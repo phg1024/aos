@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write the following markdown fact sheet to /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md:\n\n## AOS Project Fact Sheet\n\n- **Core Architecture**: Durable process table, event log, mailbox IPC, and artifact store\n- **Runtime Language**: Go\n- **ML Endpoint**: Local vLLM for live experimentation\n- **Prototype Status**: Local prototype in development"
+    },
+    {
+      "role": "tool",
+      "content": "write_file:map[path:/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md]"
+    }
+  ],
+  "tool_artifact_ids": [
+    "art-000011"
+  ]
+}

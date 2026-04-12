@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 1 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    h1, h2 { color: #111827; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 1 Report</h1>
+    <p>Architecture correction and revised planning docs for the role-agnostic AOS refactor.</p>
+  </div>
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Rewrote <code>testing-plan.md</code> around a role-agnostic control plane and optional workflow-level review behavior.</li>
+    <li>Rewrote <code>multi-agent-mini-projects.md</code> around declarative workflow-driven collaboration rather than built-in planner, worker, and verifier roles.</li>
+    <li>Rewrote <code>implementation-plan.md</code> into a new phased plan centered on workflow specs, generic delegation, operator reports, and live mini-project validation.</li>
+    <li>Kept <code>AOS_REFACTOR_PLAN.md</code> as the architecture note describing the correction from built-in workflow policy to generic orchestration substrate.</li>
+  </ul>
+  <h2>Issues Encountered And Resolved</h2>
+  <ul>
+    <li>The existing docs still reflected the earlier planner-worker-verifier prototype, which would have misled later implementation work. This was resolved by rewriting the plans before continuing the code refactor.</li>
+  </ul>
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>AOS core should not know whether an agent is a reviewer, planner, or writer.</li>
+    <li>Verification is now explicitly documented as optional workflow behavior.</li>
+    <li>Every later phase report must include completed work, issues, decisions, and tests, so reporting becomes acceptance evidence instead of an afterthought.</li>
+  </ul>
+  <h2>Tests Run</h2>
+  <ul>
+    <li>Regression check via <code>sh /Users/claw/Code/aos/scripts/verify.sh</code> after the doc updates to make sure the repo stayed green while the plan changed.</li>
+  </ul>
+</body>
+</html>

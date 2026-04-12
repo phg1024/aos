@@ -1,0 +1,8 @@
+{
+  "tool": "read_file",
+  "summary": "read file",
+  "output": {
+    "content": "The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation.",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt"
+  }
+}

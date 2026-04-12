@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Mini Project: reviewed-merge</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>AOS Mini Project: reviewed-merge</h1>
+    <p>Workflow: <code>live-reviewed-merge</code></p>
+    <p>Generated: <code>2026-04-12T21:05:21Z</code></p>
+    <p>Root PID: <code>pid-000001</code> | Entry PID: <code>pid-000002</code></p>
+    <p>Workflow summary artifact: <code>art-000025</code></p>
+  </div>
+  <h2>Decisions</h2>
+  <ul>
+    <li>Included a review agent to show that review is a workflow choice rather than a core AOS obligation.</li>
+  </ul>
+  <h2>Issues And Resolutions</h2>
+  <ul>
+    <li>If the review agent is weak, the workflow can still finish because the coordinator decides how to use the review note.</li>
+  </ul>
+  <h2>Tests</h2>
+  <ul>
+    <li>Live local-vLLM run with reviewer participation as a normal delegated agent.</li>
+  </ul>
+  <h2>Processes</h2>
+  <table>
+    <tr><th>PID</th><th>Role</th><th>Parent</th><th>State</th><th>Exit</th></tr>
+<tr><td>pid-000001</td><td>workflow:live-reviewed-merge</td><td></td><td>exited</td><td>0 / workflow completed</td></tr>
+<tr><td>pid-000002</td><td>agent:delivery_lead</td><td>pid-000001</td><td>exited</td><td>0 / reviewed merge complete: Review of reviewed-report.html:
+
+Coherence: The document is well-structured with proper HTML5 doctype, head, and body sections. Two distinct sections (Kernel and Workflow) are clearly separated.
+
+Duplication: No duplicate content detected. Each section contains unique information.
+
+Main Points Preserved: Both input fragments appear to be represented - the Kernel section covers process state/events/records, and the Workflow section addresses agent meanings in workflow specs. The merge successfully preserved the core concepts from both fragments without redundancy.</td></tr>
+<tr><td>pid-000003</td><td>agent:merger</td><td>pid-000002</td><td>exited</td><td>0 / Merged HTML document has been provided in previous message. Task complete.</td></tr>
+<tr><td>pid-000004</td><td>agent:file_writer</td><td>pid-000002</td><td>exited</td><td>0 / write complete</td></tr>
+<tr><td>pid-000005</td><td>agent:review_partner</td><td>pid-000002</td><td>exited</td><td>0 / Task complete - output file has been read and reviewed. The merged HTML document is coherent with proper structure, contains no duplication, and preserves the main points from both input fragments (Kernel and Workflow sections).</td></tr>
+  </table>
+  <h2>Artifacts</h2>
+  <table>
+    <tr><th>ID</th><th>Type</th><th>Producer PID</th><th>Parents</th></tr>
+<tr><td>art-000001</td><td>tool_result</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000002</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000003</td><td>tool_result</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000004</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000005</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000006</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000007</td><td>agent_run</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000008</td><td>delegate_result</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000009</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000010</td><td>tool_result</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000011</td><td>checkpoint</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000012</td><td>checkpoint</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000013</td><td>agent_run</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000014</td><td>delegate_result</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000015</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000016</td><td>tool_result</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000017</td><td>checkpoint</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000018</td><td>checkpoint</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000019</td><td>checkpoint</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000020</td><td>agent_run</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000021</td><td>delegate_result</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000022</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000023</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000024</td><td>agent_run</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000025</td><td>workflow_summary</td><td>pid-000001</td><td></td></tr>
+  </table>
+  <h2>Event Trace</h2>
+  <table>
+    <tr><th>Time</th><th>PID</th><th>Event</th><th>Data</th></tr>
+<tr><td>2026-04-12T21:04:43Z</td><td>pid-000001</td><td>process.spawned</td><td>role=workflow:live-reviewed-merge</td></tr>
+<tr><td>2026-04-12T21:04:43Z</td><td>pid-000002</td><td>process.spawned</td><td>role=agent:delivery_lead</td></tr>
+<tr><td>2026-04-12T21:04:43Z</td><td>pid-000002</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T21:04:43Z</td><td>pid-000003</td><td>process.spawned</td><td>role=agent:merger</td></tr>
+<tr><td>2026-04-12T21:04:43Z</td><td>pid-000003</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000003</td><td>process.exited</td><td>code=0, reason=Merged HTML document has been provided in previous message. Task complete., retryable=false</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000004</td><td>process.spawned</td><td>role=agent:file_writer</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000004</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000004</td><td>process.exited</td><td>code=0, reason=write complete, retryable=false</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000005</td><td>process.spawned</td><td>role=agent:review_partner</td></tr>
+<tr><td>2026-04-12T21:05:05Z</td><td>pid-000005</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T21:05:21Z</td><td>pid-000005</td><td>process.exited</td><td>code=0, reason=Task complete - output file has been read and reviewed. The merged HTML document is coherent with proper structure, contains no duplication, and preserves the main points from both input fragments (Kernel and Workflow sections)., retryable=false</td></tr>
+<tr><td>2026-04-12T21:05:21Z</td><td>pid-000002</td><td>process.exited</td><td>code=0, reason=reviewed merge complete: Review of reviewed-report.html:
+
+Coherence: The document is well-structured with proper HTML5 doctype, head, and body sections. Two distinct sections (Kernel and Workflow) are clearly separated.
+
+Duplication: No duplicate content detected. Each section contains unique information.
+
+Main Points Preserved: Both input fragments appear to be represented - the Kernel section covers process state/events/records, and the Workflow section addresses agent meanings in workflow specs. The merge successfully preserved the core concepts from both fragments without redundancy., retryable=false</td></tr>
+<tr><td>2026-04-12T21:05:21Z</td><td>pid-000001</td><td>process.exited</td><td>code=0, reason=workflow completed, retryable=false</td></tr>
+  </table>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 7 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 920px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 7 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: implement the first harness-style planner/worker/verifier workflow with structured contracts and verification-gated completion.</p>
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/workflow/contracts.go</code> with task contracts, plan artifacts, worker output artifacts, and verification artifacts</li>
+    <li>Rework loop support where verifier rejection causes another worker attempt</li>
+    <li>Tests proving that verifier approval, not worker self-report, determines task completion</li>
+  </ul>
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Planner can emit task contracts as structured artifacts</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Workers operate on one contract at a time</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Verifier can fail a task even when worker exits successfully</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Final task completion depends on verifier artifact, not worker self-report</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>At least one integration test shows verifier-triggered rework</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+  <h2>Verification Evidence</h2>
+  <p>Coverage lives in <code>internal/workflow/contracts_test.go</code>.</p>
+  <p>Verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+</body>
+</html>

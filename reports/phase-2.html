@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 2 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 2 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: implement the collaboration substrate with mailboxes, topic publish/subscribe, artifacts, and lease-based coordination.</p>
+
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/ipc/mailbox.go</code> with file-backed inboxes and topic subscriptions</li>
+    <li><code>internal/artifact/store.go</code> with durable payloads and lineage metadata</li>
+    <li><code>internal/lease/manager.go</code> with exclusive acquisition, release, and kernel block/wake integration</li>
+  </ul>
+
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Messages are delivered deterministically to a target inbox</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Topic subscribers receive published events</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Artifacts are durable and retrievable by ID</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Artifact lineage metadata is persisted</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Conflicting lease acquisition is prevented</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Blocked tasks resume correctly after lock release</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+
+  <h2>Verification Evidence</h2>
+  <p>Coverage lives in <code>internal/ipc/mailbox_test.go</code>, <code>internal/artifact/store_test.go</code>, and <code>internal/lease/manager_test.go</code>.</p>
+  <p>Verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+</body>
+</html>

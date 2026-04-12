@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 0 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 0 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: establish the repository, Ralph-style project memory, verification commands, and the initial Go workspace.</p>
+
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>go.mod</code> and a runnable Go workspace</li>
+    <li><code>README.md</code>, <code>AGENTS.md</code>, <code>prd.json</code>, and <code>progress.txt</code></li>
+    <li><code>scripts/verify.sh</code> with project-local Go cache support for sandboxed testing</li>
+    <li><code>cmd/aos/main.go</code> bootstrap entrypoint</li>
+    <li>More than ten decomposed Ralph stories in <code>prd.json</code></li>
+  </ul>
+
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Repo can run tests from a single command</td><td><span class="ok">Passed</span> via <code>sh ./scripts/verify.sh</code></td></tr>
+    <tr><td>Ralph project memory files exist</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>First 10-20 stories exist in <code>prd.json</code></td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Verification script fails fast on command errors</td><td><span class="ok">Passed</span> by shell <code>set -eu</code></td></tr>
+    <tr><td>Docs are linked from the repo index</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+
+  <h2>Verification Evidence</h2>
+  <p>Command run: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+  <p>Result: all current Go packages compiled and tests passed.</p>
+</body>
+</html>

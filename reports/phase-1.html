@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 1 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 1 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: implement the deterministic kernel substrate with process lifecycle rules, durable process storage, and event logging.</p>
+
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/kernel/types.go</code> with process, event, and exit models</li>
+    <li><code>internal/kernel/store.go</code> file-backed durable process/event store</li>
+    <li><code>internal/kernel/kernel.go</code> with <code>Spawn</code>, <code>Transition</code>, <code>Exit</code>, and <code>Await</code></li>
+    <li>Kernel tests covering persistence, lifecycle validation, parent linkage, and await semantics</li>
+  </ul>
+
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td><code>spawn()</code> creates durable process records</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Invalid lifecycle transitions are rejected</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Child processes retain parent linkage</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Exited processes include structured exit metadata</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Event log records lifecycle transitions</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>All tests pass deterministically without live model access</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+
+  <h2>Verification Evidence</h2>
+  <p>Primary test coverage lives in <code>internal/kernel/kernel_test.go</code>.</p>
+  <p>Verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+</body>
+</html>

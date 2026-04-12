@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 6 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 920px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 6 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: connect AOS to a real local inference backend while preserving the adapter boundary and normalizing imperfect model outputs.</p>
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/inference/vllm.go</code> with an OpenAI-compatible <code>vllm</code> backend</li>
+    <li>Normalization for nested AOS JSON, flat exit JSON, and reasoning-wrapped trailing JSON</li>
+    <li><code>cmd/aos-live-smoke/main.go</code> to run the actual AOS runtime loop against the local model endpoint</li>
+  </ul>
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Live requests can be sent to local <code>vllm</code> through the adapter</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Runtime receives normalized responses in internal format</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Timeouts and malformed outputs produce structured errors</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>At least one end-to-end single-agent live scenario passes</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>No kernel code depends directly on provider-specific response shapes</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+  <h2>Verification Evidence</h2>
+  <p>Deterministic coverage lives in <code>internal/inference/vllm_test.go</code>.</p>
+  <p>Live verification command:</p>
+  <pre>GOCACHE=/Users/claw/Code/aos/.cache/go-build GOTMPDIR=/Users/claw/Code/aos/.cache/tmp \
+AOS_VLLM_BASE_URL=http://lenovo-px.local:8001 \
+AOS_VLLM_MODEL=Qwen/Qwen3.5-27B \
+AOS_VLLM_API_KEY=dummy \
+go run ./cmd/aos-live-smoke</pre>
+  <p>Observed live result:</p>
+  <pre>{
+  "exit_status": {
+    "code": 0,
+    "reason": "live-smoke-ok",
+    "retryable": false
+  },
+  "checkpoint_id": "art-000001"
+}</pre>
+</body>
+</html>

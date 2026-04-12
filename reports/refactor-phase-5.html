@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 5 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 5 Report</h1>
+    <p>Live mini-project harness using the refactored AOS control plane and the local <code>vllm</code> endpoint.</p>
+  </div>
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Added three workflow specs under <code>/Users/claw/Code/aos/workflows</code> for docs merge, fact sheet extraction, and reviewed merge.</li>
+    <li>Added a live runner in <code>/Users/claw/Code/aos/cmd/aos-mini-projects/main.go</code> that seeds inputs, runs workflows, and writes output files, state directories, summaries, and HTML completion reports.</li>
+    <li>Completed live runs for:
+      <code>/Users/claw/Code/aos/reports/live-mini-projects/docs-merge</code>,
+      <code>/Users/claw/Code/aos/reports/live-mini-projects/fact-sheet</code>,
+      <code>/Users/claw/Code/aos/reports/live-mini-projects/reviewed-merge</code>.
+    </li>
+  </ul>
+  <h2>Issues Encountered And Resolved</h2>
+  <ul>
+    <li>A fully live writer agent looped on <code>write_file</code> after success. This was first mitigated by strengthening the generic backend contract to require an exit after a successful write.</li>
+    <li>Fully live coordinator agents were still fragile because they had to emit strict control JSON. The mini-project harness was then adjusted to use deterministic coordinators and deterministic writers while keeping the substantive synthesis, extraction, and review agents live on the local model.</li>
+    <li>The first scripted coordinator version counted delegate completions by text summary, which caused repeated writer spawns when a writer returned no message text. This was fixed by tracking delegate agent IDs instead.</li>
+  </ul>
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>For the current milestone, orchestrators and I/O specialists are deterministic, while the semantic agents remain live. This matches the project goal better than forcing fragile control JSON out of every live agent today.</li>
+    <li>The final live suite demonstrates that review is optional workflow behavior: <code>reviewed-merge</code> includes a review agent because the workflow asks for one, not because AOS enforces it.</li>
+  </ul>
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>sh /Users/claw/Code/aos/scripts/verify.sh</code></li>
+    <li>Live suite command:
+      <code>go run ./cmd/aos-mini-projects</code>
+      with the local <code>vllm</code> environment set.
+    </li>
+    <li>Observed live project metrics:
+      <code>docs-merge</code> = 4 processes, 18 artifacts, 11 events;
+      <code>fact-sheet</code> = 4 processes, 18 artifacts, 11 events;
+      <code>reviewed-merge</code> = 5 processes, 25 artifacts, 14 events.
+    </li>
+  </ul>
+</body>
+</html>

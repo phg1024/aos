@@ -1,0 +1,16 @@
+{
+  "agent_id": "fact_extractor",
+  "pid": "pid-000003",
+  "parent_pid": "pid-000002",
+  "checkpoint_id": "art-000006",
+  "exit_status": {
+    "code": 0,
+    "reason": "Fact sheet created successfully with title and flat bullet list from input files",
+    "retryable": false
+  },
+  "final_message": "# Project AOS Fact Sheet\n\n- Project AOS uses a durable process table, event log, mailbox IPC, and artifact store\n- The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation",
+  "tool_artifacts": [
+    "art-000001",
+    "art-000003"
+  ]
+}

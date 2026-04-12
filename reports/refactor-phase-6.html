@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 6 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 6 Report</h1>
+    <p>Recovery and resume support, mailbox-backed session flow, fully live workflow hardening, and a direct text UI for interacting with an AOS agent.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Extended <code>/Users/claw/Code/aos/internal/runtime/runtime.go</code> with resumable checkpoints, recovery into a replacement process, mailbox ingestion, mailbox send/publish/subscribe actions, and block/yield support.</li>
+    <li>Hardened <code>/Users/claw/Code/aos/internal/agentflow/backend.go</code> with raw-response parsing, JSON repair retries, richer action examples, and tool-semantic auto-exit for successful single-purpose writers.</li>
+    <li>Added a direct interactive terminal client in <code>/Users/claw/Code/aos/cmd/aos-tui/main.go</code> that talks to an agent through the resumable mailbox-backed runtime.</li>
+    <li>Moved the live mini-project suite back to the fully live backend path by removing the earlier deterministic coordinator/writer workaround from <code>cmd/aos-mini-projects</code>.</li>
+  </ul>
+
+  <h2>Issues Encountered And Resolved</h2>
+  <ul>
+    <li>Fully live coordinators previously produced malformed control output often enough to require a deterministic harness. This was addressed by adding raw text parsing plus an automatic repair pass inside the prompt backend.</li>
+    <li>Live writer agents sometimes kept looping after a successful <code>write_file</code>. This was resolved with a generic tool-semantic auto-exit for agents whose only job is successful file writing.</li>
+    <li>The interactive path originally had no clean way to continue an agent session after a yield or a blocked wait. This was resolved by adding resumable checkpoints and recovery-aware run results to the runtime itself.</li>
+  </ul>
+
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>Mailbox delivery is now treated as part of the runtime session substrate rather than an external demo-only primitive.</li>
+    <li>The text UI uses the same runtime, checkpoint, and mailbox flow as the workflow engine, so it is a real AOS session path instead of a separate chat wrapper.</li>
+    <li>The caveat about deterministic coordinators/writers is now removed for the validated Phase 6 suite, because the mini projects were rerun with the fully live backend path.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>sh /Users/claw/Code/aos/scripts/verify.sh</code></li>
+    <li>All-live workflow smoke:
+      <code>/Users/claw/Code/aos/reports/live-all-agent-smoke-2</code>
+    </li>
+    <li>All-live mini-project suite:
+      <code>/Users/claw/Code/aos/reports/live-mini-projects-phase6</code>
+      with outcomes:
+      <code>docs-merge</code> = 4 processes, 21 artifacts, 11 events;
+      <code>fact-sheet</code> = 4 processes, 19 artifacts, 11 events;
+      <code>reviewed-merge</code> = 5 processes, 27 artifacts, 14 events.
+    </li>
+    <li>Text UI smoke transcript:
+      <code>/Users/claw/Code/aos/reports/tui-smoke-transcript.txt</code>
+    </li>
+  </ul>
+</body>
+</html>

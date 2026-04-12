@@ -1,0 +1,24 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Read the input files at /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt and /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt and return a compact markdown fact sheet with only the concrete project facts that matter."
+    },
+    {
+      "role": "tool",
+      "content": "read_file:map[content:Project AOS uses a durable process table, event log, mailbox IPC, and artifact store. path:/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt]"
+    },
+    {
+      "role": "tool",
+      "content": "read_file:map[content:The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation. path:/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt]"
+    },
+    {
+      "role": "assistant",
+      "content": "## AOS Project Fact Sheet\n\n- **Core Architecture**: Durable process table, event log, mailbox IPC, and artifact store\n- **Runtime Language**: Go\n- **ML Endpoint**: Local vLLM for live experimentation\n- **Prototype Status**: Local prototype in development"
+    }
+  ],
+  "tool_artifact_ids": [
+    "art-000001",
+    "art-000003"
+  ]
+}

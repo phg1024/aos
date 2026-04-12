@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 4 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 4 Report</h1>
+    <p>Operator-facing CLI workflow runs and inspectable HTML reports.</p>
+  </div>
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Extended <code>/Users/claw/Code/aos/cmd/aos/main.go</code> to support <code>--workflow</code>, <code>--state-dir</code>, and <code>--report</code>.</li>
+    <li>Added HTML workflow report rendering in <code>/Users/claw/Code/aos/internal/agentflow/report.go</code>.</li>
+    <li>Kept the earlier app-centric <code>aos run</code> path for direct file assembly, while adding the new workflow-driven path for the refactored architecture.</li>
+  </ul>
+  <h2>Issues Encountered And Resolved</h2>
+  <ul>
+    <li>The CLI previously had no way to preserve workflow state or emit user-inspectable traces. This was resolved by making state and report paths explicit flags instead of hidden temp behavior.</li>
+  </ul>
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>The refactor keeps backwards compatibility with the existing single-command assembly flow while introducing a more faithful workflow-driven path.</li>
+    <li>Reports render process, artifact, and event tables directly from durable state so they stay aligned with the actual control-plane trace.</li>
+  </ul>
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>sh /Users/claw/Code/aos/scripts/verify.sh</code></li>
+    <li>Manual dry-run checks by building and invoking the new <code>cmd/aos</code> workflow path before live runs.</li>
+  </ul>
+</body>
+</html>

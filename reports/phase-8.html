@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 8 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 940px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 8 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: turn the runtime into a scenario-tested system using mini-project-style flows plus at least one live local-model path.</p>
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/scenario/scenario.go</code> with scenario runner and report capture</li>
+    <li>Three scenario flows: docs assembly, parallel refactor with lease coordination, and data extraction</li>
+    <li>Scenario tests plus the live <code>aos-live-smoke</code> path for a real local-model runtime check</li>
+  </ul>
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Scenario runner stores process, artifact, and verification traces</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>At least three mini-project scenarios exist and run end-to-end</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>At least one scenario proves multi-agent artifact handoff</td><td><span class="ok">Passed</span> via docs assembly and extraction workflows</td></tr>
+    <tr><td>At least one scenario proves lease-based coordination</td><td><span class="ok">Passed</span> via parallel refactor flow</td></tr>
+    <tr><td>At least one live local <code>vllm</code> scenario completes successfully</td><td><span class="ok">Passed</span> via <code>aos-live-smoke</code></td></tr>
+  </table>
+  <h2>Verification Evidence</h2>
+  <p>Coverage lives in <code>internal/scenario/scenario_test.go</code>.</p>
+  <p>Deterministic verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+  <p>Live verification command: <code>go run ./cmd/aos-live-smoke</code> against the local endpoint.</p>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "agent_count": 3,
+  "entry_pid": "pid-000002",
+  "goal": "Read the source notes and produce one markdown fact sheet with only the concrete project facts that matter.",
+  "inputs_dir": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+  "name": "fact-sheet",
+  "output_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md",
+  "report_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/completion-report.html",
+  "result_id": "art-000019",
+  "state_dir": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state",
+  "workflow": "live-fact-sheet"
+}

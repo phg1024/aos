@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Phase 5 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Phase 5 Report</h1>
+  <p>Status: <span class="ok">Complete</span></p>
+  <p>Objective: add the first true multi-agent control layer with a cooperative scheduler, traces, blocked/wake behavior, and supervisor-managed retries.</p>
+  <h2>Delivered</h2>
+  <ul>
+    <li><code>internal/scheduler/scheduler.go</code> with queueing, dispatch, wake, and trace capture</li>
+    <li><code>internal/supervisor/supervisor.go</code> with child spawning, bounded retry, and tree inspection</li>
+    <li>Tests covering round-robin scheduling, blocked/resume semantics, retryable failures, and sibling isolation</li>
+  </ul>
+  <h2>Acceptance Criteria</h2>
+  <table>
+    <tr><th>Criterion</th><th>Result</th></tr>
+    <tr><td>Multiple agents can run under one scheduler without corrupting shared state</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Blocked agents are skipped and resumed correctly</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Supervisor can monitor child exits and retries</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Sibling failures do not automatically terminate unrelated work</td><td><span class="ok">Passed</span></td></tr>
+    <tr><td>Scheduler behavior is visible through traces</td><td><span class="ok">Passed</span></td></tr>
+  </table>
+  <h2>Verification Evidence</h2>
+  <p>Coverage lives in <code>internal/scheduler/scheduler_test.go</code> and <code>internal/supervisor/supervisor_test.go</code>.</p>
+  <p>Verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+</body>
+</html>

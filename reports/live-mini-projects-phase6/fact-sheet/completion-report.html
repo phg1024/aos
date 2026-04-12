@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Mini Project: fact-sheet</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>AOS Mini Project: fact-sheet</h1>
+    <p>Workflow: <code>live-fact-sheet</code></p>
+    <p>Generated: <code>2026-04-12T22:03:20Z</code></p>
+    <p>Root PID: <code>pid-000001</code> | Entry PID: <code>pid-000002</code></p>
+    <p>Workflow summary artifact: <code>art-000019</code></p>
+  </div>
+  <h2>Decisions</h2>
+  <ul>
+    <li>Kept this workflow in markdown to show that AOS can coordinate file-producing tasks without assuming HTML-only outputs.</li>
+  </ul>
+  <h2>Issues And Resolutions</h2>
+  <ul>
+    <li>Structured extraction is still model-sensitive, so the deliverable format is intentionally simple and inspectable.</li>
+  </ul>
+  <h2>Tests</h2>
+  <ul>
+    <li>Live local-vLLM run with artifact-producing delegation plus output file creation.</li>
+  </ul>
+  <h2>Processes</h2>
+  <table>
+    <tr><th>PID</th><th>Role</th><th>Parent</th><th>State</th><th>Exit</th></tr>
+<tr><td>pid-000001</td><td>workflow:live-fact-sheet</td><td></td><td>exited</td><td>0 / workflow completed</td></tr>
+<tr><td>pid-000002</td><td>agent:task_router</td><td>pid-000001</td><td>exited</td><td>0 / Fact sheet generated successfully - fact_extractor extracted project facts and digest_writer wrote markdown to output path</td></tr>
+<tr><td>pid-000003</td><td>agent:fact_extractor</td><td>pid-000002</td><td>exited</td><td>0 / fact sheet created with key project facts from both input files</td></tr>
+<tr><td>pid-000004</td><td>agent:digest_writer</td><td>pid-000002</td><td>exited</td><td>0 / write complete</td></tr>
+  </table>
+  <h2>Artifacts</h2>
+  <table>
+    <tr><th>ID</th><th>Type</th><th>Producer PID</th><th>Parents</th></tr>
+<tr><td>art-000001</td><td>tool_result</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000002</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000003</td><td>tool_result</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000004</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000005</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000006</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000007</td><td>checkpoint</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000008</td><td>agent_run</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000009</td><td>delegate_result</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000010</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000011</td><td>tool_result</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000012</td><td>checkpoint</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000013</td><td>checkpoint</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000014</td><td>agent_run</td><td>pid-000004</td><td></td></tr>
+<tr><td>art-000015</td><td>delegate_result</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000016</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000017</td><td>checkpoint</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000018</td><td>agent_run</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000019</td><td>workflow_summary</td><td>pid-000001</td><td></td></tr>
+  </table>
+  <h2>Event Trace</h2>
+  <table>
+    <tr><th>Time</th><th>PID</th><th>Event</th><th>Data</th></tr>
+<tr><td>2026-04-12T22:02:42Z</td><td>pid-000001</td><td>process.spawned</td><td>role=workflow:live-fact-sheet</td></tr>
+<tr><td>2026-04-12T22:02:42Z</td><td>pid-000002</td><td>process.spawned</td><td>role=agent:task_router</td></tr>
+<tr><td>2026-04-12T22:02:42Z</td><td>pid-000002</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T22:02:49Z</td><td>pid-000003</td><td>process.spawned</td><td>role=agent:fact_extractor</td></tr>
+<tr><td>2026-04-12T22:02:49Z</td><td>pid-000003</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T22:03:04Z</td><td>pid-000003</td><td>process.exited</td><td>code=0, reason=fact sheet created with key project facts from both input files, retryable=false</td></tr>
+<tr><td>2026-04-12T22:03:10Z</td><td>pid-000004</td><td>process.spawned</td><td>role=agent:digest_writer</td></tr>
+<tr><td>2026-04-12T22:03:10Z</td><td>pid-000004</td><td>process.transition</td><td>state=running</td></tr>
+<tr><td>2026-04-12T22:03:15Z</td><td>pid-000004</td><td>process.exited</td><td>code=0, reason=write complete, retryable=false</td></tr>
+<tr><td>2026-04-12T22:03:20Z</td><td>pid-000002</td><td>process.exited</td><td>code=0, reason=Fact sheet generated successfully - fact_extractor extracted project facts and digest_writer wrote markdown to output path, retryable=false</td></tr>
+<tr><td>2026-04-12T22:03:20Z</td><td>pid-000001</td><td>process.exited</td><td>code=0, reason=workflow completed, retryable=false</td></tr>
+  </table>
+</body>
+</html>

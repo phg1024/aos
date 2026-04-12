@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 2 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 2 Report</h1>
+    <p>Declarative workflow specs and a generic agent control plane.</p>
+  </div>
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Added workflow and agent spec types in <code>/Users/claw/Code/aos/internal/agentflow/spec.go</code>.</li>
+    <li>Added validation for entry agent existence, duplicate IDs, and allowed-agent references.</li>
+    <li>Implemented a generic engine in <code>/Users/claw/Code/aos/internal/agentflow/engine.go</code> that runs agents by spec instead of by hardcoded role.</li>
+    <li>Added <code>internal/agentflow/engine_test.go</code> to cover generic delegation and invalid workflow specs.</li>
+  </ul>
+  <h2>Issues Encountered And Resolved</h2>
+  <ul>
+    <li>The existing workflow layer still embedded planner, worker, and verifier semantics. The refactor resolved this by creating a separate <code>agentflow</code> package instead of mutating the example workflow engine into the kernel.</li>
+  </ul>
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>The earlier <code>internal/workflow</code> package remains as an example harness, but the new control-plane path lives in <code>internal/agentflow</code>.</li>
+    <li>Workflow specs are JSON-backed so the CLI can load them directly and users can define agent meaning outside AOS core code.</li>
+  </ul>
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>sh /Users/claw/Code/aos/scripts/verify.sh</code></li>
+    <li><code>go test ./internal/agentflow</code> through the repo verify script</li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,417 @@
+{
+  "stories": [
+    {
+      "id": "P0-001",
+      "title": "Create Go module, verification commands, and Ralph project memory files",
+      "phase": 0,
+      "priority": "high",
+      "artifacts_expected": [
+        "go.mod",
+        "AGENTS.md",
+        "prd.json",
+        "progress.txt"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "workspace contains foundational repo files",
+        "go tooling resolves the module",
+        "project memory files exist"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P0-002",
+      "title": "Create repository documentation index and developer conventions",
+      "phase": 0,
+      "priority": "high",
+      "artifacts_expected": [
+        "README.md",
+        "AGENTS.md"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "docs are linked from README",
+        "developer conventions are recorded"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P0-003",
+      "title": "Add a local verification script that fails fast on formatting or test issues",
+      "phase": 0,
+      "priority": "high",
+      "artifacts_expected": [
+        "scripts/verify.sh"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "verification script is present",
+        "script exits non-zero on command failures"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P1-001",
+      "title": "Implement process model and lifecycle state validation",
+      "phase": 1,
+      "priority": "high",
+      "artifacts_expected": [
+        "kernel process types",
+        "lifecycle validation tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "invalid transitions are rejected",
+        "valid transitions are allowed"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P1-002",
+      "title": "Implement durable process store and event log",
+      "phase": 1,
+      "priority": "high",
+      "artifacts_expected": [
+        "durable process store",
+        "event log"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "processes persist and reload",
+        "events are recorded durably"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P1-003",
+      "title": "Add structured exit metadata and await semantics",
+      "phase": 1,
+      "priority": "high",
+      "artifacts_expected": [
+        "exit status model",
+        "await tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "await rejects non-exited processes",
+        "exited processes expose exit status"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P2-001",
+      "title": "Implement mailbox IPC, artifact store, and lease manager",
+      "phase": 2,
+      "priority": "high",
+      "artifacts_expected": [
+        "mailboxes",
+        "artifact store",
+        "lease manager"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "messages are delivered deterministically",
+        "artifacts preserve lineage",
+        "exclusive leases are enforced"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P2-002",
+      "title": "Block waiting processes on lease contention and wake them on release",
+      "phase": 2,
+      "priority": "high",
+      "artifacts_expected": [
+        "lease-to-kernel integration",
+        "blocking/wake tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "contention transitions waiter to blocked",
+        "release can wake waiter to ready"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P3-001",
+      "title": "Implement capability model, mount views, and tool runtime",
+      "phase": 3,
+      "priority": "high",
+      "artifacts_expected": [
+        "capability evaluator",
+        "tool runtime"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "out-of-scope writes are denied",
+        "tool outputs are captured"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P3-002",
+      "title": "Add explicit child capability derivation rules with tests",
+      "phase": 3,
+      "priority": "high",
+      "artifacts_expected": [
+        "capability derivation helper",
+        "capability inheritance tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "child capabilities are an intersection of parent and request",
+        "network access can only narrow"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P3-003",
+      "title": "Record tool outputs as structured artifacts",
+      "phase": 3,
+      "priority": "high",
+      "artifacts_expected": [
+        "tool artifact recording helper",
+        "artifact recording tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "tool output artifacts persist",
+        "tool metadata is searchable"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P4-001",
+      "title": "Implement single-agent runtime loop with fake inference backend",
+      "phase": 4,
+      "priority": "high",
+      "artifacts_expected": [
+        "fake inference backend",
+        "agent runtime loop"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "single agent completes deterministic scripted flow",
+        "tool outputs re-enter the loop",
+        "malformed backend outputs fail cleanly"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P4-002",
+      "title": "Add checkpoint creation and restore for runtime sessions",
+      "phase": 4,
+      "priority": "high",
+      "artifacts_expected": [
+        "checkpoint artifacts",
+        "restore tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "intermediate checkpoints are emitted",
+        "session state can be restored from a checkpoint"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P4-003",
+      "title": "Fail cleanly on malformed backend outputs",
+      "phase": 4,
+      "priority": "high",
+      "artifacts_expected": [
+        "malformed output guard",
+        "runtime failure tests"
+      ],
+      "verification_commands": [
+        "go test ./..."
+      ],
+      "acceptance_checks": [
+        "malformed outputs produce structured exit status",
+        "runtime returns explicit malformed output error"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P5-001",
+      "title": "Implement cooperative scheduler with traces and blocked/wake behavior",
+      "phase": 5,
+      "priority": "high",
+      "artifacts_expected": [
+        "scheduler package",
+        "scheduler tests",
+        "scheduler traces"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "multiple agents can run under one scheduler",
+        "blocked agents are skipped and later resumed",
+        "scheduler traces are visible"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P5-002",
+      "title": "Implement supervisor retries, sibling isolation, and process tree inspection",
+      "phase": 5,
+      "priority": "high",
+      "artifacts_expected": [
+        "supervisor package",
+        "retry tests",
+        "tree inspection"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "retryable child can be retried",
+        "stable sibling completes independently",
+        "supervisor tree can be inspected"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P6-001",
+      "title": "Implement local vLLM backend with normalized response handling",
+      "phase": 6,
+      "priority": "high",
+      "artifacts_expected": [
+        "inference backend",
+        "adapter tests"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "openai-style chat responses normalize into runtime results",
+        "wrapped or flat JSON responses are recovered",
+        "timeouts surface as errors"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P6-002",
+      "title": "Verify the local vLLM endpoint with a real end-to-end runtime smoke command",
+      "phase": 6,
+      "priority": "high",
+      "artifacts_expected": [
+        "cmd/aos-live-smoke"
+      ],
+      "verification_commands": [
+        "go run ./cmd/aos-live-smoke"
+      ],
+      "acceptance_checks": [
+        "live endpoint is reachable",
+        "real runtime loop exits successfully",
+        "checkpoint artifact is produced"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P7-001",
+      "title": "Implement contract-based planner-worker-verifier engine with rework loop",
+      "phase": 7,
+      "priority": "high",
+      "artifacts_expected": [
+        "workflow engine",
+        "plan artifacts",
+        "verification artifacts"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "planner emits structured contracts",
+        "verifier can force rework",
+        "task completion depends on verification artifact"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P8-001",
+      "title": "Implement scenario runner and three mini-project-backed scenario flows",
+      "phase": 8,
+      "priority": "high",
+      "artifacts_expected": [
+        "scenario package",
+        "scenario tests"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh"
+      ],
+      "acceptance_checks": [
+        "docs assembly scenario runs",
+        "parallel refactor scenario runs",
+        "data extraction scenario runs"
+      ],
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "P8-002",
+      "title": "Capture scenario traces and verify at least one live local vLLM scenario",
+      "phase": 8,
+      "priority": "high",
+      "artifacts_expected": [
+        "scenario reports",
+        "live smoke output"
+      ],
+      "verification_commands": [
+        "sh ./scripts/verify.sh",
+        "go run ./cmd/aos-live-smoke"
+      ],
+      "acceptance_checks": [
+        "scenario reports include process and artifact traces",
+        "live local vLLM path succeeds"
+      ],
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

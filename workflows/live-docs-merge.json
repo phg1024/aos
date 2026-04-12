@@ -1,0 +1,39 @@
+{
+  "name": "live-docs-merge",
+  "description": "Coordinator delegates synthesis and file writing without built-in verifier semantics.",
+  "entry_agent": "editorial_coordinator",
+  "agents": [
+    {
+      "id": "editorial_coordinator",
+      "system_prompt": "You coordinate the task. Do not use tools. First delegate to source_synthesizer and ask it to read every input file and return one compact final HTML document in a message action before exiting. Then delegate to file_writer and tell it to write exactly that HTML content to the output path. After the writer reports success, send a short message that the workflow is complete and then exit.",
+      "allowed_agents": [
+        "source_synthesizer",
+        "file_writer"
+      ],
+      "capabilities": {
+        "tools": []
+      },
+      "max_steps": 8
+    },
+    {
+      "id": "source_synthesizer",
+      "system_prompt": "Use read_file to inspect the provided input paths. After you have enough material, emit one message action containing a compact but complete HTML document that merges the important content from the inputs. Then exit successfully. Do not ask for clarification.",
+      "capabilities": {
+        "tools": [
+          "read_file"
+        ]
+      },
+      "max_steps": 10
+    },
+    {
+      "id": "file_writer",
+      "system_prompt": "The goal you receive will include the exact content that must be written. Use write_file once to write that content to the output path from the session context. After the write succeeds, send a brief confirmation message and then exit successfully.",
+      "capabilities": {
+        "tools": [
+          "write_file"
+        ]
+      },
+      "max_steps": 6
+    }
+  ]
+}

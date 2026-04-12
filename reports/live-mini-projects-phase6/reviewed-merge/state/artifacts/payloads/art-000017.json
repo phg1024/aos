@@ -1,0 +1,8 @@
+{
+  "tool": "read_file",
+  "summary": "read file",
+  "output": {
+    "content": "\u003c!DOCTYPE html\u003e\u003chtml\u003e\u003chead\u003e\u003ctitle\u003eReviewed Report\u003c/title\u003e\u003c/head\u003e\u003cbody\u003e\u003csection\u003e\u003ch2\u003eKernel\u003c/h2\u003e\u003cp\u003eThe kernel owns process state, events, and durable records.\u003c/p\u003e\u003c/section\u003e\u003csection\u003e\u003ch2\u003eWorkflow\u003c/h2\u003e\u003cp\u003eAgent meanings should live in workflow specs, not inside the control plane.\u003c/p\u003e\u003c/section\u003e\u003c/body\u003e\u003c/html\u003e",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/reviewed-merge/reviewed-report.html"
+  }
+}

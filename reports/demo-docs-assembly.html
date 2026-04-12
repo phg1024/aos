@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Mini Project Demo</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .hero { background: linear-gradient(135deg, #f0fdf4, #eff6ff); padding: 24px; border-radius: 16px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>AOS Mini Project Demo</h1>
+    <p>Scenario: <code>docs-assembly</code></p>
+    <p>Generated: <code>2026-04-12T07:12:49Z</code></p>
+    <p>Parent PID: <code>pid-000001</code></p>
+    <p>Processes: <code>6</code>, Artifacts: <code>5</code>, Events: <code>11</code></p>
+  </div>
+  <h2>What This Demonstrates</h2>
+  <p>This mini project shows planner/worker/verifier collaboration, artifact handoff, and durable runtime traces. It is a concrete harness demo built on the AOS runtime rather than a unit test alone.</p>
+  <h2>Processes</h2>
+  <table>
+    <tr><th>PID</th><th>Role</th><th>State</th><th>Parent</th><th>Exit</th></tr>
+<tr><td>pid-000001</td><td>scenario-docs</td><td>ready</td><td></td><td></td></tr>
+<tr><td>pid-000002</td><td>planner</td><td>exited</td><td>pid-000001</td><td>0 / planned</td></tr>
+<tr><td>pid-000003</td><td>worker</td><td>exited</td><td>pid-000001</td><td>0 / produced</td></tr>
+<tr><td>pid-000004</td><td>verifier</td><td>exited</td><td>pid-000001</td><td>0 / approved=true</td></tr>
+<tr><td>pid-000005</td><td>worker</td><td>exited</td><td>pid-000001</td><td>0 / produced</td></tr>
+<tr><td>pid-000006</td><td>verifier</td><td>exited</td><td>pid-000001</td><td>0 / approved=true</td></tr>
+  </table>
+  <h2>Artifacts</h2>
+  <table>
+    <tr><th>ID</th><th>Type</th><th>Producer PID</th><th>Parents</th></tr>
+<tr><td>art-000001</td><td>task_plan</td><td>pid-000002</td><td></td></tr>
+<tr><td>art-000002</td><td>worker_output</td><td>pid-000003</td><td></td></tr>
+<tr><td>art-000003</td><td>verification</td><td>pid-000004</td><td>art-000002</td></tr>
+<tr><td>art-000004</td><td>worker_output</td><td>pid-000005</td><td></td></tr>
+<tr><td>art-000005</td><td>verification</td><td>pid-000006</td><td>art-000004</td></tr>
+  </table>
+  <h2>Event Trace</h2>
+  <table>
+    <tr><th>Time</th><th>PID</th><th>Event</th><th>Data</th></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000001</td><td>process.spawned</td><td>role=scenario-docs</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000002</td><td>process.spawned</td><td>role=planner</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000002</td><td>process.exited</td><td>code=0, reason=planned, retryable=false</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000003</td><td>process.spawned</td><td>role=worker</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000003</td><td>process.exited</td><td>code=0, reason=produced, retryable=false</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000004</td><td>process.spawned</td><td>role=verifier</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000004</td><td>process.exited</td><td>code=0, reason=approved=true, retryable=false</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000005</td><td>process.spawned</td><td>role=worker</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000005</td><td>process.exited</td><td>code=0, reason=produced, retryable=false</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000006</td><td>process.spawned</td><td>role=verifier</td></tr>
+<tr><td>2026-04-12T07:12:49Z</td><td>pid-000006</td><td>process.exited</td><td>code=0, reason=approved=true, retryable=false</td></tr>
+  </table>
+</body>
+</html>

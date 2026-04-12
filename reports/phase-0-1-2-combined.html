@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Consolidated Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 900px; line-height: 1.5; color: #1f2937; }
+    h1, h2 { color: #111827; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+    section { margin-bottom: 40px; border-bottom: 1px solid #e5e7eb; padding-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>AOS Consolidated Report (Phases 0-2)</h1>
+  <p>Overall Status: <span class="ok">Complete</span></p>
+  <p>This document consolidates the progress, deliverables, and acceptance criteria for Phases 0, 1, and 2 of the AOS project.</p>
+
+  <section id="phase-0">
+    <h2>Phase 0: Repository & Workspace</h2>
+    <p>Status: <span class="ok">Complete</span></p>
+    <p>Objective: establish the repository, Ralph-style project memory, verification commands, and the initial Go workspace.</p>
+
+    <h3>Delivered</h3>
+    <ul>
+      <li><code>go.mod</code> and a runnable Go workspace</li>
+      <li><code>README.md</code>, <code>AGENTS.md</code>, <code>prd.json</code>, and <code>progress.txt</code></li>
+      <li><code>scripts/verify.sh</code> with project-local Go cache support for sandboxed testing</li>
+      <li><code>cmd/aos/main.go</code> bootstrap entrypoint</li>
+      <li>More than ten decomposed Ralph stories in <code>prd.json</code></li>
+    </ul>
+
+    <h3>Acceptance Criteria</h3>
+    <table>
+      <tr><th>Criterion</th><th>Result</th></tr>
+      <tr><td>Repo can run tests from a single command</td><td><span class="ok">Passed</span> via <code>sh ./scripts/verify.sh</code></td></tr>
+      <tr><td>Ralph project memory files exist</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>First 10-20 stories exist in <code>prd.json</code></td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Verification script fails fast on command errors</td><td><span class="ok">Passed</span> by shell <code>set -eu</code></td></tr>
+      <tr><td>Docs are linked from the repo index</td><td><span class="ok">Passed</span></td></tr>
+    </table>
+
+    <h3>Verification Evidence</h3>
+    <p>Command run: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+    <p>Result: all current Go packages compiled and tests passed.</p>
+  </section>
+
+  <section id="phase-1">
+    <h2>Phase 1: Kernel Substrate</h2>
+    <p>Status: <span class="ok">Complete</span></p>
+    <p>Objective: implement the deterministic kernel substrate with process lifecycle rules, durable process storage, and event logging.</p>
+
+    <h3>Delivered</h3>
+    <ul>
+      <li><code>internal/kernel/types.go</code> with process, event, and exit models</li>
+      <li><code>internal/kernel/store.go</code> file-backed durable process/event store</li>
+      <li><code>internal/kernel/kernel.go</code> with <code>Spawn</code>, <code>Transition</code>, <code>Exit</code>, and <code>Await</code></li>
+      <li>Kernel tests covering persistence, lifecycle validation, parent linkage, and await semantics</li>
+    </ul>
+
+    <h3>Acceptance Criteria</h3>
+    <table>
+      <tr><th>Criterion</th><th>Result</th></tr>
+      <tr><td><code>spawn()</code> creates durable process records</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Invalid lifecycle transitions are rejected</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Child processes retain parent linkage</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Exited processes include structured exit metadata</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Event log records lifecycle transitions</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>All tests pass deterministically without live model access</td><td><span class="ok">Passed</span></td></tr>
+    </table>
+
+    <h3>Test Coverage</h3>
+    <p>Primary test coverage lives in <code>internal/kernel/kernel_test.go</code>.</p>
+  </section>
+
+  <section id="phase-2">
+    <h2>Phase 2: Collaboration Substrate</h2>
+    <p>Status: <span class="ok">Complete</span></p>
+    <p>Objective: implement the collaboration substrate with mailboxes, topic publish/subscribe, artifacts, and lease-based coordination.</p>
+
+    <h3>Delivered</h3>
+    <ul>
+      <li><code>internal/ipc/mailbox.go</code> with file-backed inboxes and topic subscriptions</li>
+      <li><code>internal/artifact/store.go</code> with durable payloads and lineage metadata</li>
+      <li><code>internal/lease/manager.go</code> with exclusive acquisition, release, and kernel block/wake integration</li>
+    </ul>
+
+    <h3>Acceptance Criteria</h3>
+    <table>
+      <tr><th>Criterion</th><th>Result</th></tr>
+      <tr><td>Messages are delivered deterministically to a target inbox</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Topic subscribers receive published events</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Artifacts are durable and retrievable by ID</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Artifact lineage metadata is persisted</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Conflicting lease acquisition is prevented</td><td><span class="ok">Passed</span></td></tr>
+      <tr><td>Blocked tasks resume correctly after lock release</td><td><span class="ok">Passed</span></td></tr>
+    </table>
+
+    <h3>Test Coverage</h3>
+    <p>Coverage lives in <code>internal/ipc/mailbox_test.go</code>, <code>internal/artifact/store_test.go</code>, and <code>internal/lease/manager_test.go</code>.</p>
+  </section>
+
+  <section id="verification">
+    <h2>Global Verification</h2>
+    <p>All phases are verified using the project-local verification script.</p>
+    <p>Command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+  </section>
+</body>
+</html>

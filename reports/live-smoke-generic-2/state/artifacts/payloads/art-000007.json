@@ -1,0 +1,16 @@
+{
+  "agent_id": "source_synthesizer",
+  "pid": "pid-000003",
+  "parent_pid": "pid-000002",
+  "checkpoint_id": "art-000006",
+  "exit_status": {
+    "code": 0,
+    "reason": "Task complete - merged HTML document has been synthesized and returned in previous message action",
+    "retryable": false
+  },
+  "final_message": "\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003eMerged Report\u003c/title\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003ch1\u003eAlpha \u0026 Beta\u003c/h1\u003e\n  \u003cp\u003eArtifacts are the collaboration surface.\u003c/p\u003e\n  \u003cp\u003eAgents should delegate work through workflow specs.\u003c/p\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+  "tool_artifacts": [
+    "art-000001",
+    "art-000003"
+  ]
+}

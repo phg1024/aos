@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Final Completion Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .ok { color: #166534; font-weight: 700; }
+    .warn { color: #92400e; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>AOS Final Completion Report</h1>
+  <p>This report summarizes the implementation work completed in this build session.</p>
+
+  <h2>Completed Phases</h2>
+  <table>
+    <tr><th>Phase</th><th>Status</th><th>Summary</th></tr>
+    <tr><td>0</td><td><span class="ok">Complete</span></td><td>Repo scaffold, Ralph memory files, verification script, docs index</td></tr>
+    <tr><td>1</td><td><span class="ok">Complete</span></td><td>Deterministic kernel, durable process store, lifecycle/event model</td></tr>
+    <tr><td>2</td><td><span class="ok">Complete</span></td><td>Mailbox IPC, artifact store, lease coordination with block/wake behavior</td></tr>
+    <tr><td>3</td><td><span class="ok">Complete</span></td><td>Capability checks, child capability derivation, tool runtime, structured tool artifacts</td></tr>
+    <tr><td>4</td><td><span class="ok">Complete</span></td><td>Single-agent runtime loop with fake inference, checkpoints, malformed-output guard</td></tr>
+    <tr><td>5</td><td><span class="ok">Complete</span></td><td>Cooperative scheduler, traces, supervisor retries, and process-tree inspection</td></tr>
+    <tr><td>6</td><td><span class="ok">Complete</span></td><td>Local vLLM adapter, response normalization, and live end-to-end smoke verification</td></tr>
+    <tr><td>7</td><td><span class="ok">Complete</span></td><td>Contract-based planner-worker-verifier workflow with verifier-triggered rework</td></tr>
+    <tr><td>8</td><td><span class="ok">Complete</span></td><td>Scenario harness with docs assembly, refactor, extraction, and a live local-model path</td></tr>
+  </table>
+
+  <h2>Verification Summary</h2>
+  <p>Deterministic verification command: <code>sh /Users/claw/Code/aos/scripts/verify.sh</code></p>
+  <p>Observed result:</p>
+  <pre>?    aos/cmd/aos                [no test files]
+?    aos/cmd/aos-live-smoke     [no test files]
+ok   aos/internal/artifact      passing
+ok   aos/internal/capability    passing
+ok   aos/internal/inference     passing
+ok   aos/internal/ipc           passing
+ok   aos/internal/kernel        passing
+ok   aos/internal/lease         passing
+ok   aos/internal/runtime       passing
+ok   aos/internal/scenario      passing
+ok   aos/internal/scheduler     passing
+ok   aos/internal/supervisor    passing
+ok   aos/internal/tools         passing
+ok   aos/internal/workflow      passing</pre>
+  <p>Live verification command: <code>go run ./cmd/aos-live-smoke</code> against <code>http://lenovo-px.local:8001</code>.</p>
+  <p>Observed live result:</p>
+  <pre>{
+  "exit_status": {
+    "code": 0,
+    "reason": "live-smoke-ok",
+    "retryable": false
+  },
+  "checkpoint_id": "art-000001"
+}</pre>
+
+  <h2>Implemented Files</h2>
+  <ul>
+    <li><code>cmd/aos/main.go</code> and <code>cmd/aos-live-smoke/main.go</code></li>
+    <li><code>internal/kernel/*</code></li>
+    <li><code>internal/ipc/*</code></li>
+    <li><code>internal/artifact/*</code></li>
+    <li><code>internal/lease/*</code></li>
+    <li><code>internal/capability/*</code></li>
+    <li><code>internal/tools/*</code></li>
+    <li><code>internal/runtime/*</code></li>
+    <li><code>internal/inference/*</code></li>
+    <li><code>internal/scheduler/*</code></li>
+    <li><code>internal/supervisor/*</code></li>
+    <li><code>internal/workflow/*</code></li>
+    <li><code>internal/scenario/*</code></li>
+    <li><code>scripts/verify.sh</code></li>
+    <li><code>reports/phase-0.html</code> through <code>reports/phase-8.html</code></li>
+  </ul>
+
+  <h2>Not Yet Implemented</h2>
+  <table>
+    <tr><th>Future Phase</th><th>Status</th><th>Notes</th></tr>
+    <tr><td>9</td><td><span class="warn">Pending</span></td><td>Recovery, resume, checkpoint reconciliation, and failure isolation hardening</td></tr>
+    <tr><td>10</td><td><span class="warn">Pending</span></td><td>Evaluator hardening, adversarial quality gates, and verifier calibration</td></tr>
+    <tr><td>11</td><td><span class="warn">Pending</span></td><td>Performance, contention, inference-slot scheduling, and operational tuning</td></tr>
+    <tr><td>12</td><td><span class="warn">Pending</span></td><td>Beta readiness, consolidated spec, setup flow, and release-quality acceptance suite</td></tr>
+  </table>
+
+  <h2>Assessment</h2>
+  <p>The current AOS prototype now covers phases 0 through 8 from the implementation plan. It has a durable kernel, collaboration primitives, scheduler and supervision layer, local <code>vllm</code> adapter, contract-based workflow engine, and scenario harness with a verified live local-model smoke path. The remaining work is in recovery, evaluator hardening, and operational maturity rather than foundational runtime structure.</p>
+</body>
+</html>

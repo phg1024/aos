@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Read the input files listed in the session context and return one markdown fact sheet with a title and flat bullet list."
+    },
+    {
+      "role": "tool",
+      "content": "read_file:map[content:Project AOS uses a durable process table, event log, mailbox IPC, and artifact store. path:/Users/claw/Code/aos/reports/live-mini-projects/fact-sheet/inputs/notes-1.txt]"
+    }
+  ],
+  "tool_artifact_ids": [
+    "art-000001"
+  ]
+}

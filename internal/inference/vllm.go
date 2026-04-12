@@ -1,0 +1,278 @@
+package inference
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"aos/internal/kernel"
+	"aos/internal/runtime"
+)
+
+var ErrMalformedModelResponse = errors.New("malformed model response")
+
+type VLLMConfig struct {
+	BaseURL      string
+	Model        string
+	APIKey       string
+	SystemPrompt string
+	Timeout      time.Duration
+	HTTPClient   *http.Client
+	OnStream     func(string)
+}
+
+type VLLMBackend struct {
+	baseURL  string
+	model    string
+	apiKey   string
+	client   *http.Client
+	system   string
+	onStream func(string)
+}
+
+type chatCompletionRequest struct {
+	Model       string        `json:"model"`
+	Messages    []chatMessage `json:"messages"`
+	Temperature float64       `json:"temperature"`
+	Stream      bool          `json:"stream,omitempty"`
+}
+
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type chatCompletionResponse struct {
+	Choices []struct {
+		Message chatMessage `json:"message"`
+	} `json:"choices"`
+}
+
+func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
+	timeout := config.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	system := config.SystemPrompt
+	if system == "" {
+		system = "You are an AOS backend. Return only JSON matching the GenerateResult schema."
+	}
+	client := config.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: timeout}
+	}
+	return &VLLMBackend{
+		baseURL:  strings.TrimRight(config.BaseURL, "/"),
+		model:    config.Model,
+		apiKey:   config.APIKey,
+		system:   system,
+		client:   client,
+		onStream: config.OnStream,
+	}
+}
+
+func (b *VLLMBackend) Generate(ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	content, err := b.complete(ctx, b.messages(request))
+	if err != nil {
+		return runtime.GenerateResult{}, err
+	}
+	content = extractTrailingJSONObject(content)
+	result, err := normalizeGenerateResult(content)
+	if err != nil {
+		return runtime.GenerateResult{}, ErrMalformedModelResponse
+	}
+	return result, nil
+}
+
+func (b *VLLMBackend) CompleteJSON(ctx context.Context, systemPrompt, userPrompt string, target any) error {
+	content, err := b.CompleteText(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return err
+	}
+	content = extractTrailingJSONObject(content)
+	if err := json.Unmarshal([]byte(content), target); err != nil {
+		return ErrMalformedModelResponse
+	}
+	return nil
+}
+
+func (b *VLLMBackend) CompleteText(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	messages := []chatMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+	return b.complete(ctx, messages)
+}
+
+type chatCompletionChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+	} `json:"choices"`
+}
+
+func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
+	payload := chatCompletionRequest{
+		Model:       b.model,
+		Messages:    messages,
+		Temperature: 0,
+		Stream:      b.onStream != nil,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	if b.apiKey != "" {
+		httpRequest.Header.Set("Authorization", "Bearer "+b.apiKey)
+	}
+	if b.onStream != nil {
+		httpRequest.Header.Set("Accept", "text/event-stream")
+	}
+
+	response, err := b.client.Do(httpRequest)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode >= 400 {
+		return "", fmt.Errorf("vllm request failed: %s", response.Status)
+	}
+
+	if b.onStream != nil {
+		var fullResponse strings.Builder
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				if data == "[DONE]" {
+					break
+				}
+				var chunk chatCompletionChunk
+				if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
+					content := chunk.Choices[0].Delta.Content
+					if content != "" {
+						b.onStream(content)
+						fullResponse.WriteString(content)
+					}
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return fullResponse.String(), err
+		}
+		b.onStream("\x00")
+		return fullResponse.String(), nil
+	}
+
+	var parsed chatCompletionResponse
+	if err := json.NewDecoder(response.Body).Decode(&parsed); err != nil {
+		return "", err
+	}
+	if len(parsed.Choices) == 0 {
+		return "", ErrMalformedModelResponse
+	}
+	return parsed.Choices[0].Message.Content, nil
+}
+
+func (b *VLLMBackend) messages(request runtime.GenerateRequest) []chatMessage {
+	messages := []chatMessage{
+		{Role: "system", Content: b.system},
+		{Role: "user", Content: fmt.Sprintf("Process role=%s pid=%s", request.Process.Role, request.Process.PID)},
+	}
+	for _, message := range request.History {
+		messages = append(messages, chatMessage{
+			Role:    message.Role,
+			Content: message.Content,
+		})
+	}
+	return messages
+}
+
+func extractTrailingJSONObject(input string) string {
+	start := strings.LastIndex(input, "{")
+	if start == -1 {
+		return input
+	}
+	for candidateStart := start; candidateStart >= 0; candidateStart = previousBrace(input, candidateStart) {
+		if candidateStart < 0 {
+			break
+		}
+		candidate := strings.TrimSpace(input[candidateStart:])
+		if json.Valid([]byte(candidate)) {
+			return candidate
+		}
+	}
+	return strings.TrimSpace(input)
+}
+
+func previousBrace(input string, before int) int {
+	for i := before - 1; i >= 0; i-- {
+		if input[i] == '{' {
+			if utf8.ValidString(input[i:]) {
+				return i
+			}
+			return i
+		}
+	}
+	return -1
+}
+
+func normalizeGenerateResult(raw string) (runtime.GenerateResult, error) {
+	var nested runtime.GenerateResult
+	if err := json.Unmarshal([]byte(raw), &nested); err == nil && nested.Action.Type != "" {
+		return nested, nil
+	}
+
+	var flat struct {
+		Action    string `json:"action"`
+		Reason    string `json:"reason"`
+		Retryable bool   `json:"retryable"`
+		Code      int    `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(raw), &flat); err == nil && flat.Action != "" {
+		code := flat.Code
+		if code == 0 && flat.Action != "exit" {
+			code = 0
+		}
+		status := runtimeExitStatus(flat.Action, code, flat.Reason, flat.Retryable)
+		return runtime.GenerateResult{
+			Action: runtime.GenerateAction{
+				Type:       flat.Action,
+				ExitStatus: &status,
+			},
+		}, nil
+	}
+
+	return runtime.GenerateResult{}, ErrMalformedModelResponse
+}
+
+func runtimeExitStatus(action string, code int, reason string, retryable bool) kernel.ExitStatus {
+	if action != "exit" {
+		return kernel.ExitStatus{
+			Code:      code,
+			Reason:    reason,
+			Retryable: retryable,
+		}
+	}
+	return kernel.ExitStatus{
+		Code:      code,
+		Reason:    reason,
+		Retryable: retryable,
+	}
+}

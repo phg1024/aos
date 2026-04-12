@@ -1,0 +1,214 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"aos/internal/agentflow"
+	"aos/internal/app"
+	"aos/internal/artifact"
+	"aos/internal/inference"
+	"aos/internal/kernel"
+	"aos/internal/tools"
+)
+
+type arrayFlags []string
+
+func (a *arrayFlags) String() string {
+	return fmt.Sprintf("%v", []string(*a))
+}
+
+func (a *arrayFlags) Set(value string) error {
+	*a = append(*a, value)
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		printUsage()
+		return
+	}
+
+	switch os.Args[1] {
+	case "run":
+		run(os.Args[2:])
+	default:
+		printUsage()
+	}
+}
+
+func run(args []string) {
+	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	var inputs arrayFlags
+	var outputPath string
+	var workflowPath string
+	var reportPath string
+	var stateDir string
+	fs.Var(&inputs, "input", "input file path (repeatable)")
+	fs.StringVar(&outputPath, "output", "", "output file path")
+	fs.StringVar(&workflowPath, "workflow", "", "workflow JSON spec path")
+	fs.StringVar(&reportPath, "report", "", "optional HTML report output path")
+	fs.StringVar(&stateDir, "state-dir", "", "optional state directory for workflow runs")
+	_ = fs.Parse(args)
+
+	goal := ""
+	if fs.NArg() > 0 {
+		goal = fs.Arg(0)
+	}
+
+	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 120*time.Second)
+	backend := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL: getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001"),
+		Model:   getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B"),
+		APIKey:  getenv("AOS_VLLM_API_KEY", "dummy"),
+		Timeout: timeout,
+	})
+
+	if workflowPath != "" {
+		if err := runWorkflow(context.Background(), backend, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	result, err := app.AssembleFiles(context.Background(), backend, app.AssembleRequest{
+		Goal:       goal,
+		InputPaths: []string(inputs),
+		OutputPath: outputPath,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	bytes, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(string(bytes))
+}
+
+func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string) error {
+	specBytes, err := os.ReadFile(workflowPath)
+	if err != nil {
+		return err
+	}
+	var spec agentflow.WorkflowSpec
+	if err := json.Unmarshal(specBytes, &spec); err != nil {
+		return err
+	}
+
+	if stateDir == "" {
+		stateDir, err = os.MkdirTemp("", "aos-workflow-*")
+		if err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return err
+	}
+
+	k, err := kernel.New(filepath.Join(stateDir, "kernel"))
+	if err != nil {
+		return err
+	}
+	store, err := artifact.New(filepath.Join(stateDir, "artifacts"))
+	if err != nil {
+		return err
+	}
+
+	engine := agentflow.Engine{
+		Kernel:    k,
+		Artifacts: store,
+		Tools:     tools.NewRuntime(),
+		Factory:   agentflow.StaticBackendFactory{Completer: backend},
+	}
+
+	summary, err := engine.Run(ctx, spec, agentflow.RunRequest{
+		Goal:       goal,
+		InputPaths: inputs,
+		OutputPath: outputPath,
+	})
+	if err != nil {
+		return err
+	}
+
+	if reportPath != "" {
+		report, err := agentflow.CollectRunReport(k, store, "AOS Workflow Run", summary)
+		if err != nil {
+			return err
+		}
+		report.Decisions = []string{
+			"Executed the user-supplied workflow spec without imposing built-in planner or verifier semantics.",
+			"Used the generic multi-step agent loop so agents could iterate through tool and delegate actions until completion.",
+		}
+		report.Issues = []string{
+			"Any model-side action formatting issues would surface as runtime parse or malformed-output failures in the event log.",
+		}
+		report.Tests = []string{
+			"Runtime, workflow, and workflow-spec tests were expected to pass before this live run.",
+		}
+		if err := os.WriteFile(reportPath, []byte(agentflow.RenderHTML(report)), 0o644); err != nil {
+			return err
+		}
+	}
+
+	bytes, err := json.MarshalIndent(map[string]any{
+		"workflow":      spec.Name,
+		"root_pid":      summary.RootPID,
+		"entry_pid":     summary.EntryPID,
+		"result_id":     summary.ResultID,
+		"output_path":   outputPath,
+		"state_dir":     stateDir,
+		"report_path":   reportPath,
+		"agent_run_cnt": countAgentRuns(summary.AgentRuns),
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(bytes))
+	return nil
+}
+
+func countAgentRuns(runs []agentflow.AgentRun) int {
+	total := 0
+	for _, run := range runs {
+		total++
+		total += countAgentRuns(run.Children)
+	}
+	return total
+}
+
+func printUsage() {
+	fmt.Println("Usage:")
+	fmt.Println("  aos run --input A --input B --input C --output D \"assemble files A, B, C into D\"")
+	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
+}
+
+func getenv(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func getenvDuration(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return fallback
+	}
+	return time.Duration(seconds) * time.Second
+}

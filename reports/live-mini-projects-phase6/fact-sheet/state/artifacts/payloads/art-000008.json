@@ -1,0 +1,16 @@
+{
+  "agent_id": "fact_extractor",
+  "pid": "pid-000003",
+  "parent_pid": "pid-000002",
+  "checkpoint_id": "art-000007",
+  "exit_status": {
+    "code": 0,
+    "reason": "fact sheet created with key project facts from both input files",
+    "retryable": false
+  },
+  "final_message": "## AOS Project Fact Sheet\n\n- **Core Architecture**: Durable process table, event log, mailbox IPC, and artifact store\n- **Runtime Language**: Go\n- **ML Endpoint**: Local vLLM for live experimentation\n- **Prototype Status**: Local prototype in development",
+  "tool_artifacts": [
+    "art-000001",
+    "art-000003"
+  ]
+}

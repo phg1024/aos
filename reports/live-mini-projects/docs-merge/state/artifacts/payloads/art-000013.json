@@ -1,0 +1,14 @@
+{
+  "agent_id": "file_writer",
+  "pid": "pid-000004",
+  "parent_pid": "pid-000002",
+  "checkpoint_id": "art-000012",
+  "exit_status": {
+    "code": 0,
+    "reason": "write complete",
+    "retryable": false
+  },
+  "tool_artifacts": [
+    "art-000010"
+  ]
+}

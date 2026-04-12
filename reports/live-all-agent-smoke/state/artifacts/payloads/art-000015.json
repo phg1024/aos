@@ -1,0 +1,7 @@
+{
+  "tool": "write_file",
+  "summary": "wrote file",
+  "output": {
+    "path": "/Users/claw/Code/aos/reports/live-all-agent-smoke/out.html"
+  }
+}

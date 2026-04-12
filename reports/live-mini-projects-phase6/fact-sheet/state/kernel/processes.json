@@ -1,0 +1,149 @@
+{
+  "pid-000001": {
+    "pid": "pid-000001",
+    "role": "workflow:live-fact-sheet",
+    "state": "exited",
+    "metadata": {
+      "goal": "Read the source notes and produce one markdown fact sheet with only the concrete project facts that matter."
+    },
+    "capability_set": {
+      "allow_network": false
+    },
+    "created_at": "2026-04-12T22:02:42.406903Z",
+    "updated_at": "2026-04-12T22:03:20.26032Z",
+    "exit_status": {
+      "code": 0,
+      "reason": "workflow completed",
+      "retryable": false
+    }
+  },
+  "pid-000002": {
+    "pid": "pid-000002",
+    "parent_pid": "pid-000001",
+    "role": "agent:task_router",
+    "state": "exited",
+    "metadata": {
+      "agent_id": "task_router",
+      "goal": "Read the source notes and produce one markdown fact sheet with only the concrete project facts that matter.",
+      "input_paths": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt\n/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt",
+      "output_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md"
+    },
+    "mounts": [
+      {
+        "name": "input-0",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "read_only": true
+      },
+      {
+        "name": "output",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet",
+        "read_only": false
+      }
+    ],
+    "capability_set": {
+      "read_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "write_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "allow_network": false
+    },
+    "created_at": "2026-04-12T22:02:42.407792Z",
+    "updated_at": "2026-04-12T22:03:20.256002Z",
+    "exit_status": {
+      "code": 0,
+      "reason": "Fact sheet generated successfully - fact_extractor extracted project facts and digest_writer wrote markdown to output path",
+      "retryable": false
+    }
+  },
+  "pid-000003": {
+    "pid": "pid-000003",
+    "parent_pid": "pid-000002",
+    "role": "agent:fact_extractor",
+    "state": "exited",
+    "metadata": {
+      "agent_id": "fact_extractor",
+      "goal": "Read the input files at /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt and /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt and return a compact markdown fact sheet with only the concrete project facts that matter.",
+      "input_paths": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt\n/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt",
+      "output_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md"
+    },
+    "mounts": [
+      {
+        "name": "input-0",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "read_only": true
+      },
+      {
+        "name": "output",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet",
+        "read_only": false
+      }
+    ],
+    "capability_set": {
+      "read_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "write_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "tools": [
+        "read_file"
+      ],
+      "allow_network": false
+    },
+    "created_at": "2026-04-12T22:02:49.048567Z",
+    "updated_at": "2026-04-12T22:03:04.554669Z",
+    "exit_status": {
+      "code": 0,
+      "reason": "fact sheet created with key project facts from both input files",
+      "retryable": false
+    }
+  },
+  "pid-000004": {
+    "pid": "pid-000004",
+    "parent_pid": "pid-000002",
+    "role": "agent:digest_writer",
+    "state": "exited",
+    "metadata": {
+      "agent_id": "digest_writer",
+      "goal": "Write the following markdown fact sheet to /Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md:\n\n## AOS Project Fact Sheet\n\n- **Core Architecture**: Durable process table, event log, mailbox IPC, and artifact store\n- **Runtime Language**: Go\n- **ML Endpoint**: Local vLLM for live experimentation\n- **Prototype Status**: Local prototype in development",
+      "input_paths": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-1.txt\n/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs/notes-2.txt",
+      "output_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/fact-sheet.md"
+    },
+    "mounts": [
+      {
+        "name": "input-0",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "read_only": true
+      },
+      {
+        "name": "output",
+        "host_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet",
+        "read_only": false
+      }
+    ],
+    "capability_set": {
+      "read_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/inputs",
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "write_paths": [
+        "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet"
+      ],
+      "tools": [
+        "write_file"
+      ],
+      "allow_network": false
+    },
+    "created_at": "2026-04-12T22:03:10.16485Z",
+    "updated_at": "2026-04-12T22:03:15.216579Z",
+    "exit_status": {
+      "code": 0,
+      "reason": "write complete",
+      "retryable": false
+    }
+  }
+}

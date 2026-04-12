@@ -1,0 +1,194 @@
+{
+  "art-000001": {
+    "id": "art-000001",
+    "type": "tool_result",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000001.json",
+    "metadata": {
+      "tool": "read_file"
+    },
+    "created_at": "2026-04-12T22:02:52.011251Z"
+  },
+  "art-000002": {
+    "id": "art-000002",
+    "type": "checkpoint",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000002.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:02:52.011688Z"
+  },
+  "art-000003": {
+    "id": "art-000003",
+    "type": "tool_result",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000003.json",
+    "metadata": {
+      "tool": "read_file"
+    },
+    "created_at": "2026-04-12T22:02:54.820682Z"
+  },
+  "art-000004": {
+    "id": "art-000004",
+    "type": "checkpoint",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000004.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:02:54.821662Z"
+  },
+  "art-000005": {
+    "id": "art-000005",
+    "type": "checkpoint",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000005.json",
+    "metadata": {
+      "kind": "yield"
+    },
+    "created_at": "2026-04-12T22:02:59.549592Z"
+  },
+  "art-000006": {
+    "id": "art-000006",
+    "type": "checkpoint",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000006.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:02:59.550623Z"
+  },
+  "art-000007": {
+    "id": "art-000007",
+    "type": "checkpoint",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000007.json",
+    "metadata": {
+      "kind": "final"
+    },
+    "created_at": "2026-04-12T22:03:04.553809Z"
+  },
+  "art-000008": {
+    "id": "art-000008",
+    "type": "agent_run",
+    "producer_pid": "pid-000003",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000008.json",
+    "metadata": {
+      "agent_id": "fact_extractor"
+    },
+    "created_at": "2026-04-12T22:03:04.556648Z"
+  },
+  "art-000009": {
+    "id": "art-000009",
+    "type": "delegate_result",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000009.json",
+    "metadata": {
+      "agent_id": "fact_extractor",
+      "pid": "pid-000003"
+    },
+    "created_at": "2026-04-12T22:03:04.557657Z"
+  },
+  "art-000010": {
+    "id": "art-000010",
+    "type": "checkpoint",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000010.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:03:04.558667Z"
+  },
+  "art-000011": {
+    "id": "art-000011",
+    "type": "tool_result",
+    "producer_pid": "pid-000004",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000011.json",
+    "metadata": {
+      "tool": "write_file"
+    },
+    "created_at": "2026-04-12T22:03:15.21358Z"
+  },
+  "art-000012": {
+    "id": "art-000012",
+    "type": "checkpoint",
+    "producer_pid": "pid-000004",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000012.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:03:15.214711Z"
+  },
+  "art-000013": {
+    "id": "art-000013",
+    "type": "checkpoint",
+    "producer_pid": "pid-000004",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000013.json",
+    "metadata": {
+      "kind": "final"
+    },
+    "created_at": "2026-04-12T22:03:15.215722Z"
+  },
+  "art-000014": {
+    "id": "art-000014",
+    "type": "agent_run",
+    "producer_pid": "pid-000004",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000014.json",
+    "metadata": {
+      "agent_id": "digest_writer"
+    },
+    "created_at": "2026-04-12T22:03:15.218761Z"
+  },
+  "art-000015": {
+    "id": "art-000015",
+    "type": "delegate_result",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000015.json",
+    "metadata": {
+      "agent_id": "digest_writer",
+      "pid": "pid-000004"
+    },
+    "created_at": "2026-04-12T22:03:15.219684Z"
+  },
+  "art-000016": {
+    "id": "art-000016",
+    "type": "checkpoint",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000016.json",
+    "metadata": {
+      "kind": "intermediate"
+    },
+    "created_at": "2026-04-12T22:03:15.220496Z"
+  },
+  "art-000017": {
+    "id": "art-000017",
+    "type": "checkpoint",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000017.json",
+    "metadata": {
+      "kind": "final"
+    },
+    "created_at": "2026-04-12T22:03:20.254992Z"
+  },
+  "art-000018": {
+    "id": "art-000018",
+    "type": "agent_run",
+    "producer_pid": "pid-000002",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000018.json",
+    "metadata": {
+      "agent_id": "task_router"
+    },
+    "created_at": "2026-04-12T22:03:20.258304Z"
+  },
+  "art-000019": {
+    "id": "art-000019",
+    "type": "workflow_summary",
+    "producer_pid": "pid-000001",
+    "path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/fact-sheet/state/artifacts/payloads/art-000019.json",
+    "metadata": {
+      "workflow": "live-fact-sheet"
+    },
+    "created_at": "2026-04-12T22:03:20.259487Z"
+  }
+}

@@ -1,0 +1,109 @@
+[
+  {
+    "id": "evt-000001",
+    "process_id": "pid-000001",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T16:01:34.911351Z",
+    "data": {
+      "role": "workflow:live-docs-merge"
+    }
+  },
+  {
+    "id": "evt-000002",
+    "process_id": "pid-000002",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T16:01:34.912091Z",
+    "data": {
+      "role": "agent:editorial_coordinator"
+    }
+  },
+  {
+    "id": "evt-000003",
+    "process_id": "pid-000002",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T16:01:34.912985Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000004",
+    "process_id": "pid-000003",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T16:01:42.304228Z",
+    "data": {
+      "role": "agent:source_synthesizer"
+    }
+  },
+  {
+    "id": "evt-000005",
+    "process_id": "pid-000003",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T16:01:42.305729Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000006",
+    "process_id": "pid-000003",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T16:01:58.228343Z",
+    "data": {
+      "code": "0",
+      "reason": "Successfully merged a.html and b.html into a single coherent HTML document containing both Alpha and Beta sections with their respective content.",
+      "retryable": "false"
+    }
+  },
+  {
+    "id": "evt-000007",
+    "process_id": "pid-000004",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T16:02:05.837036Z",
+    "data": {
+      "role": "agent:file_writer"
+    }
+  },
+  {
+    "id": "evt-000008",
+    "process_id": "pid-000004",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T16:02:05.839014Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000009",
+    "process_id": "pid-000004",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T16:02:39.934733Z",
+    "data": {
+      "code": "1",
+      "reason": "step limit exceeded",
+      "retryable": "true"
+    }
+  },
+  {
+    "id": "evt-000010",
+    "process_id": "pid-000002",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T16:02:51.77764Z",
+    "data": {
+      "code": "0",
+      "reason": "Workflow already complete - source_synthesizer merged HTML content and file_writer successfully wrote to output path",
+      "retryable": "false"
+    }
+  },
+  {
+    "id": "evt-000011",
+    "process_id": "pid-000001",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T16:02:51.782969Z",
+    "data": {
+      "code": "0",
+      "reason": "workflow completed",
+      "retryable": "false"
+    }
+  }
+]

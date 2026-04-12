@@ -1,0 +1,109 @@
+[
+  {
+    "id": "evt-000001",
+    "process_id": "pid-000001",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T21:04:26.986129Z",
+    "data": {
+      "role": "workflow:live-fact-sheet"
+    }
+  },
+  {
+    "id": "evt-000002",
+    "process_id": "pid-000002",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T21:04:26.986686Z",
+    "data": {
+      "role": "agent:task_router"
+    }
+  },
+  {
+    "id": "evt-000003",
+    "process_id": "pid-000002",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T21:04:26.987338Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000004",
+    "process_id": "pid-000003",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T21:04:26.98794Z",
+    "data": {
+      "role": "agent:fact_extractor"
+    }
+  },
+  {
+    "id": "evt-000005",
+    "process_id": "pid-000003",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T21:04:26.988833Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000006",
+    "process_id": "pid-000003",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T21:04:43.797549Z",
+    "data": {
+      "code": "0",
+      "reason": "Fact sheet created successfully with title and flat bullet list from input files",
+      "retryable": "false"
+    }
+  },
+  {
+    "id": "evt-000007",
+    "process_id": "pid-000004",
+    "type": "process.spawned",
+    "timestamp": "2026-04-12T21:04:43.802162Z",
+    "data": {
+      "role": "agent:digest_writer"
+    }
+  },
+  {
+    "id": "evt-000008",
+    "process_id": "pid-000004",
+    "type": "process.transition",
+    "timestamp": "2026-04-12T21:04:43.803837Z",
+    "data": {
+      "state": "running"
+    }
+  },
+  {
+    "id": "evt-000009",
+    "process_id": "pid-000004",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T21:04:43.808003Z",
+    "data": {
+      "code": "0",
+      "reason": "write complete",
+      "retryable": "false"
+    }
+  },
+  {
+    "id": "evt-000010",
+    "process_id": "pid-000002",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T21:04:43.812773Z",
+    "data": {
+      "code": "0",
+      "reason": "fact sheet complete",
+      "retryable": "false"
+    }
+  },
+  {
+    "id": "evt-000011",
+    "process_id": "pid-000001",
+    "type": "process.exited",
+    "timestamp": "2026-04-12T21:04:43.815191Z",
+    "data": {
+      "code": "0",
+      "reason": "workflow completed",
+      "retryable": "false"
+    }
+  }
+]

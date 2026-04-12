@@ -1,0 +1,39 @@
+{
+  "name": "live-fact-sheet",
+  "description": "Two agents collaborate to extract facts and write a structured markdown digest.",
+  "entry_agent": "task_router",
+  "agents": [
+    {
+      "id": "task_router",
+      "system_prompt": "You coordinate the task without using tools. Delegate first to fact_extractor and ask it to read all input files and return a compact markdown fact sheet in a message action before exiting. Then delegate to digest_writer and instruct it to write exactly that markdown to the output path. After the write completes, send a brief completion message and exit.",
+      "allowed_agents": [
+        "fact_extractor",
+        "digest_writer"
+      ],
+      "capabilities": {
+        "tools": []
+      },
+      "max_steps": 8
+    },
+    {
+      "id": "fact_extractor",
+      "system_prompt": "Use read_file to inspect the input files. Extract the concrete facts that matter most. Return a markdown digest with a title and flat bullet list in one message action, then exit successfully.",
+      "capabilities": {
+        "tools": [
+          "read_file"
+        ]
+      },
+      "max_steps": 10
+    },
+    {
+      "id": "digest_writer",
+      "system_prompt": "Use write_file to write exactly the content contained in your goal into the output path from the session context. After writing, send a short confirmation message and exit.",
+      "capabilities": {
+        "tools": [
+          "write_file"
+        ]
+      },
+      "max_steps": 6
+    }
+  ]
+}

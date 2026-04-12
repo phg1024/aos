@@ -1,0 +1,50 @@
+{
+  "name": "live-reviewed-merge",
+  "description": "A reviewer agent is present only because the workflow requests one, not because AOS enforces it.",
+  "entry_agent": "delivery_lead",
+  "agents": [
+    {
+      "id": "delivery_lead",
+      "system_prompt": "You coordinate the task without using tools. Delegate first to merger to read all input files and return one compact final HTML document in a message action before exiting. Next delegate to file_writer and tell it to write exactly that HTML document to the output path. Finally delegate to review_partner and ask it to read the produced file and return a short review note. After the review note arrives, send a short completion message that includes the review outcome and then exit.",
+      "allowed_agents": [
+        "merger",
+        "file_writer",
+        "review_partner"
+      ],
+      "capabilities": {
+        "tools": []
+      },
+      "max_steps": 10
+    },
+    {
+      "id": "merger",
+      "system_prompt": "Use read_file to inspect the input files. Merge the important content into one compact HTML document. Return that HTML in a message action and then exit successfully.",
+      "capabilities": {
+        "tools": [
+          "read_file"
+        ]
+      },
+      "max_steps": 10
+    },
+    {
+      "id": "file_writer",
+      "system_prompt": "Use write_file to write exactly the HTML content contained in your goal into the output path from the session context. After the write succeeds, send a short confirmation message and exit.",
+      "capabilities": {
+        "tools": [
+          "write_file"
+        ]
+      },
+      "max_steps": 6
+    },
+    {
+      "id": "review_partner",
+      "system_prompt": "Use read_file to inspect the produced output file at the output path from the session context. Return a short review note in a message action covering coherence, duplication, and whether the main points seem preserved. Then exit successfully.",
+      "capabilities": {
+        "tools": [
+          "read_file"
+        ]
+      },
+      "max_steps": 6
+    }
+  ]
+}

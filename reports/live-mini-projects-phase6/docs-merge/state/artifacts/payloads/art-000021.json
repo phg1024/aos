@@ -1,0 +1,74 @@
+{
+  "workflow": "live-docs-merge",
+  "root_pid": "pid-000001",
+  "entry_pid": "pid-000002",
+  "result_id": "art-000020",
+  "agent_runs": [
+    {
+      "agent_id": "editorial_coordinator",
+      "pid": "pid-000002",
+      "parent_pid": "pid-000001",
+      "checkpoint_id": "art-000019",
+      "result_id": "art-000020",
+      "exit_status": {
+        "code": 0,
+        "reason": "workflow complete - source_synthesizer assembled HTML report and file_writer successfully wrote to combined-report.html",
+        "retryable": false
+      },
+      "final_message": "Workflow complete: source_synthesizer assembled the HTML report and file_writer successfully wrote it to combined-report.html",
+      "delegates": [
+        {
+          "role": "tool",
+          "content": "delegate_result agent=source_synthesizer pid=pid-000003 summary=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n    \u003ctitle\u003eLive Mini Projects Phase 6 - Combined Report\u003c/title\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n    \u003ch1\u003eLive Mini Projects Phase 6 - Combined Report\u003c/h1\u003e\n    \n    \u003ch2\u003eCore Principles\u003c/h2\u003e\n    \u003cp\u003eAOS should be role-agnostic, durable, and centered on artifacts instead of transcript sharing.\u003c/p\u003e\n    \n    \u003ch2\u003eRuntime Requirements\u003c/h2\u003e\n    \u003cp\u003eThe runtime should support repeated tool use and delegation until the task is complete.\u003c/p\u003e\n\u003c/body\u003e\n\u003c/html\u003e result_artifact=art-000008 checkpoint=art-000007"
+        },
+        {
+          "role": "tool",
+          "content": "delegate_result agent=file_writer pid=pid-000004 summary= result_artifact=art-000014 checkpoint=art-000013"
+        },
+        {
+          "role": "delegate",
+          "content": "source_synthesizer:art-000008"
+        },
+        {
+          "role": "delegate",
+          "content": "file_writer:art-000014"
+        }
+      ],
+      "children": [
+        {
+          "agent_id": "source_synthesizer",
+          "pid": "pid-000003",
+          "parent_pid": "pid-000002",
+          "checkpoint_id": "art-000007",
+          "result_id": "art-000008",
+          "exit_status": {
+            "code": 0,
+            "reason": "Merged HTML document created successfully combining Phase A and Phase B content",
+            "retryable": false
+          },
+          "final_message": "\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n    \u003ctitle\u003eLive Mini Projects Phase 6 - Combined Report\u003c/title\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n    \u003ch1\u003eLive Mini Projects Phase 6 - Combined Report\u003c/h1\u003e\n    \n    \u003ch2\u003eCore Principles\u003c/h2\u003e\n    \u003cp\u003eAOS should be role-agnostic, durable, and centered on artifacts instead of transcript sharing.\u003c/p\u003e\n    \n    \u003ch2\u003eRuntime Requirements\u003c/h2\u003e\n    \u003cp\u003eThe runtime should support repeated tool use and delegation until the task is complete.\u003c/p\u003e\n\u003c/body\u003e\n\u003c/html\u003e",
+          "tool_artifacts": [
+            "art-000001",
+            "art-000003"
+          ]
+        },
+        {
+          "agent_id": "file_writer",
+          "pid": "pid-000004",
+          "parent_pid": "pid-000002",
+          "checkpoint_id": "art-000013",
+          "result_id": "art-000014",
+          "exit_status": {
+            "code": 0,
+            "reason": "write complete",
+            "retryable": false
+          },
+          "tool_artifacts": [
+            "art-000011"
+          ]
+        }
+      ]
+    }
+  ],
+  "output_path": "/Users/claw/Code/aos/reports/live-mini-projects-phase6/docs-merge/combined-report.html"
+}

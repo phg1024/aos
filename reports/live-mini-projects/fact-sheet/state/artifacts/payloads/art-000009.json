@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Read the source notes and produce one markdown fact sheet with only the concrete project facts that matter."
+    },
+    {
+      "role": "tool",
+      "content": "delegate_result agent=fact_extractor pid=pid-000003 summary=# Project AOS Fact Sheet\n\n- Project AOS uses a durable process table, event log, mailbox IPC, and artifact store\n- The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation result_artifact=art-000007 checkpoint=art-000006"
+    }
+  ],
+  "delegate_artifact_ids": [
+    "art-000008"
+  ]
+}

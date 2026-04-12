@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write exactly this markdown content to the output path:\n# Project AOS Fact Sheet\n\n- Project AOS uses a durable process table, event log, mailbox IPC, and artifact store\n- The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation"
+    },
+    {
+      "role": "tool",
+      "content": "write_file:map[path:/Users/claw/Code/aos/reports/live-mini-projects/fact-sheet/fact-sheet.md]"
+    }
+  ],
+  "tool_artifact_ids": [
+    "art-000010"
+  ]
+}

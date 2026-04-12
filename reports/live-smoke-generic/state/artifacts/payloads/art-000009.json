@@ -1,0 +1,15 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Assemble the provided notes into one compact coherent HTML report. Preserve the most important ideas and remove repetition."
+    },
+    {
+      "role": "tool",
+      "content": "delegate_result agent=source_synthesizer pid=pid-000003 summary=\u003c!DOCTYPE html\u003e\n\u003chtml\u003e\n\u003chead\u003e\n  \u003ctitle\u003eMerged Documentation\u003c/title\u003e\n\u003c/head\u003e\n\u003cbody\u003e\n  \u003ch1\u003eAlpha\u003c/h1\u003e\n  \u003cp\u003eArtifacts are the collaboration surface.\u003c/p\u003e\n  \u003ch1\u003eBeta\u003c/h1\u003e\n  \u003cp\u003eAgents should delegate work through workflow specs.\u003c/p\u003e\n\u003c/body\u003e\n\u003c/html\u003e result_artifact=art-000007 checkpoint=art-000006"
+    }
+  ],
+  "delegate_artifact_ids": [
+    "art-000008"
+  ]
+}
