@@ -9,7 +9,9 @@
       "Bash(git rm:*)",
       "Bash(git commit:*)",
       "Bash(go test:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(go build:*)",
+      "Bash(./aos-tui)"
     ]
   }
 }
