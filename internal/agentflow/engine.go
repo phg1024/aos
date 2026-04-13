@@ -12,6 +12,7 @@ import (
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
+	"aos/internal/skills"
 	"aos/internal/tools"
 )
 
@@ -19,19 +20,25 @@ var ErrUnknownAgent = errors.New("unknown agent")
 var ErrDelegationDenied = errors.New("delegation denied")
 
 type BackendFactory interface {
-	BackendFor(agent AgentSpec, workflow WorkflowSpec) runtime.Backend
+	BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error)
 }
 
 type StaticBackendFactory struct {
 	Completer JSONCompleter
+	Skills    skills.Registry
 }
 
-func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) runtime.Backend {
+func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
+	loadedSkills, err := f.Skills.LoadMany(agent.Skills)
+	if err != nil {
+		return nil, err
+	}
 	return PromptBackend{
 		Completer: f.Completer,
 		Workflow:  workflow,
 		Agent:     agent,
-	}
+		Skills:    loadedSkills,
+	}, nil
 }
 
 type RunRequest struct {
@@ -130,7 +137,6 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		Artifacts: e.Artifacts,
 		Tools:     e.Tools,
 		Bus:       e.Bus,
-		Backend:   e.Factory.BackendFor(agent, spec),
 		MaxSteps:  maxSteps(agent),
 		DelegateHandler: func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
 			if !contains(agent.AllowedAgents, call.AgentID) {
@@ -154,6 +160,11 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 			}, nil
 		},
 	}
+	backend, err := e.Factory.BackendFor(agent, spec)
+	if err != nil {
+		return AgentRun{}, err
+	}
+	agentRuntime.Backend = backend
 
 	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
 	result, err := agentRuntime.Run(ctx, process.PID, initial)

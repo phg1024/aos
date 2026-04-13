@@ -12,6 +12,7 @@ type WorkflowSpec struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	EntryAgent  string      `json:"entry_agent"`
+	SkillRoots  []string    `json:"skill_roots,omitempty"`
 	Agents      []AgentSpec `json:"agents"`
 }
 
@@ -19,6 +20,7 @@ type AgentSpec struct {
 	ID            string             `json:"id"`
 	SystemPrompt  string             `json:"system_prompt"`
 	AllowedAgents []string           `json:"allowed_agents,omitempty"`
+	Skills        []string           `json:"skills,omitempty"`
 	MaxSteps      int                `json:"max_steps,omitempty"`
 	Mounts        []capability.Mount `json:"mounts,omitempty"`
 	Capabilities  capability.Set     `json:"capabilities"`

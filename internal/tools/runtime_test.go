@@ -1,6 +1,7 @@
 package tools_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -99,6 +100,13 @@ func TestToolRuntimeHonorsCapabilities(t *testing.T) {
 func TestExecuteAndRecordStoresStructuredArtifact(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	notePath := filepath.Join(workspace, "note.txt")
+	if err := os.WriteFile(notePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
 	store, err := artifact.New(filepath.Join(root, "artifacts"))
 	if err != nil {
 		t.Fatalf("new artifact store: %v", err)
@@ -106,19 +114,20 @@ func TestExecuteAndRecordStoresStructuredArtifact(t *testing.T) {
 	runtime := tools.NewRuntime()
 
 	result, record, err := runtime.ExecuteAndRecord(store, "pid-1", tools.Request{
-		Tool: "echo",
-		Args: map[string]string{"message": "hello"},
+		Tool: "read_file",
+		Args: map[string]string{"path": notePath},
 		Mounts: []capability.Mount{
 			{Name: "workspace", HostPath: workspace},
 		},
 		CapabilitySet: capability.Set{
-			Tools: []string{"echo"},
+			ReadPaths: []string{workspace},
+			Tools:     []string{"read_file"},
 		},
 	})
 	if err != nil {
 		t.Fatalf("execute and record: %v", err)
 	}
-	if result.Tool != "echo" {
+	if result.Tool != "read_file" {
 		t.Fatalf("unexpected tool result %#v", result)
 	}
 
@@ -126,87 +135,8 @@ func TestExecuteAndRecordStoresStructuredArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("artifact metadata: %v", err)
 	}
-	if meta.Metadata["tool"] != "echo" {
+	if meta.Metadata["tool"] != "read_file" {
 		t.Fatalf("unexpected artifact metadata %#v", meta.Metadata)
-	}
-}
-
-func TestExecuteCode(t *testing.T) {
-	root := t.TempDir()
-	runtime := tools.NewRuntime()
-
-	// Test basic Python execution
-	result, err := runtime.Execute(tools.Request{
-		Tool: "execute_code",
-		Args: map[string]string{
-			"language": "python3",
-			"code":     "print('hello world')",
-		},
-		Mounts: []capability.Mount{
-			{Name: "workspace", HostPath: root},
-		},
-		CapabilitySet: capability.Set{
-			Tools: []string{"execute_code"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("execute_code: %v", err)
-	}
-	if result.Output["exit_code"] != "0" {
-		t.Fatalf("unexpected exit code: %s", result.Output["exit_code"])
-	}
-	if !strings.Contains(result.Output["stdout"], "hello world") {
-		t.Fatalf("unexpected stdout: %s", result.Output["stdout"])
-	}
-
-	// Test code with error
-	result, err = runtime.Execute(tools.Request{
-		Tool: "execute_code",
-		Args: map[string]string{
-			"language": "python3",
-			"code":     "raise ValueError('test error')",
-		},
-		Mounts: []capability.Mount{
-			{Name: "workspace", HostPath: root},
-		},
-		CapabilitySet: capability.Set{
-			Tools: []string{"execute_code"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("execute_code should not error on non-zero exit: %v", err)
-	}
-	if result.Output["exit_code"] != "1" {
-		t.Fatalf("expected exit code 1, got: %s", result.Output["exit_code"])
-	}
-
-	// Test missing code argument
-	_, err = runtime.Execute(tools.Request{
-		Tool:          "execute_code",
-		Args:          map[string]string{},
-		Mounts:        []capability.Mount{{Name: "workspace", HostPath: root}},
-		CapabilitySet: capability.Set{Tools: []string{"execute_code"}},
-	})
-	if err == nil {
-		t.Fatal("expected error for missing code")
-	}
-
-	// Test unsupported language
-	_, err = runtime.Execute(tools.Request{
-		Tool: "execute_code",
-		Args: map[string]string{
-			"language": "javascript",
-			"code":     "console.log('hi')",
-		},
-		Mounts: []capability.Mount{
-			{Name: "workspace", HostPath: root},
-		},
-		CapabilitySet: capability.Set{
-			Tools: []string{"execute_code"},
-		},
-	})
-	if err == nil {
-		t.Fatal("expected error for unsupported language")
 	}
 }
 
@@ -286,5 +216,24 @@ func TestRunTool(t *testing.T) {
 	}
 	if !strings.Contains(result.Output["stdout"], root) {
 		t.Fatalf("expected stdout to contain %s, got: %s", root, result.Output["stdout"])
+	}
+
+	result, err = runtime.Execute(tools.Request{
+		Tool: "run",
+		Args: map[string]string{
+			"command": "python3 -c \"print('hello from python')\"",
+		},
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: root},
+		},
+		CapabilitySet: capability.Set{
+			Tools: []string{"run"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("run python: %v", err)
+	}
+	if result.Output["exit_code"] != "0" || !strings.Contains(result.Output["stdout"], "hello from python") {
+		t.Fatalf("unexpected python run result %#v", result.Output)
 	}
 }

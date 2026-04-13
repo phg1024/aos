@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -69,10 +71,18 @@ type Backend interface {
 }
 
 type Session struct {
-	Messages            []Message `json:"messages"`
-	ToolArtifactIDs     []string  `json:"tool_artifact_ids,omitempty"`
-	DelegateArtifactIDs []string  `json:"delegate_artifact_ids,omitempty"`
-	MailboxArtifactIDs  []string  `json:"mailbox_artifact_ids,omitempty"`
+	Messages            []Message     `json:"messages"`
+	ToolArtifactIDs     []string      `json:"tool_artifact_ids,omitempty"`
+	DelegateArtifactIDs []string      `json:"delegate_artifact_ids,omitempty"`
+	MailboxArtifactIDs  []string      `json:"mailbox_artifact_ids,omitempty"`
+	ToolAttempts        []ToolAttempt `json:"tool_attempts,omitempty"`
+}
+
+type ToolAttempt struct {
+	Name      string `json:"name"`
+	Signature string `json:"signature"`
+	Useful    bool   `json:"useful"`
+	Error     string `json:"error,omitempty"`
 }
 
 type RunResult struct {
@@ -115,6 +125,10 @@ func (r *AgentRuntime) RunWithOptions(ctx context.Context, pid string, initial [
 type RunOptions struct {
 	StopOnAssistantMessage bool
 	ContinueOnToolError    bool
+	OnToolCall             func(ToolCall)
+	OnToolResult           func(tools.Result)
+	OnToolError            func(ToolCall, error)
+	OnAssistantMessage     func(string)
 }
 
 func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
@@ -199,6 +213,22 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			History: append([]Message(nil), session.Messages...),
 		})
 		if err != nil {
+			if options.ContinueOnToolError {
+				artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
+					"error": err.Error(),
+				}, nil, map[string]string{
+					"kind": "backend_error",
+				})
+				if recordErr != nil {
+					return RunResult{}, recordErr
+				}
+				session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+				session.Messages = append(session.Messages, Message{
+					Role:    "tool",
+					Content: fmt.Sprintf("tool_error name=backend error=%s try_different_strategy=true", err.Error()),
+				})
+				continue
+			}
 			exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
 			if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 				return RunResult{}, exitErr
@@ -208,6 +238,9 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 
 		switch result.Action.Type {
 		case "message":
+			if options.OnAssistantMessage != nil {
+				options.OnAssistantMessage(result.Action.Message)
+			}
 			session.Messages = append(session.Messages, Message{
 				Role:    "assistant",
 				Content: result.Action.Message,
@@ -229,6 +262,37 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			if result.Action.ToolCall == nil || result.Action.ToolCall.Name == "" {
 				return r.failMalformed(pid, checkpointID)
 			}
+			if options.OnToolCall != nil {
+				options.OnToolCall(*result.Action.ToolCall)
+			}
+			signature := toolCallSignature(*result.Action.ToolCall)
+			if repeatedUnhelpfulToolCall(session.ToolAttempts, signature) {
+				repeatErr := errors.New("repeated unsuccessful tool call suppressed; try different args or another tool")
+				if options.OnToolError != nil {
+					options.OnToolError(*result.Action.ToolCall, repeatErr)
+				}
+				artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
+					"tool":  result.Action.ToolCall.Name,
+					"error": repeatErr.Error(),
+				}, nil, map[string]string{
+					"tool": result.Action.ToolCall.Name,
+				})
+				if recordErr != nil {
+					return RunResult{}, recordErr
+				}
+				session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+				session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
+					Name:      result.Action.ToolCall.Name,
+					Signature: signature,
+					Useful:    false,
+					Error:     repeatErr.Error(),
+				})
+				session.Messages = append(session.Messages, Message{
+					Role:    "tool",
+					Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error()),
+				})
+				break
+			}
 			toolResult, err := r.Tools.Execute(tools.Request{
 				Tool:          result.Action.ToolCall.Name,
 				Args:          result.Action.ToolCall.Args,
@@ -236,6 +300,9 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				Mounts:        process.Mounts,
 			})
 			if err != nil {
+				if options.OnToolError != nil {
+					options.OnToolError(*result.Action.ToolCall, err)
+				}
 				if options.ContinueOnToolError {
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 						"tool":  result.Action.ToolCall.Name,
@@ -247,9 +314,15 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 						return RunResult{}, recordErr
 					}
 					session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+					session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
+						Name:      result.Action.ToolCall.Name,
+						Signature: signature,
+						Useful:    false,
+						Error:     err.Error(),
+					})
 					session.Messages = append(session.Messages, Message{
 						Role:    "tool",
-						Content: fmt.Sprintf("tool_error name=%s error=%s", result.Action.ToolCall.Name, err.Error()),
+						Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, err.Error()),
 					})
 					break
 				}
@@ -265,11 +338,26 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			if err != nil {
 				return RunResult{}, err
 			}
+			if options.OnToolResult != nil {
+				options.OnToolResult(toolResult)
+			}
 			session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+			useful, reason := assessToolResult(toolResult)
+			session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
+				Name:      result.Action.ToolCall.Name,
+				Signature: signature,
+				Useful:    useful,
+			})
 			session.Messages = append(session.Messages, Message{
 				Role:    "tool",
 				Content: fmt.Sprintf("%s:%v", toolResult.Tool, toolResult.Output),
 			})
+			if !useful {
+				session.Messages = append(session.Messages, Message{
+					Role:    "tool",
+					Content: fmt.Sprintf("tool_notice name=%s useful=false reason=%s try_different_strategy=true", toolResult.Tool, reason),
+				})
+			}
 		case "delegate":
 			if result.Action.Delegate == nil || result.Action.Delegate.AgentID == "" {
 				return r.failMalformed(pid, checkpointID)
@@ -420,6 +508,73 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		return RunResult{}, err
 	}
 	return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID, Session: session}, nil
+}
+
+func assessToolResult(result tools.Result) (bool, string) {
+	switch result.Tool {
+	case "find_files":
+		if strings.TrimSpace(result.Output["matches"]) == "" {
+			return false, "no_matches"
+		}
+	case "list_dir":
+		if strings.TrimSpace(result.Output["entries"]) == "" {
+			return false, "empty_directory"
+		}
+	case "read_file":
+		if strings.TrimSpace(result.Output["content"]) == "" {
+			return false, "empty_file"
+		}
+	case "web_search":
+		if strings.TrimSpace(result.Output["result"]) == "" {
+			return false, "no_search_hits"
+		}
+	case "web_fetch":
+		status := strings.TrimSpace(result.Output["status"])
+		content := strings.TrimSpace(result.Output["content"])
+		if strings.HasPrefix(status, "4") || strings.HasPrefix(status, "5") {
+			return false, "http_error"
+		}
+		if content == "" {
+			return false, "empty_response"
+		}
+	case "run":
+		exitCode := strings.TrimSpace(result.Output["exit_code"])
+		if exitCode != "" && exitCode != "0" {
+			return false, "non_zero_exit"
+		}
+	}
+	return true, ""
+}
+
+func toolCallSignature(call ToolCall) string {
+	if len(call.Args) == 0 {
+		return call.Name
+	}
+	keys := make([]string, 0, len(call.Args))
+	for key := range call.Args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var builder strings.Builder
+	builder.WriteString(call.Name)
+	for _, key := range keys {
+		builder.WriteString("|")
+		builder.WriteString(key)
+		builder.WriteString("=")
+		builder.WriteString(call.Args[key])
+	}
+	return builder.String()
+}
+
+func repeatedUnhelpfulToolCall(attempts []ToolAttempt, signature string) bool {
+	for i := len(attempts) - 1; i >= 0; i-- {
+		attempt := attempts[i]
+		if attempt.Signature != signature {
+			continue
+		}
+		return !attempt.Useful
+	}
+	return false
 }
 
 func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"aos/internal/agentflow"
@@ -15,6 +16,7 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/kernel"
+	"aos/internal/skills"
 	"aos/internal/tools"
 )
 
@@ -105,6 +107,7 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 	if err := json.Unmarshal(specBytes, &spec); err != nil {
 		return err
 	}
+	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...))
 
 	if stateDir == "" {
 		stateDir, err = os.MkdirTemp("", "aos-workflow-*")
@@ -129,7 +132,10 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 		Kernel:    k,
 		Artifacts: store,
 		Tools:     tools.NewRuntime(),
-		Factory:   agentflow.StaticBackendFactory{Completer: backend},
+		Factory: agentflow.StaticBackendFactory{
+			Completer: backend,
+			Skills:    skills.NewRegistry(spec.SkillRoots),
+		},
 	}
 
 	summary, err := engine.Run(ctx, spec, agentflow.RunRequest{
@@ -176,6 +182,42 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 	}
 	fmt.Println(string(bytes))
 	return nil
+}
+
+func resolveSkillRoots(roots []string, baseDir string) []string {
+	out := make([]string, 0, len(roots))
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if !filepath.IsAbs(root) {
+			root = filepath.Join(baseDir, root)
+		}
+		out = append(out, filepath.Clean(root))
+	}
+	return out
+}
+
+func defaultSkillRoots(baseDir string) []string {
+	return dedupeStrings([]string{
+		filepath.Join(baseDir, "skills"),
+		filepath.Join(filepath.Dir(baseDir), "skills"),
+	})
+}
+
+func dedupeStrings(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func countAgentRuns(runs []agentflow.AgentRun) int {

@@ -18,7 +18,10 @@ import (
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
+	"aos/internal/skills"
+	"aos/internal/tokenizer"
 	"aos/internal/tools"
+	"aos/internal/tui/render"
 )
 
 func main() {
@@ -28,14 +31,20 @@ func main() {
 	var stateDir string
 	var workdir string
 	var toolList string
+	var skillDirs sliceFlags
+	var skillRefs sliceFlags
 
 	flag.StringVar(&workflowPath, "workflow", "", "optional workflow JSON path")
 	flag.StringVar(&agentID, "agent", "", "agent ID when using a workflow")
-	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, and use wait when you need more user input.", "system prompt for direct interactive mode")
+	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and before exiting after completing a user task always send one final user-facing message that summarizes the outcome.", "system prompt for direct interactive mode")
 	flag.StringVar(&stateDir, "state-dir", "", "optional persistent state directory")
 	flag.StringVar(&workdir, "workdir", ".", "workspace directory for read/write tools")
-	flag.StringVar(&toolList, "tools", "list_dir,find_files,read_file,write_file,run,execute_code,web_search,web_fetch", "comma-separated tools for direct interactive mode")
+	flag.StringVar(&toolList, "tools", "list_dir,find_files,read_file,write_file,run,web_search,web_fetch", "comma-separated tools for direct interactive mode")
+	flag.Var(&skillDirs, "skill-dir", "directory containing Claude-Code-style skills (repeatable)")
+	flag.Var(&skillRefs, "skill", "skill name or skill path to load (repeatable)")
 	flag.Parse()
+
+	ui := render.NewPalette(os.Stdout)
 
 	if stateDir == "" {
 		var err error
@@ -53,7 +62,7 @@ func main() {
 		fail(err)
 	}
 
-	spec, agent := loadInteractiveSpec(workflowPath, agentID, systemPrompt, absWorkdir, parseTools(toolList))
+	spec, agent := loadInteractiveSpec(workflowPath, agentID, systemPrompt, absWorkdir, parseTools(toolList), []string(skillDirs), []string(skillRefs))
 
 	k, err := kernel.New(filepath.Join(stateDir, "kernel"))
 	if err != nil {
@@ -79,28 +88,15 @@ func main() {
 	}
 
 	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 180*time.Second)
-	var streamBuffer string
+	modelName := getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B")
+	repoRoot := detectRepoRoot(absWorkdir)
+	stream := render.NewStreamRenderer(ui)
 	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL: getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001"),
-		Model:   getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B"),
-		APIKey:  getenv("AOS_VLLM_API_KEY", "dummy"),
-		Timeout: timeout,
-		OnStream: func(s string) {
-			if s == "\x00" {
-				fmt.Print("\033[2K\r")
-				streamBuffer = ""
-				return
-			}
-			if len(streamBuffer) < 80 {
-				s = strings.ReplaceAll(s, "\n", " ")
-				s = strings.ReplaceAll(s, "\r", " ")
-				streamBuffer += s
-				if len(streamBuffer) > 80 {
-					streamBuffer = streamBuffer[:80] + "..."
-				}
-				fmt.Printf("\033[2K\r\033[5m%s\033[0m", streamBuffer)
-			}
-		},
+		BaseURL:       getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001"),
+		Model:         modelName,
+		APIKey:        getenv("AOS_VLLM_API_KEY", "dummy"),
+		Timeout:       timeout,
+		OnStreamEvent: stream.Handle,
 	})
 
 	agentRuntime := &runtime.AgentRuntime{
@@ -108,21 +104,51 @@ func main() {
 		Artifacts: store,
 		Tools:     tools.NewRuntime(),
 		Bus:       bus,
-		Backend: agentflow.PromptBackend{
-			Completer: backend,
-			Workflow:  spec,
-			Agent:     agent,
-		},
-		MaxSteps: maxSteps(agent),
+		MaxSteps:  maxSteps(agent),
+	}
+	loadedSkills, err := skills.NewRegistry(spec.SkillRoots).LoadMany(agent.Skills)
+	if err != nil {
+		fail(err)
+	}
+	agentRuntime.Backend = agentflow.PromptBackend{
+		Completer: backend,
+		Workflow:  spec,
+		Agent:     agent,
+		Skills:    loadedSkills,
+	}
+	var tokenCounter tokenizer.Counter
+	if sidecar, sidecarErr := tokenizer.Start(getenv("AOS_TOKENIZER_PYTHON", "python3"), repoRoot, modelName); sidecarErr == nil {
+		tokenCounter = sidecar
+		defer tokenCounter.Close()
 	}
 
-	fmt.Printf("AOS TUI ready. agent=%s pid=%s state=%s\n", agent.ID, process.PID, stateDir)
-	fmt.Println("Commands: /quit, /state, /recover")
+	fmt.Println(ui.Banner(render.AOSBanner()))
+	fmt.Println(ui.Header(fmt.Sprintf("AOS TUI ready  agent=%s  pid=%s", agent.ID, process.PID)))
+	fmt.Println(ui.Subtle("Model: " + modelName))
+	if tokenCounter != nil {
+		fmt.Println(ui.Subtle("Tokenizer: exact sidecar"))
+	} else {
+		fmt.Println(ui.Subtle("Tokenizer: heuristic fallback"))
+	}
+	fmt.Println(ui.Subtle("State: " + stateDir))
+	fmt.Println(ui.Subtle("Commands: /quit, /state, /recover"))
 
 	var checkpointID string
+	var currentSession runtime.Session
+	footer := render.NewFooterBar(ui)
+	defer footer.Unpin()
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("you> ")
+		footer.Update(render.FooterStatus{
+			Process:      process,
+			Model:        modelName,
+			CheckpointID: checkpointID,
+			Session:      currentSession,
+			Counter:      tokenCounter,
+			Backend:      agentRuntime.Backend.(agentflow.PromptBackend),
+		})
+		fmt.Print(ui.Prompt("you> "))
+		footer.Draw()
 		if !scanner.Scan() {
 			fmt.Println()
 			return
@@ -135,50 +161,60 @@ func main() {
 		case "/quit":
 			return
 		case "/state":
-			fmt.Printf("pid=%s checkpoint=%s state_dir=%s\n", process.PID, checkpointID, stateDir)
+			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s", process.PID, checkpointID, stateDir)))
 			continue
 		case "/recover":
 			if checkpointID == "" {
-				fmt.Println("no checkpoint yet")
+				footer.Println(ui.Warn("no checkpoint yet"))
 				continue
 			}
-			result, err := agentRuntime.Recover(context.Background(), process.PID, checkpointID, nil, runtime.RunOptions{StopOnAssistantMessage: true, ContinueOnToolError: true})
+			result, err := agentRuntime.Recover(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer))
 			if err != nil && err != runtime.ErrAgentBlocked {
-				fmt.Println("recover error:", err)
+				stream.Clear()
+				footer.Println(ui.Error("recover error: " + err.Error()))
 				continue
 			}
 			if result.PID != "" {
 				process.PID = result.PID
 			}
 			checkpointID = result.CheckpointID
-			printResult(result)
+			currentSession = result.Session
+			stream.Clear()
+			printResult(ui, footer, result)
 			continue
 		}
 
 		if _, err := bus.Send("user", process.PID, line); err != nil {
-			fmt.Println("send error:", err)
+			footer.Println(ui.Error("send error: " + err.Error()))
 			continue
 		}
 
 		var result runtime.RunResult
 		if checkpointID == "" {
-			result, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{StopOnAssistantMessage: false, ContinueOnToolError: true})
+			result, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, interactiveRunOptions(ui, stream, footer))
 		} else {
-			result, err = agentRuntime.Resume(context.Background(), process.PID, checkpointID, nil, runtime.RunOptions{StopOnAssistantMessage: false, ContinueOnToolError: true})
+			result, err = agentRuntime.Resume(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer))
 		}
 		if err != nil && err != runtime.ErrAgentBlocked {
-			fmt.Println("runtime error:", err)
+			stream.Clear()
+			footer.Println(ui.Error("runtime error: " + err.Error()))
 		}
 		checkpointID = result.CheckpointID
-		printResult(result)
+		currentSession = result.Session
+		stream.Clear()
+		printResult(ui, footer, result)
 	}
 }
 
-func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir string, tools []string) (agentflow.WorkflowSpec, agentflow.AgentSpec) {
+func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir string, tools, skillDirs, skillRefs []string) (agentflow.WorkflowSpec, agentflow.AgentSpec) {
 	if workflowPath == "" {
+		roots := defaultSkillRoots(workdir)
+		roots = append(roots, normalizeSkillRoots(skillDirs, workdir)...)
+		roots = dedupeStrings(roots)
 		agent := agentflow.AgentSpec{
 			ID:           "interactive",
 			SystemPrompt: systemPrompt,
+			Skills:       dedupeStrings(append([]string{"python-runner"}, skillRefs...)),
 			MaxSteps:     32,
 			Mounts: []capability.Mount{
 				{Name: "workspace", HostPath: workdir},
@@ -190,6 +226,7 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 			},
 		}
 		return agentflow.WorkflowSpec{
+			SkillRoots: roots,
 			Name:       "interactive-session",
 			EntryAgent: agent.ID,
 			Agents:     []agentflow.AgentSpec{agent},
@@ -204,6 +241,11 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 	if err := json.Unmarshal(bytes, &spec); err != nil {
 		fail(err)
 	}
+	spec.SkillRoots = append(defaultSkillRoots(workdir), normalizeSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...)
+	if len(skillDirs) > 0 {
+		spec.SkillRoots = append(spec.SkillRoots, normalizeSkillRoots(skillDirs, workdir)...)
+	}
+	spec.SkillRoots = dedupeStrings(spec.SkillRoots)
 	targetID := requestedAgentID
 	if targetID == "" {
 		targetID = spec.EntryAgent
@@ -215,6 +257,8 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 	if len(agent.Capabilities.Tools) == 0 {
 		agent.Capabilities.Tools = tools
 	}
+	agent.Skills = append(agent.Skills, skillRefs...)
+	agent.Skills = dedupeStrings(agent.Skills)
 	if len(agent.Capabilities.ReadPaths) == 0 {
 		agent.Capabilities.ReadPaths = []string{workdir}
 	}
@@ -225,6 +269,59 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 		agent.Mounts = []capability.Mount{{Name: "workspace", HostPath: workdir}}
 	}
 	return spec, agent
+}
+
+type sliceFlags []string
+
+func (s *sliceFlags) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (s *sliceFlags) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+func normalizeSkillRoots(roots []string, baseDir string) []string {
+	out := make([]string, 0, len(roots))
+	seen := map[string]bool{}
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if !filepath.IsAbs(root) {
+			root = filepath.Join(baseDir, root)
+		}
+		root = filepath.Clean(root)
+		if seen[root] {
+			continue
+		}
+		seen[root] = true
+		out = append(out, root)
+	}
+	return out
+}
+
+func defaultSkillRoots(workdir string) []string {
+	return dedupeStrings([]string{
+		filepath.Join(workdir, "skills"),
+		filepath.Join(filepath.Dir(workdir), "aos", "skills"),
+	})
+}
+
+func dedupeStrings(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func parseTools(value string) []string {
@@ -263,20 +360,58 @@ func maxSteps(agent agentflow.AgentSpec) int {
 	return 12
 }
 
-func printResult(result runtime.RunResult) {
+func printResult(ui render.Palette, footer *render.FooterBar, result runtime.RunResult) {
 	if result.Yielded && len(result.Session.Messages) > 0 {
 		last := result.Session.Messages[len(result.Session.Messages)-1]
 		if last.Role == "assistant" {
-			fmt.Printf("agent> %s\n", last.Content)
+			footer.Println(ui.AgentBlock("agent> ", last.Content))
 			return
 		}
 	}
 	if result.Blocked {
-		fmt.Println("agent> waiting for more input")
+		footer.Println(ui.Warn("agent> waiting for more input"))
 		return
 	}
 	if result.ExitStatus.Reason != "" {
-		fmt.Printf("agent exited: %s (code=%d retryable=%t)\n", result.ExitStatus.Reason, result.ExitStatus.Code, result.ExitStatus.Retryable)
+		style := ui.Subtle
+		if result.ExitStatus.Code != 0 {
+			style = ui.Error
+		}
+		footer.Println(style(fmt.Sprintf("agent exited: %s (code=%d retryable=%t)", result.ExitStatus.Reason, result.ExitStatus.Code, result.ExitStatus.Retryable)))
+	}
+}
+
+func detectRepoRoot(workdir string) string {
+	candidate := workdir
+	for {
+		if _, err := os.Stat(filepath.Join(candidate, "go.mod")); err == nil {
+			return candidate
+		}
+		next := filepath.Dir(candidate)
+		if next == candidate {
+			return workdir
+		}
+		candidate = next
+	}
+}
+
+func interactiveRunOptions(ui render.Palette, stream *render.StreamRenderer, footer *render.FooterBar) runtime.RunOptions {
+	stream.SetFooter(footer)
+	return runtime.RunOptions{
+		StopOnAssistantMessage: true,
+		ContinueOnToolError:    true,
+		OnAssistantMessage: func(message string) {
+			stream.Clear()
+		},
+		OnToolCall: func(call runtime.ToolCall) {
+			stream.PrintStatus(ui.ToolCall("tool> " + render.SummarizeToolCall(call)))
+		},
+		OnToolResult: func(result tools.Result) {
+			stream.PrintStatus(ui.ToolResult("tool< " + render.SummarizeToolResult(result)))
+		},
+		OnToolError: func(call runtime.ToolCall, err error) {
+			stream.PrintStatus(ui.ToolError("tool! " + call.Name + ": " + err.Error()))
+		},
 	}
 }
 

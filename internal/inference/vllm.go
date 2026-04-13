@@ -19,22 +19,35 @@ import (
 var ErrMalformedModelResponse = errors.New("malformed model response")
 
 type VLLMConfig struct {
-	BaseURL      string
-	Model        string
-	APIKey       string
-	SystemPrompt string
-	Timeout      time.Duration
-	HTTPClient   *http.Client
-	OnStream     func(string)
+	BaseURL       string
+	Model         string
+	APIKey        string
+	SystemPrompt  string
+	Timeout       time.Duration
+	HTTPClient    *http.Client
+	OnStreamEvent func(StreamEvent)
 }
 
 type VLLMBackend struct {
-	baseURL  string
-	model    string
-	apiKey   string
-	client   *http.Client
-	system   string
-	onStream func(string)
+	baseURL       string
+	model         string
+	apiKey        string
+	client        *http.Client
+	system        string
+	onStreamEvent func(StreamEvent)
+}
+
+type StreamKind string
+
+const (
+	StreamThinking StreamKind = "thinking"
+	StreamContent  StreamKind = "content"
+	StreamDone     StreamKind = "done"
+)
+
+type StreamEvent struct {
+	Kind StreamKind `json:"kind"`
+	Text string     `json:"text,omitempty"`
 }
 
 type chatCompletionRequest struct {
@@ -69,12 +82,12 @@ func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
 		client = &http.Client{Timeout: timeout}
 	}
 	return &VLLMBackend{
-		baseURL:  strings.TrimRight(config.BaseURL, "/"),
-		model:    config.Model,
-		apiKey:   config.APIKey,
-		system:   system,
-		client:   client,
-		onStream: config.OnStream,
+		baseURL:       strings.TrimRight(config.BaseURL, "/"),
+		model:         config.Model,
+		apiKey:        config.APIKey,
+		system:        system,
+		client:        client,
+		onStreamEvent: config.OnStreamEvent,
 	}
 }
 
@@ -114,7 +127,10 @@ func (b *VLLMBackend) CompleteText(ctx context.Context, systemPrompt, userPrompt
 type chatCompletionChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			Reasoning        string `json:"reasoning"`
+			Thinking         string `json:"thinking"`
 		} `json:"delta"`
 	} `json:"choices"`
 }
@@ -124,7 +140,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		Model:       b.model,
 		Messages:    messages,
 		Temperature: 0,
-		Stream:      b.onStream != nil,
+		Stream:      b.onStreamEvent != nil,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -139,7 +155,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 	if b.apiKey != "" {
 		httpRequest.Header.Set("Authorization", "Bearer "+b.apiKey)
 	}
-	if b.onStream != nil {
+	if b.onStreamEvent != nil {
 		httpRequest.Header.Set("Accept", "text/event-stream")
 	}
 
@@ -153,7 +169,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		return "", fmt.Errorf("vllm request failed: %s", response.Status)
 	}
 
-	if b.onStream != nil {
+	if b.onStreamEvent != nil {
 		var fullResponse strings.Builder
 		scanner := bufio.NewScanner(response.Body)
 		for scanner.Scan() {
@@ -165,10 +181,16 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 				}
 				var chunk chatCompletionChunk
 				if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
-					content := chunk.Choices[0].Delta.Content
-					if content != "" {
-						b.onStream(content)
-						fullResponse.WriteString(content)
+					delta := chunk.Choices[0].Delta
+					for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
+						if reasoning != "" {
+							b.onStreamEvent(StreamEvent{Kind: StreamThinking, Text: reasoning})
+							fullResponse.WriteString(reasoning)
+						}
+					}
+					if delta.Content != "" {
+						b.onStreamEvent(StreamEvent{Kind: StreamContent, Text: delta.Content})
+						fullResponse.WriteString(delta.Content)
 					}
 				}
 			}
@@ -176,7 +198,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		if err := scanner.Err(); err != nil {
 			return fullResponse.String(), err
 		}
-		b.onStream("\x00")
+		b.onStreamEvent(StreamEvent{Kind: StreamDone})
 		return fullResponse.String(), nil
 	}
 

@@ -13,6 +13,7 @@ import (
 
 	"aos/internal/kernel"
 	"aos/internal/runtime"
+	"aos/internal/skills"
 )
 
 type JSONCompleter interface {
@@ -27,6 +28,7 @@ type PromptBackend struct {
 	Completer JSONCompleter
 	Workflow  WorkflowSpec
 	Agent     AgentSpec
+	Skills    []skills.Document
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -45,6 +47,13 @@ func (b PromptBackend) Generate(ctx context.Context, request runtime.GenerateReq
 		return runtime.GenerateResult{}, err
 	}
 	return result, nil
+}
+
+func (b PromptBackend) PromptMessages(request runtime.GenerateRequest) []runtime.Message {
+	return []runtime.Message{
+		{Role: "system", Content: b.systemPrompt()},
+		{Role: "user", Content: b.userPrompt(request)},
+	}
 }
 
 func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
@@ -91,11 +100,18 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Use 'delegate' only for allowed agents. ")
 	builder.WriteString("Use 'send', 'publish', or 'subscribe' only when mailbox collaboration is actually needed. ")
 	builder.WriteString("Use 'wait' when you need more user or mailbox input before acting further. ")
-	builder.WriteString("Use 'message' to add reasoning or a concise work note before your next action. ")
+	builder.WriteString("Use 'message' only for user-facing output or a concise visible status update when the user would benefit from seeing it. ")
+	builder.WriteString("Do not use 'message' for hidden chain-of-thought or internal scratch work. ")
 	builder.WriteString("Use 'exit' only when your assigned task is complete or blocked. ")
+	builder.WriteString("If the user adds, tightens, or corrects a requirement later in the conversation, treat the latest user instruction as authoritative and treat any earlier completion as invalid until the new requirement is satisfied. ")
+	builder.WriteString("When a user says things like 'no', 'instead', 'you must', 'the deliverable is', or otherwise corrects your approach, you must re-evaluate the task against that updated requirement before exiting. ")
 	builder.WriteString("Never repeat the same successful tool call if the latest tool result already accomplished the task. ")
 	builder.WriteString("In particular, after a successful write_file result, your next action must be exit unless the user explicitly asked for another write to a different path. ")
+	builder.WriteString("If a tool fails, times out, returns no matches, returns empty content, or reports a non-zero exit, treat that as a signal to try a different strategy rather than exiting immediately. ")
+	builder.WriteString("Prefer at least two materially different attempts before giving up when tools are available. ")
+	builder.WriteString("Do not repeat the exact same failing call with unchanged arguments more than once. ")
 	builder.WriteString("When inspecting a codebase, prefer using list_dir or find_files before guessing file paths. ")
+	builder.WriteString("History entries beginning with tool_notice or tool_error mean the previous approach was not enough and you should adapt. ")
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
@@ -104,6 +120,20 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("{\"action\":{\"type\":\"exit\",\"exit_status\":{\"code\":0,\"reason\":\"task complete\",\"retryable\":false}}}\n\n")
 	builder.WriteString("Agent instructions:\n")
 	builder.WriteString(b.Agent.SystemPrompt)
+	if len(b.Skills) > 0 {
+		builder.WriteString("\n\nLoaded skills:\n")
+		for _, skill := range b.Skills {
+			builder.WriteString("\n")
+			builder.WriteString("Skill: ")
+			builder.WriteString(skill.Name)
+			builder.WriteString("\n")
+			builder.WriteString("Path: ")
+			builder.WriteString(skill.Path)
+			builder.WriteString("\n")
+			builder.WriteString(skill.Content)
+			builder.WriteString("\n")
+		}
+	}
 	builder.WriteString("\n\nAllowed tools:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.Capabilities.Tools), ", "))
 	builder.WriteString("\n\nAllowed agents:\n")
@@ -123,7 +153,10 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		History    []runtime.Message `json:"history"`
 		ReadPaths  []string          `json:"read_paths,omitempty"`
 		WritePaths []string          `json:"write_paths,omitempty"`
+		ToolErrors int               `json:"tool_errors"`
+		LastTool   string            `json:"last_tool_observation,omitempty"`
 	}
+	toolErrors, lastTool := summarizeToolHistory(request.History)
 	payload := promptContext{
 		Workflow:   b.Workflow.Name,
 		AgentID:    b.Agent.ID,
@@ -135,12 +168,32 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		History:    request.History,
 		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
 		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
+		ToolErrors: toolErrors,
+		LastTool:   lastTool,
 	}
 	bytes, _ := json.MarshalIndent(payload, "", "  ")
 	return fmt.Sprintf(
 		"Here is your current session context.\n\n%s\n\nRespond with the next action JSON only.",
 		string(bytes),
 	)
+}
+
+func summarizeToolHistory(history []runtime.Message) (int, string) {
+	toolErrors := 0
+	lastTool := ""
+	for _, message := range history {
+		if message.Role != "tool" {
+			continue
+		}
+		if strings.HasPrefix(message.Content, "tool_error ") {
+			toolErrors++
+		}
+		lastTool = message.Content
+	}
+	if len(lastTool) > 400 {
+		lastTool = lastTool[:400] + "..."
+	}
+	return toolErrors, lastTool
 }
 
 func splitList(value string) []string {
@@ -296,6 +349,12 @@ func fallbackMessage(raw string) (runtime.GenerateResult, bool) {
 	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 		return runtime.GenerateResult{}, false
 	}
+	if strings.Contains(trimmed, "</think>") || strings.Contains(trimmed, "<think>") {
+		return runtime.GenerateResult{}, false
+	}
+	if strings.Contains(trimmed, `{"action"`) || strings.Contains(trimmed, `"tool_call"`) {
+		return runtime.GenerateResult{}, false
+	}
 	return runtime.GenerateResult{
 		Action: runtime.GenerateAction{
 			Type:    "message",
@@ -330,6 +389,9 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 		}
 		name := firstString(callData, "name", "tool", "tool_name")
 		args := stringMap(value(callData, "args", "arguments", "tool_args"))
+		if len(args) == 0 {
+			args = implicitToolArgs(callData, "type", "action", "kind", "name", "tool", "tool_name", "tool_call", "call", "args", "arguments", "tool_args")
+		}
 		if name == "" {
 			return runtime.GenerateResult{}, false
 		}
@@ -391,6 +453,9 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 	default:
 		args := stringMap(value(actionData, "args", "arguments", "tool_args"))
 		if len(args) == 0 {
+			args = implicitToolArgs(actionData, "type", "action", "kind", "args", "arguments", "tool_args")
+		}
+		if len(args) == 0 {
 			return runtime.GenerateResult{}, false
 		}
 		result.Action.Type = "tool"
@@ -401,6 +466,26 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 	}
 
 	return result, true
+}
+
+func implicitToolArgs(data map[string]any, exclude ...string) map[string]string {
+	skip := make(map[string]struct{}, len(exclude))
+	for _, key := range exclude {
+		skip[key] = struct{}{}
+	}
+	args := map[string]string{}
+	for key, raw := range data {
+		if _, ignored := skip[key]; ignored {
+			continue
+		}
+		if value := scalarString(raw); value != "" {
+			args[key] = value
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	return args
 }
 
 func actionUsable(action runtime.GenerateAction) bool {
@@ -445,22 +530,29 @@ func value(data map[string]any, keys ...string) any {
 func firstString(data map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if value, ok := data[key]; ok {
-			switch typed := value.(type) {
-			case string:
-				if trimmed := strings.TrimSpace(typed); trimmed != "" {
-					return trimmed
-				}
-			case json.Number:
-				return typed.String()
-			case float64:
-				return strconv.FormatFloat(typed, 'f', -1, 64)
-			case bool:
-				if typed {
-					return "true"
-				}
-				return "false"
+			if text := scalarString(value); text != "" {
+				return text
 			}
 		}
+	}
+	return ""
+}
+
+func scalarString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			return trimmed
+		}
+	case json.Number:
+		return typed.String()
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case bool:
+		if typed {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }

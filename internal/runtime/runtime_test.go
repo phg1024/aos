@@ -2,7 +2,10 @@ package runtime_test
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aos/internal/artifact"
@@ -12,6 +15,33 @@ import (
 	"aos/internal/runtime"
 	"aos/internal/tools"
 )
+
+type scriptedBackend struct {
+	steps []backendStep
+	index int
+}
+
+type backendStep struct {
+	result runtime.GenerateResult
+	err    error
+}
+
+func (s *scriptedBackend) Generate(_ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	if s.index >= len(s.steps) {
+		return runtime.GenerateResult{
+			Action: runtime.GenerateAction{
+				Type: "exit",
+				ExitStatus: &kernel.ExitStatus{
+					Code:   0,
+					Reason: "completed",
+				},
+			},
+		}, nil
+	}
+	step := s.steps[s.index]
+	s.index++
+	return step.result, step.err
+}
 
 func TestAgentRuntimeSingleAgentFlowWithCheckpointRestore(t *testing.T) {
 	root := t.TempDir()
@@ -368,5 +398,295 @@ func TestAgentRuntimeCanContinueAfterToolError(t *testing.T) {
 	}
 	if len(result.Session.ToolArtifactIDs) != 1 {
 		t.Fatalf("expected one tool artifact for error, got %d", len(result.Session.ToolArtifactIDs))
+	}
+}
+
+func TestAgentRuntimeCanContinueAfterBackendErrorWhenAllowed(t *testing.T) {
+	root := t.TempDir()
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "interactive"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &scriptedBackend{
+			steps: []backendStep{
+				{err: errors.New("unable to repair malformed action JSON")},
+				{
+					result: runtime.GenerateResult{
+						Action: runtime.GenerateAction{
+							Type:    "message",
+							Message: "retrying with a different approach",
+						},
+					},
+				},
+				{
+					result: runtime.GenerateResult{
+						Action: runtime.GenerateAction{
+							Type: "exit",
+							ExitStatus: &kernel.ExitStatus{
+								Code:      0,
+								Reason:    "done",
+								Retryable: false,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{
+		ContinueOnToolError: true,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.ExitStatus.Reason != "done" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if len(result.Session.Messages) == 0 || !strings.Contains(result.Session.Messages[0].Content, "tool_error name=backend") {
+		t.Fatalf("expected backend error message in session, got %#v", result.Session.Messages)
+	}
+}
+
+func TestAgentRuntimeAddsToolNoticeForUnhelpfulResult(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "interactive",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths: []string{workspace},
+			Tools:     []string{"find_files"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{
+					Action: runtime.GenerateAction{
+						Type: "tool",
+						ToolCall: &runtime.ToolCall{
+							Name: "find_files",
+							Args: map[string]string{"root": workspace, "pattern": "missing"},
+						},
+					},
+				},
+				{
+					Action: runtime.GenerateAction{
+						Type: "exit",
+						ExitStatus: &kernel.ExitStatus{
+							Code:   0,
+							Reason: "done",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := agentRuntime.Run(context.Background(), process.PID, nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	foundNotice := false
+	for _, message := range result.Session.Messages {
+		if strings.Contains(message.Content, "tool_notice name=find_files useful=false reason=no_matches") {
+			foundNotice = true
+			break
+		}
+	}
+	if !foundNotice {
+		t.Fatalf("expected tool notice in session %#v", result.Session.Messages)
+	}
+}
+
+func TestAgentRuntimeInvokesToolCallbacks(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "interactive",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			WritePaths: []string{workspace},
+			Tools:      []string{"write_file"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	var called runtime.ToolCall
+	var got tools.Result
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{
+					Action: runtime.GenerateAction{
+						Type: "tool",
+						ToolCall: &runtime.ToolCall{
+							Name: "write_file",
+							Args: map[string]string{
+								"path":    filepath.Join(workspace, "note.txt"),
+								"content": "hello",
+							},
+						},
+					},
+				},
+				{
+					Action: runtime.GenerateAction{
+						Type:       "exit",
+						ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"},
+					},
+				},
+			},
+		},
+	}
+
+	_, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{
+		OnToolCall: func(call runtime.ToolCall) {
+			called = call
+		},
+		OnToolResult: func(result tools.Result) {
+			got = result
+		},
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if called.Name != "write_file" {
+		t.Fatalf("unexpected tool call %#v", called)
+	}
+	if got.Tool != "write_file" {
+		t.Fatalf("unexpected tool result %#v", got)
+	}
+}
+
+func TestAgentRuntimeSuppressesRepeatedUnhelpfulToolCall(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "interactive",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths: []string{workspace},
+			Tools:     []string{"find_files"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{
+					Action: runtime.GenerateAction{
+						Type: "tool",
+						ToolCall: &runtime.ToolCall{
+							Name: "find_files",
+							Args: map[string]string{"root": workspace, "pattern": "missing"},
+						},
+					},
+				},
+				{
+					Action: runtime.GenerateAction{
+						Type: "tool",
+						ToolCall: &runtime.ToolCall{
+							Name: "find_files",
+							Args: map[string]string{"root": workspace, "pattern": "missing"},
+						},
+					},
+				},
+				{
+					Action: runtime.GenerateAction{
+						Type:       "exit",
+						ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{
+		ContinueOnToolError: true,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	foundSuppression := false
+	for _, message := range result.Session.Messages {
+		if strings.Contains(message.Content, "repeated unsuccessful tool call suppressed") {
+			foundSuppression = true
+			break
+		}
+	}
+	if !foundSuppression {
+		t.Fatalf("expected repeated-call suppression in session %#v", result.Session.Messages)
 	}
 }

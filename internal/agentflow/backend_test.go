@@ -2,11 +2,14 @@ package agentflow_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"aos/internal/agentflow"
 	"aos/internal/capability"
+	"aos/internal/kernel"
 	"aos/internal/runtime"
+	"aos/internal/skills"
 )
 
 type repairingCompleter struct {
@@ -24,6 +27,20 @@ func (r *repairingCompleter) CompleteText(_ context.Context, _ string, _ string)
 		r.idx++
 	}
 	return value, nil
+}
+
+type capturingCompleter struct {
+	systemPrompt string
+	userPrompt   string
+}
+
+func (c *capturingCompleter) CompleteJSON(_ context.Context, systemPrompt, userPrompt string, target any) error {
+	c.systemPrompt = systemPrompt
+	c.userPrompt = userPrompt
+	typed := target.(*runtime.GenerateResult)
+	typed.Action.Type = "exit"
+	typed.Action.ExitStatus = &kernel.ExitStatus{Code: 0, Reason: "captured"}
+	return nil
 }
 
 func TestPromptBackendRepairsMalformedActionOutput(t *testing.T) {
@@ -185,6 +202,94 @@ func TestPromptBackendRepairsLooseEmbeddedJSON(t *testing.T) {
 	if result.Action.ToolCall.Name != "find_files" || result.Action.ToolCall.Args["root"] != "/workspace" {
 		t.Fatalf("unexpected tool call %#v", result.Action.ToolCall)
 	}
+}
+
+func TestPromptBackendAcceptsShorthandRunAction(t *testing.T) {
+	backend := agentflow.PromptBackend{
+		Completer: &repairingCompleter{
+			raw: []string{
+				`{"action":{"type":"run","command":"python3 /workspace/compute_pi_fixed.py"}}`,
+			},
+		},
+		Workflow: agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+		},
+	}
+
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.Type != "tool" || result.Action.ToolCall == nil {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if result.Action.ToolCall.Name != "run" || result.Action.ToolCall.Args["command"] != "python3 /workspace/compute_pi_fixed.py" {
+		t.Fatalf("unexpected tool call %#v", result.Action.ToolCall)
+	}
+}
+
+func TestPromptBackendDoesNotLeakMixedReasoningAndActionAsMessage(t *testing.T) {
+	backend := agentflow.PromptBackend{
+		Completer: &repairingCompleter{
+			raw: []string{
+				"Let me run the fixed script.\n</think>\n\n{\"action\":{\"type\":\"run\",\"command\":\"python3 /workspace/compute_pi_fixed.py\"}}",
+			},
+		},
+		Workflow: agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+		},
+	}
+
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.Type != "tool" || result.Action.ToolCall == nil {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if result.Action.ToolCall.Name != "run" {
+		t.Fatalf("unexpected tool call %#v", result.Action.ToolCall)
+	}
+}
+
+func TestPromptBackendIncludesLoadedSkillsInSystemPrompt(t *testing.T) {
+	completer := &capturingCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+			Skills:       []string{"writer"},
+		},
+		Skills: []skills.Document{
+			{Name: "writer", Path: "/tmp/skills/writer/SKILL.md", Content: "# Writer\nPrefer concise prose."},
+		},
+	}
+
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.Type != "exit" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if got := completer.systemPrompt; !containsAll(got, "Loaded skills:", "Skill: writer", "Prefer concise prose.") {
+		t.Fatalf("expected loaded skill in system prompt, got %q", got)
+	}
+}
+
+func containsAll(value string, parts ...string) bool {
+	for _, part := range parts {
+		if !strings.Contains(value, part) {
+			return false
+		}
+	}
+	return true
 }
 
 func capabilitySet(tool string) capability.Set {

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -52,20 +53,22 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 	switch req.Tool {
 	case "write_file":
 		path := filepath.Clean(req.Args["path"])
+		content := req.Args["content"]
 		if !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
 			return Result{}, ErrPathDenied
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return Result{}, err
 		}
-		if err := os.WriteFile(path, []byte(req.Args["content"]), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return Result{}, err
 		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: "wrote file",
 			Output: map[string]string{
-				"path": path,
+				"path":  path,
+				"bytes": fmt.Sprintf("%d", len(content)),
 			},
 		}, nil
 	case "read_file":
@@ -163,59 +166,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				"matches": strings.Join(matches, "\n"),
 			},
 		}, nil
-	case "execute_code":
-		language := strings.TrimSpace(req.Args["language"])
-		if language == "" {
-			language = "python3"
-		}
-		code := req.Args["code"]
-		if code == "" {
-			return Result{}, errors.New("execute_code requires code")
-		}
-		timeoutStr := req.Args["timeout"]
-		timeout := 30 * time.Second
-		if timeoutStr != "" {
-			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
-				timeout = parsed
-			}
-		}
-		var interpreter string
-		switch language {
-		case "python", "python3":
-			interpreter = "python3"
-		default:
-			return Result{}, errors.New("execute_code only supports python3")
-		}
-		cmd := exec.Command(interpreter, "-c", code)
-		cmd.Dir = mountRoot(req.Mounts)
-		cmd.Stdin = nil
-		var stdoutBuf, stderrBuf bytes.Buffer
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		err := cmd.Run()
-		exitCode := 0
-		if err != nil {
-			if ctx.Err() != nil {
-				return Result{}, errors.New("code execution timed out")
-			}
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				exitCode = exitErr.ExitCode()
-			} else {
-				exitCode = 1
-			}
-		}
-		return Result{
-			Tool:    req.Tool,
-			Summary: fmt.Sprintf("executed %s code (exit: %d)", language, exitCode),
-			Output: map[string]string{
-				"language":  language,
-				"stdout":    stdoutBuf.String(),
-				"stderr":    stderrBuf.String(),
-				"exit_code": fmt.Sprintf("%d", exitCode),
-			},
-		}, nil
 	case "run":
 		command := strings.TrimSpace(req.Args["command"])
 		if command == "" {
@@ -228,18 +178,18 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				timeout = parsed
 			}
 		}
-		cmd := exec.Command("sh", "-c", command)
+		cmdCtx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
 		cmd.Dir = mountRoot(req.Mounts)
 		cmd.Stdin = nil
 		var stdoutBuf, stderrBuf bytes.Buffer
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
 		err := cmd.Run()
 		exitCode := 0
 		if err != nil {
-			if ctx.Err() != nil {
+			if cmdCtx.Err() != nil {
 				return Result{}, errors.New("command execution timed out")
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -252,9 +202,9 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 			Tool:    req.Tool,
 			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
 			Output: map[string]string{
-				"command": command,
-				"stdout":  stdoutBuf.String(),
-				"stderr":  stderrBuf.String(),
+				"command":   command,
+				"stdout":    stdoutBuf.String(),
+				"stderr":    stderrBuf.String(),
 				"exit_code": fmt.Sprintf("%d", exitCode),
 			},
 		}, nil
@@ -270,12 +220,11 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				timeout = parsed
 			}
 		}
-		// Use DuckDuckGo Instant Answer API (returns JSON, no authentication required)
 		searchURL := "https://api.duckduckgo.com/?q=" + url.QueryEscape(query) + "&format=json&no_html=1"
 		client := &http.Client{
 			Timeout: timeout,
 		}
-		resp, err := client.Get(searchURL)
+		resp, err := getWithUserAgent(client, searchURL)
 		if err != nil {
 			return Result{}, fmt.Errorf("web search failed: %w", err)
 		}
@@ -284,46 +233,38 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		if err != nil {
 			return Result{}, fmt.Errorf("failed to read search response: %w", err)
 		}
-		// Parse DuckDuckGo JSON response
 		var result map[string]interface{}
 		if err := json.Unmarshal(body, &result); err != nil {
 			return Result{}, fmt.Errorf("failed to parse search response: %w", err)
 		}
-		// Build human-readable summary
-		var summary strings.Builder
-		if abstract, ok := result["Abstract"].(string); ok && abstract != "" {
-			summary.WriteString("Abstract: " + abstract + "\n")
-		}
-		if abstractSource, ok := result["AbstractSource"].(string); ok && abstractSource != "" {
-			summary.WriteString("Source: " + abstractSource + "\n")
-		}
-		if related, ok := result["RelatedTopics"].([]interface{}); ok {
-			summary.WriteString("\nRelated topics:\n")
-			for _, topic := range related {
-				if t, ok := topic.(map[string]interface{}); ok {
-					if text, ok := t["Text"].(string); ok && text != "" {
-						summary.WriteString("  - " + text + "\n")
-					}
-					if firstURL, ok := t["FirstURL"].(string); ok && firstURL != "" {
-						summary.WriteString("    URL: " + firstURL + "\n")
-					}
-				}
+		summary := summarizeInstantAnswer(result)
+		if strings.TrimSpace(summary) == "" {
+			htmlSummary, htmlURL, htmlRaw, htmlErr := fallbackHTMLSearch(client, query)
+			if htmlErr == nil && strings.TrimSpace(htmlSummary) != "" {
+				return Result{
+					Tool:    req.Tool,
+					Summary: "web search completed",
+					Output: map[string]string{
+						"query":      query,
+						"status":     "200",
+						"source":     "duckduckgo_html",
+						"search_url": htmlURL,
+						"raw":        htmlRaw,
+						"result":     htmlSummary,
+					},
+				}, nil
 			}
-		}
-		if images, ok := result["Images"].([]interface{}); ok && len(images) > 0 {
-			summary.WriteString("\nImages found: " + fmt.Sprintf("%d", len(images)) + "\n")
-		}
-		if videos, ok := result["Videos"].([]interface{}); ok && len(videos) > 0 {
-			summary.WriteString("\nVideos found: " + fmt.Sprintf("%d", len(videos)) + "\n")
 		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: "web search completed",
 			Output: map[string]string{
-				"query":  query,
-				"status": fmt.Sprintf("%d", resp.StatusCode),
-				"raw":    string(body),
-				"result": summary.String(),
+				"query":      query,
+				"status":     fmt.Sprintf("%d", resp.StatusCode),
+				"source":     "duckduckgo_instant_answer",
+				"search_url": searchURL,
+				"raw":        string(body),
+				"result":     summary,
 			},
 		}, nil
 	case "web_fetch":
@@ -354,14 +295,16 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 			return Result{}, fmt.Errorf("failed to read response: %w", err)
 		}
 		contentType := resp.Header.Get("Content-Type")
+		textContent := truncateString(simpleHTMLToText(string(body)), 8000)
 		return Result{
 			Tool:    req.Tool,
 			Summary: "web fetch completed",
 			Output: map[string]string{
-				"url":         targetURL,
-				"status":      fmt.Sprintf("%d", resp.StatusCode),
+				"url":          targetURL,
+				"status":       fmt.Sprintf("%d", resp.StatusCode),
 				"content_type": contentType,
-				"content":     string(body),
+				"content":      string(body),
+				"text":         textContent,
 			},
 		}, nil
 	default:
@@ -413,26 +356,34 @@ func simpleHTMLToText(html string) string {
 }
 
 func removeTag(s, tag string) string {
-	open := "<" + tag
-	close := "</" + tag
+	open := "<" + strings.ToLower(tag)
+	close := "</" + strings.ToLower(tag)
+	lower := strings.ToLower(s)
 	for {
-		startOpen := strings.Index(s, open)
+		startOpen := strings.Index(lower, open)
 		if startOpen == -1 {
 			break
 		}
-		endOpen := strings.Index(s[startOpen:], ">")
+		endOpen := strings.Index(lower[startOpen:], ">")
 		if endOpen == -1 {
 			break
 		}
-		startClose := strings.Index(s, close)
-		if startClose == -1 {
-			break
+		contentStart := startOpen + endOpen + 1
+		startCloseRel := strings.Index(lower[contentStart:], close)
+		if startCloseRel == -1 {
+			s = s[:startOpen] + s[contentStart:]
+			lower = strings.ToLower(s)
+			continue
 		}
-		endClose := strings.Index(s[startClose:], ">")
+		startClose := contentStart + startCloseRel
+		endClose := strings.Index(lower[startClose:], ">")
 		if endClose == -1 {
-			break
+			s = s[:startOpen] + s[startClose+len(close):]
+			lower = strings.ToLower(s)
+			continue
 		}
-		s = s[:startOpen] + s[startOpen+len(open)+endOpen+1 : startClose] + s[startClose+len(close)+endClose+1:]
+		s = s[:startOpen] + s[startClose+endClose+1:]
+		lower = strings.ToLower(s)
 	}
 	return s
 }
@@ -455,4 +406,156 @@ func stripTags(s string) string {
 func normalizeWhitespace(s string) string {
 	fields := strings.Fields(s)
 	return strings.Join(fields, " ")
+}
+
+func getWithUserAgent(client *http.Client, target string) (*http.Response, error) {
+	request, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("User-Agent", "Mozilla/5.0 (compatible; AOS/1.0; +https://example.invalid/aos)")
+	request.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	return client.Do(request)
+}
+
+func summarizeInstantAnswer(result map[string]interface{}) string {
+	var summary strings.Builder
+	if abstract, ok := result["Abstract"].(string); ok && abstract != "" {
+		summary.WriteString("Abstract: " + abstract + "\n")
+	}
+	if abstractURL, ok := result["AbstractURL"].(string); ok && abstractURL != "" {
+		summary.WriteString("URL: " + abstractURL + "\n")
+	}
+	if abstractSource, ok := result["AbstractSource"].(string); ok && abstractSource != "" {
+		summary.WriteString("Source: " + abstractSource + "\n")
+	}
+	if related, ok := result["RelatedTopics"].([]interface{}); ok {
+		count := 0
+		for _, topic := range related {
+			if count >= 5 {
+				break
+			}
+			entry, ok := topic.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			text, _ := entry["Text"].(string)
+			firstURL, _ := entry["FirstURL"].(string)
+			if text == "" && firstURL == "" {
+				continue
+			}
+			if count == 0 {
+				summary.WriteString("\nRelated topics:\n")
+			}
+			count++
+			if text != "" {
+				summary.WriteString("  - " + text + "\n")
+			}
+			if firstURL != "" {
+				summary.WriteString("    URL: " + firstURL + "\n")
+			}
+		}
+	}
+	return strings.TrimSpace(summary.String())
+}
+
+func fallbackHTMLSearch(client *http.Client, query string) (summary string, searchURL string, raw string, err error) {
+	searchURL = "https://html.duckduckgo.com/html/?q=" + url.QueryEscape(query)
+	resp, err := getWithUserAgent(client, searchURL)
+	if err != nil {
+		return "", searchURL, "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", searchURL, "", err
+	}
+	raw = string(body)
+	results := extractHTMLSearchResults(raw)
+	if len(results) == 0 {
+		return "", searchURL, raw, nil
+	}
+	var builder strings.Builder
+	for i, result := range results {
+		if i >= 5 {
+			break
+		}
+		builder.WriteString(fmt.Sprintf("%d. %s\n", i+1, result.Title))
+		if result.URL != "" {
+			builder.WriteString("   URL: " + result.URL + "\n")
+		}
+		if result.Snippet != "" {
+			builder.WriteString("   Snippet: " + result.Snippet + "\n")
+		}
+	}
+	return strings.TrimSpace(builder.String()), searchURL, raw, nil
+}
+
+type htmlSearchResult struct {
+	Title   string
+	URL     string
+	Snippet string
+}
+
+var (
+	resultAnchorPattern  = regexp.MustCompile(`(?is)<a[^>]+class="[^"]*(?:result__a|result-link)[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>`)
+	resultSnippetPattern = regexp.MustCompile(`(?is)<a[^>]+class="[^"]*(?:result__snippet|result-snippet)[^"]*"[^>]*>(.*?)</a>|<div[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</div>`)
+)
+
+func extractHTMLSearchResults(html string) []htmlSearchResult {
+	anchors := resultAnchorPattern.FindAllStringSubmatch(html, 10)
+	if len(anchors) == 0 {
+		return nil
+	}
+	snippets := resultSnippetPattern.FindAllStringSubmatch(html, 10)
+	results := make([]htmlSearchResult, 0, len(anchors))
+	for i, match := range anchors {
+		targetURL := decodeDuckDuckGoRedirect(htmlEntityDecode(match[1]))
+		title := normalizeWhitespace(stripTags(htmlEntityDecode(match[2])))
+		if title == "" || targetURL == "" {
+			continue
+		}
+		snippet := ""
+		if i < len(snippets) {
+			snippet = htmlEntityDecode(snippets[i][1])
+			if snippet == "" && len(snippets[i]) > 2 {
+				snippet = htmlEntityDecode(snippets[i][2])
+			}
+			snippet = normalizeWhitespace(stripTags(snippet))
+		}
+		results = append(results, htmlSearchResult{
+			Title:   title,
+			URL:     targetURL,
+			Snippet: snippet,
+		})
+	}
+	return results
+}
+
+func decodeDuckDuckGoRedirect(target string) string {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	if uddg := parsed.Query().Get("uddg"); uddg != "" {
+		decoded, err := url.QueryUnescape(uddg)
+		if err == nil && decoded != "" {
+			return decoded
+		}
+		return uddg
+	}
+	return target
+}
+
+func htmlEntityDecode(input string) string {
+	replacer := strings.NewReplacer(
+		"&amp;", "&",
+		"&lt;", "<",
+		"&gt;", ">",
+		"&quot;", "\"",
+		"&#39;", "'",
+		"&apos;", "'",
+		"&nbsp;", " ",
+	)
+	return replacer.Replace(input)
 }

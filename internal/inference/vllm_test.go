@@ -221,6 +221,63 @@ func TestVLLMBackendCompleteJSON(t *testing.T) {
 	}
 }
 
+func TestVLLMBackendStreamsReasoningAndContentEvents(t *testing.T) {
+	var events []inference.StreamEvent
+	backend := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL: "http://vllm.local",
+		Model:   "local-model",
+		OnStreamEvent: func(event inference.StreamEvent) {
+			events = append(events, event)
+		},
+		HTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				var payload map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				if got, _ := payload["stream"].(bool); !got {
+					t.Fatalf("expected stream=true, got %#v", payload["stream"])
+				}
+				body := strings.Join([]string{
+					`data: {"choices":[{"delta":{"reasoning_content":"thinking step"}}]}`,
+					``,
+					`data: {"choices":[{"delta":{"content":"{\"action\":{\"type\":\"exit\",\"exit_status\":{\"code\":0,\"reason\":\"streamed\",\"retryable\":false}}}"}}]}`,
+					``,
+					`data: [DONE]`,
+					``,
+				}, "\n")
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			}),
+		},
+	})
+
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{PID: "pid-1", Role: "worker"},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.ExitStatus == nil || result.Action.ExitStatus.Reason != "streamed" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	if len(events) != 3 {
+		t.Fatalf("expected 3 stream events, got %d", len(events))
+	}
+	if events[0].Kind != inference.StreamThinking || events[0].Text != "thinking step" {
+		t.Fatalf("unexpected first event %#v", events[0])
+	}
+	if events[1].Kind != inference.StreamContent {
+		t.Fatalf("unexpected second event %#v", events[1])
+	}
+	if events[2].Kind != inference.StreamDone {
+		t.Fatalf("unexpected final event %#v", events[2])
+	}
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
