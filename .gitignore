@@ -2,8 +2,9 @@
 .cache/
 
 # Binary builds
-aos-tui
-cmd/*/aos-tui
+./aos-tui
+*/aos-tui
+!cmd/aos-tui/
 
 # Test binary
 *.test
