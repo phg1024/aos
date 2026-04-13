@@ -1,11 +1,16 @@
 package tools
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -72,7 +77,7 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) {
 			return Result{}, ErrPathDenied
 		}
-		bytes, err := os.ReadFile(path)
+		contentBytes, err := os.ReadFile(path)
 		if err != nil {
 			return Result{}, err
 		}
@@ -81,7 +86,7 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 			Summary: "read file",
 			Output: map[string]string{
 				"path":    path,
-				"content": string(bytes),
+				"content": string(contentBytes),
 			},
 		}, nil
 	case "list_dir":
@@ -160,6 +165,101 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				"root":    root,
 				"pattern": pattern,
 				"matches": strings.Join(matches, "\n"),
+			},
+		}, nil
+	case "execute_code":
+		language := strings.TrimSpace(req.Args["language"])
+		if language == "" {
+			language = "python3"
+		}
+		code := req.Args["code"]
+		if code == "" {
+			return Result{}, errors.New("execute_code requires code")
+		}
+		timeoutStr := req.Args["timeout"]
+		timeout := 30 * time.Second
+		if timeoutStr != "" {
+			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
+				timeout = parsed
+			}
+		}
+		var interpreter string
+		switch language {
+		case "python", "python3":
+			interpreter = "python3"
+		default:
+			return Result{}, errors.New("execute_code only supports python3")
+		}
+		cmd := exec.Command(interpreter, "-c", code)
+		cmd.Dir = mountRoot(req.Mounts)
+		cmd.Stdin = nil
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		err := cmd.Run()
+		exitCode := 0
+		if err != nil {
+			if ctx.Err() != nil {
+				return Result{}, errors.New("code execution timed out")
+			}
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+		return Result{
+			Tool:    req.Tool,
+			Summary: fmt.Sprintf("executed %s code (exit: %d)", language, exitCode),
+			Output: map[string]string{
+				"language":  language,
+				"stdout":    stdoutBuf.String(),
+				"stderr":    stderrBuf.String(),
+				"exit_code": fmt.Sprintf("%d", exitCode),
+			},
+		}, nil
+	case "run":
+		command := strings.TrimSpace(req.Args["command"])
+		if command == "" {
+			return Result{}, errors.New("run requires command")
+		}
+		timeoutStr := req.Args["timeout"]
+		timeout := 60 * time.Second
+		if timeoutStr != "" {
+			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
+				timeout = parsed
+			}
+		}
+		cmd := exec.Command("sh", "-c", command)
+		cmd.Dir = mountRoot(req.Mounts)
+		cmd.Stdin = nil
+		var stdoutBuf, stderrBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		err := cmd.Run()
+		exitCode := 0
+		if err != nil {
+			if ctx.Err() != nil {
+				return Result{}, errors.New("command execution timed out")
+			}
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+		return Result{
+			Tool:    req.Tool,
+			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
+			Output: map[string]string{
+				"command": command,
+				"stdout":  stdoutBuf.String(),
+				"stderr":  stderrBuf.String(),
+				"exit_code": fmt.Sprintf("%d", exitCode),
 			},
 		}, nil
 	default:
