@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,14 +49,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 	}
 
 	switch req.Tool {
-	case "echo":
-		return Result{
-			Tool:    req.Tool,
-			Summary: "echoed message",
-			Output: map[string]string{
-				"message": req.Args["message"],
-			},
-		}, nil
 	case "write_file":
 		path := filepath.Clean(req.Args["path"])
 		if !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
@@ -262,6 +257,82 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				"exit_code": fmt.Sprintf("%d", exitCode),
 			},
 		}, nil
+	case "web_search":
+		query := strings.TrimSpace(req.Args["query"])
+		if query == "" {
+			return Result{}, errors.New("web_search requires query")
+		}
+		timeoutStr := req.Args["timeout"]
+		timeout := 30 * time.Second
+		if timeoutStr != "" {
+			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
+				timeout = parsed
+			}
+		}
+		searchURL := "https://www.google.com/search"
+		form := url.Values{}
+		form.Set("q", query)
+		form.Set("num", "10")
+		client := &http.Client{
+			Timeout: timeout,
+		}
+		reqURL := searchURL + "?" + form.Encode()
+		resp, err := client.Get(reqURL)
+		if err != nil {
+			return Result{}, fmt.Errorf("web search failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to read search response: %w", err)
+		}
+		return Result{
+			Tool:    req.Tool,
+			Summary: "web search completed",
+			Output: map[string]string{
+				"query":    query,
+				"status":   fmt.Sprintf("%d", resp.StatusCode),
+				"raw_html": string(body),
+			},
+		}, nil
+	case "web_fetch":
+		targetURL := strings.TrimSpace(req.Args["url"])
+		if targetURL == "" {
+			return Result{}, errors.New("web_fetch requires url")
+		}
+		if _, parseErr := url.Parse(targetURL); parseErr != nil {
+			return Result{}, errors.New("web_fetch requires valid url")
+		}
+		timeoutStr := req.Args["timeout"]
+		timeout := 60 * time.Second
+		if timeoutStr != "" {
+			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
+				timeout = parsed
+			}
+		}
+		client := &http.Client{
+			Timeout: timeout,
+		}
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			return Result{}, fmt.Errorf("web fetch failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to read response: %w", err)
+		}
+		contentType := resp.Header.Get("Content-Type")
+		return Result{
+			Tool:    req.Tool,
+			Summary: "web fetch completed",
+			Output: map[string]string{
+				"url":         targetURL,
+				"status":      fmt.Sprintf("%d", resp.StatusCode),
+				"content_type": contentType,
+				"content":     string(body),
+			},
+		}, nil
 	default:
 		return Result{}, errors.New("unknown tool")
 	}
@@ -286,4 +357,71 @@ func mountRoot(mounts []capability.Mount) string {
 		return "."
 	}
 	return filepath.Clean(mounts[0].HostPath)
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// simpleHTMLToText converts basic HTML to plain text
+func simpleHTMLToText(html string) string {
+	text := html
+	// Remove script tags
+	text = removeTag(text, "script")
+	// Remove style tags
+	text = removeTag(text, "style")
+	// Remove all other tags
+	text = stripTags(text)
+	// Normalize whitespace
+	text = normalizeWhitespace(text)
+	return text
+}
+
+func removeTag(s, tag string) string {
+	open := "<" + tag
+	close := "</" + tag
+	for {
+		startOpen := strings.Index(s, open)
+		if startOpen == -1 {
+			break
+		}
+		endOpen := strings.Index(s[startOpen:], ">")
+		if endOpen == -1 {
+			break
+		}
+		startClose := strings.Index(s, close)
+		if startClose == -1 {
+			break
+		}
+		endClose := strings.Index(s[startClose:], ">")
+		if endClose == -1 {
+			break
+		}
+		s = s[:startOpen] + s[startOpen+len(open)+endOpen+1 : startClose] + s[startClose+len(close)+endClose+1:]
+	}
+	return s
+}
+
+func stripTags(s string) string {
+	var result strings.Builder
+	inTag := false
+	for _, ch := range s {
+		if ch == '<' {
+			inTag = true
+		} else if ch == '>' {
+			inTag = false
+		} else if !inTag {
+			result.WriteRune(ch)
+		}
+	}
+	return result.String()
+}
+
+func normalizeWhitespace(s string) string {
+	fields := strings.Fields(s)
+	return strings.Join(fields, " ")
 }

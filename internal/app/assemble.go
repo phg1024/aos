@@ -224,7 +224,7 @@ func deriveCapabilities(inputPaths []string, outputPath string) ([]capability.Mo
 	return mounts, capability.Set{
 		ReadPaths:  uniqueStrings(readPaths),
 		WritePaths: uniqueStrings(writePaths),
-		Tools:      []string{"read_file", "write_file", "run", "execute_code"},
+		Tools:      []string{"read_file", "write_file", "list_dir", "find_files", "run", "execute_code"},
 	}
 }
 
