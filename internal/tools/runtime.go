@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -269,15 +270,12 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				timeout = parsed
 			}
 		}
-		searchURL := "https://www.google.com/search"
-		form := url.Values{}
-		form.Set("q", query)
-		form.Set("num", "10")
+		// Use DuckDuckGo Instant Answer API (returns JSON, no authentication required)
+		searchURL := "https://api.duckduckgo.com/?q=" + url.QueryEscape(query) + "&format=json&no_html=1"
 		client := &http.Client{
 			Timeout: timeout,
 		}
-		reqURL := searchURL + "?" + form.Encode()
-		resp, err := client.Get(reqURL)
+		resp, err := client.Get(searchURL)
 		if err != nil {
 			return Result{}, fmt.Errorf("web search failed: %w", err)
 		}
@@ -286,13 +284,46 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		if err != nil {
 			return Result{}, fmt.Errorf("failed to read search response: %w", err)
 		}
+		// Parse DuckDuckGo JSON response
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return Result{}, fmt.Errorf("failed to parse search response: %w", err)
+		}
+		// Build human-readable summary
+		var summary strings.Builder
+		if abstract, ok := result["Abstract"].(string); ok && abstract != "" {
+			summary.WriteString("Abstract: " + abstract + "\n")
+		}
+		if abstractSource, ok := result["AbstractSource"].(string); ok && abstractSource != "" {
+			summary.WriteString("Source: " + abstractSource + "\n")
+		}
+		if related, ok := result["RelatedTopics"].([]interface{}); ok {
+			summary.WriteString("\nRelated topics:\n")
+			for _, topic := range related {
+				if t, ok := topic.(map[string]interface{}); ok {
+					if text, ok := t["Text"].(string); ok && text != "" {
+						summary.WriteString("  - " + text + "\n")
+					}
+					if firstURL, ok := t["FirstURL"].(string); ok && firstURL != "" {
+						summary.WriteString("    URL: " + firstURL + "\n")
+					}
+				}
+			}
+		}
+		if images, ok := result["Images"].([]interface{}); ok && len(images) > 0 {
+			summary.WriteString("\nImages found: " + fmt.Sprintf("%d", len(images)) + "\n")
+		}
+		if videos, ok := result["Videos"].([]interface{}); ok && len(videos) > 0 {
+			summary.WriteString("\nVideos found: " + fmt.Sprintf("%d", len(videos)) + "\n")
+		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: "web search completed",
 			Output: map[string]string{
-				"query":    query,
-				"status":   fmt.Sprintf("%d", resp.StatusCode),
-				"raw_html": string(body),
+				"query":  query,
+				"status": fmt.Sprintf("%d", resp.StatusCode),
+				"raw":    string(body),
+				"result": summary.String(),
 			},
 		}, nil
 	case "web_fetch":
