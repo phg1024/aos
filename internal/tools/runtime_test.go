@@ -237,3 +237,59 @@ func TestRunTool(t *testing.T) {
 		t.Fatalf("unexpected python run result %#v", result.Output)
 	}
 }
+
+func TestEditFileTool(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	target := filepath.Join(workspace, "note.txt")
+	if err := os.WriteFile(target, []byte("alpha beta alpha"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	runtime := tools.NewRuntime()
+	req := tools.Request{
+		Tool: "edit_file",
+		Args: map[string]string{
+			"path":        target,
+			"old_text":    "alpha",
+			"new_text":    "omega",
+			"replace_all": "true",
+		},
+		Mounts: []capability.Mount{{Name: "workspace", HostPath: workspace}},
+		CapabilitySet: capability.Set{
+			ReadPaths:  []string{workspace},
+			WritePaths: []string{workspace},
+			Tools:      []string{"edit_file"},
+		},
+	}
+	result, err := runtime.Execute(req)
+	if err != nil {
+		t.Fatalf("edit file: %v", err)
+	}
+	if got := result.Output["occurrences"]; got != "2" {
+		t.Fatalf("unexpected occurrence count %q", got)
+	}
+	contents, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if got := string(contents); got != "omega beta omega" {
+		t.Fatalf("unexpected contents %q", got)
+	}
+
+	_, err = runtime.Execute(tools.Request{
+		Tool: "edit_file",
+		Args: map[string]string{
+			"path":     target,
+			"old_text": "missing",
+			"new_text": "value",
+		},
+		Mounts:        req.Mounts,
+		CapabilitySet: req.CapabilitySet,
+	})
+	if err == nil {
+		t.Fatal("expected missing old_text match error")
+	}
+}

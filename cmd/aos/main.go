@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"aos/internal/agentflow"
@@ -16,6 +17,7 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/skills"
 	"aos/internal/tools"
 )
@@ -118,6 +120,11 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return err
 	}
+	releaseLock, err := acquireStateLock(stateDir)
+	if err != nil {
+		return err
+	}
+	defer releaseLock()
 
 	k, err := kernel.New(filepath.Join(stateDir, "kernel"))
 	if err != nil {
@@ -127,10 +134,15 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 	if err != nil {
 		return err
 	}
+	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"))
+	if err != nil {
+		return err
+	}
 
 	engine := agentflow.Engine{
 		Kernel:    k,
 		Artifacts: store,
+		Leases:    leaseManager,
 		Tools:     tools.NewRuntime(),
 		Factory: agentflow.StaticBackendFactory{
 			Completer: backend,
@@ -182,6 +194,29 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 	}
 	fmt.Println(string(bytes))
 	return nil
+}
+
+func acquireStateLock(stateDir string) (func(), error) {
+	lockPath := filepath.Clean(stateDir) + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lockFile.Close()
+		if err == syscall.EWOULDBLOCK {
+			return nil, fmt.Errorf("state directory is already in use by another aos run: %s", stateDir)
+		}
+		return nil, err
+	}
+	if err := lockFile.Truncate(0); err == nil {
+		_, _ = lockFile.WriteString(fmt.Sprintf("pid=%d\nstarted_at=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339)))
+		_, _ = lockFile.Seek(0, 0)
+	}
+	return func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	}, nil
 }
 
 func resolveSkillRoots(roots []string, baseDir string) []string {

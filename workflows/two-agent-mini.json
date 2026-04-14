@@ -1,0 +1,48 @@
+{
+  "name": "two-agent-mini",
+  "description": "A simple collaboration flow where a coordinator delegates drafting to a writer, then refines the draft into a final file.",
+  "entry_agent": "coordinator",
+  "agents": [
+    {
+      "id": "coordinator",
+      "system_prompt": "You are the coordinator. Your task is to produce the final deliverable file for the user. First delegate the initial drafting work to the writer agent. The writer will save its draft at /Users/claw/Code/aos/reports/two-agent-mini-demo/draft.txt. After delegation returns, immediately read that draft file, improve it into a clearer and more polished final note, and write the final result to the output path provided in session metadata. Do not repeatedly call list_artifacts once delegation has already succeeded; only use list_artifacts if the draft file is missing or the delegate result is unclear. After successfully writing the final output file, send one concise user-facing completion message and then exit.",
+      "allowed_agents": ["writer"],
+      "mounts": [
+        {
+          "name": "workspace",
+          "host_path": "/Users/claw/Code/aos/reports/two-agent-mini-demo"
+        }
+      ],
+      "capabilities": {
+        "read_paths": ["/Users/claw/Code/aos/reports/two-agent-mini-demo"],
+        "write_paths": ["/Users/claw/Code/aos/reports/two-agent-mini-demo"],
+        "tools": [
+          "spawn_agent",
+          "await_agent",
+          "message_agent",
+          "checkpoint",
+          "read_file",
+          "write_file",
+          "edit_file",
+          "list_artifacts",
+          "publish_artifact"
+        ]
+      }
+    },
+    {
+      "id": "writer",
+      "system_prompt": "You are the writer. Create a concise first draft based on the user's goal and save it to /Users/claw/Code/aos/reports/two-agent-mini-demo/draft.txt. The draft should be useful but can be rough. After saving the draft, exit cleanly.",
+      "mounts": [
+        {
+          "name": "workspace",
+          "host_path": "/Users/claw/Code/aos/reports/two-agent-mini-demo"
+        }
+      ],
+      "capabilities": {
+        "read_paths": ["/Users/claw/Code/aos/reports/two-agent-mini-demo"],
+        "write_paths": ["/Users/claw/Code/aos/reports/two-agent-mini-demo"],
+        "tools": ["write_file"]
+      }
+    }
+  ]
+}

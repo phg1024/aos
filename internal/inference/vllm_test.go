@@ -97,6 +97,43 @@ func TestVLLMBackendTimeout(t *testing.T) {
 	}
 }
 
+func TestVLLMBackendRetriesTimeoutOnce(t *testing.T) {
+	attempts := 0
+	backend := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL:    "http://vllm.local",
+		Model:      "local-model",
+		Timeout:    10 * time.Millisecond,
+		MaxRetries: 2,
+		HTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				if attempts == 1 {
+					return nil, context.DeadlineExceeded
+				}
+				return jsonResponse(http.StatusOK, map[string]any{
+					"choices": []map[string]any{
+						{"message": map[string]any{
+							"content": `{"action":{"type":"exit","exit_status":{"code":0,"reason":"retried","retryable":false}}}`,
+						}},
+					},
+				}), nil
+			}),
+		},
+	})
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{PID: "pid-1", Role: "worker"},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+	if result.Action.ExitStatus == nil || result.Action.ExitStatus.Reason != "retried" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+}
+
 func TestVLLMBackendSupportsEndToEndSingleAgentFlowAgainstMockServer(t *testing.T) {
 	root := t.TempDir()
 	k, err := kernel.New(filepath.Join(root, "kernel"))

@@ -17,6 +17,7 @@ import (
 	"aos/internal/inference"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tokenizer"
@@ -72,6 +73,10 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"))
+	if err != nil {
+		fail(err)
+	}
 	bus, err := ipc.New(filepath.Join(stateDir, "bus"))
 	if err != nil {
 		fail(err)
@@ -104,6 +109,7 @@ func main() {
 		Artifacts: store,
 		Tools:     tools.NewRuntime(),
 		Bus:       bus,
+		Leases:    leaseManager,
 		MaxSteps:  maxSteps(agent),
 	}
 	loadedSkills, err := skills.NewRegistry(spec.SkillRoots).LoadMany(agent.Skills)

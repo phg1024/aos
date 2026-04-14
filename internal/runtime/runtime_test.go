@@ -12,6 +12,7 @@ import (
 	"aos/internal/capability"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/tools"
 )
@@ -265,6 +266,142 @@ func TestAgentRuntimeSupportsMailboxWaitAndResume(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeRuntimeTools(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	bus, err := ipc.New(filepath.Join(root, "bus"))
+	if err != nil {
+		t.Fatalf("new bus: %v", err)
+	}
+	leaseManager, err := lease.New(filepath.Join(root, "leases"))
+	if err != nil {
+		t.Fatalf("new lease manager: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "runtime-tools",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			Tools: []string{"publish_artifact", "list_artifacts", "checkpoint", "message_agent", "await_agent", "acquire_lease", "release_lease", "spawn_agent"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	child, err := k.Spawn(kernel.ProcessSpec{ParentPID: process.PID, Role: "child"})
+	if err != nil {
+		t.Fatalf("spawn child: %v", err)
+	}
+	if _, err := k.Exit(child.PID, kernel.ExitStatus{Code: 0, Reason: "done", Retryable: false}); err != nil {
+		t.Fatalf("exit child: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Bus:       bus,
+		Leases:    leaseManager,
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "publish_artifact", Args: map[string]string{"type": "note", "body": "hello"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "list_artifacts", Args: map[string]string{"scope": "process"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "checkpoint"}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "message_agent", Args: map[string]string{"to": "proc-external", "body": "ping"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "await_agent", Args: map[string]string{"pid": child.PID}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "acquire_lease", Args: map[string]string{"resource": "file:plan.txt", "ttl": "1m"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "release_lease", Args: map[string]string{"resource": "file:plan.txt"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "spawn_agent", Args: map[string]string{"agent_id": "writer", "goal": "Draft a note"}}}},
+				{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}},
+			},
+		},
+		DelegateHandler: func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
+			return runtime.DelegateResult{
+				AgentID:      call.AgentID,
+				PID:          "proc-child-2",
+				Summary:      "delegated ok",
+				ResultID:     "art-000123",
+				CheckpointID: "art-000124",
+			}, nil
+		},
+	}
+
+	result, err := agentRuntime.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "do work"}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.ExitStatus.Code != 0 {
+		t.Fatalf("unexpected exit status %#v", result.ExitStatus)
+	}
+	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
+	if err != nil {
+		t.Fatalf("restore checkpoint: %v", err)
+	}
+	joined := make([]string, 0, len(session.Messages))
+	for _, message := range session.Messages {
+		joined = append(joined, message.Content)
+	}
+	all := strings.Join(joined, "\n")
+	for _, needle := range []string{
+		"publish_artifact:",
+		"list_artifacts:",
+		"checkpoint:",
+		"message_agent:",
+		"await_agent:",
+		"acquire_lease:",
+		"release_lease:",
+		"spawn_agent:",
+	} {
+		if !strings.Contains(all, needle) {
+			t.Fatalf("expected session to contain %q, got %s", needle, all)
+		}
+	}
+	received, err := bus.ReceiveAll("proc-external")
+	if err != nil {
+		t.Fatalf("receive mailbox: %v", err)
+	}
+	if len(received) != 1 || received[0].Body != "ping" {
+		t.Fatalf("unexpected mailbox messages %#v", received)
+	}
+}
+
+func TestRepeatedUnhelpfulToolCallAllowsRetryAfterUsefulInterveningStep(t *testing.T) {
+	attempts := []runtime.ToolAttempt{
+		{Name: "run", Signature: "run|command=compile", Useful: false, Error: "compile failed"},
+		{Name: "write_file", Signature: "write_file|path=/tmp/main.cpp", Useful: true},
+	}
+	if repeated := runtimeTestRepeatedUnhelpfulToolCall(attempts, "run|command=compile"); repeated {
+		t.Fatal("expected compile retry to be allowed after a useful intervening step")
+	}
+}
+
+func runtimeTestRepeatedUnhelpfulToolCall(attempts []runtime.ToolAttempt, signature string) bool {
+	for i := len(attempts) - 1; i >= 0; i-- {
+		attempt := attempts[i]
+		if attempt.Useful {
+			return false
+		}
+		if attempt.Signature != signature {
+			continue
+		}
+		return !attempt.Useful
+	}
+	return false
+}
+
 func TestAgentRuntimeCanRecoverRetryableProcessFromCheckpoint(t *testing.T) {
 	root := t.TempDir()
 	k, err := kernel.New(filepath.Join(root, "kernel"))
@@ -459,6 +596,80 @@ func TestAgentRuntimeCanContinueAfterBackendErrorWhenAllowed(t *testing.T) {
 	}
 	if len(result.Session.Messages) == 0 || !strings.Contains(result.Session.Messages[0].Content, "tool_error name=backend") {
 		t.Fatalf("expected backend error message in session, got %#v", result.Session.Messages)
+	}
+}
+
+func TestAgentRuntimeCanContinueAfterMalformedActionWhenAllowed(t *testing.T) {
+	root := t.TempDir()
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "interactive"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &scriptedBackend{
+			steps: []backendStep{
+				{
+					result: runtime.GenerateResult{
+						Action: runtime.GenerateAction{
+							Type: "tool",
+						},
+					},
+				},
+				{
+					result: runtime.GenerateResult{
+						Action: runtime.GenerateAction{
+							Type:    "message",
+							Message: "recovered from malformed action",
+						},
+					},
+				},
+				{
+					result: runtime.GenerateResult{
+						Action: runtime.GenerateAction{
+							Type: "exit",
+							ExitStatus: &kernel.ExitStatus{
+								Code:      0,
+								Reason:    "done",
+								Retryable: false,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{
+		ContinueOnToolError: true,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.ExitStatus.Reason != "done" {
+		t.Fatalf("unexpected result %#v", result)
+	}
+	found := false
+	for _, message := range result.Session.Messages {
+		if strings.Contains(message.Content, "tool_error name=backend error=malformed_backend_output") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected malformed backend tool error in session, got %#v", result.Session.Messages)
 	}
 }
 

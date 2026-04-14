@@ -24,6 +24,7 @@ type VLLMConfig struct {
 	APIKey        string
 	SystemPrompt  string
 	Timeout       time.Duration
+	MaxRetries    int
 	HTTPClient    *http.Client
 	OnStreamEvent func(StreamEvent)
 }
@@ -34,6 +35,7 @@ type VLLMBackend struct {
 	apiKey        string
 	client        *http.Client
 	system        string
+	maxRetries    int
 	onStreamEvent func(StreamEvent)
 }
 
@@ -87,6 +89,7 @@ func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
 		apiKey:        config.APIKey,
 		system:        system,
 		client:        client,
+		maxRetries:    max(1, config.MaxRetries),
 		onStreamEvent: config.OnStreamEvent,
 	}
 }
@@ -146,70 +149,122 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 	if err != nil {
 		return "", err
 	}
+	var lastErr error
+	for attempt := 0; attempt < b.maxRetries; attempt++ {
+		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+		if err != nil {
+			return "", err
+		}
+		httpRequest.Header.Set("Content-Type", "application/json")
+		if b.apiKey != "" {
+			httpRequest.Header.Set("Authorization", "Bearer "+b.apiKey)
+		}
+		if b.onStreamEvent != nil {
+			httpRequest.Header.Set("Accept", "text/event-stream")
+		}
 
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-	if b.apiKey != "" {
-		httpRequest.Header.Set("Authorization", "Bearer "+b.apiKey)
-	}
-	if b.onStreamEvent != nil {
-		httpRequest.Header.Set("Accept", "text/event-stream")
-	}
+		response, err := b.client.Do(httpRequest)
+		if err != nil {
+			lastErr = err
+			if isRetryableVLLMError(err) && attempt < b.maxRetries-1 {
+				continue
+			}
+			return "", err
+		}
 
-	response, err := b.client.Do(httpRequest)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
+		if response.StatusCode >= 500 {
+			lastErr = fmt.Errorf("vllm request failed: %s", response.Status)
+			response.Body.Close()
+			if attempt < b.maxRetries-1 {
+				continue
+			}
+			return "", lastErr
+		}
+		if response.StatusCode >= 400 {
+			lastErr = fmt.Errorf("vllm request failed: %s", response.Status)
+			response.Body.Close()
+			return "", lastErr
+		}
 
-	if response.StatusCode >= 400 {
-		return "", fmt.Errorf("vllm request failed: %s", response.Status)
-	}
-
-	if b.onStreamEvent != nil {
-		var fullResponse strings.Builder
-		scanner := bufio.NewScanner(response.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "data: ") {
-				data := strings.TrimPrefix(line, "data: ")
-				if data == "[DONE]" {
-					break
-				}
-				var chunk chatCompletionChunk
-				if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
-					delta := chunk.Choices[0].Delta
-					for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
-						if reasoning != "" {
-							b.onStreamEvent(StreamEvent{Kind: StreamThinking, Text: reasoning})
-							fullResponse.WriteString(reasoning)
-						}
+		if b.onStreamEvent != nil {
+			var fullResponse strings.Builder
+			scanner := bufio.NewScanner(response.Body)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.HasPrefix(line, "data: ") {
+					data := strings.TrimPrefix(line, "data: ")
+					if data == "[DONE]" {
+						break
 					}
-					if delta.Content != "" {
-						b.onStreamEvent(StreamEvent{Kind: StreamContent, Text: delta.Content})
-						fullResponse.WriteString(delta.Content)
+					var chunk chatCompletionChunk
+					if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
+						delta := chunk.Choices[0].Delta
+						for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
+							if reasoning != "" {
+								b.onStreamEvent(StreamEvent{Kind: StreamThinking, Text: reasoning})
+								fullResponse.WriteString(reasoning)
+							}
+						}
+						if delta.Content != "" {
+							b.onStreamEvent(StreamEvent{Kind: StreamContent, Text: delta.Content})
+							fullResponse.WriteString(delta.Content)
+						}
 					}
 				}
 			}
+			response.Body.Close()
+			if err := scanner.Err(); err != nil {
+				lastErr = err
+				if isRetryableVLLMError(err) && attempt < b.maxRetries-1 {
+					continue
+				}
+				return fullResponse.String(), err
+			}
+			b.onStreamEvent(StreamEvent{Kind: StreamDone})
+			return fullResponse.String(), nil
 		}
-		if err := scanner.Err(); err != nil {
-			return fullResponse.String(), err
-		}
-		b.onStreamEvent(StreamEvent{Kind: StreamDone})
-		return fullResponse.String(), nil
-	}
 
-	var parsed chatCompletionResponse
-	if err := json.NewDecoder(response.Body).Decode(&parsed); err != nil {
-		return "", err
+		var parsed chatCompletionResponse
+		err = json.NewDecoder(response.Body).Decode(&parsed)
+		response.Body.Close()
+		if err != nil {
+			lastErr = err
+			if attempt < b.maxRetries-1 {
+				continue
+			}
+			return "", err
+		}
+		if len(parsed.Choices) == 0 {
+			lastErr = ErrMalformedModelResponse
+			if attempt < b.maxRetries-1 {
+				continue
+			}
+			return "", ErrMalformedModelResponse
+		}
+		return parsed.Choices[0].Message.Content, nil
 	}
-	if len(parsed.Choices) == 0 {
-		return "", ErrMalformedModelResponse
+	if lastErr != nil {
+		return "", lastErr
 	}
-	return parsed.Choices[0].Message.Content, nil
+	return "", ErrMalformedModelResponse
+}
+
+func isRetryableVLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded")
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (b *VLLMBackend) messages(request runtime.GenerateRequest) []chatMessage {

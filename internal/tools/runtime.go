@@ -88,6 +88,50 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				"content": string(contentBytes),
 			},
 		}, nil
+	case "edit_file":
+		path := filepath.Clean(req.Args["path"])
+		oldText := req.Args["old_text"]
+		newText := req.Args["new_text"]
+		replaceAll := strings.EqualFold(strings.TrimSpace(req.Args["replace_all"]), "true")
+		if path == "" {
+			return Result{}, errors.New("edit_file requires path")
+		}
+		if oldText == "" {
+			return Result{}, errors.New("edit_file requires old_text")
+		}
+		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) || !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
+			return Result{}, ErrPathDenied
+		}
+		contentBytes, err := os.ReadFile(path)
+		if err != nil {
+			return Result{}, err
+		}
+		content := string(contentBytes)
+		count := strings.Count(content, oldText)
+		if count == 0 {
+			return Result{}, errors.New("edit_file old_text not found")
+		}
+		if count > 1 && !replaceAll {
+			return Result{}, errors.New("edit_file old_text matched multiple times; pass replace_all=true")
+		}
+		updated := content
+		if replaceAll {
+			updated = strings.ReplaceAll(content, oldText, newText)
+		} else {
+			updated = strings.Replace(content, oldText, newText, 1)
+		}
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			return Result{}, err
+		}
+		return Result{
+			Tool:    req.Tool,
+			Summary: "edited file",
+			Output: map[string]string{
+				"path":        path,
+				"occurrences": fmt.Sprintf("%d", count),
+				"bytes":       fmt.Sprintf("%d", len(updated)),
+			},
+		}, nil
 	case "list_dir":
 		path := filepath.Clean(req.Args["path"])
 		if path == "." || path == "" {

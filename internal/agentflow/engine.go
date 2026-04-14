@@ -11,6 +11,7 @@ import (
 	"aos/internal/capability"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tools"
@@ -18,6 +19,7 @@ import (
 
 var ErrUnknownAgent = errors.New("unknown agent")
 var ErrDelegationDenied = errors.New("delegation denied")
+var ErrDelegateAlreadyActive = errors.New("delegate already active")
 
 type BackendFactory interface {
 	BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error)
@@ -73,6 +75,7 @@ type Engine struct {
 	Kernel    *kernel.Kernel
 	Artifacts *artifact.Store
 	Bus       *ipc.Bus
+	Leases    *lease.Manager
 	Tools     *tools.Runtime
 	Factory   BackendFactory
 }
@@ -137,10 +140,23 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		Artifacts: e.Artifacts,
 		Tools:     e.Tools,
 		Bus:       e.Bus,
+		Leases:    e.Leases,
 		MaxSteps:  maxSteps(agent),
 		DelegateHandler: func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
 			if !contains(agent.AllowedAgents, call.AgentID) {
 				return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
+			}
+			children, err := e.Kernel.Children(parent.PID)
+			if err != nil {
+				return runtime.DelegateResult{}, err
+			}
+			for _, child := range children {
+				if child.State == kernel.StateExited {
+					continue
+				}
+				if child.Metadata["agent_id"] == call.AgentID {
+					return runtime.DelegateResult{}, fmt.Errorf("%w: %s", ErrDelegateAlreadyActive, call.AgentID)
+				}
 			}
 			childReq := req
 			if strings.TrimSpace(call.Goal) != "" {
@@ -167,7 +183,9 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	agentRuntime.Backend = backend
 
 	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
-	result, err := agentRuntime.Run(ctx, process.PID, initial)
+	result, err := agentRuntime.RunWithOptions(ctx, process.PID, initial, runtime.RunOptions{
+		ContinueOnToolError: true,
+	})
 	if err != nil {
 		return AgentRun{}, err
 	}

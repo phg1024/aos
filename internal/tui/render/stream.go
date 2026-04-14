@@ -283,6 +283,11 @@ func SummarizeToolResult(result tools.Result) string {
 			return fmt.Sprintf("write_file wrote %s (%s chars)", filepath.Base(result.Output["path"]), bytes)
 		}
 		return fmt.Sprintf("write_file wrote %s", filepath.Base(result.Output["path"]))
+	case "edit_file":
+		if count := strings.TrimSpace(result.Output["occurrences"]); count != "" {
+			return fmt.Sprintf("edit_file updated %s (%s matches)", filepath.Base(result.Output["path"]), count)
+		}
+		return fmt.Sprintf("edit_file updated %s", filepath.Base(result.Output["path"]))
 	case "web_search":
 		if strings.TrimSpace(result.Output["result"]) == "" {
 			return "web_search returned no direct answer"
@@ -305,6 +310,25 @@ func SummarizeToolResult(result tools.Result) string {
 			summary += previewText(stderr, 72)
 		}
 		return summary
+	case "spawn_agent":
+		return fmt.Sprintf("spawn_agent launched %s (%s)", result.Output["agent_id"], result.Output["pid"])
+	case "message_agent":
+		return fmt.Sprintf("message_agent sent to %s", result.Output["to"])
+	case "await_agent":
+		return fmt.Sprintf("await_agent saw %s state=%s", result.Output["pid"], result.Output["state"])
+	case "checkpoint":
+		return "checkpoint saved " + result.Output["checkpoint_id"]
+	case "list_artifacts":
+		return "list_artifacts found " + result.Output["count"]
+	case "publish_artifact":
+		return fmt.Sprintf("publish_artifact created %s (%s)", result.Output["artifact_id"], result.Output["type"])
+	case "acquire_lease":
+		if result.Output["held"] == "true" {
+			return fmt.Sprintf("acquire_lease blocked by %s", result.Output["owner_pid"])
+		}
+		return fmt.Sprintf("acquire_lease locked %s", result.Output["resource"])
+	case "release_lease":
+		return fmt.Sprintf("release_lease unlocked %s", result.Output["resource"])
 	default:
 		return result.Summary
 	}

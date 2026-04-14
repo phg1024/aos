@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/tools"
 )
 
@@ -99,6 +101,7 @@ type AgentRuntime struct {
 	Artifacts       *artifact.Store
 	Tools           *tools.Runtime
 	Bus             *ipc.Bus
+	Leases          *lease.Manager
 	Backend         Backend
 	DelegateHandler DelegateHandler
 	MaxSteps        int
@@ -195,6 +198,25 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	if maxSteps <= 0 {
 		maxSteps = 32
 	}
+	handleMalformed := func() (bool, error) {
+		if options.ContinueOnToolError {
+			artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
+				"error": ErrMalformedBackendOutput.Error(),
+			}, nil, map[string]string{
+				"kind": "backend_error",
+			})
+			if recordErr != nil {
+				return false, recordErr
+			}
+			session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+			session.Messages = append(session.Messages, Message{
+				Role:    "tool",
+				Content: "tool_error name=backend error=malformed_backend_output try_different_strategy=true",
+			})
+			return true, nil
+		}
+		return false, nil
+	}
 	for step := 0; step < maxSteps; step++ {
 		var inboxMessages []ipc.Message
 		if r.Bus != nil {
@@ -260,6 +282,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			}
 		case "tool":
 			if result.Action.ToolCall == nil || result.Action.ToolCall.Name == "" {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			if options.OnToolCall != nil {
@@ -293,12 +320,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				})
 				break
 			}
-			toolResult, err := r.Tools.Execute(tools.Request{
-				Tool:          result.Action.ToolCall.Name,
-				Args:          result.Action.ToolCall.Args,
-				CapabilitySet: process.CapabilitySet,
-				Mounts:        process.Mounts,
-			})
+			toolResult, err := r.executeToolCall(ctx, process, session, checkpointID, *result.Action.ToolCall)
 			if err != nil {
 				if options.OnToolError != nil {
 					options.OnToolError(*result.Action.ToolCall, err)
@@ -360,6 +382,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			}
 		case "delegate":
 			if result.Action.Delegate == nil || result.Action.Delegate.AgentID == "" {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			if r.DelegateHandler == nil {
@@ -398,6 +425,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			})
 		case "send":
 			if result.Action.Send == nil || result.Action.Send.To == "" {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			if r.Bus == nil {
@@ -421,6 +453,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			})
 		case "publish":
 			if result.Action.Publish == nil || result.Action.Publish.Topic == "" {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			if r.Bus == nil {
@@ -443,6 +480,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			})
 		case "subscribe":
 			if result.Action.Subscribe == nil || result.Action.Subscribe.Topic == "" {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			if r.Bus == nil {
@@ -476,6 +518,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			return RunResult{PID: pid, CheckpointID: checkpointID, Session: session, Blocked: true}, ErrAgentBlocked
 		case "exit":
 			if result.Action.ExitStatus == nil {
+				if continued, err := handleMalformed(); err != nil {
+					return RunResult{}, err
+				} else if continued {
+					break
+				}
 				return r.failMalformed(pid, checkpointID)
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
@@ -491,6 +538,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			}
 			return RunResult{PID: pid, ExitStatus: *process.ExitStatus, CheckpointID: checkpointID, Session: session}, nil
 		default:
+			if continued, err := handleMalformed(); err != nil {
+				return RunResult{}, err
+			} else if continued {
+				break
+			}
 			return r.failMalformed(pid, checkpointID)
 		}
 
@@ -542,6 +594,14 @@ func assessToolResult(result tools.Result) (bool, string) {
 		if exitCode != "" && exitCode != "0" {
 			return false, "non_zero_exit"
 		}
+	case "list_artifacts":
+		if strings.TrimSpace(result.Output["count"]) == "0" {
+			return false, "no_artifacts"
+		}
+	case "acquire_lease":
+		if strings.TrimSpace(result.Output["held"]) == "true" {
+			return false, "lease_held"
+		}
 	}
 	return true, ""
 }
@@ -569,6 +629,9 @@ func toolCallSignature(call ToolCall) string {
 func repeatedUnhelpfulToolCall(attempts []ToolAttempt, signature string) bool {
 	for i := len(attempts) - 1; i >= 0; i-- {
 		attempt := attempts[i]
+		if attempt.Useful {
+			return false
+		}
 		if attempt.Signature != signature {
 			continue
 		}
@@ -581,6 +644,244 @@ func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {
 	var session Session
 	err := r.Artifacts.ReadJSON(id, &session)
 	return session, err
+}
+
+func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
+	if isRuntimeTool(call.Name) {
+		return r.executeRuntimeTool(ctx, process, session, checkpointID, call)
+	}
+	return r.Tools.Execute(tools.Request{
+		Tool:          call.Name,
+		Args:          call.Args,
+		CapabilitySet: process.CapabilitySet,
+		Mounts:        process.Mounts,
+	})
+}
+
+func isRuntimeTool(name string) bool {
+	switch name {
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease":
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
+	evaluator := capability.Evaluator{}
+	if !evaluator.ToolAllowed(call.Name, process.CapabilitySet) {
+		return tools.Result{}, tools.ErrToolDenied
+	}
+
+	switch call.Name {
+	case "spawn_agent":
+		if r.DelegateHandler == nil {
+			return tools.Result{}, errors.New("delegate handler not configured")
+		}
+		agentID := strings.TrimSpace(call.Args["agent_id"])
+		if agentID == "" {
+			return tools.Result{}, errors.New("spawn_agent requires agent_id")
+		}
+		result, err := r.DelegateHandler(ctx, process, DelegateCall{
+			AgentID: agentID,
+			Goal:    call.Args["goal"],
+		}, session)
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "spawned agent",
+			Output: map[string]string{
+				"agent_id":      result.AgentID,
+				"pid":           result.PID,
+				"summary":       result.Summary,
+				"result_id":     result.ResultID,
+				"checkpoint_id": result.CheckpointID,
+			},
+		}, nil
+	case "message_agent":
+		if r.Bus == nil {
+			return tools.Result{}, errors.New("mailbox bus not configured")
+		}
+		to := strings.TrimSpace(call.Args["to"])
+		if to == "" {
+			to = strings.TrimSpace(call.Args["pid"])
+		}
+		if to == "" {
+			return tools.Result{}, errors.New("message_agent requires to")
+		}
+		message, err := r.Bus.Send(process.PID, to, call.Args["body"])
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "sent agent message",
+			Output: map[string]string{
+				"id":   message.ID,
+				"to":   message.To,
+				"body": message.Body,
+			},
+		}, nil
+	case "await_agent":
+		pid := strings.TrimSpace(call.Args["pid"])
+		if pid == "" {
+			return tools.Result{}, errors.New("await_agent requires pid")
+		}
+		child, err := r.Kernel.Get(pid)
+		if err != nil {
+			return tools.Result{}, err
+		}
+		result := tools.Result{
+			Tool:    call.Name,
+			Summary: "awaited agent",
+			Output: map[string]string{
+				"pid":   pid,
+				"state": string(child.State),
+			},
+		}
+		if child.ExitStatus != nil {
+			result.Output["code"] = fmt.Sprintf("%d", child.ExitStatus.Code)
+			result.Output["reason"] = child.ExitStatus.Reason
+			result.Output["retryable"] = fmt.Sprintf("%t", child.ExitStatus.Retryable)
+		}
+		return result, nil
+	case "checkpoint":
+		record, err := r.Artifacts.CreateJSON("checkpoint", process.PID, session, nil, map[string]string{
+			"kind": "manual",
+		})
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "created checkpoint",
+			Output: map[string]string{
+				"checkpoint_id": record.ID,
+			},
+		}, nil
+	case "list_artifacts":
+		items, err := r.Artifacts.List()
+		if err != nil {
+			return tools.Result{}, err
+		}
+		var filtered []artifact.Artifact
+		typeFilter := strings.TrimSpace(call.Args["type"])
+		pidFilter := strings.TrimSpace(call.Args["producer_pid"])
+		if pidFilter == "" && strings.EqualFold(strings.TrimSpace(call.Args["scope"]), "process") {
+			pidFilter = process.PID
+		}
+		for _, item := range items {
+			if typeFilter != "" && item.Type != typeFilter {
+				continue
+			}
+			if pidFilter != "" && item.ProducerPID != pidFilter {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].CreatedAt.Before(filtered[j].CreatedAt)
+		})
+		lines := make([]string, 0, len(filtered))
+		for _, item := range filtered {
+			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s", item.ID, item.Type, item.ProducerPID, item.CreatedAt.Format(time.RFC3339)))
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "listed artifacts",
+			Output: map[string]string{
+				"count":     fmt.Sprintf("%d", len(filtered)),
+				"artifacts": strings.Join(lines, "\n"),
+			},
+		}, nil
+	case "publish_artifact":
+		artifactType := strings.TrimSpace(call.Args["type"])
+		if artifactType == "" {
+			artifactType = "note"
+		}
+		body := call.Args["body"]
+		record, err := r.Artifacts.CreateJSON(artifactType, process.PID, map[string]string{
+			"body": body,
+		}, nil, map[string]string{
+			"kind": "published",
+		})
+		if err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "published artifact",
+			Output: map[string]string{
+				"artifact_id": record.ID,
+				"type":        record.Type,
+				"path":        record.Path,
+			},
+		}, nil
+	case "acquire_lease":
+		if r.Leases == nil {
+			return tools.Result{}, errors.New("lease manager not configured")
+		}
+		resource := strings.TrimSpace(call.Args["resource"])
+		if resource == "" {
+			return tools.Result{}, errors.New("acquire_lease requires resource")
+		}
+		ttl := 10 * time.Minute
+		if raw := strings.TrimSpace(call.Args["ttl"]); raw != "" {
+			if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+				ttl = parsed
+			}
+		}
+		leaseRecord, err := r.Leases.Acquire(resource, process.PID, ttl)
+		if err != nil {
+			if errors.Is(err, lease.ErrLeaseHeld) {
+				if current, ok, getErr := r.Leases.Get(resource); getErr == nil && ok {
+					return tools.Result{
+						Tool:    call.Name,
+						Summary: "lease held",
+						Output: map[string]string{
+							"resource":   resource,
+							"owner_pid":  current.OwnerPID,
+							"expires_at": current.ExpiresAt.Format(time.RFC3339),
+							"held":       "true",
+						},
+					}, nil
+				}
+			}
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "lease acquired",
+			Output: map[string]string{
+				"resource":   leaseRecord.Resource,
+				"owner_pid":  leaseRecord.OwnerPID,
+				"expires_at": leaseRecord.ExpiresAt.Format(time.RFC3339),
+				"held":       "false",
+			},
+		}, nil
+	case "release_lease":
+		if r.Leases == nil {
+			return tools.Result{}, errors.New("lease manager not configured")
+		}
+		resource := strings.TrimSpace(call.Args["resource"])
+		if resource == "" {
+			return tools.Result{}, errors.New("release_lease requires resource")
+		}
+		if err := r.Leases.Release(resource, process.PID); err != nil {
+			return tools.Result{}, err
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "lease released",
+			Output: map[string]string{
+				"resource": resource,
+			},
+		}, nil
+	default:
+		return tools.Result{}, errors.New("unknown runtime tool")
+	}
 }
 
 func (r *AgentRuntime) failMalformed(pid, checkpointID string) (RunResult, error) {
