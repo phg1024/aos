@@ -104,8 +104,9 @@ func (f *FooterBar) drawLocked() {
 func formatFooter(status FooterStatus) string {
 	messageCount := len(status.Session.Messages)
 	promptMessages := status.Backend.PromptMessages(runtime.GenerateRequest{
-		Process: status.Process,
-		History: append([]runtime.Message(nil), status.Session.Messages...),
+		Process:    status.Process,
+		History:    append([]runtime.Message(nil), status.Session.Messages...),
+		MemoryRefs: append([]runtime.MemoryRef(nil), status.Session.MemoryRefs...),
 	})
 	contextChars := estimateMessageChars(promptMessages)
 	contextTokens := estimateTokens(contextChars)

@@ -35,6 +35,12 @@ var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
 var halfQuotedKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)":`)
 var trailingCommaPattern = regexp.MustCompile(`,\s*([}\]])`)
 
+const (
+	maxPromptHistoryMessages = 12
+	maxPromptHistoryChars    = 4000
+	maxSummaryItemsPerRole   = 6
+)
+
 func (b PromptBackend) Generate(ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 	if result, ok := b.autoExitForCompletedTool(request); ok {
 		return result, nil
@@ -112,6 +118,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Do not repeat the exact same failing call with unchanged arguments more than once. ")
 	builder.WriteString("When inspecting a codebase, prefer using list_dir or find_files before guessing file paths. ")
 	builder.WriteString("History entries beginning with tool_notice or tool_error mean the previous approach was not enough and you should adapt. ")
+	builder.WriteString("If memory_refs are present, older session context has been compacted into durable JSON files. Use read_file on those paths when you need deeper prior context beyond the live history and summary. ")
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
@@ -143,39 +150,183 @@ func (b PromptBackend) systemPrompt() string {
 
 func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 	type promptContext struct {
-		Workflow   string            `json:"workflow"`
-		AgentID    string            `json:"agent_id"`
-		ProcessID  string            `json:"process_id"`
-		Goal       string            `json:"goal"`
-		InputPaths []string          `json:"input_paths,omitempty"`
-		OutputPath string            `json:"output_path,omitempty"`
-		Metadata   map[string]string `json:"metadata,omitempty"`
-		History    []runtime.Message `json:"history"`
-		ReadPaths  []string          `json:"read_paths,omitempty"`
-		WritePaths []string          `json:"write_paths,omitempty"`
-		ToolErrors int               `json:"tool_errors"`
-		LastTool   string            `json:"last_tool_observation,omitempty"`
+		Workflow               string              `json:"workflow"`
+		AgentID                string              `json:"agent_id"`
+		ProcessID              string              `json:"process_id"`
+		Goal                   string              `json:"goal"`
+		InputPaths             []string            `json:"input_paths,omitempty"`
+		OutputPath             string              `json:"output_path,omitempty"`
+		Metadata               map[string]string   `json:"metadata,omitempty"`
+		History                []runtime.Message   `json:"history"`
+		HistorySummary         string              `json:"history_summary,omitempty"`
+		HistoryCompacted       bool                `json:"history_compacted,omitempty"`
+		HistoryMessagesOmitted int                 `json:"history_messages_omitted,omitempty"`
+		MemoryRefs             []runtime.MemoryRef `json:"memory_refs,omitempty"`
+		ReadPaths              []string            `json:"read_paths,omitempty"`
+		WritePaths             []string            `json:"write_paths,omitempty"`
+		ToolErrors             int                 `json:"tool_errors"`
+		LastTool               string              `json:"last_tool_observation,omitempty"`
 	}
+	compacted := compactHistory(request.History)
 	toolErrors, lastTool := summarizeToolHistory(request.History)
 	payload := promptContext{
-		Workflow:   b.Workflow.Name,
-		AgentID:    b.Agent.ID,
-		ProcessID:  request.Process.PID,
-		Goal:       request.Process.Metadata["goal"],
-		InputPaths: splitList(request.Process.Metadata["input_paths"]),
-		OutputPath: request.Process.Metadata["output_path"],
-		Metadata:   cloneMap(request.Process.Metadata),
-		History:    request.History,
-		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
-		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
-		ToolErrors: toolErrors,
-		LastTool:   lastTool,
+		Workflow:               b.Workflow.Name,
+		AgentID:                b.Agent.ID,
+		ProcessID:              request.Process.PID,
+		Goal:                   request.Process.Metadata["goal"],
+		InputPaths:             splitList(request.Process.Metadata["input_paths"]),
+		OutputPath:             request.Process.Metadata["output_path"],
+		Metadata:               cloneMap(request.Process.Metadata),
+		History:                compacted.Recent,
+		HistorySummary:         compacted.Summary,
+		HistoryCompacted:       compacted.Compacted,
+		HistoryMessagesOmitted: compacted.Omitted,
+		MemoryRefs:             append([]runtime.MemoryRef(nil), request.MemoryRefs...),
+		ReadPaths:              append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
+		WritePaths:             append([]string(nil), request.Process.CapabilitySet.WritePaths...),
+		ToolErrors:             toolErrors,
+		LastTool:               lastTool,
 	}
 	bytes, _ := json.MarshalIndent(payload, "", "  ")
 	return fmt.Sprintf(
 		"Here is your current session context.\n\n%s\n\nRespond with the next action JSON only.",
 		string(bytes),
 	)
+}
+
+type compactedHistory struct {
+	Recent    []runtime.Message
+	Summary   string
+	Compacted bool
+	Omitted   int
+}
+
+func compactHistory(history []runtime.Message) compactedHistory {
+	if len(history) == 0 {
+		return compactedHistory{}
+	}
+	if !shouldCompactHistory(history) {
+		return compactedHistory{Recent: append([]runtime.Message(nil), history...)}
+	}
+
+	start := len(history) - maxPromptHistoryMessages
+	if start < 0 {
+		start = 0
+	}
+	recent := append([]runtime.Message(nil), history[start:]...)
+	older := history[:start]
+	return compactedHistory{
+		Recent:    recent,
+		Summary:   summarizeHistory(older),
+		Compacted: true,
+		Omitted:   len(older),
+	}
+}
+
+func shouldCompactHistory(history []runtime.Message) bool {
+	if len(history) > maxPromptHistoryMessages {
+		return true
+	}
+	totalChars := 0
+	for _, message := range history {
+		totalChars += len(message.Role) + len(message.Content)
+		if totalChars > maxPromptHistoryChars {
+			return true
+		}
+	}
+	return false
+}
+
+func summarizeHistory(history []runtime.Message) string {
+	if len(history) == 0 {
+		return ""
+	}
+	var userItems []string
+	var assistantItems []string
+	var toolItems []string
+	for _, message := range history {
+		item := summarizeHistoryMessage(message)
+		if item == "" {
+			continue
+		}
+		switch message.Role {
+		case "user":
+			userItems = appendUniqueLimited(userItems, item, maxSummaryItemsPerRole)
+		case "assistant":
+			assistantItems = appendUniqueLimited(assistantItems, item, maxSummaryItemsPerRole)
+		case "tool":
+			toolItems = appendUniqueLimited(toolItems, item, maxSummaryItemsPerRole)
+		}
+	}
+
+	var sections []string
+	if len(userItems) > 0 {
+		sections = append(sections, "Earlier user instructions:\n- "+strings.Join(userItems, "\n- "))
+	}
+	if len(assistantItems) > 0 {
+		sections = append(sections, "Earlier assistant decisions/messages:\n- "+strings.Join(assistantItems, "\n- "))
+	}
+	if len(toolItems) > 0 {
+		sections = append(sections, "Earlier tool/delegation outcomes:\n- "+strings.Join(toolItems, "\n- "))
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func summarizeHistoryMessage(message runtime.Message) string {
+	content := strings.TrimSpace(message.Content)
+	if content == "" {
+		return ""
+	}
+	switch message.Role {
+	case "user", "assistant":
+		return summarizeText(content, 180)
+	case "tool":
+		return summarizeToolMessage(content)
+	default:
+		return summarizeText(content, 180)
+	}
+}
+
+func summarizeToolMessage(content string) string {
+	content = strings.TrimSpace(content)
+	switch {
+	case strings.HasPrefix(content, "tool_error "),
+		strings.HasPrefix(content, "tool_notice "),
+		strings.HasPrefix(content, "delegate_result "),
+		strings.HasPrefix(content, "send:"),
+		strings.HasPrefix(content, "publish:"),
+		strings.HasPrefix(content, "subscribe:"):
+		return summarizeText(content, 180)
+	default:
+		colon := strings.Index(content, ":")
+		if colon > 0 {
+			return content[:colon] + ": " + summarizeText(content[colon+1:], 160)
+		}
+		return summarizeText(content, 180)
+	}
+}
+
+func summarizeText(value string, limit int) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	if len(value) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return value[:limit]
+	}
+	return value[:limit-3] + "..."
+}
+
+func appendUniqueLimited(items []string, item string, limit int) []string {
+	for _, existing := range items {
+		if existing == item {
+			return items
+		}
+	}
+	if len(items) >= limit {
+		return items
+	}
+	return append(items, item)
 }
 
 func summarizeToolHistory(history []runtime.Message) (int, string) {

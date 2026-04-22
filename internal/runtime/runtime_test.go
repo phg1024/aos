@@ -151,6 +151,96 @@ func TestAgentRuntimeSingleAgentFlowWithCheckpointRestore(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeCompactsLongHistoryIntoMemoryFiles(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "worker",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths:  []string{workspace},
+			WritePaths: []string{workspace},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	fake := &runtime.FakeBackend{
+		Steps: []runtime.GenerateResult{
+			{
+				Action: runtime.GenerateAction{
+					Type: "exit",
+					ExitStatus: &kernel.ExitStatus{
+						Code:   0,
+						Reason: "done",
+					},
+				},
+			},
+		},
+	}
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend:   fake,
+	}
+
+	var initial []runtime.Message
+	for i := 0; i < 30; i++ {
+		initial = append(initial, runtime.Message{Role: "user", Content: "history item " + strings.Repeat("x", 40)})
+	}
+	result, err := agentRuntime.Run(context.Background(), process.PID, initial)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(fake.Requests) != 1 {
+		t.Fatalf("expected one backend request, got %d", len(fake.Requests))
+	}
+	if got := len(fake.Requests[0].History); got != 12 {
+		t.Fatalf("expected compacted live history of 12 messages, got %d", got)
+	}
+	if len(fake.Requests[0].MemoryRefs) != 1 {
+		t.Fatalf("expected one memory ref in backend request, got %#v", fake.Requests[0].MemoryRefs)
+	}
+	ref := fake.Requests[0].MemoryRefs[0]
+	if !strings.HasPrefix(ref.Path, filepath.Join(workspace, ".aos-memory")) {
+		t.Fatalf("unexpected memory ref path %q", ref.Path)
+	}
+	content, err := os.ReadFile(ref.Path)
+	if err != nil {
+		t.Fatalf("read memory file: %v", err)
+	}
+	if !strings.Contains(string(content), `"message_count": 18`) {
+		t.Fatalf("expected dumped message count in memory file, got:\n%s", string(content))
+	}
+
+	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
+	if err != nil {
+		t.Fatalf("restore checkpoint: %v", err)
+	}
+	if len(session.MemoryRefs) != 1 {
+		t.Fatalf("expected checkpoint to preserve memory refs, got %#v", session.MemoryRefs)
+	}
+	if got := len(session.Messages); got != 12 {
+		t.Fatalf("expected trimmed session messages in checkpoint, got %d", got)
+	}
+}
+
 func TestAgentRuntimeRejectsMalformedBackendOutput(t *testing.T) {
 	root := t.TempDir()
 

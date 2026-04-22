@@ -2,8 +2,11 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -49,8 +52,9 @@ type SubscribeCall struct {
 }
 
 type GenerateRequest struct {
-	Process kernel.Process `json:"process"`
-	History []Message      `json:"history"`
+	Process    kernel.Process `json:"process"`
+	History    []Message      `json:"history"`
+	MemoryRefs []MemoryRef    `json:"memory_refs,omitempty"`
 }
 
 type GenerateAction struct {
@@ -78,6 +82,14 @@ type Session struct {
 	DelegateArtifactIDs []string      `json:"delegate_artifact_ids,omitempty"`
 	MailboxArtifactIDs  []string      `json:"mailbox_artifact_ids,omitempty"`
 	ToolAttempts        []ToolAttempt `json:"tool_attempts,omitempty"`
+	MemoryRefs          []MemoryRef   `json:"memory_refs,omitempty"`
+	MemorySequence      int           `json:"memory_sequence,omitempty"`
+}
+
+type MemoryRef struct {
+	Path         string `json:"path"`
+	Summary      string `json:"summary,omitempty"`
+	MessageCount int    `json:"message_count"`
 }
 
 type ToolAttempt struct {
@@ -106,6 +118,14 @@ type AgentRuntime struct {
 	DelegateHandler DelegateHandler
 	MaxSteps        int
 }
+
+const (
+	sessionMemoryKeepMessages = 12
+	sessionMemoryMaxMessages  = 24
+	sessionMemoryMaxChars     = 8000
+	sessionMemoryDirName      = ".aos-memory"
+	sessionMemorySummaryLimit = 180
+)
 
 type DelegateResult struct {
 	AgentID      string `json:"agent_id"`
@@ -229,10 +249,15 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				return RunResult{}, err
 			}
 		}
+		session, err = r.compactSessionMemory(process, session)
+		if err != nil {
+			return RunResult{}, err
+		}
 
 		result, err := r.Backend.Generate(ctx, GenerateRequest{
-			Process: process,
-			History: append([]Message(nil), session.Messages...),
+			Process:    process,
+			History:    append([]Message(nil), session.Messages...),
+			MemoryRefs: append([]MemoryRef(nil), session.MemoryRefs...),
 		})
 		if err != nil {
 			if options.ContinueOnToolError {
@@ -638,6 +663,161 @@ func repeatedUnhelpfulToolCall(attempts []ToolAttempt, signature string) bool {
 		return !attempt.Useful
 	}
 	return false
+}
+
+func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session) (Session, error) {
+	if !shouldCompactSessionMessages(session.Messages) {
+		return session, nil
+	}
+	if len(session.Messages) <= sessionMemoryKeepMessages {
+		return session, nil
+	}
+
+	root, ok := compactibleMemoryRoot(process)
+	if !ok {
+		return session, nil
+	}
+
+	cut := len(session.Messages) - sessionMemoryKeepMessages
+	older := append([]Message(nil), session.Messages[:cut]...)
+	recent := append([]Message(nil), session.Messages[cut:]...)
+	ref, err := persistSessionMemory(root, process.PID, session.MemorySequence+1, older)
+	if err != nil {
+		return Session{}, err
+	}
+	session.MemoryRefs = append(session.MemoryRefs, ref)
+	session.MemorySequence++
+	session.Messages = recent
+	return session, nil
+}
+
+func shouldCompactSessionMessages(messages []Message) bool {
+	if len(messages) > sessionMemoryMaxMessages {
+		return true
+	}
+	totalChars := 0
+	for _, message := range messages {
+		totalChars += len(message.Role) + len(message.Content)
+		if totalChars > sessionMemoryMaxChars {
+			return true
+		}
+	}
+	return false
+}
+
+func compactibleMemoryRoot(process kernel.Process) (string, bool) {
+	evaluator := capability.Evaluator{}
+	for _, candidate := range process.CapabilitySet.WritePaths {
+		candidate = filepath.Clean(candidate)
+		if evaluator.CanWrite(candidate, process.Mounts, process.CapabilitySet) && evaluator.CanRead(candidate, process.Mounts, process.CapabilitySet) {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func persistSessionMemory(root, pid string, sequence int, messages []Message) (MemoryRef, error) {
+	dir := filepath.Join(root, sessionMemoryDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return MemoryRef{}, err
+	}
+	fileName := fmt.Sprintf("%s-memory-%04d.json", sanitizeMemoryFileComponent(pid), sequence)
+	path := filepath.Join(dir, fileName)
+	payload := struct {
+		ProcessID    string    `json:"process_id"`
+		Sequence     int       `json:"sequence"`
+		MessageCount int       `json:"message_count"`
+		Summary      string    `json:"summary,omitempty"`
+		Messages     []Message `json:"messages"`
+	}{
+		ProcessID:    pid,
+		Sequence:     sequence,
+		MessageCount: len(messages),
+		Summary:      summarizeMemoryMessages(messages),
+		Messages:     messages,
+	}
+	content, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return MemoryRef{}, err
+	}
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return MemoryRef{}, err
+	}
+	return MemoryRef{
+		Path:         path,
+		Summary:      payload.Summary,
+		MessageCount: len(messages),
+	}, nil
+}
+
+func sanitizeMemoryFileComponent(value string) string {
+	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-")
+	return replacer.Replace(strings.TrimSpace(value))
+}
+
+func summarizeMemoryMessages(messages []Message) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	var userItems []string
+	var assistantItems []string
+	var toolItems []string
+	for _, message := range messages {
+		item := summarizeMemoryMessage(message)
+		if item == "" {
+			continue
+		}
+		switch message.Role {
+		case "user":
+			userItems = appendUniqueMemoryItem(userItems, item)
+		case "assistant":
+			assistantItems = appendUniqueMemoryItem(assistantItems, item)
+		default:
+			toolItems = appendUniqueMemoryItem(toolItems, item)
+		}
+	}
+
+	var sections []string
+	if len(userItems) > 0 {
+		sections = append(sections, "Earlier user instructions: "+strings.Join(userItems, " | "))
+	}
+	if len(assistantItems) > 0 {
+		sections = append(sections, "Earlier assistant decisions/messages: "+strings.Join(assistantItems, " | "))
+	}
+	if len(toolItems) > 0 {
+		sections = append(sections, "Earlier tool/delegation outcomes: "+strings.Join(toolItems, " | "))
+	}
+	return strings.Join(sections, "\n")
+}
+
+func summarizeMemoryMessage(message Message) string {
+	content := strings.Join(strings.Fields(strings.TrimSpace(message.Content)), " ")
+	if content == "" {
+		return ""
+	}
+	return truncateMemorySummary(content, sessionMemorySummaryLimit)
+}
+
+func appendUniqueMemoryItem(items []string, item string) []string {
+	for _, existing := range items {
+		if existing == item {
+			return items
+		}
+	}
+	if len(items) >= 6 {
+		return items
+	}
+	return append(items, item)
+}
+
+func truncateMemorySummary(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return value[:limit]
+	}
+	return value[:limit-3] + "..."
 }
 
 func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {

@@ -2,6 +2,7 @@ package agentflow_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -280,6 +281,120 @@ func TestPromptBackendIncludesLoadedSkillsInSystemPrompt(t *testing.T) {
 	}
 	if got := completer.systemPrompt; !containsAll(got, "Loaded skills:", "Skill: writer", "Prefer concise prose.") {
 		t.Fatalf("expected loaded skill in system prompt, got %q", got)
+	}
+}
+
+func TestPromptBackendCompactsLongHistoryInUserPrompt(t *testing.T) {
+	completer := &capturingCompleter{}
+	var history []runtime.Message
+	for i := 0; i < 16; i++ {
+		history = append(history,
+			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i)},
+			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:example output " + strconv.Itoa(i) + "]"},
+		)
+	}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+		},
+	}
+
+	_, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{
+			PID:      "pid-1",
+			Metadata: map[string]string{"goal": "finish the task"},
+		},
+		History: history,
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if !strings.Contains(completer.userPrompt, `"history_compacted": true`) {
+		t.Fatalf("expected compacted history in user prompt:\n%s", completer.userPrompt)
+	}
+	if !strings.Contains(completer.userPrompt, `"history_summary":`) {
+		t.Fatalf("expected history summary in user prompt:\n%s", completer.userPrompt)
+	}
+	if strings.Contains(completer.userPrompt, `"content": "user constraint round 0"`) {
+		t.Fatalf("expected earliest history to be summarized instead of kept verbatim:\n%s", completer.userPrompt)
+	}
+	if !strings.Contains(completer.userPrompt, "Earlier tool/delegation outcomes") {
+		t.Fatalf("expected summarized tool section in user prompt:\n%s", completer.userPrompt)
+	}
+}
+
+func TestPromptBackendKeepsShortHistoryVerbatim(t *testing.T) {
+	completer := &capturingCompleter{}
+	history := []runtime.Message{
+		{Role: "user", Content: "first constraint"},
+		{Role: "assistant", Content: "working on it"},
+		{Role: "tool", Content: "find_files:map[matches:/workspace/aos]"},
+	}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+		},
+	}
+
+	_, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{
+			PID:      "pid-1",
+			Metadata: map[string]string{"goal": "finish the task"},
+		},
+		History: history,
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if strings.Contains(completer.userPrompt, `"history_compacted": true`) {
+		t.Fatalf("did not expect short history compaction:\n%s", completer.userPrompt)
+	}
+	if !strings.Contains(completer.userPrompt, "first constraint") {
+		t.Fatalf("expected verbatim short history in prompt:\n%s", completer.userPrompt)
+	}
+}
+
+func TestPromptBackendIncludesMemoryRefsInUserPrompt(t *testing.T) {
+	completer := &capturingCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent: agentflow.AgentSpec{
+			ID:           "interactive",
+			SystemPrompt: "help the user",
+		},
+	}
+
+	_, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{
+			PID:      "pid-1",
+			Metadata: map[string]string{"goal": "finish the task"},
+		},
+		History: []runtime.Message{
+			{Role: "user", Content: "latest instruction"},
+		},
+		MemoryRefs: []runtime.MemoryRef{
+			{
+				Path:         "/workspace/.aos-memory/pid-1-memory-0001.json",
+				Summary:      "Earlier user instructions: keep the benchmark harness intact.",
+				MessageCount: 18,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if !strings.Contains(completer.userPrompt, `"memory_refs":`) {
+		t.Fatalf("expected memory refs in user prompt:\n%s", completer.userPrompt)
+	}
+	if !strings.Contains(completer.userPrompt, "pid-1-memory-0001.json") {
+		t.Fatalf("expected memory ref path in user prompt:\n%s", completer.userPrompt)
 	}
 }
 
