@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -78,6 +82,122 @@ type Engine struct {
 	Leases    *lease.Manager
 	Tools     *tools.Runtime
 	Factory   BackendFactory
+	Trace     func(TraceEvent)
+}
+
+type TraceEvent struct {
+	Time    time.Time
+	AgentID string
+	PID     string
+	Kind    string
+	Detail  string
+}
+
+func (e *Engine) emitTrace(agentID, pid, kind, detail string) {
+	if e.Trace == nil {
+		return
+	}
+	e.Trace(TraceEvent{
+		Time:    time.Now(),
+		AgentID: agentID,
+		PID:     pid,
+		Kind:    kind,
+		Detail:  detail,
+	})
+}
+
+func NewStdoutTracer() func(TraceEvent) {
+	var mu sync.Mutex
+	useColor := stdoutSupportsANSI()
+	return func(event TraceEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		timestamp := event.Time.Format("15:04:05")
+		agent := event.AgentID
+		if agent == "" {
+			agent = "workflow"
+		}
+		pid := event.PID
+		if pid == "" {
+			pid = "-"
+		}
+		header := fmt.Sprintf(
+			"%s %s %s",
+			traceColor(useColor, traceColorDim, "["+timestamp+"]"),
+			traceColor(useColor, traceColorAgent, agent),
+			traceColor(useColor, traceColorDim, "(pid="+pid+")"),
+		)
+		kind := traceColor(useColor, traceKindColor(event.Kind), strings.ToUpper(event.Kind))
+		fmt.Fprintf(os.Stdout, "%s %s\n", header, kind)
+		if detail := formatTraceDetail(event.Detail); detail != "" {
+			fmt.Fprintf(os.Stdout, "  %s\n", detail)
+		}
+	}
+}
+
+const (
+	traceColorReset  = "\033[0m"
+	traceColorDim    = "\033[2m"
+	traceColorAgent  = "\033[1;36m"
+	traceColorStart  = "\033[1;32m"
+	traceColorMsg    = "\033[1;37m"
+	traceColorTool   = "\033[1;34m"
+	traceColorResult = "\033[1;32m"
+	traceColorError  = "\033[1;31m"
+	traceColorExit   = "\033[1;35m"
+	traceColorInfo   = "\033[1;33m"
+)
+
+func stdoutSupportsANSI() bool {
+	info, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func traceColor(enabled bool, colorCode, text string) string {
+	if !enabled || text == "" {
+		return text
+	}
+	return colorCode + text + traceColorReset
+}
+
+func traceKindColor(kind string) string {
+	switch kind {
+	case "start":
+		return traceColorStart
+	case "message":
+		return traceColorMsg
+	case "tool_call":
+		return traceColorTool
+	case "tool_result":
+		return traceColorResult
+	case "tool_error", "runtime_error":
+		return traceColorError
+	case "delegate", "delegate_result":
+		return traceColorInfo
+	case "exit":
+		return traceColorExit
+	default:
+		return traceColorMsg
+	}
+}
+
+func formatTraceDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return ""
+	}
+	lines := strings.Split(detail, "\n")
+	for i, line := range lines {
+		line = strings.Join(strings.Fields(strings.TrimSpace(line)), " ")
+		if len(line) > 140 {
+			line = line[:137] + "..."
+		}
+		lines[i] = line
+	}
+	return strings.Join(lines, "\n  ")
 }
 
 func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (RunSummary, error) {
@@ -133,6 +253,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	if err != nil {
 		return AgentRun{}, err
 	}
+	e.emitTrace(agent.ID, process.PID, "start", req.Goal)
 
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
@@ -146,6 +267,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 			if !contains(agent.AllowedAgents, call.AgentID) {
 				return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
 			}
+			e.emitTrace(agent.ID, parent.PID, "delegate", fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal)))
 			children, err := e.Kernel.Children(parent.PID)
 			if err != nil {
 				return runtime.DelegateResult{}, err
@@ -167,6 +289,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 				return runtime.DelegateResult{}, err
 			}
 			childRuns = append(childRuns, childRun)
+			e.emitTrace(agent.ID, parent.PID, "delegate_result", fmt.Sprintf("from=%s pid=%s reason=%s", childRun.AgentID, childRun.PID, childRun.ExitStatus.Reason))
 			return runtime.DelegateResult{
 				AgentID:      childRun.AgentID,
 				PID:          childRun.PID,
@@ -185,8 +308,21 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
 	result, err := agentRuntime.RunWithOptions(ctx, process.PID, initial, runtime.RunOptions{
 		ContinueOnToolError: true,
+		OnAssistantMessage: func(message string) {
+			e.emitTrace(agent.ID, process.PID, "message", message)
+		},
+		OnToolCall: func(call runtime.ToolCall) {
+			e.emitTrace(agent.ID, process.PID, "tool_call", formatToolCall(call))
+		},
+		OnToolResult: func(result tools.Result) {
+			e.emitTrace(agent.ID, process.PID, "tool_result", formatToolResult(result))
+		},
+		OnToolError: func(call runtime.ToolCall, err error) {
+			e.emitTrace(agent.ID, process.PID, "tool_error", fmt.Sprintf("%s error=%s", formatToolCall(call), err.Error()))
+		},
 	})
 	if err != nil {
+		e.emitTrace(agent.ID, process.PID, "runtime_error", err.Error())
 		return AgentRun{}, err
 	}
 	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
@@ -202,6 +338,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		FinalMessage:  finalAssistantMessage(session.Messages),
 		ToolArtifacts: append([]string(nil), session.ToolArtifactIDs...),
 	}
+	e.emitTrace(agent.ID, process.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable))
 	run.Delegates = delegateMessages(session.Messages)
 	run.Children = append(run.Children, childRuns...)
 	for _, child := range childRuns {
@@ -221,6 +358,49 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		})
 	}
 	return run, nil
+}
+
+func formatToolCall(call runtime.ToolCall) string {
+	if len(call.Args) == 0 {
+		return call.Name
+	}
+	keys := make([]string, 0, len(call.Args))
+	for key := range call.Args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, summarizeTraceText(call.Args[key])))
+	}
+	return fmt.Sprintf("%s %s", call.Name, strings.Join(parts, " "))
+}
+
+func formatToolResult(result tools.Result) string {
+	if len(result.Output) == 0 {
+		if result.Summary != "" {
+			return summarizeTraceText(result.Summary)
+		}
+		return result.Tool
+	}
+	keys := make([]string, 0, len(result.Output))
+	for key := range result.Output {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, min(3, len(keys)))
+	for _, key := range keys[:min(3, len(keys))] {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, summarizeTraceText(result.Output[key])))
+	}
+	return fmt.Sprintf("%s %s", result.Tool, strings.Join(parts, " "))
+}
+
+func summarizeTraceText(value string) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	if len(value) > 120 {
+		return value[:117] + "..."
+	}
+	return value
 }
 
 func agentMetadata(agent AgentSpec, req RunRequest) map[string]string {

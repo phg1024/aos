@@ -92,15 +92,11 @@ func main() {
 		fail(err)
 	}
 
-	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 180*time.Second)
-	modelName := getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B")
+	llmConfig := inference.LoadBackendConfig(180 * time.Second)
+	modelName := llmConfig.Model
 	repoRoot := detectRepoRoot(absWorkdir)
 	stream := render.NewStreamRenderer(ui)
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL:       getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001"),
-		Model:         modelName,
-		APIKey:        getenv("AOS_VLLM_API_KEY", "dummy"),
-		Timeout:       timeout,
+	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{
 		OnStreamEvent: stream.Handle,
 	})
 
@@ -130,6 +126,7 @@ func main() {
 
 	fmt.Println(ui.Banner(render.AOSBanner()))
 	fmt.Println(ui.Header(fmt.Sprintf("AOS TUI ready  agent=%s  pid=%s", agent.ID, process.PID)))
+	fmt.Println(ui.Subtle("Backend: " + string(llmConfig.Kind)))
 	fmt.Println(ui.Subtle("Model: " + modelName))
 	if tokenCounter != nil {
 		fmt.Println(ui.Subtle("Tokenizer: exact sidecar"))

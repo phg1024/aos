@@ -16,9 +16,7 @@ import (
 )
 
 func main() {
-	baseURL := getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001")
-	model := getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B")
-	apiKey := getenv("AOS_VLLM_API_KEY", "dummy")
+	llmConfig := inference.LoadBackendConfig(30 * time.Second)
 
 	root, err := os.MkdirTemp("", "aos-live-smoke-*")
 	if err != nil {
@@ -39,11 +37,7 @@ func main() {
 		fail(err)
 	}
 
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL: baseURL,
-		Model:   model,
-		APIKey:  apiKey,
-		Timeout: 30 * time.Second,
+	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{
 		SystemPrompt: "Return only compact JSON matching the GenerateResult schema. " +
 			"Prefer an exit action with reason 'live-smoke-ok'.",
 	})

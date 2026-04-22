@@ -28,12 +28,16 @@ type liveDemoReport struct {
 	OutputHTML  string
 }
 
+type jsonCompleter interface {
+	CompleteJSON(ctx context.Context, systemPrompt, userPrompt string, target any) error
+}
+
 type liveWorker struct {
-	backend *inference.VLLMBackend
+	backend jsonCompleter
 }
 
 type liveVerifier struct {
-	backend *inference.VLLMBackend
+	backend jsonCompleter
 }
 
 type staticPlanner struct {
@@ -57,7 +61,7 @@ func (w liveWorker) Execute(ctx context.Context, contract workflow.TaskContract,
 		Summary: out.Summary,
 		Metadata: map[string]string{
 			"attempt": fmt.Sprintf("%d", attempt),
-			"mode":    "live-vllm",
+			"mode":    "live-llm",
 		},
 	}, nil
 }
@@ -75,16 +79,13 @@ func (v liveVerifier) Verify(ctx context.Context, contract workflow.TaskContract
 	return workflow.Verification{
 		Approved: out.Approved,
 		Reason:   out.Reason,
-		Metadata: map[string]string{"mode": "live-vllm"},
+		Metadata: map[string]string{"mode": "live-llm"},
 	}, nil
 }
 
 func main() {
-	baseURL := getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001")
-	model := getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B")
-	apiKey := getenv("AOS_VLLM_API_KEY", "dummy")
 	outputPath := getenv("AOS_DEMO_OUT", "/Users/claw/Code/aos/reports/demo-live-docs-assembly.html")
-	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 120*time.Second)
+	llmConfig := inference.LoadBackendConfig(120 * time.Second)
 
 	root, err := os.MkdirTemp("", "aos-demo-live-*")
 	if err != nil {
@@ -104,12 +105,7 @@ func main() {
 		fail(err)
 	}
 
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL: baseURL,
-		Model:   model,
-		APIKey:  apiKey,
-		Timeout: timeout,
-	})
+	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	goal := "assemble a compact AOS guide from two source snippets"
 	engine := workflow.Engine{
@@ -268,7 +264,7 @@ func renderHTML(report liveDemoReport, summary workflow.Summary) string {
 		"    <p>Plan artifact: <code>" + html.EscapeString(summary.PlanArtifactID) + "</code></p>\n" +
 		"  </div>\n" +
 		"  <h2>What This Demonstrates</h2>\n" +
-		"  <p>This demo uses your local <code>vllm</code> endpoint for worker and verifier roles. It is a live harness run, not a mocked scenario.</p>\n" +
+		"  <p>This demo uses your configured local LLM backend for worker and verifier roles. It is a live harness run, not a mocked scenario.</p>\n" +
 		"  <h2>Task Results</h2>\n" +
 		"  <table>\n    <tr><th>Contract</th><th>Attempts</th><th>Approved</th><th>Verifier Reason</th><th>Worker PID</th><th>Verifier PID</th></tr>\n" + resultRows.String() + "  </table>\n" +
 		"  <h2>Processes</h2>\n" +

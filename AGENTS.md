@@ -12,6 +12,6 @@
 ## Current Assumptions
 
 - Implementation language: Go
-- First live backend: local `vllm`
+- First live backend: local OpenAI-compatible endpoint, with `vllm` as the current default
 - Early persistence: JSON/file-backed durable store to avoid dependency drag
 - Initial focus: phases 0 through 4 from `implementation-plan.md`

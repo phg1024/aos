@@ -54,11 +54,13 @@ func run(args []string) {
 	var workflowPath string
 	var reportPath string
 	var stateDir string
+	var trace bool
 	fs.Var(&inputs, "input", "input file path (repeatable)")
 	fs.StringVar(&outputPath, "output", "", "output file path")
 	fs.StringVar(&workflowPath, "workflow", "", "workflow JSON spec path")
 	fs.StringVar(&reportPath, "report", "", "optional HTML report output path")
 	fs.StringVar(&stateDir, "state-dir", "", "optional state directory for workflow runs")
+	fs.BoolVar(&trace, "trace", getenvBool("AOS_TRACE", false), "print real-time agent actions during workflow runs")
 	_ = fs.Parse(args)
 
 	goal := ""
@@ -66,16 +68,11 @@ func run(args []string) {
 		goal = fs.Arg(0)
 	}
 
-	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 120*time.Second)
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL: getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001"),
-		Model:   getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B"),
-		APIKey:  getenv("AOS_VLLM_API_KEY", "dummy"),
-		Timeout: timeout,
-	})
+	llmConfig := inference.LoadBackendConfig(120 * time.Second)
+	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	if workflowPath != "" {
-		if err := runWorkflow(context.Background(), backend, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal); err != nil {
+		if err := runWorkflow(context.Background(), backend, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -100,7 +97,7 @@ func run(args []string) {
 	fmt.Println(string(bytes))
 }
 
-func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string) error {
+func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -148,6 +145,9 @@ func runWorkflow(ctx context.Context, backend *inference.VLLMBackend, workflowPa
 			Completer: backend,
 			Skills:    skills.NewRegistry(spec.SkillRoots),
 		},
+	}
+	if trace {
+		engine.Trace = agentflow.NewStdoutTracer()
 	}
 
 	summary, err := engine.Run(ctx, spec, agentflow.RunRequest{
@@ -288,4 +288,18 @@ func getenvDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func getenvBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
 }

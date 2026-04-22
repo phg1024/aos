@@ -27,18 +27,10 @@ type projectSpec struct {
 }
 
 func main() {
-	baseURL := getenv("AOS_VLLM_BASE_URL", "http://lenovo-px.local:8001")
-	model := getenv("AOS_VLLM_MODEL", "Qwen/Qwen3.5-27B")
-	apiKey := getenv("AOS_VLLM_API_KEY", "dummy")
 	reportRoot := getenv("AOS_REPORT_ROOT", "/Users/claw/Code/aos/reports/live-mini-projects")
-	timeout := getenvDuration("AOS_VLLM_TIMEOUT_SECONDS", 180*time.Second)
+	llmConfig := inference.LoadBackendConfig(180 * time.Second)
 
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{
-		BaseURL: baseURL,
-		Model:   model,
-		APIKey:  apiKey,
-		Timeout: timeout,
-	})
+	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	if err := os.MkdirAll(reportRoot, 0o755); err != nil {
 		fail(err)
@@ -120,7 +112,7 @@ func main() {
 	fmt.Println(string(bytes))
 }
 
-func runProject(ctx context.Context, backend *inference.VLLMBackend, reportRoot string, project projectSpec) (map[string]any, error) {
+func runProject(ctx context.Context, backend agentflow.JSONCompleter, reportRoot string, project projectSpec) (map[string]any, error) {
 	projectRoot := filepath.Join(reportRoot, project.Name)
 	inputRoot := filepath.Join(projectRoot, "inputs")
 	stateRoot := filepath.Join(projectRoot, "state")

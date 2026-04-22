@@ -2,7 +2,7 @@
 
 AOS is a research prototype for an agent operating system built around deterministic runtime semantics, artifact-based collaboration, and replaceable inference backends.
 
-The codebase is intentionally exploratory, but the core runtime is implemented and covered by Go tests. The current repo includes a file-backed kernel, IPC bus, artifact store, lease manager, capability model, tool runtime, workflow engine, live vLLM integration, and an interactive terminal UI.
+The codebase is intentionally exploratory, but the core runtime is implemented and covered by Go tests. The current repo includes a file-backed kernel, IPC bus, artifact store, lease manager, capability model, tool runtime, workflow engine, configurable local LLM integration, and an interactive terminal UI.
 
 ## Current Status
 
@@ -29,6 +29,27 @@ See [STATUS.md](./STATUS.md) for the current project snapshot and [RELEASE_CHECK
 - `go run ./cmd/aos-tui --workdir .`
 
 `make test` uses repo-local `GOCACHE` and `GOTMPDIR` paths so tests run reliably in sandboxed environments too.
+
+## LLM Backend Config
+
+AOS now uses backend-agnostic env vars for live model selection:
+
+- `AOS_LLM_BACKEND` with values such as `vllm`, `ollama`, or `openai-compatible`
+- `AOS_LLM_BASE_URL`
+- `AOS_LLM_MODEL`
+- `AOS_LLM_API_KEY`
+- `AOS_LLM_TIMEOUT_SECONDS`
+
+Legacy `AOS_VLLM_*` vars are still supported as fallback for existing scripts.
+
+Example using Ollama:
+
+```sh
+AOS_LLM_BACKEND=ollama \
+AOS_LLM_BASE_URL=http://lenovo-px.local:11434 \
+AOS_LLM_MODEL=qwen3.6:35b \
+go run ./cmd/aos run --workflow ./workflows/rasterizer-optimized-tail.json --output ./reports/rasterizer-team-demo/final-summary.txt
+```
 
 ## Docs
 
