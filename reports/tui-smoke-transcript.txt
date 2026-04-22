@@ -1,4 +1,0 @@
-AOS TUI ready. agent=interactive pid=pid-000001 state=/var/folders/yw/mr22mghs24gc1zmvlgz5h8d40000gn/T/aos-tui-4104406629
-Commands: /quit, /state, /recover
-you> agent> AOS is an agent operating system framework that enables building, coordinating, and managing AI agents through a unified architecture with tools, delegation, and communication capabilities.
-you> 

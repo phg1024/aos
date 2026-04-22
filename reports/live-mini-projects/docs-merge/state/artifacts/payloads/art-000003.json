@@ -1,8 +1,0 @@
-{
-  "tool": "read_file",
-  "summary": "read file",
-  "output": {
-    "content": "\u003ch1\u003ePhase B\u003c/h1\u003e\u003cp\u003eThe runtime should support repeated tool use and delegation until the task is complete.\u003c/p\u003e",
-    "path": "/Users/claw/Code/aos/reports/live-mini-projects/docs-merge/inputs/phase-b.html"
-  }
-}

@@ -1,1 +1,0 @@
-The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation.

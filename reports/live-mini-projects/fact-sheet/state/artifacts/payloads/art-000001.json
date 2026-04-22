@@ -1,8 +1,0 @@
-{
-  "tool": "read_file",
-  "summary": "read file",
-  "output": {
-    "content": "Project AOS uses a durable process table, event log, mailbox IPC, and artifact store.",
-    "path": "/Users/claw/Code/aos/reports/live-mini-projects/fact-sheet/inputs/notes-1.txt"
-  }
-}

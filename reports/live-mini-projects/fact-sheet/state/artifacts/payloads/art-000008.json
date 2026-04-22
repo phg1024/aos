@@ -1,7 +1,0 @@
-{
-  "agent_id": "fact_extractor",
-  "pid": "pid-000003",
-  "summary": "# Project AOS Fact Sheet\n\n- Project AOS uses a durable process table, event log, mailbox IPC, and artifact store\n- The local prototype uses Go for the runtime and a local vLLM endpoint for live experimentation",
-  "result_id": "art-000007",
-  "checkpoint_id": "art-000006"
-}

@@ -1,7 +1,0 @@
-{
-  "tool": "write_file",
-  "summary": "wrote file",
-  "output": {
-    "path": "/Users/claw/Code/aos/reports/live-mini-projects/fact-sheet/fact-sheet.md"
-  }
-}

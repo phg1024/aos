@@ -32,3 +32,28 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.log
+
+# Local agent/editor settings
+.claude/settings.local.json
+
+# Local scratch programs and binaries
+pi_bigint
+pi_bigint.cpp
+pi_compute
+pi_compute.cpp
+pi_compute.py
+compute_pi.py
+aos-tui
+
+# Generated demo/report outputs
+reports/rasterizer-team-demo/
+reports/two-agent-mini-demo/
+reports/live-all-agent-smoke/
+reports/live-all-agent-smoke-2/
+reports/live-mini-projects/
+reports/live-mini-projects-phase6/
+reports/live-smoke-generic/
+reports/live-smoke-generic-2/
+reports/tui-streaming-transcript.txt
+reports/tui-inspect-llm-transcript.txt
+reports/tui-smoke-transcript.txt

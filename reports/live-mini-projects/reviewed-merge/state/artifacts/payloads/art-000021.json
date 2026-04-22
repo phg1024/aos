@@ -1,7 +1,0 @@
-{
-  "agent_id": "review_partner",
-  "pid": "pid-000005",
-  "summary": "Review of reviewed-report.html:\n\nCoherence: The document is well-structured with proper HTML5 doctype, head, and body sections. Two distinct sections (Kernel and Workflow) are clearly separated.\n\nDuplication: No duplicate content detected. Each section contains unique information.\n\nMain Points Preserved: Both input fragments appear to be represented - the Kernel section covers process state/events/records, and the Workflow section addresses agent meanings in workflow specs. The merge successfully preserved the core concepts from both fragments without redundancy.",
-  "result_id": "art-000020",
-  "checkpoint_id": "art-000019"
-}

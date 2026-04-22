@@ -1,8 +1,13 @@
+GOCACHE ?= $(CURDIR)/.cache/go-build
+GOTMPDIR ?= $(CURDIR)/.cache/tmp
+
 test:
-	go test ./...
+	mkdir -p $(GOCACHE) $(GOTMPDIR)
+	GOCACHE=$(GOCACHE) GOTMPDIR=$(GOTMPDIR) go test ./...
 
 test-unit:
-	go test ./...
+	mkdir -p $(GOCACHE) $(GOTMPDIR)
+	GOCACHE=$(GOCACHE) GOTMPDIR=$(GOTMPDIR) go test ./...
 
 fmt:
 	gofmt -w ./cmd ./internal

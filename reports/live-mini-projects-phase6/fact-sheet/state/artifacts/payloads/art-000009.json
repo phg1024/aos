@@ -1,7 +1,0 @@
-{
-  "agent_id": "fact_extractor",
-  "pid": "pid-000003",
-  "summary": "## AOS Project Fact Sheet\n\n- **Core Architecture**: Durable process table, event log, mailbox IPC, and artifact store\n- **Runtime Language**: Go\n- **ML Endpoint**: Local vLLM for live experimentation\n- **Prototype Status**: Local prototype in development",
-  "result_id": "art-000008",
-  "checkpoint_id": "art-000007"
-}

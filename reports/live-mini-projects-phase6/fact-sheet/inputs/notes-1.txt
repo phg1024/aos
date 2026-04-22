@@ -1,1 +1,0 @@
-Project AOS uses a durable process table, event log, mailbox IPC, and artifact store.
