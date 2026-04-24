@@ -3,6 +3,8 @@ package render
 import (
 	"os"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Palette struct {
@@ -78,14 +80,15 @@ func (p Palette) ToolError(text string) string {
 	return p.wrap(text, "1;38;5;203")
 }
 
-func (p Palette) ThinkingPhase(text string, phase int) string {
-	styles := []string{
-		"2;38;5;67",
-		"0;38;5;75",
-		"1;38;5;117",
-		"0;38;5;75",
+func (p Palette) ThinkingPhase(text string, _ int) string {
+	if !p.Enabled {
+		return text
 	}
-	return p.wrap(text, styles[phase%len(styles)])
+	return lipgloss.NewStyle().
+		Blink(true).
+		Faint(true).
+		Foreground(lipgloss.Color("67")).
+		Render(text)
 }
 
 func (p Palette) Warn(text string) string {

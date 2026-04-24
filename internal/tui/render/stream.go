@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"aos/internal/inference"
 	"aos/internal/runtime"
@@ -17,12 +16,10 @@ import (
 
 type StreamRenderer struct {
 	thinking    string
-	thinkingRaw string
+	thinkingLen int
 	pending     string
 	inThink     bool
 	active      bool
-	pulseFrame  int
-	pulseStop   chan struct{}
 	mu          sync.Mutex
 	ui          Palette
 	footer      *FooterBar
@@ -59,17 +56,12 @@ func (r *StreamRenderer) PrintStatus(line string) {
 func (r *StreamRenderer) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.pulseStop != nil {
-		close(r.pulseStop)
-		r.pulseStop = nil
-	}
 	if r.active && r.ui.Enabled {
 		fmt.Fprint(os.Stdout, ansi.EraseEntireLine, "\r")
 	}
 	r.active = false
-	r.pulseFrame = 0
 	r.thinking = ""
-	r.thinkingRaw = ""
+	r.thinkingLen = 0
 	r.pending = ""
 	r.inThink = false
 }
@@ -131,11 +123,8 @@ func (r *StreamRenderer) appendThinking(text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	r.thinkingRaw += text
-	if len(r.thinkingRaw) > 2000 {
-		r.thinkingRaw = r.thinkingRaw[len(r.thinkingRaw)-1200:]
-	}
-	preview := previewThought(r.thinkingRaw, 3, 256)
+	r.thinkingLen += len(text)
+	preview := thinkingStatus(r.thinkingLen)
 	width, _ := TerminalSize()
 	preview = clampDisplayWidth(preview, maxInt(width-len("thinking> ")-1, 32))
 	if preview == r.thinking && r.active {
@@ -143,37 +132,6 @@ func (r *StreamRenderer) appendThinking(text string) {
 	}
 	r.thinking = preview
 	r.renderThinkingLocked()
-	r.ensurePulseLocked()
-}
-
-func (r *StreamRenderer) ensurePulseLocked() {
-	if r.pulseStop != nil || !r.ui.Enabled || r.thinking == "" {
-		return
-	}
-	r.active = true
-	r.pulseStop = make(chan struct{})
-	stop := r.pulseStop
-	go r.pulseLoop(stop)
-}
-
-func (r *StreamRenderer) pulseLoop(stop chan struct{}) {
-	ticker := time.NewTicker(180 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			r.mu.Lock()
-			if !r.active || r.thinking == "" || r.pulseStop != stop {
-				r.mu.Unlock()
-				return
-			}
-			r.pulseFrame = (r.pulseFrame + 1) % 4
-			r.renderThinkingLocked()
-			r.mu.Unlock()
-		case <-stop:
-			return
-		}
-	}
 }
 
 func (r *StreamRenderer) renderThinkingLocked() {
@@ -182,7 +140,7 @@ func (r *StreamRenderer) renderThinkingLocked() {
 	}
 	r.active = true
 	fmt.Fprint(os.Stdout, ansi.EraseEntireLine, "\r")
-	fmt.Fprint(os.Stdout, r.ui.ThinkingPhase("thinking> "+r.thinking, r.pulseFrame))
+	fmt.Fprint(os.Stdout, r.ui.ThinkingPhase("thinking> "+r.thinking, 0))
 	if r.footer != nil {
 		r.footer.Draw()
 	}
@@ -202,34 +160,14 @@ func maxInt(left, right int) int {
 	return right
 }
 
-func previewThought(raw string, maxThoughts, maxThoughtLen int) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
+func thinkingStatus(chars int) string {
+	if chars < 512 {
+		return "working"
 	}
-	paragraphs := strings.Split(raw, "\n\n")
-	var preview []string
-	for idx := len(paragraphs) - 1; idx >= 0; idx-- {
-		candidate := strings.TrimSpace(paragraphs[idx])
-		if candidate == "" {
-			continue
-		}
-		candidate = strings.Join(strings.Fields(candidate), " ")
-		if len(candidate) > maxThoughtLen {
-			candidate = candidate[:maxThoughtLen] + "..."
-		}
-		preview = append(preview, candidate)
-		if len(preview) >= maxThoughts {
-			break
-		}
+	if chars < 2048 {
+		return "working through context"
 	}
-	if len(preview) == 0 {
-		return ""
-	}
-	for left, right := 0, len(preview)-1; left < right; left, right = left+1, right-1 {
-		preview[left], preview[right] = preview[right], preview[left]
-	}
-	return strings.Join(preview, "")
+	return "working through a long response"
 }
 
 func clampDisplayWidth(value string, limit int) string {
