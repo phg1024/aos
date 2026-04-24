@@ -318,8 +318,53 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				options.OnToolCall(*result.Action.ToolCall)
 			}
 			signature := toolCallSignature(*result.Action.ToolCall)
+			loopWarningIssued := lastLoopWarningForSignature(session.ToolAttempts, signature)
 			if repeatedUnhelpfulToolCall(session.ToolAttempts, signature) {
 				repeatErr := errors.New("repeated unsuccessful tool call suppressed; try different args or another tool")
+				if loopWarningIssued {
+					repeatErr = errors.New("repeated unsuccessful tool call suppressed after prior loop warning; agent did not adjust")
+				}
+				if options.OnToolError != nil {
+					options.OnToolError(*result.Action.ToolCall, repeatErr)
+				}
+				artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
+					"tool":  result.Action.ToolCall.Name,
+					"error": repeatErr.Error(),
+				}, nil, map[string]string{
+					"tool": result.Action.ToolCall.Name,
+				})
+				if recordErr != nil {
+					return RunResult{}, recordErr
+				}
+				session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+				session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
+					Name:      result.Action.ToolCall.Name,
+					Signature: signature,
+					Useful:    false,
+					Error:     repeatErr.Error(),
+				})
+				session.Messages = append(session.Messages, Message{
+					Role:    "tool",
+					Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error()),
+				})
+				if loopWarningIssued {
+					exitStatus := kernel.ExitStatus{Code: 1, Reason: repeatErr.Error(), Retryable: false}
+					artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+						"kind": "loop_retry_suppressed",
+					})
+					if err != nil {
+						return RunResult{}, err
+					}
+					checkpointID = artifactRecord.ID
+					if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
+						return RunResult{}, err
+					}
+					return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID, Session: session}, repeatErr
+				}
+				break
+			}
+			if repeatedLoopingToolCall(session.ToolAttempts, signature, result.Action.ToolCall.Name) {
+				repeatErr := errors.New("repeated successful tool loop suppressed; exit or choose a different action")
 				if options.OnToolError != nil {
 					options.OnToolError(*result.Action.ToolCall, repeatErr)
 				}
@@ -663,6 +708,62 @@ func repeatedUnhelpfulToolCall(attempts []ToolAttempt, signature string) bool {
 		return !attempt.Useful
 	}
 	return false
+}
+
+func lastLoopWarningForSignature(attempts []ToolAttempt, signature string) bool {
+	for i := len(attempts) - 1; i >= 0; i-- {
+		attempt := attempts[i]
+		if attempt.Signature != signature {
+			continue
+		}
+		return strings.Contains(attempt.Error, "repeated successful tool loop suppressed")
+	}
+	return false
+}
+
+func repeatedLoopingToolCall(attempts []ToolAttempt, signature, name string) bool {
+	if !loopSensitiveTool(name) || len(attempts) < 4 {
+		return repeatedIdenticalSuccessfulToolCall(attempts, signature, name)
+	}
+	recent := attempts[len(attempts)-4:]
+	for _, attempt := range recent {
+		if !attempt.Useful || !loopSensitiveTool(attempt.Name) {
+			return repeatedIdenticalSuccessfulToolCall(attempts, signature, name)
+		}
+	}
+	a := recent[0]
+	b := recent[1]
+	c := recent[2]
+	d := recent[3]
+	if a.Signature != c.Signature || b.Signature != d.Signature {
+		return repeatedIdenticalSuccessfulToolCall(attempts, signature, name)
+	}
+	if a.Signature == b.Signature {
+		return repeatedIdenticalSuccessfulToolCall(attempts, signature, name)
+	}
+	return signature == a.Signature
+}
+
+func repeatedIdenticalSuccessfulToolCall(attempts []ToolAttempt, signature, name string) bool {
+	if !loopSensitiveTool(name) || len(attempts) < 3 {
+		return false
+	}
+	recent := attempts[len(attempts)-3:]
+	for _, attempt := range recent {
+		if !attempt.Useful || attempt.Name != name || attempt.Signature != signature {
+			return false
+		}
+	}
+	return true
+}
+
+func loopSensitiveTool(name string) bool {
+	switch name {
+	case "read_file", "write_file", "edit_file", "list_dir":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session) (Session, error) {

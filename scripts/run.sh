@@ -14,16 +14,16 @@ case "$BACKEND" in
   ollama)
     export AOS_LLM_BACKEND="ollama"
     export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://lenovo-px.local:11434}"
-    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-gemma4:26b}"
+    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-gemma4:31b}"
     export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-}"
-    export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-180}"
+    export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-600}"
     ;;
   vllm)
     export AOS_LLM_BACKEND="vllm"
-    export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://lenovo-px.local:8001}"
-    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-Qwen/Qwen3.5-27B}"
+    export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://lenovo-px.local:8000}"
+    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-QuantTrio/Qwen3.5-35B-A3B-AWQ}"
     export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-dummy}"
-    export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-180}"
+    export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-600}"
     ;;
   *)
     echo "unsupported backend: $BACKEND" >&2

@@ -478,6 +478,206 @@ func TestRepeatedUnhelpfulToolCallAllowsRetryAfterUsefulInterveningStep(t *testi
 	}
 }
 
+func TestAgentRuntimeSuppressesAlternatingSuccessfulFileLoop(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	source := filepath.Join(workspace, "source.txt")
+	if err := os.WriteFile(source, []byte("baseline"), 0o644); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "writer",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths:  []string{workspace},
+			WritePaths: []string{workspace},
+			Tools:      []string{"read_file", "write_file"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	target := filepath.Join(workspace, "target.txt")
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "write_file", Args: map[string]string{"path": target, "content": "candidate"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "write_file", Args: map[string]string{"path": target, "content": "candidate"}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "adjusted after warning"}}},
+				{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}},
+			},
+		},
+	}
+
+	result, err := agentRuntime.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "produce one candidate then stop"}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.ExitStatus.Code != 0 {
+		t.Fatalf("expected successful exit after recovery turn, got %#v", result.ExitStatus)
+	}
+	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
+	if err != nil {
+		t.Fatalf("restore checkpoint: %v", err)
+	}
+	joined := make([]string, 0, len(session.Messages))
+	for _, message := range session.Messages {
+		joined = append(joined, message.Content)
+	}
+	all := strings.Join(joined, "\n")
+	if !strings.Contains(all, "repeated successful tool loop suppressed") {
+		t.Fatalf("expected alternating loop suppression message, got:\n%s", all)
+	}
+}
+
+func TestAgentRuntimeSuppressesRepeatedSuccessfulReadLoop(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	source := filepath.Join(workspace, "source.txt")
+	if err := os.WriteFile(source, []byte("baseline"), 0o644); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "writer",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths: []string{workspace},
+			Tools:     []string{"read_file"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "adjusted after warning"}}},
+				{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}},
+			},
+		},
+	}
+
+	result, err := agentRuntime.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "produce one candidate then stop"}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.ExitStatus.Code != 0 {
+		t.Fatalf("expected successful exit after recovery turn, got %#v", result.ExitStatus)
+	}
+	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
+	if err != nil {
+		t.Fatalf("restore checkpoint: %v", err)
+	}
+	joined := make([]string, 0, len(session.Messages))
+	for _, message := range session.Messages {
+		joined = append(joined, message.Content)
+	}
+	all := strings.Join(joined, "\n")
+	if !strings.Contains(all, "repeated successful tool loop suppressed") {
+		t.Fatalf("expected repeated read loop suppression message, got:\n%s", all)
+	}
+}
+
+func TestAgentRuntimeExitsIfAgentRepeatsCallAfterLoopWarning(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	source := filepath.Join(workspace, "source.txt")
+	if err := os.WriteFile(source, []byte("baseline"), 0o644); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role: "writer",
+		Mounts: []capability.Mount{
+			{Name: "workspace", HostPath: workspace},
+		},
+		CapabilitySet: capability.Set{
+			ReadPaths: []string{workspace},
+			Tools:     []string{"read_file"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:    k,
+		Artifacts: artifactStore,
+		Tools:     tools.NewRuntime(),
+		Backend: &runtime.FakeBackend{
+			Steps: []runtime.GenerateResult{
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+				{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_file", Args: map[string]string{"path": source}}}},
+			},
+		},
+	}
+
+	result, err := agentRuntime.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "produce one candidate then stop"}})
+	if err == nil || !strings.Contains(err.Error(), "after prior loop warning") {
+		t.Fatalf("expected terminal retry-after-warning error, got %v", err)
+	}
+	if result.ExitStatus.Code != 1 {
+		t.Fatalf("expected terminal exit after ignored warning, got %#v", result.ExitStatus)
+	}
+}
+
 func runtimeTestRepeatedUnhelpfulToolCall(attempts []runtime.ToolAttempt, signature string) bool {
 	for i := len(attempts) - 1; i >= 0; i-- {
 		attempt := attempts[i]
