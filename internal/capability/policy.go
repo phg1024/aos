@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -46,15 +47,18 @@ func DeriveChildSet(parent, requested Set) Set {
 	}
 }
 
+// withinAllowed judges where a path really points: symlinks in the path,
+// in mounts and in scopes are resolved first, so a link inside a mount that
+// leads outside it is refused.
 func withinAllowed(path string, mounts []Mount, scopes []string, write bool) bool {
-	cleanPath := filepath.Clean(path)
+	resolved := resolvePath(path)
 	for _, mount := range mounts {
-		if write && mount.ReadOnly && within(mount.HostPath, cleanPath) {
+		if write && mount.ReadOnly && within(resolvePath(mount.HostPath), resolved) {
 			return false
 		}
 	}
 	for _, scope := range scopes {
-		if within(scope, cleanPath) && withinAnyMount(cleanPath, mounts) {
+		if within(resolvePath(scope), resolved) && withinAnyMount(resolved, mounts) {
 			return true
 		}
 	}
@@ -63,11 +67,43 @@ func withinAllowed(path string, mounts []Mount, scopes []string, write bool) boo
 
 func withinAnyMount(path string, mounts []Mount) bool {
 	for _, mount := range mounts {
-		if within(mount.HostPath, path) {
+		if within(resolvePath(mount.HostPath), path) {
 			return true
 		}
 	}
 	return false
+}
+
+// maxSymlinkHops bounds link chains (and cycles) followed by resolvePath.
+const maxSymlinkHops = 40
+
+// resolvePath returns path with symlinks followed. The longest existing
+// prefix is resolved; a final component that is a dangling link is followed
+// to its target, since writing through it would create the target; any
+// remaining, not yet existing components are appended unchanged.
+func resolvePath(path string) string {
+	return resolveHops(filepath.Clean(path), 0)
+}
+
+func resolveHops(path string, hops int) string {
+	existing, rest := path, ""
+	for {
+		if resolved, err := filepath.EvalSymlinks(existing); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		if target, err := os.Readlink(existing); err == nil && hops < maxSymlinkHops {
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(existing), target)
+			}
+			return filepath.Join(resolveHops(filepath.Clean(target), hops+1), rest)
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return path
+		}
+		rest = filepath.Join(filepath.Base(existing), rest)
+		existing = parent
+	}
 }
 
 func within(base, target string) bool {
