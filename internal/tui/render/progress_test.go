@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"aos/internal/agentflow"
+	"aos/internal/capability"
 )
 
 func testProgress(clock *time.Time) *WorkflowProgress {
@@ -143,5 +144,42 @@ func TestWorkflowProgressMarksFailedChildExit(t *testing.T) {
 	progress.Apply(event(clock, "writer", "pid-4", "start", ""))
 	if line := progress.Apply(event(clock, "writer", "pid-4", "exit", "code=0 reason=done retryable=false")); !strings.HasPrefix(line, "  └ writer exited") {
 		t.Fatalf("zero exit should read as a normal exit, got %q", line)
+	}
+}
+
+func TestWorkflowProgressShowsVerdictAndStaleness(t *testing.T) {
+	clock := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	progress := NewWorkflowProgress(Palette{}, agentflow.WorkflowSpec{
+		Name:       "gated",
+		EntryAgent: "coordinator",
+		Agents: []agentflow.AgentSpec{
+			{ID: "coordinator", Capabilities: capability.Set{Tools: []string{"write_file"}}},
+			{ID: "writer", Capabilities: capability.Set{Tools: []string{"write_file"}}},
+			{ID: "verifier", Capabilities: capability.Set{Tools: []string{"read_file"}}},
+		},
+		Verification: &agentflow.VerificationSpec{Policy: "required", Verifier: "verifier"},
+	})
+	progress.now = func() time.Time { return clock }
+	step := func(agent, pid, detail string) {
+		progress.Apply(event(clock, agent, pid, "start", ""))
+		progress.Apply(event(clock, agent, pid, "exit", detail))
+	}
+	progress.Apply(event(clock, "coordinator", "pid-2", "start", ""))
+	if status := progress.StatusLine(); !strings.Contains(status, "verify: pending") {
+		t.Fatalf("expected a pending verdict, got %q", status)
+	}
+	step("writer", "pid-3", "code=0 reason=wrote retryable=false")
+	step("verifier", "pid-4", "code=1 reason=FAIL retryable=false")
+	if status := progress.StatusLine(); !strings.Contains(status, "verify: FAIL (pid-4)") {
+		t.Fatalf("expected a failed verdict, got %q", status)
+	}
+	step("writer", "pid-5", "code=0 reason=fixed retryable=false")
+	if status := progress.StatusLine(); !strings.Contains(status, "verify: stale (writer ran after pid-4)") {
+		t.Fatalf("a writer after the verdict makes it stale, got %q", status)
+	}
+	step("verifier", "pid-6", "code=0 reason=PASS retryable=false")
+	progress.Observe(event(clock, "coordinator", "pid-2", "exit", "code=0 reason=done retryable=false"))
+	if status := progress.StatusLine(); !strings.Contains(status, "idle") || !strings.Contains(status, "verify: pass (pid-6)") {
+		t.Fatalf("the entry agent's own exit must not mark the verdict stale, got %q", status)
 	}
 }

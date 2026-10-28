@@ -19,6 +19,7 @@ import (
 	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tools"
+	"aos/internal/workflow"
 )
 
 var ErrUnknownAgent = errors.New("unknown agent")
@@ -75,9 +76,13 @@ type RunSummary struct {
 	// ExitStatus is the workflow root's recorded exit, derived from the entry
 	// agent's: the workflow succeeded only if Code is 0.
 	ExitStatus kernel.ExitStatus `json:"exit_status"`
-	ResultID   string            `json:"result_id,omitempty"`
-	AgentRuns  []AgentRun        `json:"agent_runs"`
-	OutputPath string            `json:"output_path,omitempty"`
+	// Verification is the verifier's verdict under a declared policy, and
+	// VerificationID the artifact the root recorded it in.
+	Verification   *Verdict   `json:"verification,omitempty"`
+	VerificationID string     `json:"verification_id,omitempty"`
+	ResultID       string     `json:"result_id,omitempty"`
+	AgentRuns      []AgentRun `json:"agent_runs"`
+	OutputPath     string     `json:"output_path,omitempty"`
 }
 
 // rootExitStatus derives the workflow root's exit from the entry agent's
@@ -227,6 +232,10 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if err := spec.Validate(); err != nil {
 		return RunSummary{}, err
 	}
+	policy, err := spec.VerificationPolicy()
+	if err != nil {
+		return RunSummary{}, err
+	}
 	root, err := e.Kernel.Spawn(kernel.ProcessSpec{
 		Role:     "workflow:" + spec.Name,
 		Metadata: map[string]string{"goal": req.Goal},
@@ -248,6 +257,24 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	summary.ResultID = run.ResultID
 	summary.AgentRuns = append(summary.AgentRuns, run)
 	summary.ExitStatus = rootExitStatus(run)
+	if policy != workflow.VerificationNone {
+		verdict, err := e.judge(spec, policy, root.PID, run.PID)
+		if err != nil {
+			return RunSummary{}, err
+		}
+		record, err := e.Artifacts.CreateJSON("verification", root.PID, verdict, nil, map[string]string{
+			"policy":       string(policy),
+			"verifier":     verdict.Verifier,
+			"verifier_pid": verdict.VerifierPID,
+			"status":       verdict.Status,
+		})
+		if err != nil {
+			return RunSummary{}, err
+		}
+		summary.Verification = &verdict
+		summary.VerificationID = record.ID
+		summary.ExitStatus = gateExit(summary.ExitStatus, policy, verdict)
+	}
 
 	allRuns, err := e.Artifacts.CreateJSON("workflow_summary", root.PID, summary, nil, map[string]string{
 		"workflow": spec.Name,

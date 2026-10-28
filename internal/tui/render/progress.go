@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"aos/internal/agentflow"
+	"aos/internal/workflow"
 )
 
 // WorkflowProgress tracks the live delegation stack of a workflow from engine
@@ -21,6 +22,16 @@ type WorkflowProgress struct {
 	stack []progressFrame
 	// completed counts finished delegated (non-entry) agent runs.
 	completed int
+
+	// Verification view, mirroring the engine's gate: the verifier's latest
+	// exit is the verdict, and a work-changing delegated agent finishing
+	// after it makes it stale. verifier is empty without a policy.
+	entry        string
+	verifier     string
+	workChanging map[string]bool
+	verdict      string
+	verdictPID   string
+	staleAgent   string
 }
 
 type progressFrame struct {
@@ -36,7 +47,14 @@ func NewWorkflowProgress(ui Palette, spec agentflow.WorkflowSpec) *WorkflowProgr
 	for _, agent := range spec.Agents {
 		maxSteps[agent.ID] = agent.MaxSteps
 	}
-	return &WorkflowProgress{ui: ui, workflow: spec.Name, maxSteps: maxSteps, now: time.Now}
+	progress := &WorkflowProgress{ui: ui, workflow: spec.Name, maxSteps: maxSteps, now: time.Now, entry: spec.EntryAgent, workChanging: map[string]bool{}}
+	if policy, err := spec.VerificationPolicy(); err == nil && policy != workflow.VerificationNone {
+		progress.verifier = spec.Verification.Verifier
+	}
+	for _, agent := range spec.Agents {
+		progress.workChanging[agent.ID] = agent.IsWorkChanging()
+	}
+	return progress
 }
 
 // Observe applies one trace event to the delegation stack.
@@ -54,6 +72,7 @@ func (p *WorkflowProgress) Observe(event agentflow.TraceEvent) {
 		}
 		p.stack = append(p.stack, progressFrame{agentID: event.AgentID, pid: event.PID, started: started, activity: "starting"})
 	case "exit", "runtime_error", "cancelled":
+		p.observeVerificationLocked(event)
 		if idx := p.indexLocked(event.PID); idx >= 0 {
 			p.stack = p.stack[:idx]
 			// Only delegated runs count; the entry agent ends every turn.
@@ -69,6 +88,34 @@ func (p *WorkflowProgress) Observe(event agentflow.TraceEvent) {
 		p.stepLocked(event.PID, "replied")
 	case "tool_result", "tool_error", "delegate_result":
 		p.setActivityLocked(event.PID, "thinking")
+	}
+}
+
+func (p *WorkflowProgress) observeVerificationLocked(event agentflow.TraceEvent) {
+	if p.verifier == "" || p.indexLocked(event.PID) <= 0 {
+		return
+	}
+	switch {
+	case event.AgentID == p.verifier && event.Kind == "exit":
+		p.verdict, p.verdictPID, p.staleAgent = "FAIL", event.PID, ""
+		if strings.HasPrefix(event.Detail, "code=0 ") {
+			p.verdict = "pass"
+		}
+	case event.AgentID != p.verifier && event.AgentID != p.entry && p.workChanging[event.AgentID] && p.verdict != "":
+		p.verdict, p.staleAgent = "stale", event.AgentID
+	}
+}
+
+func (p *WorkflowProgress) verificationLocked() string {
+	switch {
+	case p.verifier == "":
+		return ""
+	case p.verdict == "":
+		return " | verify: pending"
+	case p.verdict == "stale":
+		return fmt.Sprintf(" | verify: stale (%s ran after %s)", p.staleAgent, p.verdictPID)
+	default:
+		return fmt.Sprintf(" | verify: %s (%s)", p.verdict, p.verdictPID)
 	}
 }
 
@@ -96,7 +143,7 @@ func (p *WorkflowProgress) StatusLine() string {
 	var builder strings.Builder
 	builder.WriteString(" workflow " + p.workflow)
 	if len(p.stack) == 0 {
-		fmt.Fprintf(&builder, " | idle | finished=%d ", p.completed)
+		fmt.Fprintf(&builder, " | idle | finished=%d%s ", p.completed, p.verificationLocked())
 		return builder.String()
 	}
 	builder.WriteString(" ▸ ")
@@ -107,7 +154,7 @@ func (p *WorkflowProgress) StatusLine() string {
 		builder.WriteString(frame.agentID + " " + p.stepLabelLocked(frame))
 	}
 	top := p.stack[len(p.stack)-1]
-	fmt.Fprintf(&builder, " | %s | %s | finished=%d ", formatElapsed(p.now().Sub(top.started)), top.activity, p.completed)
+	fmt.Fprintf(&builder, " | %s | %s | finished=%d%s ", formatElapsed(p.now().Sub(top.started)), top.activity, p.completed, p.verificationLocked())
 	return builder.String()
 }
 

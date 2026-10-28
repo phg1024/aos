@@ -214,6 +214,10 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		"agent_run_cnt": countAgentRuns(summary.AgentRuns),
 		"exit_status":   summary.ExitStatus,
 	}
+	if summary.Verification != nil {
+		result["verification"] = summary.Verification
+		result["verification_id"] = summary.VerificationID
+	}
 	if metered, ok := backend.(interface{ Usage() inference.TokenUsage }); ok {
 		result["usage"] = metered.Usage()
 	}

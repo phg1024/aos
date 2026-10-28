@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 11 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 11 Report: Recorded Outcomes</h1>
+    <p>Workflow success now rests on kernel exit records rather than on what a model writes. These are the first two runtime-contract items from the aos-book design review: the workflow root follows the entry agent's recorded exit (<code>34f7b5d</code>), and a workflow can require a passing verdict from a designated verifier, which only that verifier's exit can produce.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>Root follows the entry agent.</b> <code>Engine.Run</code> no longer exits the root with code 0 unconditionally. The entry agent's exit code decides the root's, and <code>RunSummary.ExitStatus</code> records it. <code>aos run --workflow</code> exits non-zero when the root does.</li>
+    <li><b>Children report their exit.</b> <code>DelegateResult.ExitStatus</code> carries a delegated agent's recorded exit to its parent. It appears as <code>exit_code</code>, <code>exit_reason</code> and <code>exit_retryable</code> fields in the parent's history and in the <code>delegate_result</code> artifact.</li>
+    <li><b>Verification block.</b> <code>WorkflowSpec.Verification</code> is <code>{policy, verifier}</code>, using <code>workflow.VerificationPolicy</code>. Under <code>required</code> or <code>best_effort</code>, validation checks three things: the verifier exists, it is not the entry agent, and the entry agent can reach it through <code>allowed_agents</code>.</li>
+    <li><b>Verdict from the kernel.</b> The engine finds the verifier's latest exit among the root's descendant processes, ordered by kernel event sequence, and reads it with <code>Kernel.Await</code>. The verdict is stale if a work-changing delegated agent exited after it. Work-changing means it has <code>write_file</code>, <code>edit_file</code>, <code>run</code>, or write paths.</li>
+    <li><b>The gate.</b> Under <code>required</code>, a root that would otherwise succeed fails with the reason <code>verification required: no verifier run</code>, <code>…verifier &lt;pid&gt; failed: &lt;reason&gt;</code>, or <code>…verdict stale; &lt;agent&gt; (&lt;pid&gt;) ran after verifier &lt;pid&gt;</code>. <code>best_effort</code> records the verdict without gating.</li>
+    <li><b>Recorded by the root.</b> The verdict becomes a <code>verification</code> artifact whose producer is the workflow root. It is also in <code>RunSummary.Verification</code> and the summary JSON.</li>
+    <li><b>Workflows.</b> The four rasterizer workflows and <code>live-reviewed-merge</code> declare <code>required</code>. Their verifiers exit 1 on FAIL, and their PASS/FAIL report files remain as evidence.</li>
+    <li><b>TUI.</b> The progress row shows <code>verify: pending</code>, <code>pass (pid)</code>, <code>FAIL (pid)</code> or <code>stale (agent ran after pid)</code>. A failed delegated agent shows as <code>└ agent failed</code>.</li>
+  </ul>
+
+  <h2>Decisions Made</h2>
+  <table>
+    <tr><th>Choice</th><th>Why</th></tr>
+    <tr><td>The entry agent is excluded from the freshness check.</td><td>Its run spans the whole workflow, so it always exits last. The rasterizer coordinators hold <code>write_file</code> for their ledger and final summary, so counting the entry agent would make every verdict stale. Tracking the entry agent's own writes after the verdict belongs to the later capability items.</td></tr>
+    <tr><td>Runs are ordered by kernel event sequence.</td><td>Event IDs come from one counter allocated under a lock, so ordering is total and has no clock ties.</td></tr>
+    <tr><td><code>best_effort</code> is validated like <code>required</code>.</td><td>A recorded verdict naming a missing or unreachable verifier is a spec error either way.</td></tr>
+    <tr><td>Gated exit codes.</td><td>A failed verdict carries the verifier's code and retryable flag. A stale verdict is code 1 and retryable, because another verifier run may pass. A missing verifier run is code 1 and not retryable. If the entry agent itself failed, its failure takes precedence over any verdict.</td></tr>
+  </table>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>The verifier is not independent of the writer: same model, shared writable directories, an unconfined <code>run</code>. These are later design-review items.</li>
+    <li>Agents can still publish an artifact of type <code>verification</code>. Reserving types is a later item. The engine's artifact is the one whose producer is the root.</li>
+    <li>Interactive TUI sessions show the verdict but are not gated.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 17 packages pass. <code>go vet ./...</code> is clean.</li>
+    <li>Gate tests cover:
+      <ul>
+        <li>a pass after the writer;</li>
+        <li>a verifier failure despite the entry agent exiting 0;</li>
+        <li>no verifier run;</li>
+        <li>a stale verdict after the writer ran again;</li>
+        <li>the latest verdict winning after fail, fix, pass;</li>
+        <li>an entry failure taking precedence;</li>
+        <li><code>best_effort</code> recording without gating;</li>
+        <li>the artifact's producer being the root, and its exit matching <code>Kernel.Await</code>;</li>
+        <li>no change when the block is absent.</li>
+      </ul>
+    </li>
+    <li>Validation tests cover a missing verifier, an unknown agent, the verifier being the entry agent, an unreachable verifier, a bad policy, and reachability through another agent. A separate test checks that every checked-in workflow validates and that the five gated ones require their verifier.</li>
+    <li>Real binary against a scripted model: the verifier exits 1 and the coordinator exits 0. <code>aos run</code> exits 1 with <code>verification required: verifier pid-000003 failed: FAIL: 2 scenes differ</code>.</li>
+  </ul>
+</body>
+</html>
