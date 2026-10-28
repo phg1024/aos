@@ -2,6 +2,7 @@ package render
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -272,58 +273,138 @@ func escapeFinal(final byte, params string) keyKind {
 	return keyIgnored
 }
 
-// renderInput draws the input row: prompt, the text with its command word
-// highlighted, and (with showHint and the cursor at the end) a dim completion
-// hint. It
-// returns the row and the 0-based column the cursor belongs in. Text wider
-// than the window scrolls horizontally to keep the cursor visible.
-func renderInput(ui Palette, prompt string, buffer lineBuffer, commands []Command, width int, showHint bool) (string, int) {
-	text := buffer.text
-	promptWidth := ansi.StringWidth(prompt)
-	room := width - 1 - promptWidth
-	if width <= 0 || room < 8 {
-		room = 1 << 30
+// inputFrame is the one write that replaces a drawn input with new rows:
+// go up to the first of the drawnRows old rows, clear them, write rows, and
+// put the cursor at (cursorRow, cursorCol). Writing past the bottom of the
+// scroll region scrolls it, so the pinned footer is not disturbed.
+func inputFrame(drawnRows, oldCursorRow int, rows []string, cursorRow, cursorCol int) string {
+	var frame strings.Builder
+	if oldCursorRow > 0 {
+		fmt.Fprintf(&frame, "\x1b[%dA", oldCursorRow)
 	}
-	// Scroll so the text before the cursor fits, leaving a column for it.
-	start := 0
-	for ansi.StringWidth(string(text[start:buffer.cursor])) > room-1 {
-		start++
-	}
-	visible := string(text[start:])
-
-	var row strings.Builder
-	row.WriteString(prompt)
-	word, rest, hasSpace := strings.Cut(visible, " ")
-	matches := MatchCommands(commands, buffer.String())
-	switch {
-	case start > 0 || !strings.HasPrefix(word, "/"):
-		row.WriteString(visible)
-	case len(matches) > 0 && matches[0].Name == word:
-		row.WriteString(ui.CommandName(word))
-		if hasSpace {
-			row.WriteString(" " + rest)
-		}
-	case len(matches) > 0:
-		row.WriteString(ui.CommandPartial(word))
-	default:
-		row.WriteString(ui.CommandUnknown(word))
-		if hasSpace {
-			row.WriteString(" " + rest)
+	frame.WriteString("\r")
+	for i := 0; i < drawnRows; i++ {
+		frame.WriteString("\x1b[2K")
+		if i < drawnRows-1 {
+			frame.WriteString("\x1b[B")
 		}
 	}
-	if showHint && buffer.cursor == len(text) && start == 0 {
-		row.WriteString(commandHint(ui, buffer.String(), matches))
+	if drawnRows > 1 {
+		fmt.Fprintf(&frame, "\x1b[%dA", drawnRows-1)
 	}
-	line := row.String()
-	if width > 0 && ansi.StringWidth(line) > width-1 {
-		line = ansi.Truncate(line, width-1, "")
+	frame.WriteString(strings.Join(rows, "\r\n"))
+	if up := len(rows) - 1 - cursorRow; up > 0 {
+		fmt.Fprintf(&frame, "\x1b[%dA", up)
 	}
-	return line, promptWidth + ansi.StringWidth(string(text[start:buffer.cursor]))
+	frame.WriteString("\r")
+	if cursorCol > 0 {
+		fmt.Fprintf(&frame, "\x1b[%dC", cursorCol)
+	}
+	return frame.String()
 }
 
-// commandHint shows the rest of the best match, its summary, and any other
-// candidates, all dimmed so they read as suggestions rather than input.
-func commandHint(ui Palette, input string, matches []Command) string {
+// Styles of the characters in the input line.
+const (
+	stylePlain = iota
+	styleCommandName
+	styleCommandPartial
+	styleCommandUnknown
+)
+
+func applyStyle(ui Palette, style int, text string) string {
+	switch style {
+	case styleCommandName:
+		return ui.CommandName(text)
+	case styleCommandPartial:
+		return ui.CommandPartial(text)
+	case styleCommandUnknown:
+		return ui.CommandUnknown(text)
+	}
+	return text
+}
+
+// layoutInput lays the prompt and input out over as many rows of width
+// columns as they need, so long input stays fully visible. The command word
+// is highlighted, and with showHint and the cursor at the end a dim
+// completion hint follows, cut to the room left on the last row. It returns
+// the rows and the cursor's row and column. A wide rune never splits across
+// rows. width <= 0 means no wrapping.
+func layoutInput(ui Palette, prompt string, buffer lineBuffer, commands []Command, width int, showHint bool) (rows []string, cursorRow, cursorCol int) {
+	text := buffer.text
+	limit := width
+	if limit <= 0 {
+		limit = 1 << 30
+	}
+	input := buffer.String()
+	matches := MatchCommands(commands, input)
+	styles := make([]int, len(text))
+	if word, _, _ := strings.Cut(input, " "); strings.HasPrefix(word, "/") {
+		style := styleCommandUnknown
+		switch {
+		case len(matches) > 0 && matches[0].Name == word:
+			style = styleCommandName
+		case len(matches) > 0:
+			style = styleCommandPartial
+		}
+		for i := range []rune(word) {
+			styles[i] = style
+		}
+	}
+
+	var line strings.Builder
+	line.WriteString(prompt)
+	col := ansi.StringWidth(prompt)
+	var run []rune
+	runStyle := stylePlain
+	flush := func() {
+		if len(run) > 0 {
+			line.WriteString(applyStyle(ui, runStyle, string(run)))
+			run = run[:0]
+		}
+	}
+	newRow := func() {
+		flush()
+		rows = append(rows, line.String())
+		line.Reset()
+		col = 0
+	}
+	for i, r := range text {
+		w := ansi.StringWidth(string(r))
+		if col+w > limit && col > 0 {
+			newRow()
+		}
+		if i == buffer.cursor {
+			cursorRow, cursorCol = len(rows), col
+		}
+		if styles[i] != runStyle {
+			flush()
+			runStyle = styles[i]
+		}
+		run = append(run, r)
+		col += w
+	}
+	if buffer.cursor == len(text) {
+		if col >= limit {
+			newRow()
+		}
+		cursorRow, cursorCol = len(rows), col
+		if showHint {
+			if hint := commandHint(input, matches); hint != "" {
+				if room := limit - col; room > 3 {
+					flush()
+					line.WriteString(ui.Hint(ansi.Truncate(hint, room, "…")))
+				}
+			}
+		}
+	}
+	flush()
+	rows = append(rows, line.String())
+	return rows, cursorRow, cursorCol
+}
+
+// commandHint is the rest of the best match, its summary, and any other
+// candidates, as plain text for the caller to dim.
+func commandHint(input string, matches []Command) string {
 	if len(matches) == 0 || strings.Contains(input, " ") {
 		return ""
 	}
@@ -336,5 +417,5 @@ func commandHint(ui Palette, input string, matches []Command) string {
 		}
 		hint += "  · also " + strings.Join(names, " ")
 	}
-	return ui.Hint(hint)
+	return hint
 }

@@ -104,8 +104,8 @@ func TestMatchAndLookupCommands(t *testing.T) {
 }
 
 func plainInput(b lineBuffer, width int, hint bool) (string, int) {
-	row, column := renderInput(Palette{}, "you> ", b, testCommands, width, hint)
-	return row, column
+	rows, _, column := layoutInput(Palette{}, "you> ", b, testCommands, width, hint)
+	return strings.Join(rows, "\n"), column
 }
 
 func TestRenderInputHintsAndHighlights(t *testing.T) {
@@ -120,31 +120,85 @@ func TestRenderInputHintsAndHighlights(t *testing.T) {
 	}
 
 	colored := Palette{Enabled: true}
-	b.set("/help")
-	if row, _ := renderInput(colored, "you> ", b, testCommands, 120, true); !strings.Contains(row, colored.CommandName("/help")) {
+	render := func(text string) string {
+		var buffer lineBuffer
+		buffer.set(text)
+		rows, _, _ := layoutInput(colored, "you> ", buffer, testCommands, 120, true)
+		return strings.Join(rows, "\n")
+	}
+	if row := render("/help"); !strings.Contains(row, colored.CommandName("/help")) {
 		t.Fatalf("exact command should be highlighted: %q", row)
 	}
-	b.set("/nope x")
-	if row, _ := renderInput(colored, "you> ", b, testCommands, 120, true); !strings.Contains(row, colored.CommandUnknown("/nope")) {
+	if row := render("/nope x"); !strings.Contains(row, colored.CommandUnknown("/nope")) {
 		t.Fatalf("unknown command should be marked: %q", row)
 	}
-	b.set("/s")
-	if row, _ := renderInput(colored, "you> ", b, testCommands, 120, true); !strings.Contains(row, colored.CommandPartial("/s")) {
+	if row := render("/s"); !strings.Contains(row, colored.CommandPartial("/s")) {
 		t.Fatalf("partial command should be marked: %q", row)
 	}
 }
 
-func TestRenderInputCursorWithWideTextAndScroll(t *testing.T) {
+// Long input wraps onto further rows instead of scrolling out of view.
+func TestLayoutInputWrapsLongText(t *testing.T) {
 	var b lineBuffer
-	b.set("你好 world")
-	b.cursor = 2
-	if _, column := plainInput(b, 120, true); column != 5+4 {
-		t.Fatalf("cursor after two wide runes should be at column 9, got %d", column)
-	}
-
 	b.set(strings.Repeat("abcdefghij", 10))
-	row, column := plainInput(b, 40, true)
-	if ansi.StringWidth(row) > 39 || column > 39 || !strings.HasSuffix(row, "ghij") {
-		t.Fatalf("long input should scroll to keep the cursor visible: width %d column %d row %q", ansi.StringWidth(row), column, row)
+	rows, row, col := layoutInput(Palette{}, "you> ", b, testCommands, 40, true)
+	if strings.Join(rows, "") != "you> "+strings.Repeat("abcdefghij", 10) {
+		t.Fatalf("wrapping must keep every character: %q", rows)
+	}
+	for i, line := range rows[:len(rows)-1] {
+		if ansi.StringWidth(line) != 40 {
+			t.Fatalf("row %d is %d columns wide, want 40: %q", i, ansi.StringWidth(line), line)
+		}
+	}
+	// 5 prompt columns + 100 runes = 105 columns: rows of 40, 40, 25.
+	if len(rows) != 3 || row != 2 || col != 25 {
+		t.Fatalf("got %d rows, cursor at row %d col %d", len(rows), row, col)
+	}
+	b.cursor = 40
+	if _, row, col := layoutInput(Palette{}, "you> ", b, testCommands, 40, true); row != 1 || col != 5 {
+		t.Fatalf("cursor in the middle at rune 40 should be row 1 col 5, got %d %d", row, col)
+	}
+}
+
+func TestLayoutInputKeepsWideRunesWhole(t *testing.T) {
+	var b lineBuffer
+	b.set("你好世界")
+	rows, row, col := layoutInput(Palette{}, "you> ", b, testCommands, 10, false)
+	// "you> " is 5 columns; 你好 fill to 9, 世 (2 columns) would cross 10 and moves down.
+	if len(rows) != 2 || rows[0] != "you> 你好" || rows[1] != "世界" || row != 1 || col != 4 {
+		t.Fatalf("got rows %q cursor %d %d", rows, row, col)
+	}
+	b.cursor = 2
+	if _, row, col := layoutInput(Palette{}, "you> ", b, testCommands, 10, false); row != 1 || col != 0 {
+		t.Fatalf("cursor before 世 should be at the start of row 1, got %d %d", row, col)
+	}
+}
+
+func TestLayoutInputCursorAtRowEndStartsNewRow(t *testing.T) {
+	var b lineBuffer
+	b.set("12345")
+	rows, row, col := layoutInput(Palette{}, "you> ", b, testCommands, 10, false)
+	if len(rows) != 2 || rows[1] != "" || row != 1 || col != 0 {
+		t.Fatalf("a full row should leave the cursor on a fresh row, got %q %d %d", rows, row, col)
+	}
+}
+
+func TestLayoutInputCutsHintToRoom(t *testing.T) {
+	var b lineBuffer
+	b.set("/st")
+	rows, _, _ := layoutInput(Palette{}, "you> ", b, testCommands, 20, true)
+	if len(rows) != 1 || ansi.StringWidth(rows[0]) > 20 || !strings.HasPrefix(rows[0], "you> /state") || !strings.HasSuffix(rows[0], "…") {
+		t.Fatalf("the hint should be cut to the row, got %q", rows)
+	}
+}
+
+func TestInputFrameClearsOldRowsAndPlacesCursor(t *testing.T) {
+	frame := inputFrame(3, 1, []string{"you> abc", "def"}, 1, 2)
+	want := "\x1b[1A\r\x1b[2K\x1b[B\x1b[2K\x1b[B\x1b[2K\x1b[2A" + "you> abc\r\ndef" + "\r\x1b[2C"
+	if frame != want {
+		t.Fatalf("frame = %q\nwant    %q", frame, want)
+	}
+	if frame := inputFrame(1, 0, []string{"you> "}, 0, 5); frame != "\r\x1b[2Kyou> \r\x1b[5C" {
+		t.Fatalf("single-row frame = %q", frame)
 	}
 }

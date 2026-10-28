@@ -43,14 +43,14 @@ func (e *LineEditor) ReadLine(prompt string) (string, error) {
 	var buffer lineBuffer
 	historyIndex := len(e.history)
 	var draft string
+	// The input may span several rows; remember how many were drawn and
+	// which one holds the cursor, so each redraw can clear exactly them.
+	drawnRows, cursorRow := 1, 0
 	redraw := func(showHint bool) {
 		width, _ := TerminalSize()
-		row, column := renderInput(e.ui, prompt, buffer, e.commands, width, showHint)
-		move := "\r"
-		if column > 0 {
-			move += fmt.Sprintf("\x1b[%dC", column)
-		}
-		fmt.Fprint(os.Stdout, "\r\x1b[2K"+row+move)
+		rows, row, column := layoutInput(e.ui, prompt, buffer, e.commands, width, showHint)
+		fmt.Fprint(os.Stdout, inputFrame(drawnRows, cursorRow, rows, row, column))
+		drawnRows, cursorRow = len(rows), row
 	}
 	redraw(true)
 
@@ -71,6 +71,10 @@ func (e *LineEditor) ReadLine(prompt string) (string, error) {
 			case keyEnter:
 				line := buffer.String()
 				redraw(false)
+				// Leave the cursor below the last input row.
+				if below := drawnRows - 1 - cursorRow; below > 0 {
+					fmt.Fprintf(os.Stdout, "\x1b[%dB", below)
+				}
 				fmt.Fprint(os.Stdout, "\r\n")
 				if line != "" && (len(e.history) == 0 || e.history[len(e.history)-1] != line) {
 					e.history = append(e.history, line)
