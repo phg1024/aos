@@ -23,6 +23,10 @@ import (
 	"aos/internal/capability"
 )
 
+// runWaitDelay bounds how long the run tool waits for stdout/stderr to close
+// after the shell exits or is killed.
+var runWaitDelay = 2 * time.Second
+
 // MaxToolOutputBytes caps file contents and command output returned to an
 // agent, so a single large result cannot overflow the model context.
 const MaxToolOutputBytes = 64 * 1024
@@ -247,6 +251,9 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		cmdCtx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
+		isolateProcessGroup(cmd)
+		// Bound the wait for output pipes in case a detached descendant still holds them.
+		cmd.WaitDelay = runWaitDelay
 		cmd.Dir = mountRoot(req.Mounts)
 		cmd.Stdin = nil
 		var stdoutBuf, stderrBuf bytes.Buffer
