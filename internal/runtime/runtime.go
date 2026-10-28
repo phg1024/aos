@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -58,7 +59,10 @@ type GenerateRequest struct {
 }
 
 type GenerateAction struct {
-	Type       string             `json:"type"`
+	Type string `json:"type"`
+	// Notes is the agent's working memory for this step. Hidden reasoning is
+	// discarded after each step, so notes are what carries a plan forward.
+	Notes      string             `json:"notes,omitempty"`
 	Message    string             `json:"message,omitempty"`
 	ToolCall   *ToolCall          `json:"tool_call,omitempty"`
 	Delegate   *DelegateCall      `json:"delegate,omitempty"`
@@ -337,6 +341,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				return RunResult{}, exitErr
 			}
 			return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
+		}
+
+		// Record what the agent decided before acting, so later steps see their
+		// own notes and actions, not only tool results.
+		if record := actionRecord(result.Action); record != "" {
+			session.Messages = append(session.Messages, Message{Role: "assistant", Content: record})
 		}
 
 		switch result.Action.Type {
@@ -730,6 +740,77 @@ func assessToolResult(result tools.Result) (bool, string) {
 		}
 	}
 	return true, ""
+}
+
+const (
+	maxActionNotesChars = 2000
+	maxActionArgChars   = 300
+)
+
+// bulkToolArgs hold file content; their size is recorded instead of the text,
+// which already lives on disk.
+var bulkToolArgs = map[string]bool{"content": true, "old_text": true, "new_text": true}
+
+// actionRecord summarizes an action and its notes for the session history.
+// Message actions are already recorded verbatim, so only their notes are kept.
+func actionRecord(action GenerateAction) string {
+	var lines []string
+	if notes := strings.TrimSpace(action.Notes); notes != "" {
+		lines = append(lines, "notes: "+truncateRecord(notes, maxActionNotesChars))
+	}
+	if summary := actionSummary(action); summary != "" {
+		lines = append(lines, "action: "+summary)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func actionSummary(action GenerateAction) string {
+	switch action.Type {
+	case "tool":
+		if action.ToolCall == nil || action.ToolCall.Name == "" {
+			return ""
+		}
+		keys := make([]string, 0, len(action.ToolCall.Args))
+		for key := range action.ToolCall.Args {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := []string{"tool " + action.ToolCall.Name}
+		for _, key := range keys {
+			value := action.ToolCall.Args[key]
+			if bulkToolArgs[key] {
+				parts = append(parts, fmt.Sprintf("%s=<%d bytes>", key, len(value)))
+				continue
+			}
+			parts = append(parts, key+"="+truncateRecord(value, maxActionArgChars))
+		}
+		return strings.Join(parts, " ")
+	case "delegate":
+		if action.Delegate == nil || action.Delegate.AgentID == "" {
+			return ""
+		}
+		return fmt.Sprintf("delegate to=%s goal=%s", action.Delegate.AgentID, truncateRecord(action.Delegate.Goal, maxActionArgChars))
+	case "exit":
+		if action.ExitStatus == nil {
+			return "exit"
+		}
+		return fmt.Sprintf("exit code=%d reason=%s", action.ExitStatus.Code, truncateRecord(action.ExitStatus.Reason, maxActionArgChars))
+	case "message", "":
+		return ""
+	default:
+		return action.Type
+	}
+}
+
+func truncateRecord(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
+	}
+	for limit > 0 && !utf8.RuneStart(value[limit]) {
+		limit--
+	}
+	return value[:limit] + "..."
 }
 
 func toolCallSignature(call ToolCall) string {

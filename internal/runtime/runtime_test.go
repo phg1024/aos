@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -236,7 +237,8 @@ func TestAgentRuntimeCompactsLongHistoryIntoMemoryFiles(t *testing.T) {
 	if len(session.MemoryRefs) != 1 {
 		t.Fatalf("expected checkpoint to preserve memory refs, got %#v", session.MemoryRefs)
 	}
-	if got := len(session.Messages); got != 12 {
+	// 12 kept messages plus the record of the final exit action.
+	if got := len(session.Messages); got != 13 {
 		t.Fatalf("expected trimmed session messages in checkpoint, got %d", got)
 	}
 }
@@ -1280,5 +1282,61 @@ func TestAgentRuntimeUsesConfiguredCompactionPolicy(t *testing.T) {
 	}
 	if len(fake.Requests[0].MemoryRefs) != 1 {
 		t.Fatalf("expected one memory ref, got %#v", fake.Requests[0].MemoryRefs)
+	}
+}
+
+func TestAgentRuntimeRecordsNotesAndActionsInHistory(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{
+		Role:          "writer",
+		Mounts:        []capability.Mount{{Name: "workspace", HostPath: workspace}},
+		CapabilitySet: capability.Set{ReadPaths: []string{workspace}, WritePaths: []string{workspace}, Tools: []string{"write_file"}},
+	})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	target := filepath.Join(workspace, "vec3.h")
+	content := "#pragma once\nstruct Vec3 { double x, y, z; };\n"
+	fake := &runtime.FakeBackend{Steps: []runtime.GenerateResult{
+		{Action: runtime.GenerateAction{
+			Type:     "tool",
+			Notes:    "Plan: vec3.h then main.cpp. Next: vec3.h.",
+			ToolCall: &runtime.ToolCall{Name: "write_file", Args: map[string]string{"path": target, "content": content}},
+		}},
+		{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}},
+	}}
+	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: artifactStore, Tools: tools.NewRuntime(), Backend: fake}
+	if _, err := agentRuntime.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "write vec3.h"}}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	history := fake.Requests[1].History
+	if len(history) != 3 {
+		t.Fatalf("expected goal, action record, and tool result, got %#v", history)
+	}
+	record := history[1]
+	if record.Role != "assistant" {
+		t.Fatalf("expected assistant action record, got %#v", record)
+	}
+	wantRecord := "notes: Plan: vec3.h then main.cpp. Next: vec3.h.\naction: tool write_file content=<" +
+		strconv.Itoa(len(content)) + " bytes> path=" + target
+	if record.Content != wantRecord {
+		t.Fatalf("unexpected action record:\n got %q\nwant %q", record.Content, wantRecord)
+	}
+	if history[2].Role != "tool" || !strings.HasPrefix(history[2].Content, "write_file:") {
+		t.Fatalf("expected tool result to stay last, got %#v", history[2])
 	}
 }

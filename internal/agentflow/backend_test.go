@@ -453,3 +453,31 @@ func TestPromptBackendHonorsContextCompactionPolicy(t *testing.T) {
 		t.Fatalf("expected 30 omitted messages with 2 kept:\n%s", completer.userPrompt)
 	}
 }
+
+func TestPromptBackendParsesNotesAndDescribesWorkingMemory(t *testing.T) {
+	backend := agentflow.PromptBackend{
+		Completer: &repairingCompleter{
+			raw: []string{`{"action":{"type":"tool","notes":"Plan: vec3, scene, render. Done: vec3. Next: scene.","tool_call":{"name":"list_dir","args":{"path":"/workspace"}}}}`},
+		},
+		Workflow: agentflow.WorkflowSpec{Name: "notes-test", EntryAgent: "writer"},
+		Agent:    agentflow.AgentSpec{ID: "writer", SystemPrompt: "write"},
+	}
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.Notes != "Plan: vec3, scene, render. Done: vec3. Next: scene." {
+		t.Fatalf("expected notes to be parsed, got %#v", result.Action)
+	}
+
+	completer := &capturingCompleter{}
+	backend = agentflow.PromptBackend{Completer: completer, Workflow: backend.Workflow, Agent: backend.Agent}
+	if _, err := backend.Generate(context.Background(), runtime.GenerateRequest{}); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for _, want := range []string{`"notes":"..."`, "working memory", "hidden reasoning is discarded"} {
+		if !strings.Contains(completer.systemPrompt, want) {
+			t.Fatalf("expected system prompt to mention %q", want)
+		}
+	}
+}
