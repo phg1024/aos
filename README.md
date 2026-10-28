@@ -43,7 +43,7 @@ Press Esc while a task is running to cancel it. Cancelling stops the model call,
 
 `make test` uses repo-local `GOCACHE` and `GOTMPDIR` paths so tests run reliably in sandboxed environments too.
 
-`scripts/tui.sh [ollama|vllm|strata|strata-phg|strata-phg-vllm] [aos-tui args...]` starts the TUI against a backend preset. Each session keeps its state in `.aos-sessions/<timestamp>-<backend>` (`AOS_TUI_SESSIONS_DIR` moves it, `--state-dir` overrides it), printed at startup, so `aos inspect` can read it after the TUI exits. A new TUI starts a new session; it does not resume an old one.
+`scripts/tui.sh [ollama|vllm|strata|strata-phg|strata-phg-vllm] [aos-tui args...]` starts the TUI against a backend preset. Each session keeps its state in `.aos-sessions/<timestamp>-<backend>` (`AOS_TUI_SESSIONS_DIR` moves it, `--state-dir` overrides it), printed at startup, so `aos inspect` can read it after the TUI exits. In the TUI, `/resume` lists the saved sessions in that directory, newest first, and `/resume N` (or a name prefix) switches to one: the TUI restarts on its state directory, shows the last exchanges, and the agent continues from its latest checkpoint. Starting the TUI on an existing session's `--state-dir` resumes it the same way. A session left mid-turn by a killed TUI is parked again; one whose agent exited retryably is recovered by the next message; one whose agent exited for good continues in a new agent seeded with its conversation. A session open in another TUI cannot be resumed.
 
 ## Workflow Outcomes
 

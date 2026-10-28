@@ -32,10 +32,22 @@ import (
 )
 
 func main() {
+	if args := runTUI(); args != nil {
+		if err := restart(args); err != nil {
+			fail(err)
+		}
+	}
+}
+
+// runTUI runs the TUI until the user quits. It returns the arguments to
+// start it again with when /resume switches to another session, after its
+// deferred cleanup has released the terminal and the state directory.
+func runTUI() []string {
 	var workflowPath string
 	var agentID string
 	var systemPrompt string
 	var stateDir string
+	var sessionsDir string
 	var workdir string
 	var toolList string
 	var skillDirs sliceFlags
@@ -45,6 +57,7 @@ func main() {
 	flag.StringVar(&agentID, "agent", "", "agent ID when using a workflow")
 	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and before exiting after completing a user task always send one final user-facing message that summarizes the outcome.", "system prompt for direct interactive mode")
 	flag.StringVar(&stateDir, "state-dir", "", "optional persistent state directory")
+	flag.StringVar(&sessionsDir, "sessions-dir", os.Getenv("AOS_TUI_SESSIONS_DIR"), "directory of saved sessions for /resume (default: the state directory's parent)")
 	flag.StringVar(&workdir, "workdir", ".", "workspace directory for read/write tools")
 	flag.StringVar(&toolList, "tools", "list_dir,find_files,read_file,write_file,run,web_search,web_fetch", "comma-separated tools for direct interactive mode")
 	flag.Var(&skillDirs, "skill-dir", "directory containing Claude-Code-style skills (repeatable)")
@@ -62,6 +75,9 @@ func main() {
 	}
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		fail(err)
+	}
+	if sessionsDir == "" {
+		sessionsDir = filepath.Dir(filepath.Clean(stateDir))
 	}
 	// One run per state directory, as for aos run; aos reap relies on it to
 	// tell a live session's processes from orphans.
@@ -95,15 +111,20 @@ func main() {
 		fail(err)
 	}
 
-	process, err := k.Spawn(kernel.ProcessSpec{
-		Role:          "agent:" + agent.ID,
-		Metadata:      map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir},
-		Mounts:        agentMounts(agent, absWorkdir),
-		CapabilitySet: agentCapabilities(agent, absWorkdir),
-		Delegable:     agent.Delegable,
-	})
-	if err != nil {
-		fail(err)
+	// A state directory that already holds this agent's session continues
+	// it; otherwise a new interactive process starts.
+	process, checkpointID, currentSession, seed, resumeNote, resumed := resumePoint(k, stateDir, agent.ID)
+	if process.PID == "" {
+		process, err = k.Spawn(kernel.ProcessSpec{
+			Role:          "agent:" + agent.ID,
+			Metadata:      map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir},
+			Mounts:        agentMounts(agent, absWorkdir),
+			CapabilitySet: agentCapabilities(agent, absWorkdir),
+			Delegable:     agent.Delegable,
+		})
+		if err != nil {
+			fail(err)
+		}
 	}
 
 	llmConfig := inference.LoadBackendConfig(180 * time.Second)
@@ -211,8 +232,25 @@ func main() {
 		fmt.Println(ui.Subtle(fmt.Sprintf("Workflow: %s  entry=%s  delegates=%s", spec.Name, agent.ID, strings.Join(agent.AllowedAgents, ","))))
 	}
 
-	var checkpointID string
-	var currentSession runtime.Session
+	if resumed {
+		fmt.Println(ui.Header(fmt.Sprintf("Resumed session %s", filepath.Base(stateDir))))
+		if resumeNote != "" {
+			fmt.Println(ui.Subtle(resumeNote))
+		}
+		turns := conversation(currentSession)
+		if len(turns) > 6 {
+			fmt.Println(ui.Subtle(fmt.Sprintf("… %d earlier messages", len(turns)-6)))
+			turns = turns[len(turns)-6:]
+		}
+		for _, turn := range turns {
+			if turn.user {
+				fmt.Println(ui.Prompt("you> ") + turn.text)
+			} else {
+				fmt.Println(ui.AgentBlock("agent> ", turn.text))
+			}
+		}
+	}
+
 	// interrupted marks that Esc stopped the last run, so the next message
 	// tells the agent its previous task was cut short.
 	var interrupted bool
@@ -236,7 +274,7 @@ func main() {
 			case errors.Is(err, render.ErrLineEditorUnavailable):
 				useEditor = false
 			case err != nil:
-				return
+				return nil
 			default:
 				line = typed
 			}
@@ -245,7 +283,7 @@ func main() {
 			fmt.Print(ui.Prompt("you> "))
 			if !scanner.Scan() {
 				fmt.Println()
-				return
+				return nil
 			}
 			line = scanner.Text()
 		}
@@ -268,9 +306,33 @@ func main() {
 		}
 		switch command {
 		case "/quit":
-			return
+			return nil
 		case "/help":
 			footer.Println(helpText(ui))
+			continue
+		case "/resume":
+			sessions, err := listSessions(sessionsDir)
+			if err != nil {
+				footer.Println(ui.Error("resume: " + err.Error()))
+				continue
+			}
+			arg := strings.TrimSpace(strings.TrimPrefix(line, "/resume"))
+			if arg == "" {
+				footer.Println(sessionList(ui, sessions, stateDir, sessionsDir))
+				continue
+			}
+			picked, err := pickSession(sessions, arg)
+			switch {
+			case err != nil:
+				footer.Println(ui.Warn(err.Error()))
+			case filepath.Clean(picked.Dir) == filepath.Clean(stateDir):
+				footer.Println(ui.Subtle("already in that session"))
+			case picked.InUse:
+				footer.Println(ui.Warn("that session is open in another TUI"))
+			default:
+				footer.Println(ui.Subtle("switching to session " + picked.Name + " …"))
+				return restartArgs(os.Args[1:], picked.Dir, sessionsDir)
+			}
 			continue
 		case "/clear":
 			fmt.Print("\x1b[2J\x1b[H")
@@ -318,7 +380,10 @@ func main() {
 		observeRoot("start", line)
 		result, err = runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
 			if checkpointID == "" {
-				return agentRuntime.RunWithOptions(ctx, process.PID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+				// A new agent continuing an ended one starts from its conversation.
+				initial := seed
+				seed = nil
+				return agentRuntime.RunWithOptions(ctx, process.PID, initial, interactiveRunOptions(ui, stream, footer, observeRoot))
 			}
 			return agentRuntime.Resume(ctx, process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
 		})
@@ -346,9 +411,43 @@ func main() {
 var tuiCommands = []render.Command{
 	{Name: "/help", Summary: "list commands and keys"},
 	{Name: "/state", Summary: "show the process, checkpoint and state directory"},
+	{Name: "/resume", Summary: "list saved sessions; /resume N switches to one"},
 	{Name: "/recover", Summary: "restart the agent from its last checkpoint"},
 	{Name: "/clear", Summary: "clear the screen"},
 	{Name: "/quit", Summary: "exit"},
+}
+
+// sessionList renders the saved sessions, numbered for /resume N.
+func sessionList(ui render.Palette, sessions []sessionInfo, current, dir string) string {
+	if len(sessions) == 0 {
+		return ui.Subtle("no saved sessions in " + dir)
+	}
+	var builder strings.Builder
+	builder.WriteString(ui.Header(" Sessions ") + ui.Subtle("  "+dir) + "\n")
+	for i, session := range sessions {
+		mark := " "
+		if filepath.Clean(session.Dir) == filepath.Clean(current) {
+			mark = "*"
+		}
+		preview := session.Preview
+		if preview == "" {
+			preview = "(nothing said yet)"
+		}
+		if runes := []rune(preview); len(runes) > 60 {
+			preview = string(runes[:60]) + "…"
+		}
+		status := ""
+		if session.InUse && mark != "*" {
+			status = "  " + ui.Warn("in use")
+		}
+		turns := fmt.Sprintf("%d turns", session.Turns)
+		if session.Turns == 1 {
+			turns = "1 turn"
+		}
+		builder.WriteString(fmt.Sprintf(" %s%2d  %-28s %-12s %9s  %s%s\n", mark, i+1, session.Name, ago(session.Updated), turns, ui.Subtle(preview), status))
+	}
+	builder.WriteString(ui.Subtle("  /resume N switches to session N"))
+	return builder.String()
 }
 
 func helpText(ui render.Palette) string {
