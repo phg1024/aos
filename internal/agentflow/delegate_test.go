@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
@@ -228,5 +229,62 @@ func TestEngineDelegateHandlerCancelLeavesParentResumable(t *testing.T) {
 	}
 	if resumed.ExitStatus.Reason != "coordinator-done" {
 		t.Fatalf("unexpected resumed exit %+v", resumed.ExitStatus)
+	}
+}
+
+// promptCapture answers from a script and records each prompt it was sent.
+type promptCapture struct {
+	actions []map[string]any
+	prompts []string
+}
+
+func (p *promptCapture) CompleteJSON(_ context.Context, system string, user string, target any) error {
+	p.prompts = append(p.prompts, system+"\n"+user)
+	if len(p.prompts) > len(p.actions) {
+		return errors.New("script exhausted")
+	}
+	bytes, err := json.Marshal(map[string]any{"action": p.actions[len(p.prompts)-1]})
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bytes, target)
+}
+
+func TestEngineSharesClockWithDelegatedAgents(t *testing.T) {
+	root := t.TempDir()
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	store, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	completer := &promptCapture{actions: []map[string]any{delegateAction("writer"), exitAction("writer-done"), exitAction("coordinator-done")}}
+	engine := &agentflow.Engine{
+		Kernel:    k,
+		Artifacts: store,
+		Tools:     tools.NewRuntime(),
+		Factory:   agentflow.StaticBackendFactory{Completer: completer},
+		Clock:     runtime.NewClock(15 * time.Minute),
+	}
+	spec := agentflow.WorkflowSpec{
+		Name:       "clocked",
+		EntryAgent: "coordinator",
+		Agents: []agentflow.AgentSpec{
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}},
+			{ID: "writer", SystemPrompt: "Write."},
+		},
+	}
+	if _, err := engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(completer.prompts) != 3 {
+		t.Fatalf("expected 3 prompts, got %d", len(completer.prompts))
+	}
+	for idx, prompt := range completer.prompts {
+		if !strings.Contains(prompt, "clock time_budget=15m0s") {
+			t.Fatalf("prompt %d (writer is #1) has no clock note", idx)
+		}
 	}
 }

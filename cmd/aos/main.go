@@ -58,6 +58,7 @@ func run(args []string) {
 	var stateDir string
 	var trace bool
 	var verify string
+	var timeBudget time.Duration
 	fs.Var(&inputs, "input", "input file path (repeatable)")
 	fs.StringVar(&outputPath, "output", "", "output file path")
 	fs.StringVar(&workflowPath, "workflow", "", "workflow JSON spec path")
@@ -65,6 +66,7 @@ func run(args []string) {
 	fs.StringVar(&stateDir, "state-dir", "", "optional state directory for workflow runs")
 	fs.BoolVar(&trace, "trace", getenvBool("AOS_TRACE", false), "print real-time agent actions during workflow runs")
 	fs.StringVar(&verify, "verify", string(workflow.VerificationNone), "verification policy without --workflow: none, required, or best_effort")
+	fs.DurationVar(&timeBudget, "time-budget", 0, "wall-clock budget for a --workflow run (e.g. 15m); agents see the time used and left each step")
 	_ = fs.Parse(args)
 
 	goal := ""
@@ -76,7 +78,11 @@ func run(args []string) {
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	if workflowPath != "" {
-		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
+		var clock *runtime.Clock
+		if timeBudget > 0 {
+			clock = runtime.NewClock(timeBudget)
+		}
+		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), clock, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -107,7 +113,7 @@ func run(args []string) {
 	fmt.Println(string(bytes))
 }
 
-func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
+func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, clock *runtime.Clock, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -157,6 +163,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 			Compaction: compaction,
 		},
 		Compaction: compaction,
+		Clock:      clock,
 	}
 	if trace {
 		engine.Trace = agentflow.NewStdoutTracer()
@@ -191,7 +198,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		}
 	}
 
-	bytes, err := json.MarshalIndent(map[string]any{
+	result := map[string]any{
 		"workflow":      spec.Name,
 		"root_pid":      summary.RootPID,
 		"entry_pid":     summary.EntryPID,
@@ -200,7 +207,11 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		"state_dir":     stateDir,
 		"report_path":   reportPath,
 		"agent_run_cnt": countAgentRuns(summary.AgentRuns),
-	}, "", "  ")
+	}
+	if metered, ok := backend.(interface{ Usage() inference.TokenUsage }); ok {
+		result["usage"] = metered.Usage()
+	}
+	bytes, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return err
 	}

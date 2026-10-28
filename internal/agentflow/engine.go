@@ -87,6 +87,9 @@ type Engine struct {
 	Trace     func(TraceEvent)
 	// Compaction is passed to every agent runtime; zero uses runtime defaults.
 	Compaction runtime.CompactionPolicy
+	// Clock, when set, is shared by every agent so the whole workflow works
+	// against one deadline.
+	Clock *runtime.Clock
 }
 
 type TraceEvent struct {
@@ -268,6 +271,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		Leases:     e.Leases,
 		MaxSteps:   maxSteps(agent),
 		Compaction: e.Compaction,
+		Clock:      e.Clock,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

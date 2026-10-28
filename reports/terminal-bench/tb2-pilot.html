@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Terminal-Bench 2.0 Pilot</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pass { color: #047857; font-weight: 600; }
+    .fail { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Terminal-Bench 2.0 Pilot: AOS + local Strata</h1>
+    <p><b>6 of 8 tasks solved (mean reward 0.75)</b> in 45 minutes of wall time. AOS ran inside each task container through Harbor, against Qwen3.8-Flash-Next (Unsloth UD-Q4_K_XL) served by Strata on this Mac. Both failures were time-limit expiries in which the agent kept exploring and never committed an answer.</p>
+  </div>
+
+  <h2>Setup</h2>
+  <ul>
+    <li><b>Harness:</b> Harbor 0.25.0, dataset <code>terminal-bench@2.0</code>, one trial per task, one trial at a time, default task timeouts (900&nbsp;s for every pilot task).</li>
+    <li><b>Agent:</b> <code>bench/harbor/aos_agent.py</code> uploads a static Linux <code>aos</code> binary into the task container and runs the single-agent <code>workflows/terminal-bench.json</code> solver. Its tools are <code>run</code>, <code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>list_dir</code> and <code>find_files</code>, with a 300-step budget.</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-unsloth-ud-q4_k_xl</code> on local Strata (Metal), reached from containers at <code>host.docker.internal:8080</code>. Temperature 0.6, top_p 0.95, max_tokens 8192, thinking budget 2048 tokens per step. Measured speed: about 1,000 tok/s prefill and 72 tok/s decode.</li>
+    <li><b>Docker:</b> Docker Desktop 4.97.0 on the Apple Virtualization framework, with Rosetta for the amd64 task images. 18 CPUs and 8 GB of memory.</li>
+  </ul>
+
+  <h2>Results</h2>
+  <table>
+    <tr><th>Task</th><th>Difficulty</th><th>Reward</th><th class="num">Agent time</th><th class="num">Model calls</th><th class="num">Prompt tokens (cached)</th><th class="num">Output tokens</th></tr>
+    <tr><td>fix-git</td><td>easy</td><td class="pass">1</td><td class="num">37 s</td><td class="num">8</td><td class="num">38,382 (82%)</td><td class="num">2,145</td></tr>
+    <tr><td>prove-plus-comm</td><td>easy</td><td class="pass">1</td><td class="num">43 s</td><td class="num">7</td><td class="num">18,983 (82%)</td><td class="num">2,681</td></tr>
+    <tr><td>cobol-modernization</td><td>easy</td><td class="pass">1</td><td class="num">440 s</td><td class="num">21</td><td class="num">250,516 (91%)</td><td class="num">31,076</td></tr>
+    <tr><td>vulnerable-secret</td><td>medium</td><td class="pass">1</td><td class="num">33 s</td><td class="num">10</td><td class="num">54,247 (81%)</td><td class="num">1,613</td></tr>
+    <tr><td>nginx-request-logging</td><td>medium</td><td class="pass">1</td><td class="num">98 s</td><td class="num">8</td><td class="num">66,870 (83%)</td><td class="num">5,486</td></tr>
+    <tr><td>openssl-selfsigned-cert</td><td>medium</td><td class="pass">1</td><td class="num">105 s</td><td class="num">12</td><td class="num">70,012 (88%)</td><td class="num">7,098</td></tr>
+    <tr><td>polyglot-c-py</td><td>medium</td><td class="fail">0</td><td class="num">900 s (timeout)</td><td class="num">≥33 tool calls</td><td class="num">not recorded</td><td class="num">not recorded</td></tr>
+    <tr><td>raman-fitting</td><td>medium</td><td class="fail">0</td><td class="num">900 s (timeout)</td><td class="num">≥33 tool calls</td><td class="num">not recorded</td><td class="num">not recorded</td></tr>
+  </table>
+  <p>Eight hand-picked tasks with one attempt each make a smoke signal, not a benchmark score. The tasks were chosen for short expert-time estimates and 2&nbsp;GB memory needs.</p>
+
+  <h2>Failure Analysis</h2>
+  <ul>
+    <li><b>polyglot-c-py.</b> The agent spent its 33 tool calls testing how C preprocessor directives and Python triple quotes could share one file. It wrote two full candidate solutions midway, then went back to experimenting, and the clock ran out. There were no tool errors.</li>
+    <li><b>raman-fitting.</b> The agent ran a dozen exploratory numpy/scipy scripts (baselines, peak shapes, symmetry, indexing) without writing the result file the tests read.</li>
+    <li><b>Common cause:</b> at 72 tok/s the time limit allows only about 60k generated tokens. The solver prompt says to check work, but not to save a valid answer before refining it. A prompt rule like "write a complete answer early, then improve it in place" would turn a timeout from a guaranteed 0 into a chance at 1.</li>
+  </ul>
+
+  <h2>Infrastructure Issues Found and Fixed</h2>
+  <ul>
+    <li><b>Strata rejected containers (403).</b> Its DNS-rebinding protection refused the <code>host.docker.internal</code> Host header. Fixed by adding that name to <code>allowed_hosts</code> in the Strata config and restarting Strata; the config was backed up first.</li>
+    <li><b>AOS crashed under QEMU.</b> Docker Desktop 4.3.1 ran the amd64 task images under old QEMU emulation, and AOS died with a corrupted Go type pointer (<code>aos_exit=2</code>) on <code>cobol-modernization</code>. Updating to Docker Desktop 4.97 with Rosetta fixed it, and the same task then passed. The adapter also now sets <code>GODEBUG=asyncpreemptoff=1</code> as a safeguard.</li>
+    <li><b>Docker VM wedged during the update attempt.</b> The guest hung waiting on file sharing. A clean quit and relaunch fixed it before the Homebrew upgrade.</li>
+    <li><b>Live progress.</b> Harbor syncs <code>/logs/agent</code> only when a trial ends. <code>bench/harbor/progress.sh</code> reads a running trial's log from its container instead.</li>
+  </ul>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>Token usage is reported only when <code>aos run</code> finishes, so timed-out trials have none. AOS should write running totals to its state directory so the adapter can read them after a kill.</li>
+    <li>The <code>run</code> tool has no TTY, so tasks that need interactive programs depend on the agent finding non-interactive equivalents.</li>
+  </ul>
+
+  <h2>Next</h2>
+  <ul>
+    <li>A 5-task Terminal-Bench 4.0 pilot (<code>pilot-tb4-5</code>) is running now: CPU-only tasks, 4&nbsp;GB each, agent time capped at 2&nbsp;h instead of the official 8&nbsp;h.</li>
+    <li>Add the "commit an answer early" rule to the solver prompt and rerun <code>polyglot-c-py</code> and <code>raman-fitting</code>.</li>
+  </ul>
+
+  <h2>Reproduce</h2>
+  <p><code>bench/harbor/run-tb.sh --job-name pilot-strata-8 -i fix-git -i prove-plus-comm -i cobol-modernization -i openssl-selfsigned-cert -i nginx-request-logging -i polyglot-c-py -i vulnerable-secret -i raman-fitting</code></p>
+  <p>Job outputs, including per-trial AOS traces and state, are in <code>reports/terminal-bench/jobs/pilot-strata-8/</code>. They are not committed.</p>
+</body>
+</html>

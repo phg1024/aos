@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -39,6 +40,38 @@ type VLLMBackend struct {
 	maxRetries    int
 	onStreamEvent func(StreamEvent)
 	sampling      Sampling
+
+	usageMu sync.Mutex
+	usage   TokenUsage
+}
+
+// TokenUsage totals what the server reported across completed requests.
+type TokenUsage struct {
+	Requests         int `json:"requests"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	CachedTokens     int `json:"cached_tokens"`
+}
+
+// Usage returns the token totals so far.
+func (b *VLLMBackend) Usage() TokenUsage {
+	b.usageMu.Lock()
+	defer b.usageMu.Unlock()
+	return b.usage
+}
+
+func (b *VLLMBackend) recordUsage(usage *responseUsage) {
+	b.usageMu.Lock()
+	defer b.usageMu.Unlock()
+	b.usage.Requests++
+	if usage == nil {
+		return
+	}
+	b.usage.PromptTokens += usage.PromptTokens
+	b.usage.CompletionTokens += usage.CompletionTokens
+	if usage.PromptTokensDetails != nil {
+		b.usage.CachedTokens += usage.PromptTokensDetails.CachedTokens
+	}
 }
 
 type StreamKind string
@@ -66,13 +99,26 @@ type Sampling struct {
 }
 
 type chatCompletionRequest struct {
-	Model                 string        `json:"model"`
-	Messages              []chatMessage `json:"messages"`
-	Temperature           float64       `json:"temperature"`
-	TopP                  float64       `json:"top_p,omitempty"`
-	MaxTokens             int           `json:"max_tokens,omitempty"`
-	ReasoningBudgetTokens int           `json:"reasoning_budget_tokens,omitempty"`
-	Stream                bool          `json:"stream,omitempty"`
+	Model                 string         `json:"model"`
+	Messages              []chatMessage  `json:"messages"`
+	Temperature           float64        `json:"temperature"`
+	TopP                  float64        `json:"top_p,omitempty"`
+	MaxTokens             int            `json:"max_tokens,omitempty"`
+	ReasoningBudgetTokens int            `json:"reasoning_budget_tokens,omitempty"`
+	Stream                bool           `json:"stream,omitempty"`
+	StreamOptions         *streamOptions `json:"stream_options,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
+}
+
+type responseUsage struct {
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	PromptTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details,omitempty"`
 }
 
 type chatMessage struct {
@@ -84,6 +130,7 @@ type chatCompletionResponse struct {
 	Choices []struct {
 		Message chatMessage `json:"message"`
 	} `json:"choices"`
+	Usage *responseUsage `json:"usage,omitempty"`
 }
 
 func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
@@ -162,6 +209,7 @@ type chatCompletionChunk struct {
 			Thinking         string `json:"thinking"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Usage *responseUsage `json:"usage,omitempty"`
 }
 
 func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
@@ -173,6 +221,9 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		MaxTokens:             b.sampling.MaxTokens,
 		ReasoningBudgetTokens: b.sampling.ThinkingBudget,
 		Stream:                b.onStreamEvent != nil,
+	}
+	if payload.Stream {
+		payload.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -218,6 +269,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		if b.onStreamEvent != nil {
 			var fullResponse strings.Builder
 			scanner := bufio.NewScanner(response.Body)
+			var streamUsage *responseUsage
 			for scanner.Scan() {
 				line := scanner.Text()
 				if strings.HasPrefix(line, "data: ") {
@@ -226,7 +278,13 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 						break
 					}
 					var chunk chatCompletionChunk
-					if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Choices) > 0 {
+					if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+						continue
+					}
+					if chunk.Usage != nil {
+						streamUsage = chunk.Usage
+					}
+					if len(chunk.Choices) > 0 {
 						delta := chunk.Choices[0].Delta
 						for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
 							if reasoning != "" {
@@ -249,6 +307,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 				}
 				return fullResponse.String(), err
 			}
+			b.recordUsage(streamUsage)
 			b.onStreamEvent(StreamEvent{Kind: StreamDone})
 			return fullResponse.String(), nil
 		}
@@ -270,6 +329,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 			}
 			return "", ErrMalformedModelResponse
 		}
+		b.recordUsage(parsed.Usage)
 		return parsed.Choices[0].Message.Content, nil
 	}
 	if lastErr != nil {

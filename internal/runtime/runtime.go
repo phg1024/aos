@@ -128,6 +128,8 @@ type AgentRuntime struct {
 	MaxSteps        int
 	// Compaction defaults to DefaultCompactionPolicy when left zero.
 	Compaction CompactionPolicy
+	// Clock, when set, adds a time-budget note to the history each step.
+	Clock *Clock
 }
 
 // CompactionPolicy decides when older history is compacted. A zero
@@ -305,6 +307,9 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	for step := 0; step < maxSteps; step++ {
 		if ctx.Err() != nil {
 			return r.cancelRun(ctx, pid, session)
+		}
+		if r.Clock != nil {
+			session.Messages = append(session.Messages, Message{Role: "tool", Content: r.Clock.Note()})
 		}
 		var inboxMessages []ipc.Message
 		if r.Bus != nil {

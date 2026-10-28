@@ -59,3 +59,7 @@ reports/tui-inspect-llm-transcript.txt
 reports/tui-smoke-transcript.txt
 reports/rasterizer-bunny/
 reports/rasterizer-bunny-metal/
+
+# Terminal-Bench job outputs
+reports/terminal-bench/jobs/
+reports/terminal-bench/*.log

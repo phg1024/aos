@@ -413,3 +413,51 @@ func TestVLLMBackendCompleteMessagesSendsTranscript(t *testing.T) {
 		}
 	}
 }
+
+func TestVLLMBackendAccumulatesTokenUsage(t *testing.T) {
+	exit := `{"action":{"type":"exit","exit_status":{"code":0,"reason":"done"}}}`
+	plain := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL: "http://vllm.local",
+		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, map[string]any{
+				"choices": []map[string]any{{"message": map[string]any{"content": exit}}},
+				"usage":   map[string]any{"prompt_tokens": 1200, "completion_tokens": 80, "prompt_tokens_details": map[string]any{"cached_tokens": 1000}},
+			}), nil
+		})},
+	})
+	for i := 0; i < 2; i++ {
+		if _, err := plain.Generate(context.Background(), runtime.GenerateRequest{Process: kernel.Process{PID: "pid-1"}}); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+	}
+	if got, want := plain.Usage(), (inference.TokenUsage{Requests: 2, PromptTokens: 2400, CompletionTokens: 160, CachedTokens: 2000}); got != want {
+		t.Fatalf("non-streamed usage = %+v, want %+v", got, want)
+	}
+
+	streamed := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL:       "http://vllm.local",
+		OnStreamEvent: func(inference.StreamEvent) {},
+		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			var payload struct {
+				StreamOptions map[string]bool `json:"stream_options"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if !payload.StreamOptions["include_usage"] {
+				t.Fatalf("streaming request should ask for usage, got %v", payload.StreamOptions)
+			}
+			content, _ := json.Marshal(exit)
+			body := "data: {\"choices\":[{\"delta\":{\"content\":" + string(content) + "}}]}\n\n" +
+				"data: {\"choices\":[],\"usage\":{\"prompt_tokens\":300,\"completion_tokens\":20}}\n\n" +
+				"data: [DONE]\n\n"
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+		})},
+	})
+	if _, err := streamed.Generate(context.Background(), runtime.GenerateRequest{Process: kernel.Process{PID: "pid-1"}}); err != nil {
+		t.Fatalf("generate streamed: %v", err)
+	}
+	if got, want := streamed.Usage(), (inference.TokenUsage{Requests: 1, PromptTokens: 300, CompletionTokens: 20}); got != want {
+		t.Fatalf("streamed usage = %+v, want %+v", got, want)
+	}
+}
