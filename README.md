@@ -28,6 +28,15 @@ See [STATUS.md](./STATUS.md) for the current project snapshot and [RELEASE_CHECK
 - `go run ./cmd/aos`
 - `go run ./cmd/aos-tui --workdir .`
 
+## Workflows in the TUI
+
+`go run ./cmd/aos-tui --workflow workflow.json --workdir DIR` runs the workflow's entry agent interactively. When it delegates, the delegated agents run through the same engine as `aos run --workflow`, and the TUI shows their progress:
+
+- each delegated agent's activity is printed in the transcript, indented by depth between `┌ agent` and `└ agent exited` markers
+- a pinned progress row shows the delegation stack (`coordinator 3/400 › writer 49/200`), how long the current agent has been running, what it is doing, and how many delegations have finished
+
+`--agent ID` starts from a different agent in the workflow. Context compaction follows `AOS_LLM_CONTEXT_WINDOW` and `AOS_COMPACT_RATIO`, the same way it does for `aos run`.
+
 `make test` uses repo-local `GOCACHE` and `GOTMPDIR` paths so tests run reliably in sandboxed environments too.
 
 ## Verification Policy

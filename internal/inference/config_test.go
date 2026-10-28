@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"aos/internal/inference"
+	"aos/internal/runtime"
 )
 
 func TestLoadBackendConfigDefaultsToVLLM(t *testing.T) {
@@ -103,6 +104,25 @@ func TestLoadBackendConfigReadsContextWindow(t *testing.T) {
 		t.Setenv("AOS_LLM_CONTEXT_WINDOW", value)
 		if got := inference.LoadBackendConfig(time.Minute).ContextWindow; got != 0 {
 			t.Fatalf("expected unknown window for %q, got %d", value, got)
+		}
+	}
+}
+
+func TestBackendConfigCompactionPolicy(t *testing.T) {
+	t.Setenv("AOS_LLM_CONTEXT_WINDOW", "")
+	if got := inference.LoadBackendConfig(time.Minute).CompactionPolicy(); got != (runtime.CompactionPolicy{}) {
+		t.Fatalf("expected runtime defaults without a window, got %+v", got)
+	}
+
+	t.Setenv("AOS_LLM_CONTEXT_WINDOW", "262144")
+	for _, tc := range []struct {
+		env   string
+		ratio float64
+	}{{"", 0.8}, {"0.5", 0.5}, {"1.5", 0.8}, {"junk", 0.8}} {
+		t.Setenv("AOS_COMPACT_RATIO", tc.env)
+		got := inference.LoadBackendConfig(time.Minute).CompactionPolicy()
+		if want := runtime.ContextCompactionPolicy(262144, tc.ratio); got != want {
+			t.Fatalf("AOS_COMPACT_RATIO=%q: expected %+v, got %+v", tc.env, want, got)
 		}
 	}
 }

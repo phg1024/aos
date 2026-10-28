@@ -100,23 +100,61 @@ func main() {
 		OnStreamEvent: stream.Handle,
 	})
 
+	compaction := llmConfig.CompactionPolicy()
 	agentRuntime := &runtime.AgentRuntime{
-		Kernel:    k,
-		Artifacts: store,
-		Tools:     tools.NewRuntime(),
-		Bus:       bus,
-		Leases:    leaseManager,
-		MaxSteps:  maxSteps(agent),
+		Kernel:     k,
+		Artifacts:  store,
+		Tools:      tools.NewRuntime(),
+		Bus:        bus,
+		Leases:     leaseManager,
+		MaxSteps:   maxSteps(agent),
+		Compaction: compaction,
 	}
 	loadedSkills, err := skills.NewRegistry(spec.SkillRoots).LoadMany(agent.Skills)
 	if err != nil {
 		fail(err)
 	}
 	agentRuntime.Backend = agentflow.PromptBackend{
-		Completer: backend,
-		Workflow:  spec,
-		Agent:     agent,
-		Skills:    loadedSkills,
+		Completer:  backend,
+		Workflow:   spec,
+		Agent:      agent,
+		Skills:     loadedSkills,
+		Compaction: compaction,
+	}
+
+	footer := render.NewFooterBar(ui)
+	defer footer.Unpin()
+	observeRoot := func(kind, detail string) {}
+	if workflowPath != "" {
+		progress := render.NewWorkflowProgress(ui, spec)
+		footer.SetProgress(progress)
+		engine := &agentflow.Engine{
+			Kernel:    k,
+			Artifacts: store,
+			Bus:       bus,
+			Leases:    leaseManager,
+			Tools:     agentRuntime.Tools,
+			Factory: agentflow.StaticBackendFactory{
+				Completer:  backend,
+				Skills:     skills.NewRegistry(spec.SkillRoots),
+				Compaction: compaction,
+			},
+			Compaction: compaction,
+			Trace: func(event agentflow.TraceEvent) {
+				if line := progress.Apply(event); line != "" {
+					stream.PrintStatus(line)
+					return
+				}
+				footer.Draw()
+			},
+		}
+		agentRuntime.DelegateHandler = engine.DelegateHandler(spec, agentflow.RunRequest{Goal: process.Metadata["goal"]}, agent, nil)
+		observeRoot = func(kind, detail string) {
+			progress.Observe(agentflow.TraceEvent{Time: time.Now(), AgentID: agent.ID, PID: process.PID, Kind: kind, Detail: detail})
+			footer.Draw()
+		}
+		stopTicker := startProgressTicker(progress, footer)
+		defer stopTicker()
 	}
 	var tokenCounter tokenizer.Counter
 	if sidecar, sidecarErr := tokenizer.Start(getenv("AOS_TOKENIZER_PYTHON", "python3"), repoRoot, modelName); sidecarErr == nil {
@@ -136,10 +174,12 @@ func main() {
 	fmt.Println(ui.Subtle("State: " + stateDir))
 	fmt.Println(ui.Subtle("Commands: /quit, /state, /recover"))
 
+	if workflowPath != "" {
+		fmt.Println(ui.Subtle(fmt.Sprintf("Workflow: %s  entry=%s  delegates=%s", spec.Name, agent.ID, strings.Join(agent.AllowedAgents, ","))))
+	}
+
 	var checkpointID string
 	var currentSession runtime.Session
-	footer := render.NewFooterBar(ui)
-	defer footer.Unpin()
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		footer.Update(render.FooterStatus{
@@ -171,7 +211,7 @@ func main() {
 				footer.Println(ui.Warn("no checkpoint yet"))
 				continue
 			}
-			result, err := agentRuntime.Recover(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer))
+			result, err := agentRuntime.Recover(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
 			if err != nil && err != runtime.ErrAgentBlocked {
 				stream.Clear()
 				footer.Println(ui.Error("recover error: " + err.Error()))
@@ -193,19 +233,44 @@ func main() {
 		}
 
 		var result runtime.RunResult
+		observeRoot("start", line)
 		if checkpointID == "" {
-			result, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, interactiveRunOptions(ui, stream, footer))
+			result, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
 		} else {
-			result, err = agentRuntime.Resume(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer))
+			result, err = agentRuntime.Resume(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
 		}
 		if err != nil && err != runtime.ErrAgentBlocked {
 			stream.Clear()
 			footer.Println(ui.Error("runtime error: " + err.Error()))
 		}
+		observeRoot("exit", "")
 		checkpointID = result.CheckpointID
 		currentSession = result.Session
 		stream.Clear()
 		printResult(ui, footer, result)
+	}
+}
+
+// startProgressTicker redraws the footer every second while workflow agents
+// run, so elapsed time keeps moving during long model calls.
+func startProgressTicker(progress *render.WorkflowProgress, footer *render.FooterBar) func() {
+	ticker := time.NewTicker(time.Second)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				if progress.Active() {
+					footer.Draw()
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() {
+		ticker.Stop()
+		close(done)
 	}
 }
 
@@ -398,22 +463,28 @@ func detectRepoRoot(workdir string) string {
 	}
 }
 
-func interactiveRunOptions(ui render.Palette, stream *render.StreamRenderer, footer *render.FooterBar) runtime.RunOptions {
+// interactiveRunOptions prints the interactive agent's activity; observe
+// mirrors it into the workflow progress row.
+func interactiveRunOptions(ui render.Palette, stream *render.StreamRenderer, footer *render.FooterBar, observe func(kind, detail string)) runtime.RunOptions {
 	stream.SetFooter(footer)
 	return runtime.RunOptions{
 		StopOnAssistantMessage: true,
 		ContinueOnToolError:    true,
 		OnAssistantMessage: func(message string) {
 			stream.Clear()
+			observe("message", message)
 		},
 		OnToolCall: func(call runtime.ToolCall) {
 			stream.PrintStatus(ui.ToolCall("tool> " + render.SummarizeToolCall(call)))
+			observe("tool_call", render.SummarizeToolCall(call))
 		},
 		OnToolResult: func(result tools.Result) {
 			stream.PrintStatus(ui.ToolResult("tool< " + render.SummarizeToolResult(result)))
+			observe("tool_result", "")
 		},
 		OnToolError: func(call runtime.ToolCall, err error) {
 			stream.PrintStatus(ui.ToolError("tool! " + call.Name + ": " + err.Error()))
+			observe("tool_error", err.Error())
 		},
 	}
 }

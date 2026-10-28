@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 9 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code, pre { background: #f3f4f6; border-radius: 4px; }
+    code { padding: 2px 5px; }
+    pre { padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.35; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 9 Report</h1>
+    <p><code>aos-tui --workflow</code> can now run a whole multi-agent workflow. The entry agent stays interactive. The agents it delegates to run through the same engine as <code>aos run --workflow</code>, and a live progress view shows their work.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><code>agentflow.Engine.DelegateHandler(spec, req, agent, onChild)</code> exposes the delegation logic that <code>runAgent</code> used to keep inline. Any <code>runtime.AgentRuntime</code> can now delegate the way the engine does: <code>allowed_agents</code> checks, the one-active-child-per-agent rule, and the <code>delegate</code>/<code>start</code>/<code>exit</code>/<code>delegate_result</code> trace events.</li>
+    <li><code>inference.BackendConfig</code> now carries <code>CompactRatio</code> (from <code>AOS_COMPACT_RATIO</code>, default 0.8) and has a <code>CompactionPolicy()</code> method. <code>aos run</code> and <code>aos-tui</code> both use it. The TUI previously ignored <code>AOS_LLM_CONTEXT_WINDOW</code>.</li>
+    <li><code>render.WorkflowProgress</code> builds the delegation stack from engine trace events and renders transcript lines and a status row.</li>
+    <li><code>render.FooterBar</code> can pin a second row above the status row. Each redraw is one write, so a once-per-second ticker can keep the elapsed time moving during long model calls without interleaving with streamed output.</li>
+    <li><code>cmd/aos-tui</code> in workflow mode connects the engine's delegation handler, the context-window compaction policy, and the progress view, and mirrors the entry agent's own tool calls into the progress row.</li>
+  </ul>
+
+  <h2>What It Looks Like</h2>
+  <p>This is from a pseudo-terminal smoke run against a scripted local model server. The coordinator lists the workspace and delegates to the writer. The writer runs a 3-second command, writes a file and exits.</p>
+<pre>you&gt; build the thing
+tool&gt; list_dir path="…/tui-smoke/ws"
+tool&lt; list_dir found nothing
+  ┌ writer pid-000002 goal: Write hello.txt and build it
+  │ writer › run command=sleep 3; echo built
+  │   ↳ run command=sleep 3; echo built exit_code=0 stderr=
+  │ writer › write_file content=hi path=…/ws/hello.txt
+  │   ↳ write_file bytes=3 path=…/ws/hello.txt
+  └ writer exited code=0 reason=wrote hello.txt retryable=false
+agent&gt; Writer finished; hello.txt is in place.
+
+ workflow tui-smoke ▸ coordinator 2/10 › writer 1/8 | 0m03s | tool run | finished=0      ← pinned progress row
+ status | pid=pid-000001 | model=fake | ctx~1249 tok (4994 chars) | msgs=0 | checkpoint=none</pre>
+
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>The entry agent stays interactive, and only delegated agents run to completion on their own. This keeps the TUI's conversation model and reuses the engine unchanged. A run in the TUI and a run from <code>aos run</code> produce the same child processes, artifacts and trace events.</li>
+    <li>Steps are counted per action (tool call, delegation or message), matching what <code>max_steps</code> limits in the runtime. The entry agent's count resets each turn, because <code>max_steps</code> applies to each Run/Resume call.</li>
+    <li><code>finished</code> counts delegated runs only. The entry agent's end-of-turn is not counted.</li>
+    <li>A delegation to an agent outside <code>allowed_agents</code> is still a runtime error rather than a recoverable tool error, the same as in <code>aos run</code>.</li>
+    <li>The TUI hands its message bus to the engine. Child agents use it only if they choose to send messages. <code>aos run</code> leaves it nil.</li>
+  </ul>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>No way to cancel a delegated run except Ctrl-C, which ends the whole TUI.</li>
+    <li>Delegated agents' results are printed as one-line summaries. Nothing can be expanded or collapsed.</li>
+    <li><code>/recover</code> does not feed the progress row.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 16 packages with tests pass. <code>go vet ./...</code> is clean.</li>
+    <li>New: <code>TestEngineDelegateHandlerServesExternalRuntime</code> runs an agent outside <code>Engine.Run</code> that delegates through the handler. It checks the child run, the parent PID, the trace sequence, and the denial for an agent outside <code>allowed_agents</code>.</li>
+    <li>New: <code>TestBackendConfigCompactionPolicy</code> covers no window, the default ratio, a custom ratio, and invalid ratios.</li>
+    <li>New: <code>render</code> progress tests cover stack push/pop, indentation, step labels, elapsed time, activity, the finished count, duplicate and unknown events, and rune-safe clipping.</li>
+    <li>Smoke: the built TUI ran under <code>script</code> against a local fake OpenAI-compatible SSE server. The delegated writer created its file, and the transcript and footer frames matched the sample above.</li>
+  </ul>
+</body>
+</html>

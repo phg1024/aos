@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"aos/internal/runtime"
 )
 
 type BackendKind string
@@ -23,7 +25,10 @@ type BackendConfig struct {
 	Timeout time.Duration
 	// ContextWindow is the model context size in tokens; 0 means unknown.
 	ContextWindow int
-	Sampling      Sampling
+	// CompactRatio is the fraction of ContextWindow at which history is
+	// compacted (AOS_COMPACT_RATIO, default 0.8).
+	CompactRatio float64
+	Sampling     Sampling
 }
 
 type BackendOptions struct {
@@ -62,6 +67,7 @@ func LoadBackendConfig(defaultTimeout time.Duration) BackendConfig {
 		APIKey:        apiKey,
 		Timeout:       parseTimeoutEnv(defaultTimeout),
 		ContextWindow: parseContextWindowEnv(),
+		CompactRatio:  parseCompactRatioEnv(),
 		Sampling: Sampling{
 			Temperature:    parseFloatEnv("AOS_LLM_TEMPERATURE"),
 			TopP:           parseFloatEnv("AOS_LLM_TOP_P"),
@@ -149,6 +155,29 @@ func parseTimeoutEnv(fallback time.Duration) time.Duration {
 
 func parseContextWindowEnv() int {
 	return parsePositiveIntEnv("AOS_LLM_CONTEXT_WINDOW")
+}
+
+const defaultCompactRatio = 0.8
+
+func parseCompactRatioEnv() float64 {
+	ratio := parseFloatEnv("AOS_COMPACT_RATIO")
+	if ratio <= 0 || ratio > 1 {
+		return defaultCompactRatio
+	}
+	return ratio
+}
+
+// CompactionPolicy compacts at CompactRatio of a known context window and
+// keeps the runtime defaults when the window is unknown.
+func (c BackendConfig) CompactionPolicy() runtime.CompactionPolicy {
+	if c.ContextWindow <= 0 {
+		return runtime.CompactionPolicy{}
+	}
+	ratio := c.CompactRatio
+	if ratio <= 0 || ratio > 1 {
+		ratio = defaultCompactRatio
+	}
+	return runtime.ContextCompactionPolicy(c.ContextWindow, ratio)
 }
 
 // parsePositiveIntEnv returns 0 when the variable is unset or not a positive integer.

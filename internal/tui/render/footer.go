@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"aos/internal/agentflow"
@@ -22,15 +23,30 @@ type FooterStatus struct {
 }
 
 type FooterBar struct {
-	ui     Palette
-	mu     sync.Mutex
-	status FooterStatus
-	pinned bool
-	rows   int
+	ui       Palette
+	mu       sync.Mutex
+	status   FooterStatus
+	progress *WorkflowProgress
+	pinned   bool
+	rows     int
 }
 
 func NewFooterBar(ui Palette) *FooterBar {
 	return &FooterBar{ui: ui}
+}
+
+// SetProgress adds a workflow progress row above the status row.
+func (f *FooterBar) SetProgress(progress *WorkflowProgress) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.progress = progress
+}
+
+func (f *FooterBar) height() int {
+	if f.progress != nil {
+		return 2
+	}
+	return 1
 }
 
 func (f *FooterBar) Pin() {
@@ -38,10 +54,10 @@ func (f *FooterBar) Pin() {
 		return
 	}
 	_, rows := TerminalSize()
-	if rows < 2 {
+	if rows < f.height()+1 {
 		return
 	}
-	fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(1, rows-1), ansi.CursorPosition(1, rows-1))
+	fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(1, rows-f.height()), ansi.CursorPosition(1, rows-f.height()))
 	f.pinned = true
 	f.rows = rows
 }
@@ -51,8 +67,14 @@ func (f *FooterBar) Unpin() {
 		return
 	}
 	_, rows := TerminalSize()
-	fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(0, 0))
-	fmt.Fprint(os.Stdout, ansi.SaveCursor, ansi.CursorPosition(1, rows), ansi.EraseEntireLine, ansi.RestoreCursor)
+	var builder strings.Builder
+	builder.WriteString(ansi.SetTopBottomMargins(0, 0))
+	builder.WriteString(ansi.SaveCursor)
+	for row := rows - f.height() + 1; row <= rows; row++ {
+		builder.WriteString(ansi.CursorPosition(1, row) + ansi.EraseEntireLine)
+	}
+	builder.WriteString(ansi.RestoreCursor)
+	fmt.Fprint(os.Stdout, builder.String())
 	f.pinned = false
 	f.rows = 0
 }
@@ -84,7 +106,6 @@ func (f *FooterBar) Println(text string) {
 }
 
 func (f *FooterBar) drawLocked() {
-	line := f.ui.Footer(truncateFooter(formatFooter(f.status)))
 	if !f.ui.Enabled {
 		return
 	}
@@ -92,13 +113,24 @@ func (f *FooterBar) drawLocked() {
 		f.Pin()
 	}
 	_, rows := TerminalSize()
-	if f.pinned && rows != f.rows && rows >= 2 {
-		fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(1, rows-1))
+	if f.pinned && rows != f.rows && rows >= f.height()+1 {
+		fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(1, rows-f.height()))
 		f.rows = rows
 	}
-	fmt.Fprint(os.Stdout, ansi.SaveCursor, ansi.CursorPosition(1, rows), ansi.EraseEntireLine)
-	fmt.Fprint(os.Stdout, line)
-	fmt.Fprint(os.Stdout, ansi.RestoreCursor)
+	lines := make([]string, 0, 2)
+	if f.progress != nil {
+		lines = append(lines, f.ui.Footer(truncateFooter(f.progress.StatusLine())))
+	}
+	lines = append(lines, f.ui.Footer(truncateFooter(formatFooter(f.status))))
+	// One write per redraw so a concurrent redraw cannot split the
+	// save/restore cursor sequence of another writer.
+	var builder strings.Builder
+	builder.WriteString(ansi.SaveCursor)
+	for idx, line := range lines {
+		builder.WriteString(ansi.CursorPosition(1, rows-len(lines)+1+idx) + ansi.EraseEntireLine + line)
+	}
+	builder.WriteString(ansi.RestoreCursor)
+	fmt.Fprint(os.Stdout, builder.String())
 }
 
 func formatFooter(status FooterStatus) string {
@@ -163,11 +195,11 @@ func shortID(value string) string {
 
 func truncateFooter(value string) string {
 	width, _ := TerminalSize()
-	if width <= 0 || len(value) <= width {
+	if width <= 0 || ansi.StringWidth(value) <= width {
 		return value
 	}
 	if width <= 3 {
-		return value[:width]
+		return ansi.Truncate(value, width, "")
 	}
-	return value[:width-3] + "..."
+	return ansi.Truncate(value, width, "...")
 }

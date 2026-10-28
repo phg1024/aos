@@ -268,41 +268,9 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		Leases:     e.Leases,
 		MaxSteps:   maxSteps(agent),
 		Compaction: e.Compaction,
-		DelegateHandler: func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
-			if !contains(agent.AllowedAgents, call.AgentID) {
-				return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
-			}
-			e.emitTrace(agent.ID, parent.PID, "delegate", fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal)))
-			children, err := e.Kernel.Children(parent.PID)
-			if err != nil {
-				return runtime.DelegateResult{}, err
-			}
-			for _, child := range children {
-				if child.State == kernel.StateExited {
-					continue
-				}
-				if child.Metadata["agent_id"] == call.AgentID {
-					return runtime.DelegateResult{}, fmt.Errorf("%w: %s", ErrDelegateAlreadyActive, call.AgentID)
-				}
-			}
-			childReq := req
-			if strings.TrimSpace(call.Goal) != "" {
-				childReq.Goal = call.Goal
-			}
-			childRun, err := e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID)
-			if err != nil {
-				return runtime.DelegateResult{}, err
-			}
-			childRuns = append(childRuns, childRun)
-			e.emitTrace(agent.ID, parent.PID, "delegate_result", fmt.Sprintf("from=%s pid=%s reason=%s", childRun.AgentID, childRun.PID, childRun.ExitStatus.Reason))
-			return runtime.DelegateResult{
-				AgentID:      childRun.AgentID,
-				PID:          childRun.PID,
-				Summary:      childRun.FinalMessage,
-				ResultID:     childRun.ResultID,
-				CheckpointID: childRun.CheckpointID,
-			}, nil
-		},
+		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
+			childRuns = append(childRuns, child)
+		}),
 	}
 	backend, err := e.Factory.BackendFor(agent, spec)
 	if err != nil {
@@ -363,6 +331,49 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		})
 	}
 	return run, nil
+}
+
+// DelegateHandler lets agent delegate to the workflow agents it may call.
+// Each child runs to completion through the engine; onChild, when set,
+// receives every finished child run.
+func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentSpec, onChild func(AgentRun)) runtime.DelegateHandler {
+	return func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
+		if !contains(agent.AllowedAgents, call.AgentID) {
+			return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
+		}
+		e.emitTrace(agent.ID, parent.PID, "delegate", fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal)))
+		children, err := e.Kernel.Children(parent.PID)
+		if err != nil {
+			return runtime.DelegateResult{}, err
+		}
+		for _, child := range children {
+			if child.State == kernel.StateExited {
+				continue
+			}
+			if child.Metadata["agent_id"] == call.AgentID {
+				return runtime.DelegateResult{}, fmt.Errorf("%w: %s", ErrDelegateAlreadyActive, call.AgentID)
+			}
+		}
+		childReq := req
+		if strings.TrimSpace(call.Goal) != "" {
+			childReq.Goal = call.Goal
+		}
+		childRun, err := e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID)
+		if err != nil {
+			return runtime.DelegateResult{}, err
+		}
+		if onChild != nil {
+			onChild(childRun)
+		}
+		e.emitTrace(agent.ID, parent.PID, "delegate_result", fmt.Sprintf("from=%s pid=%s reason=%s", childRun.AgentID, childRun.PID, childRun.ExitStatus.Reason))
+		return runtime.DelegateResult{
+			AgentID:      childRun.AgentID,
+			PID:          childRun.PID,
+			Summary:      childRun.FinalMessage,
+			ResultID:     childRun.ResultID,
+			CheckpointID: childRun.CheckpointID,
+		}, nil
+	}
 }
 
 func formatToolCall(call runtime.ToolCall) string {
