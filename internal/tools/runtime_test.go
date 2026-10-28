@@ -156,7 +156,9 @@ func TestRunTool(t *testing.T) {
 			{Name: "workspace", HostPath: root},
 		},
 		CapabilitySet: capability.Set{
-			Tools: []string{"run"},
+			Tools:      []string{"run"},
+			ReadPaths:  []string{root},
+			WritePaths: []string{root},
 		},
 	})
 	if err != nil {
@@ -179,7 +181,9 @@ func TestRunTool(t *testing.T) {
 			{Name: "workspace", HostPath: root},
 		},
 		CapabilitySet: capability.Set{
-			Tools: []string{"run"},
+			Tools:      []string{"run"},
+			ReadPaths:  []string{root},
+			WritePaths: []string{root},
 		},
 	})
 	if err != nil {
@@ -194,7 +198,7 @@ func TestRunTool(t *testing.T) {
 		Tool:          "run",
 		Args:          map[string]string{},
 		Mounts:        []capability.Mount{{Name: "workspace", HostPath: root}},
-		CapabilitySet: capability.Set{Tools: []string{"run"}},
+		CapabilitySet: capability.Set{Tools: []string{"run"}, ReadPaths: []string{root}, WritePaths: []string{root}},
 	})
 	if err == nil {
 		t.Fatal("expected error for missing command")
@@ -210,7 +214,9 @@ func TestRunTool(t *testing.T) {
 			{Name: "workspace", HostPath: root},
 		},
 		CapabilitySet: capability.Set{
-			Tools: []string{"run"},
+			Tools:      []string{"run"},
+			ReadPaths:  []string{root},
+			WritePaths: []string{root},
 		},
 	})
 	if err != nil {
@@ -229,7 +235,9 @@ func TestRunTool(t *testing.T) {
 			{Name: "workspace", HostPath: root},
 		},
 		CapabilitySet: capability.Set{
-			Tools: []string{"run"},
+			Tools:      []string{"run"},
+			ReadPaths:  []string{root},
+			WritePaths: []string{root},
 		},
 	})
 	if err != nil {

@@ -54,7 +54,11 @@ func RenderHTML(report RunReport) string {
 	for _, process := range report.Processes {
 		processRows.WriteString("<tr>")
 		processRows.WriteString(td(process.PID))
-		processRows.WriteString(td(process.Role))
+		role := process.Role
+		if process.CapabilitySet.UnconfinedRun {
+			role += " (UNCONFINED run)"
+		}
+		processRows.WriteString(td(role))
 		processRows.WriteString(td(process.ParentPID))
 		processRows.WriteString(td(string(process.State)))
 		if process.ExitStatus != nil {

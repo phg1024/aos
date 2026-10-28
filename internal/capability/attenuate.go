@@ -9,12 +9,18 @@ import (
 // Union is the authority of both sets: an agent's own capabilities plus
 // what it may only delegate.
 func Union(a, b Set) Set {
-	return Set{
-		ReadPaths:    unionStrings(a.ReadPaths, b.ReadPaths),
-		WritePaths:   unionStrings(a.WritePaths, b.WritePaths),
-		Tools:        unionStrings(a.Tools, b.Tools),
-		AllowNetwork: a.AllowNetwork || b.AllowNetwork,
+	union := Set{
+		ReadPaths:     unionStrings(a.ReadPaths, b.ReadPaths),
+		WritePaths:    unionStrings(a.WritePaths, b.WritePaths),
+		Tools:         unionStrings(a.Tools, b.Tools),
+		AllowNetwork:  a.AllowNetwork || b.AllowNetwork,
+		NetworkAllow:  unionStrings(a.NetworkAllow, b.NetworkAllow),
+		UnconfinedRun: a.UnconfinedRun || b.UnconfinedRun,
 	}
+	if a.MaxRunSeconds > 0 || b.MaxRunSeconds > 0 {
+		union.MaxRunSeconds = max(effectiveRunSeconds(a.MaxRunSeconds), effectiveRunSeconds(b.MaxRunSeconds))
+	}
+	return union
 }
 
 // Excess lists what requested asks for beyond grantable: tools it lacks,
@@ -39,6 +45,17 @@ func Excess(grantable, requested Set) []string {
 	}
 	if requested.AllowNetwork && !grantable.AllowNetwork {
 		excess = append(excess, "network")
+	}
+	for _, host := range requested.NetworkAllow {
+		if !slices.Contains(grantable.NetworkAllow, host) {
+			excess = append(excess, "network allow "+host)
+		}
+	}
+	if requested.UnconfinedRun && !grantable.UnconfinedRun {
+		excess = append(excess, "unconfined_run")
+	}
+	if effectiveRunSeconds(requested.MaxRunSeconds) > effectiveRunSeconds(grantable.MaxRunSeconds) {
+		excess = append(excess, fmt.Sprintf("max_run_seconds %d", requested.MaxRunSeconds))
 	}
 	return excess
 }

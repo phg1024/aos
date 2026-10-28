@@ -31,7 +31,9 @@
           "edit_file",
           "list_dir",
           "find_files"
-        ]
+        ],
+        "unconfined_run": true,
+        "max_run_seconds": 900
       }
     }
   ]

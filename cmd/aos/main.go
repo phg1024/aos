@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -195,6 +196,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		return err
 	}
 	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...))
+	createWritableMounts(spec)
 
 	if stateDir == "" {
 		stateDir, err = os.MkdirTemp("", "aos-workflow-*")
@@ -228,7 +230,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		Kernel:    k,
 		Artifacts: store,
 		Leases:    leaseManager,
-		Tools:     tools.NewRuntime(),
+		Tools:     toolRuntime(stateDir),
 		Factory: agentflow.StaticBackendFactory{
 			Completer:  backend,
 			Skills:     skills.NewRegistry(spec.SkillRoots),
@@ -343,6 +345,36 @@ func (w workflowFailed) exitCode() int {
 		return w.status.Code
 	}
 	return 1
+}
+
+// createWritableMounts makes each writable mount directory that does not
+// exist yet but whose parent does, such as a verifier's own area next to
+// the workspace, so a confined run can work in it from the first step.
+func createWritableMounts(spec agentflow.WorkflowSpec) {
+	for _, agent := range spec.Agents {
+		for _, mount := range agent.Mounts {
+			if mount.ReadOnly || mount.HostPath == "" {
+				continue
+			}
+			if _, err := os.Stat(mount.HostPath); errors.Is(err, os.ErrNotExist) {
+				if _, err := os.Stat(filepath.Dir(mount.HostPath)); err == nil {
+					_ = os.Mkdir(mount.HostPath, 0o755)
+				}
+			}
+		}
+	}
+}
+
+// toolRuntime is the tools runtime for a run on stateDir: no tool reaches
+// the state directory or its lock, and web_fetch refuses the model
+// endpoint unless a capability set allowlists it.
+func toolRuntime(stateDir string) *tools.Runtime {
+	runtime := tools.NewRuntime()
+	runtime.Protected = []string{stateDir, statedir.LockPath(stateDir)}
+	if parsed, err := url.Parse(inference.LoadBackendConfig(0).BaseURL); err == nil && parsed.Hostname() != "" {
+		runtime.ModelHosts = []string{parsed.Hostname()}
+	}
+	return runtime
 }
 
 func resolveSkillRoots(roots []string, baseDir string) []string {

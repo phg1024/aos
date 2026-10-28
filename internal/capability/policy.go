@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 type Mount struct {
@@ -18,6 +19,69 @@ type Set struct {
 	WritePaths   []string `json:"write_paths,omitempty"`
 	Tools        []string `json:"tools,omitempty"`
 	AllowNetwork bool     `json:"allow_network"`
+	// NetworkAllow names hosts, IP addresses or CIDR ranges web_fetch may
+	// reach even though they are loopback, private or link-local, or the
+	// model endpoint. It only matters with AllowNetwork.
+	NetworkAllow []string `json:"network_allow,omitempty"`
+	// UnconfinedRun lets run execute without the OS sandbox, for agents
+	// isolated some other way, such as inside a disposable container.
+	// Without it, run is confined or refused.
+	UnconfinedRun bool `json:"unconfined_run,omitempty"`
+	// MaxRunSeconds bounds the timeout of a run command; 0 means
+	// DefaultMaxRunSeconds.
+	MaxRunSeconds int `json:"max_run_seconds,omitempty"`
+}
+
+// DefaultMaxRunSeconds bounds a run command's timeout when the set does
+// not say.
+const DefaultMaxRunSeconds = 600
+
+// RunTimeoutBound is the longest timeout a run command may ask for.
+func (s Set) RunTimeoutBound() time.Duration {
+	return time.Duration(effectiveRunSeconds(s.MaxRunSeconds)) * time.Second
+}
+
+func effectiveRunSeconds(seconds int) int {
+	if seconds <= 0 {
+		return DefaultMaxRunSeconds
+	}
+	return seconds
+}
+
+// RunScopes is where a confined run may read and write: each read scope
+// (write scope) that lies within a mount (writable mount), cut down to the
+// mount where the scope is wider, with symlinks resolved. readOnly lists
+// read-only mounts, which stay unwritable even inside a write root.
+func RunScopes(set Set, mounts []Mount) (read, write, readOnly []string) {
+	for _, mount := range mounts {
+		root := resolvePath(mount.HostPath)
+		for _, scope := range set.ReadPaths {
+			if shared, ok := overlap(resolvePath(scope), root); ok {
+				read = appendUnique(read, shared)
+			}
+		}
+		if mount.ReadOnly {
+			readOnly = appendUnique(readOnly, root)
+			continue
+		}
+		for _, scope := range set.WritePaths {
+			if shared, ok := overlap(resolvePath(scope), root); ok {
+				write = appendUnique(write, shared)
+			}
+		}
+	}
+	return read, write, readOnly
+}
+
+// overlap is the narrower of two nested paths.
+func overlap(a, b string) (string, bool) {
+	switch {
+	case within(b, a):
+		return a, true
+	case within(a, b):
+		return b, true
+	}
+	return "", false
 }
 
 type Evaluator struct{}
@@ -39,12 +103,18 @@ func (Evaluator) ToolAllowed(tool string, set Set) bool {
 // parent scope is kept as requested; a wider one is cut down to the parent
 // scope), and network only if both allow it.
 func DeriveChildSet(parent, requested Set) Set {
-	return Set{
-		ReadPaths:    intersectScopes(parent.ReadPaths, requested.ReadPaths),
-		WritePaths:   intersectScopes(parent.WritePaths, requested.WritePaths),
-		Tools:        intersectStrings(parent.Tools, requested.Tools),
-		AllowNetwork: parent.AllowNetwork && requested.AllowNetwork,
+	derived := Set{
+		ReadPaths:     intersectScopes(parent.ReadPaths, requested.ReadPaths),
+		WritePaths:    intersectScopes(parent.WritePaths, requested.WritePaths),
+		Tools:         intersectStrings(parent.Tools, requested.Tools),
+		AllowNetwork:  parent.AllowNetwork && requested.AllowNetwork,
+		NetworkAllow:  intersectStrings(parent.NetworkAllow, requested.NetworkAllow),
+		UnconfinedRun: parent.UnconfinedRun && requested.UnconfinedRun,
 	}
+	if parent.MaxRunSeconds > 0 || requested.MaxRunSeconds > 0 {
+		derived.MaxRunSeconds = min(effectiveRunSeconds(parent.MaxRunSeconds), effectiveRunSeconds(requested.MaxRunSeconds))
+	}
+	return derived
 }
 
 // withinAllowed judges where a path really points: symlinks in the path,
@@ -126,3 +196,10 @@ func intersectStrings(left, right []string) []string {
 	}
 	return out
 }
+
+// ResolvePath returns path with symlinks followed, as the capability checks
+// judge it.
+func ResolvePath(path string) string { return resolvePath(path) }
+
+// Within reports whether target is base or lies inside it.
+func Within(base, target string) bool { return within(base, target) }

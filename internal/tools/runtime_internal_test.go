@@ -85,7 +85,7 @@ func TestWebSearchReturnsResultsWithoutRawPayload(t *testing.T) {
 	result, err := NewRuntime().Execute(Request{
 		Tool:          "web_search",
 		Args:          map[string]string{"query": "megakernel"},
-		CapabilitySet: capability.Set{Tools: []string{"web_search"}},
+		CapabilitySet: capability.Set{Tools: []string{"web_search"}, AllowNetwork: true},
 	})
 	if err != nil {
 		t.Fatalf("web_search: %v", err)
@@ -111,7 +111,7 @@ func TestWebFetchReturnsPagedTextOnly(t *testing.T) {
 	fetch := func(args map[string]string) Result {
 		t.Helper()
 		args["url"] = server.URL
-		result, err := NewRuntime().Execute(Request{Tool: "web_fetch", Args: args, CapabilitySet: capability.Set{Tools: []string{"web_fetch"}}})
+		result, err := NewRuntime().Execute(Request{Tool: "web_fetch", Args: args, CapabilitySet: capability.Set{Tools: []string{"web_fetch"}, AllowNetwork: true, NetworkAllow: []string{"127.0.0.1"}}})
 		if err != nil {
 			t.Fatalf("web_fetch: %v", err)
 		}

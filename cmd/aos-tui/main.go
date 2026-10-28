@@ -7,8 +7,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -123,11 +125,19 @@ func main() {
 		fail(err)
 	}
 
+	// No tool reaches the state directory; web_fetch refuses the model
+	// endpoint unless allowlisted.
+	toolRuntime := tools.NewRuntime()
+	toolRuntime.Protected = []string{stateDir, statedir.LockPath(stateDir)}
+	if parsed, err := url.Parse(llmConfig.BaseURL); err == nil && parsed.Hostname() != "" {
+		toolRuntime.ModelHosts = []string{parsed.Hostname()}
+	}
+
 	compaction := llmConfig.CompactionPolicy()
 	agentRuntime := &runtime.AgentRuntime{
 		Kernel:     k,
 		Artifacts:  store,
-		Tools:      tools.NewRuntime(),
+		Tools:      toolRuntime,
 		Bus:        bus,
 		Leases:     leaseManager,
 		MaxSteps:   maxSteps(agent),
@@ -423,7 +433,10 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 			Capabilities: capability.Set{
 				ReadPaths:  []string{workdir},
 				WritePaths: []string{workdir},
-				Tools:      tools,
+				// The web tools you list are what grants network; it then
+				// also reaches run.
+				AllowNetwork: slices.Contains(tools, "web_search") || slices.Contains(tools, "web_fetch"),
+				Tools:        tools,
 			},
 		}
 		return agentflow.WorkflowSpec{

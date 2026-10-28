@@ -16,11 +16,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/sandbox"
 )
 
 // runWaitDelay bounds how long the run tool waits for stdout/stderr to close
@@ -46,6 +48,8 @@ type Request struct {
 	Args          map[string]string
 	CapabilitySet capability.Set
 	Mounts        []capability.Mount
+	// PID is the calling process; run keeps a scratch directory per PID.
+	PID string
 }
 
 type Result struct {
@@ -56,6 +60,49 @@ type Result struct {
 
 type Runtime struct {
 	evaluator capability.Evaluator
+	// Protected paths (the state directory) are out of reach of every
+	// tool, even where a mount and scope would grant them.
+	Protected []string
+	// ModelHosts are the model endpoint's hosts, which web_fetch refuses
+	// unless the capability set's NetworkAllow names them.
+	ModelHosts []string
+	// Confine builds the confined command for run; nil means
+	// sandbox.Command. Tests replace it to simulate a platform without a
+	// sandbox.
+	Confine func(ctx context.Context, policy sandbox.Policy, dir, command string) (*exec.Cmd, error)
+	// ScratchRoot holds each process's run scratch directory; empty means
+	// a temporary directory made on first use.
+	ScratchRoot string
+	scratchMu   sync.Mutex
+}
+
+// ErrRunUnconfined means run was refused: it cannot be confined here and
+// the process may not run unconfined.
+var ErrRunUnconfined = errors.New("run refused: it cannot be confined here and the process lacks unconfined_run")
+
+// ErrNetworkDenied means a web tool was refused network access.
+var ErrNetworkDenied = errors.New("network access denied by capabilities")
+
+// MaxFetchBytes caps how much of a web_fetch response body is read.
+const MaxFetchBytes = 4 << 20
+
+func (r *Runtime) canRead(path string, req Request) bool {
+	return r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) && !r.protected(path)
+}
+
+func (r *Runtime) canWrite(path string, req Request) bool {
+	return r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) && !r.protected(path)
+}
+
+// protected reports whether path is, or lies inside, a protected path.
+func (r *Runtime) protected(path string) bool {
+	resolved := capability.ResolvePath(path)
+	for _, root := range r.Protected {
+		if capability.Within(capability.ResolvePath(root), resolved) {
+			return true
+		}
+	}
+	return false
 }
 
 func NewRuntime() *Runtime {
@@ -82,7 +129,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if !ok {
 			return Result{}, errors.New("write_file requires content")
 		}
-		if !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
+		if !r.canWrite(path, req) {
 			return Result{}, ErrPathDenied
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -101,7 +148,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		}, nil
 	case "read_file":
 		path := filepath.Clean(req.Args["path"])
-		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) {
+		if !r.canRead(path, req) {
 			return Result{}, ErrPathDenied
 		}
 		contentBytes, err := os.ReadFile(path)
@@ -133,7 +180,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if oldText == "" {
 			return Result{}, errors.New("edit_file requires old_text")
 		}
-		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) || !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
+		if !r.canRead(path, req) || !r.canWrite(path, req) {
 			return Result{}, ErrPathDenied
 		}
 		contentBytes, err := os.ReadFile(path)
@@ -171,7 +218,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if path == "." || path == "" {
 			path = mountRoot(req.Mounts)
 		}
-		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) {
+		if !r.canRead(path, req) {
 			return Result{}, ErrPathDenied
 		}
 		entries, err := os.ReadDir(path)
@@ -200,7 +247,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if root == "." || root == "" {
 			root = mountRoot(req.Mounts)
 		}
-		if !r.evaluator.CanRead(root, req.Mounts, req.CapabilitySet) {
+		if !r.canRead(root, req) {
 			return Result{}, ErrPathDenied
 		}
 		pattern := strings.ToLower(strings.TrimSpace(req.Args["pattern"]))
@@ -212,7 +259,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 			if walkErr != nil {
 				return walkErr
 			}
-			if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) {
+			if !r.canRead(path, req) {
 				if entry.IsDir() {
 					return filepath.SkipDir
 				}
@@ -249,32 +296,36 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if command == "" {
 			return Result{}, errors.New("run requires command")
 		}
-		timeoutStr := req.Args["timeout"]
 		timeout := 60 * time.Second
-		if timeoutStr != "" {
-			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
-				timeout = parsed
-			}
+		if parsed, parseErr := time.ParseDuration(req.Args["timeout"]); parseErr == nil && parsed > 0 {
+			timeout = parsed
+		}
+		bound := req.CapabilitySet.RunTimeoutBound()
+		clamped := timeout > bound
+		if clamped {
+			timeout = bound
 		}
 		cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
+		cmd, confinement, err := r.runCommand(cmdCtx, req, command)
+		if err != nil {
+			return Result{}, err
+		}
 		isolateProcessGroup(cmd)
 		// Bound the wait for output pipes in case a detached descendant still holds them.
 		cmd.WaitDelay = runWaitDelay
-		cmd.Dir = mountRoot(req.Mounts)
 		cmd.Stdin = nil
 		var stdoutBuf, stderrBuf bytes.Buffer
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
-		err := cmd.Run()
+		err = cmd.Run()
 		exitCode := 0
 		if err != nil {
 			if ctx.Err() != nil {
 				return Result{}, fmt.Errorf("%w: %w", ErrToolCancelled, ctx.Err())
 			}
 			if cmdCtx.Err() != nil {
-				return Result{}, errors.New("command execution timed out")
+				return Result{}, fmt.Errorf("command execution timed out after %s", timeout)
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()
@@ -282,20 +333,30 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 				exitCode = 1
 			}
 		}
+		output := map[string]string{
+			"command":       command,
+			"stdout":        capOutput(stdoutBuf.String()),
+			"stderr":        capOutput(stderrBuf.String()),
+			"exit_code":     fmt.Sprintf("%d", exitCode),
+			"confinement":   confinement,
+			"timeout":       timeout.String(),
+			"timeout_bound": bound.String(),
+		}
+		if clamped {
+			output["timeout_clamped"] = "true"
+		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
-			Output: map[string]string{
-				"command":   command,
-				"stdout":    capOutput(stdoutBuf.String()),
-				"stderr":    capOutput(stderrBuf.String()),
-				"exit_code": fmt.Sprintf("%d", exitCode),
-			},
+			Output:  output,
 		}, nil
 	case "web_search":
 		query := strings.TrimSpace(req.Args["query"])
 		if query == "" {
 			return Result{}, errors.New("web_search requires query")
+		}
+		if !req.CapabilitySet.AllowNetwork {
+			return Result{}, fmt.Errorf("%w: web_search needs allow_network", ErrNetworkDenied)
 		}
 		timeoutStr := req.Args["timeout"]
 		timeout := 30 * time.Second
@@ -354,8 +415,12 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if targetURL == "" {
 			return Result{}, errors.New("web_fetch requires url")
 		}
-		if _, parseErr := url.Parse(targetURL); parseErr != nil {
-			return Result{}, errors.New("web_fetch requires valid url")
+		parsedURL, parseErr := url.Parse(targetURL)
+		if parseErr != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Hostname() == "" {
+			return Result{}, errors.New("web_fetch requires a valid http or https url")
+		}
+		if !req.CapabilitySet.AllowNetwork {
+			return Result{}, fmt.Errorf("%w: web_fetch needs allow_network", ErrNetworkDenied)
 		}
 		timeoutStr := req.Args["timeout"]
 		timeout := 60 * time.Second
@@ -364,17 +429,23 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 				timeout = parsed
 			}
 		}
-		client := &http.Client{
-			Timeout: timeout,
-		}
+		client := r.fetchClient(req.CapabilitySet, timeout)
 		resp, err := client.Get(targetURL)
 		if err != nil {
+			if errors.Is(err, ErrNetworkDenied) {
+				return Result{}, fmt.Errorf("web fetch refused: %w", err)
+			}
 			return Result{}, fmt.Errorf("web fetch failed: %w", err)
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
+		// Cap while reading, so a huge or endless body is never buffered.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchBytes+1))
 		if err != nil {
 			return Result{}, fmt.Errorf("failed to read response: %w", err)
+		}
+		bodyTruncated := len(body) > MaxFetchBytes
+		if bodyTruncated {
+			body = body[:MaxFetchBytes]
 		}
 		contentType := resp.Header.Get("Content-Type")
 		fullText := string(body)
@@ -406,6 +477,9 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		}
 		if truncated {
 			output["truncated"] = "true"
+		}
+		if bodyTruncated {
+			output["body_truncated"] = fmt.Sprintf("true: only the first %d bytes of the response were read", MaxFetchBytes)
 		}
 		return Result{
 			Tool:    req.Tool,

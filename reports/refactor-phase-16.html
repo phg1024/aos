@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 16 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 16 Report: Confined Run, Network as a Capability</h1>
+    <p>Design-review item 8. Before this phase, <code>run</code> was <code>sh -c</code> as the host user. Mounts and scopes limited only the file tools, so a worker's <code>run</code> could read secrets, write outside its mounts, rewrite the state directory, and (in the Metal workflow) write a PASS verdict into the read-only <code>cpu-reference</code> mount. <code>allow_network</code> was enforced nowhere. Now <code>run</code> executes inside an OS sandbox built from the process's capabilities, or is refused. The web tools need network, and <code>web_fetch</code> cannot reach internal addresses.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b><code>internal/sandbox</code></b> (new).
+      <ul>
+        <li><b>macOS:</b> <code>/usr/bin/sandbox-exec</code> with a profile generated per call. The profile denies everything by default. It allows the process's read roots, write roots and per-process scratch directory, plus system and toolchain reads. Read-only roots are denied writes, and the state directory is denied all access; these rules come last, so they override the grants. Only a short list of system services is reachable: directory and logging services, the Metal compiler and the GPU memory service. Name resolution and URL services are left out unless network is allowed.</li>
+        <li><b>Linux:</b> Landlock through raw syscalls (stdlib only). The binary re-executes itself as a helper, which restricts its own thread and then execs <code>sh</code>. TCP is denied unless network is allowed; this needs Landlock ABI 4, and on older kernels a policy without network is refused. A policy Landlock cannot express, such as a state dir inside a writable root, is refused rather than weakened.</li>
+        <li><b>Other platforms:</b> unavailable.</li>
+      </ul></li>
+    <li><b>Fail closed.</b> If <code>run</code> cannot be confined, it fails with <code>ErrRunUnconfined</code> and is logged as <code>capability.denied</code> (<code>unconfined_run</code>). The only exception is a process whose set includes <code>unconfined_run</code>. That field attenuates (Union / DeriveChildSet / Excess), and it appears in the process record, in inspect (<code>[UNCONFINED run]</code>) and in the HTML report. Every run result says how it was confined (<code>confinement</code>).</li>
+    <li><b>The state directory is protected.</b> <code>tools.Runtime.Protected</code> (the state dir and its lock, set by <code>aos run</code> and <code>aos-tui</code>) is unreachable from <code>run</code> and from the file tools, even where a mount covers it, as with the rasterizer runs' <code>.aos-state</code>.</li>
+    <li><b>Network as a capability.</b>
+      <ul>
+        <li><code>web_search</code> and <code>web_fetch</code> require <code>allow_network</code>.</li>
+        <li><code>web_fetch</code> refuses the model endpoint's host, and any address that is loopback, private, link-local, CGNAT (100.64/10), multicast or unspecified. A <code>network_allow</code> entry (host, address or CIDR) overrides this. The check runs at every dial, including redirects, against the address actually dialled, so DNS rebinding cannot slip past it. Proxies are not used.</li>
+        <li>The body is read through a 4 MiB limit.</li>
+        <li>Refusals are logged as <code>capability.denied</code> (<code>network</code>).</li>
+      </ul></li>
+    <li><b>Bounded timeout.</b> <code>max_run_seconds</code> (default 600) clamps <code>run</code>'s timeout and attenuates to the minimum. The result records <code>timeout</code>, <code>timeout_bound</code> and <code>timeout_clamped</code>.</li>
+    <li><b>Workflow specs.</b>
+      <ul>
+        <li>In the four gated rasterizer workflows, the verifier mounts the workspace read-only and gets a new writable <code>&lt;workspace&gt;-verification</code> directory. Its verification report and log move there, and its prompt says to build and render there.</li>
+        <li>The coordinator mounts that directory and may delegate writes to it.</li>
+        <li><code>aos run</code> creates the directory when its parent exists.</li>
+        <li>The Metal coordinator and writer get <code>allow_network</code>, because they list <code>web_search</code>/<code>web_fetch</code>, which now need it.</li>
+        <li><code>terminal-bench.json</code>'s solver opts in to <code>unconfined_run</code> (it runs inside a disposable container), with <code>max_run_seconds: 900</code>.</li>
+      </ul></li>
+    <li><b>TUI.</b> In direct mode, the interactive agent gets network when its tool list includes a web tool. That also gives its <code>run</code> network.</li>
+  </ul>
+
+  <h2>Measured on This Mac</h2>
+  <ul>
+    <li><b>Real Metal workload under the generated profile</b> (writer layout: writable workspace, read-only cpu-reference). The <code>clang++ … -framework Metal</code> build was clean. With miniforge <code>python3</code> readable as a toolchain prefix, renders produced byte-identical images. Best render: 0.188–0.226 ms sandboxed vs 0.194–0.231 ms plain, over three runs of 50 frames each, so no overhead. Writing "Overall correctness verdict: PASS" into cpu-reference was refused with "Operation not permitted".</li>
+    <li><b>Per-call overhead:</b> a warm C++ build and run took 73–76 ms confined vs 65–66 ms unconfined, about 10 ms for compiling the profile.</li>
+    <li><b>Linux:</b> the Landlock test binary (linux/arm64) ran in an Alpine container on Docker Desktop's 7.0.14 kernel and passed: in-scope writes work, reading a secret, writing outside and writing into the read-only reference fail, TCP is blocked without network and allowed with it, and a state dir nested in a writable root is refused.</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>What it shows</th></tr>
+    <tr><td><code>TestConfinedRunCannotLeaveItsScopes</code> (darwin)</td><td>Real attempts, each refused: reading a secret outside every scope; listing <code>$HOME</code>; writing outside; writing a PASS verdict into and overwriting the read-only reference mount (the Metal case); writing and reading the state dir inside the workspace. None of them leaves a file or a change behind. Reading the reference into the workspace still works.</td></tr>
+    <tr><td><code>TestConfinedRunNetworkNeedsAllowNetwork</code></td><td><code>curl</code> to a local server fails, and the server sees no request. With <code>allow_network</code>, the same curl reaches it.</td></tr>
+    <tr><td><code>TestConfinedRunBuildsAndRunsPrograms</code></td><td>C++ with clang and a Go program both build and run in the workspace, and the test logs the overhead.</td></tr>
+    <tr><td><code>TestWriterAndVerifierCannotTouchEachOther</code></td><td>The verifier writes its report. The writer's run cannot overwrite that report, and the verifier's run cannot change the sources.</td></tr>
+    <tr><td><code>TestRunWithoutSandboxNeedsUnconfinedRun</code></td><td>With the sandbox simulated as unavailable, run gives <code>ErrRunUnconfined</code>. With <code>unconfined_run</code>, it runs and reports that it was unconfined.</td></tr>
+    <tr><td><code>TestRunTimeoutIsClampedToTheBound</code></td><td>A 10h request runs as 1s under <code>max_run_seconds: 1</code>, so <code>sleep 20</code> stops after 1s. Without a bound, a 24h request becomes 10m.</td></tr>
+    <tr><td><code>TestLandlockConfinesRun</code> (linux)</td><td>The same properties on Landlock, plus the refusal of a nested state dir. It was run in Docker as described above.</td></tr>
+    <tr><td><code>TestWebToolsNeedAllowNetwork</code>, <code>TestWebFetchRefusesPrivateTargetsUnlessAllowlisted</code>, <code>TestWebFetchCapsTheBodyWhileReading</code></td><td>Both web tools are refused without network. Refused targets: loopback, <code>localhost</code>, 10/8, the 169.254.169.254 metadata address, a redirect from an allowlisted host to the metadata address, and the model endpoint by name. Each is allowed once allowlisted, by address, CIDR or name. An endless body returns after 4 MiB with <code>body_truncated</code>.</td></tr>
+    <tr><td><code>TestNetworkAndUnconfinedRunDenialsAreLogged</code></td><td>Both refusals are <code>capability.denied</code> kernel events.</td></tr>
+    <tr><td><code>TestUnconfinedRunIsAttenuatedAndVisible</code></td><td>A spec whose worker asks for <code>unconfined_run</code> that its lead cannot grant is invalid. Once granted, the worker is marked in inspect and in the HTML report.</td></tr>
+    <tr><td><code>TestRunAndNetworkFieldsAttenuate</code>, <code>TestRunScopes</code></td><td>The new fields attenuate and show in Excess; RunScopes intersects scopes with mounts.</td></tr>
+    <tr><td><code>TestRasterizerVerifiersAreIsolated</code></td><td>In all four gated specs, the verifier writes only its verification directory, and no other agent's write roots overlap it. Terminal-bench opts in.</td></tr>
+  </table>
+  <p>Also passing: <code>go test ./...</code>, <code>go vet ./...</code>, <code>-race</code> on tools, capability, runtime and <code>cmd/aos</code>, builds for windows/amd64, linux/amd64, linux/arm64 and freebsd/amd64, vet of the sandbox and tools packages for Windows and Linux, and the Harbor adapter self-test. The existing run and web tests now grant the scopes and network they use.</p>
+
+  <h2>What Existing Workflows Need</h2>
+  <ul>
+    <li><b>Rasterizer workflows on this Mac:</b> no change for the writer and benchmarker beyond confinement. The verifier now works in <code>&lt;workspace&gt;-verification</code>. Tools from PATH prefixes outside the home directory, plus miniforge-style prefixes inside it, stay readable. A toolchain elsewhere goes in <code>AOS_SANDBOX_READ</code>.</li>
+    <li><b>Metal:</b> the coordinator and writer now declare <code>allow_network</code> for their web tools.</li>
+    <li><b>Terminal-Bench:</b> <code>unconfined_run</code> and <code>max_run_seconds: 900</code>, already in the spec.</li>
+    <li><b>Live merge workflows:</b> file tools only, so unaffected.</li>
+  </ul>
+
+  <h2>Not Covered</h2>
+  <ul>
+    <li>No CPU, memory, process-count or disk quotas. Only wall time is bounded, by the timeout.</li>
+    <li><b>macOS:</b> <code>stat</code> works on any path, so a command can learn that a path exists but not read it. GPU access (<code>iokit-open</code>) is open. Allowed system services act on the command's behalf. The profile language is deprecated by Apple, although it is present and works on macOS 27.0.1.</li>
+    <li><b>Linux:</b> Landlock does not cover UDP, so DNS queries still go out even without network. It cannot carve a denied subtree out of a granted one, so such policies are refused. Rosetta-translated binaries fail under confinement.</li>
+    <li>An unconfined process (<code>unconfined_run</code>) can reach anything its user can, including the network.</li>
+  </ul>
+</body>
+</html>

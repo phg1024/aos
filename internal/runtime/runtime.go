@@ -1323,13 +1323,19 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 		Args:          call.Args,
 		CapabilitySet: process.CapabilitySet,
 		Mounts:        process.Mounts,
+		PID:           process.PID,
 	})
-	if errors.Is(err, tools.ErrPathDenied) {
+	switch {
+	case errors.Is(err, tools.ErrPathDenied):
 		path := call.Args["path"]
 		if path == "" {
 			path = call.Args["root"]
 		}
 		r.logDenial(process.PID, call.Name, call.Name, path, "path outside the granted scopes or mounts")
+	case errors.Is(err, tools.ErrNetworkDenied):
+		r.logDenial(process.PID, call.Name, "network", call.Args["url"], err.Error())
+	case errors.Is(err, tools.ErrRunUnconfined):
+		r.logDenial(process.PID, call.Name, "unconfined_run", "", err.Error())
 	}
 	return result, err
 }

@@ -72,3 +72,34 @@ func TestFilePathScope(t *testing.T) {
 		}
 	}
 }
+
+// unconfined_run, the network allowlist and the run timeout bound attenuate
+// like the rest of a set: a child gets them only as far as its parent may
+// grant them.
+func TestRunAndNetworkFieldsAttenuate(t *testing.T) {
+	parent := capability.Set{Tools: []string{"run"}, UnconfinedRun: true, AllowNetwork: true, NetworkAllow: []string{"10.0.0.0/8", "localhost"}, MaxRunSeconds: 900}
+	derived := capability.DeriveChildSet(parent, capability.Set{Tools: []string{"run"}, UnconfinedRun: true, AllowNetwork: true, NetworkAllow: []string{"localhost", "192.168.1.5"}, MaxRunSeconds: 3600})
+	if !derived.UnconfinedRun || !reflect.DeepEqual(derived.NetworkAllow, []string{"localhost"}) || derived.MaxRunSeconds != 900 {
+		t.Fatalf("derived = %+v", derived)
+	}
+	narrow := capability.DeriveChildSet(capability.Set{Tools: []string{"run"}}, capability.Set{Tools: []string{"run"}, UnconfinedRun: true})
+	if narrow.UnconfinedRun || narrow.MaxRunSeconds != 0 || narrow.RunTimeoutBound().Seconds() != capability.DefaultMaxRunSeconds {
+		t.Fatalf("a parent without unconfined_run cannot pass it on: %+v", narrow)
+	}
+	excess := capability.Excess(capability.Set{Tools: []string{"run"}}, capability.Set{Tools: []string{"run"}, UnconfinedRun: true, NetworkAllow: []string{"localhost"}, MaxRunSeconds: 1200})
+	if strings.Join(excess, "; ") != "network allow localhost; unconfined_run; max_run_seconds 1200" {
+		t.Fatalf("excess = %v", excess)
+	}
+	if excess := capability.Excess(parent, capability.Set{UnconfinedRun: true, MaxRunSeconds: 60}); len(excess) != 0 {
+		t.Fatalf("within the grant: %v", excess)
+	}
+}
+
+func TestRunScopes(t *testing.T) {
+	mounts := []capability.Mount{{Name: "ws", HostPath: "/ws"}, {Name: "ref", HostPath: "/ref", ReadOnly: true}}
+	set := capability.Set{ReadPaths: []string{"/", "/elsewhere"}, WritePaths: []string{"/ws/out", "/ref"}}
+	read, write, readOnly := capability.RunScopes(set, mounts)
+	if !reflect.DeepEqual(read, []string{"/ws", "/ref"}) || !reflect.DeepEqual(write, []string{"/ws/out"}) || !reflect.DeepEqual(readOnly, []string{"/ref"}) {
+		t.Fatalf("read %v write %v read-only %v", read, write, readOnly)
+	}
+}

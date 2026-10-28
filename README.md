@@ -82,6 +82,28 @@ A run of a process that has already exited is refused with `ErrProcessExited`, b
 
 `aos run --workflow` and `aos-tui` each hold the state directory's lock (`<state-dir>.lock`) while they run. A run that dies, for example from SIGKILL or a power loss, leaves processes that look live. `aos reap <state-dir>` refuses while any run holds the lock. Otherwise it exits every process without an exit record with `{1, "orphaned: owning run is gone", retryable}`, naming its latest checkpoint, so each one can be recovered. On platforms without `flock`, reap refuses, since it cannot tell whether a run is alive.
 
+## Confined `run` and Network
+
+`run` executes inside an OS sandbox derived from the calling process's capabilities.
+- On macOS that is `sandbox-exec` with a profile generated per call.
+- On Linux it is Landlock (ABI 4 or later when network is denied), applied by a re-exec helper with raw syscalls.
+- Elsewhere there is no sandbox.
+
+A confined command:
+- **reads** its read scopes that lie within its mounts, plus the system paths a toolchain needs. On macOS these are `/usr`, `/bin`, `/sbin`, `/System`, `/Library`, `/private/etc`, `/opt/homebrew`, `/Applications/Xcode.app` and `/dev`. On Linux they are `/usr`, `/bin`, `/sbin`, `/lib*`, `/etc`, `/opt`, `/proc`, `/sys`, `/dev` and `/run`. It can also read the install prefix of every `.../bin` on `PATH` (never the home directory itself) and anything listed in `AOS_SANDBOX_READ`.
+- **writes** only its write scopes within its writable mounts, plus a scratch directory of its own. The scratch directory becomes `TMPDIR`, and `GOCACHE` and the xcrun cache are pointed there.
+- **never reaches the state directory**: it can neither read nor write it, even when a mount covers it. The file tools refuse it too.
+- **cannot write read-only mounts**, even inside a writable one.
+- **has no network** unless the set has `allow_network`. On macOS only a short list of system services is reachable, which leaves out name resolution unless network is allowed.
+
+When a command cannot be confined (no sandbox on the platform, or a policy Landlock cannot express), `run` is refused (`capability.denied`, capability `unconfined_run`). The only exception is a process whose capabilities include `"unconfined_run": true`. That flag is meant for agents isolated some other way, such as `workflows/terminal-bench.json` inside its container. It attenuates like any capability, and it shows in the process record, in `aos inspect` (`[UNCONFINED run]`) and in the HTML report. `run` reports its `confinement`. Its `timeout` is clamped to `max_run_seconds` (default 600), and the result records the bound.
+
+`web_fetch` and `web_search` require `allow_network`. `web_fetch` refuses the model endpoint, and any address that is loopback, private, link-local, CGNAT or multicast, unless the set's `network_allow` names the host, the address or a CIDR range containing it. The check runs at every dial, including redirects, against the address actually dialled. Proxies are not used. The body is read up to 4 MiB and no further.
+
+Not covered: CPU, memory, process count and disk usage limits (the timeout bounds wall time). On macOS, metadata (`stat`) is readable everywhere, GPU access (`iokit-open`) is allowed, and Metal prints benign `sandbox_extension_issue_file failed` warnings. On Linux, Landlock does not cover UDP, so DNS queries still go out. Linux Rosetta-translated (amd64-on-arm64) binaries fail under confinement. And a command can still use whatever the allowed system services do on its behalf.
+
+The gated rasterizer workflows give the verifier read-only access to the workspace and a writable `<workspace>-verification` directory, which no other agent can write. With `run` confined, the writer cannot touch the verdict and the verifier cannot change the sources. `aos run --workflow` creates a missing writable mount directory when its parent exists.
+
 ## Leases
 
 `acquire_lease` and `release_lease` use `<state-dir>/leases/leases.json`. The file is read and written under a file lock and replaced atomically, so managers in different processes never both hold a resource. A lease ends when it expires, when its owner releases it, or when its owner exits. The owner can renew a lease, which extends its TTL and keeps its token. Every new grant, takeover or transfer gets a fencing token, strictly increasing per resource, which write sites can compare (nothing enforces it yet). Grants, renewals, releases, takeovers (`reason: expired` or `owner_exited`) and transfers are logged as `lease.*` kernel events, and `aos inspect` lists the live leases. Files from before versioning, a bare map of leases, are still read.

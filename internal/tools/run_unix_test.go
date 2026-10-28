@@ -32,7 +32,7 @@ func TestRunToolTimeoutKillsDescendants(t *testing.T) {
 			"timeout": "300ms",
 		},
 		Mounts:        []capability.Mount{{Name: "workspace", HostPath: root}},
-		CapabilitySet: capability.Set{Tools: []string{"run"}},
+		CapabilitySet: capability.Set{Tools: []string{"run"}, ReadPaths: []string{root}, WritePaths: []string{root}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("expected timeout error, got %v", err)
@@ -67,7 +67,7 @@ func TestRunToolCancelledByContext(t *testing.T) {
 		Tool:          "run",
 		Args:          map[string]string{"command": "sleep 30", "timeout": "60s"},
 		Mounts:        []capability.Mount{{Name: "workspace", HostPath: root}},
-		CapabilitySet: capability.Set{Tools: []string{"run"}},
+		CapabilitySet: capability.Set{Tools: []string{"run"}, ReadPaths: []string{root}, WritePaths: []string{root}},
 	})
 	if !errors.Is(err, tools.ErrToolCancelled) || !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected ErrToolCancelled wrapping context.Canceled, got %v", err)

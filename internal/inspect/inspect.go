@@ -51,6 +51,8 @@ type Process struct {
 	State            string             `json:"state"`
 	Exit             *kernel.ExitStatus `json:"exit,omitempty"`
 	LatestCheckpoint string             `json:"latest_checkpoint,omitempty"`
+	// UnconfinedRun marks a process whose run commands skip the sandbox.
+	UnconfinedRun bool `json:"unconfined_run,omitempty"`
 }
 
 // Usage totals model calls, per process or for the whole run.
@@ -205,6 +207,7 @@ func processTree(processes []kernel.Process, checkpoints map[string]string) []Pr
 			PID: process.PID, ParentPID: process.ParentPID, Depth: depth,
 			AgentID: process.Metadata["agent_id"], Role: process.Role, State: string(process.State),
 			Exit: process.ExitStatus, LatestCheckpoint: checkpoints[process.PID],
+			UnconfinedRun: process.CapabilitySet.UnconfinedRun,
 		})
 		list := children[process.PID]
 		byPID(list)
@@ -235,6 +238,9 @@ func (r Report) WriteText(w io.Writer) {
 			name = process.Role
 		}
 		line := fmt.Sprintf("%s%s %s  %s", strings.Repeat("  ", process.Depth+1), process.PID, name, process.State)
+		if process.UnconfinedRun {
+			line += "  [UNCONFINED run]"
+		}
 		if exit := process.Exit; exit != nil {
 			line += fmt.Sprintf("  code=%d", exit.Code)
 			if exit.Origin != "" {
