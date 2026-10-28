@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 14 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #111827; color: #e5e7eb; padding: 14px; border-radius: 10px; overflow-x: auto; font-size: 12.5px; line-height: 1.4; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 14 Report: A Run That Survives Its Own Death</h1>
+    <p>Design-review item 6. A run now writes a durable record while it runs: an engine trace joined to kernel event IDs, and a ledger of every model call with usage and a hash-checked prompt. A run that is SIGKILLed mid-step can be rebuilt from its state directory by <code>aos inspect</code>, with no model. A run that stops on a Go error still writes its report and summary.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b><code>internal/runlog</code></b>: an append-only JSONL log. Each <code>seq</code> is assigned and its line written under a file lock (<code>&lt;file&gt;.lock</code>), so seq is gap-free across goroutines and processes. Each line is fsynced before <code>Append</code> returns. The last seq is found by scanning backward, so a torn last line from a killed writer is skipped by readers and newline-terminated by the next writer.</li>
+    <li><b>Durable trace</b> (<code>&lt;state-dir&gt;/run/trace.jsonl</code>). <code>agentflow.TraceToLog</code> writes every engine trace event. Start, exit, runtime-error, cancelled and <code>capability_denied</code> records carry the matching <code>kernel_event</code>. <code>kernel.RecordEvent</code> now returns the event it logged, so denials can name theirs. <code>agentflow.Tracers</code> fans out to the file and to stdout or the TUI.</li>
+    <li><b>Call ledger</b> (<code>&lt;state-dir&gt;/run/calls.jsonl</code>). The OpenAI-compatible backend records each call with its pid, agent, repair flag, usage (prompt, cached and completion tokens), latency, error, params and the sha256 of the exact request body. <code>runtime.CallInfo</code> carries the pid and agent through the context; repair calls are marked with <code>runtime.AsRepair</code>.</li>
+    <li><b>Cheap prompts.</b> A call stores only the messages appended since its process's previous successful non-repair call, with <code>base</code> giving how many it carries over. A call that does not extend the previous one (after compaction, for example) stores everything, with base 0. So the system prompt is stored once per process, and <code>inference.RebuildRequestBody</code> reproduces any request whose hash matches.</li>
+    <li><b><code>aos inspect &lt;state-dir&gt; [--json] [--tail N]</code></b> (<code>internal/inspect</code>). It shows the process tree with exit records and origins, the processes with no exit record, each process's latest checkpoint, the latest verification verdict, usage per process and in total, and the trace tail.</li>
+    <li><b>Go-error path.</b> <code>Engine.Run</code> returns the partial summary (root PID, exit code 1, the error) alongside the error. <code>aos run --workflow</code> then still writes the HTML report, with the error first under Issues, and the summary JSON with <code>error</code>, <code>trace_path</code> and <code>calls_path</code>.</li>
+    <li><b>Harbor adapter.</b> Token counts come from <code>aos inspect --json</code> (<code>total_usage</code>), with the run summary as a fallback. When the agent timed out, so <code>run()</code> recorded nothing, they come from <code>calls.jsonl</code> in the downloaded state dir.</li>
+    <li><b>TUI.</b> <code>aos-tui</code> writes the same two files under its state dir.</li>
+  </ul>
+
+  <h2>Bug Found Along the Way</h2>
+  <p>Writing the Go-error test showed that an agent whose every model call failed (backend down, with <code>continue_on_tool_error</code>) never wrote a checkpoint. A backend error moves to the next step before checkpointing. The step-limit exit then returned an empty checkpoint ID, and the engine failed with a bare <code>file does not exist</code> that hid the real cause. Two fixes:</p>
+  <ul>
+    <li>The step-limit exit now writes a final checkpoint, so the backend errors are on disk.</li>
+    <li>The engine falls back to the returned session when there is no checkpoint.</li>
+  </ul>
+  <p>Such a run is now an ordinary workflow failure: <code>step limit exceeded</code>, exit code 1, and the report is written.</p>
+
+  <h2>A Killed Run, Rebuilt</h2>
+  <p>A scripted coordinator delegates to a writer, which exits. The coordinator then delegates again, and the process is SIGKILLed while the second writer's model call is in flight. This is the real CLI output afterwards:</p>
+  <pre>state dir: /private/tmp/claude-501/-Users-peihongguo--claude-spares-spare-dpmCIS/5b833e38-b8eb-41ae-984d-5672d4b7086e/scratchpad/killdemolt;scratch/private/tmp/claude-501/-Users-peihongguo--claude-spares-spare-dpmCIS/5b833e38-b8eb-41ae-984d-5672d4b7086e/scratchpad/killdemogt;/state
+
+processes (4, 3 not exited):
+  pid-000001 workflow:killed  ready
+    pid-000002 coordinator  running  checkpoint art-000006
+      pid-000003 writer  exited  code=0 origin=agent &quot;drafted&quot;  checkpoint art-000003
+      pid-000004 writer  running
+
+not exited (no exit record): pid-000001, pid-000002, pid-000004
+
+usage (4 model calls):
+  coordinator    pid-000002  calls=2    prompt=500      cached=100      completion=5       latency=0s       repairs=0 errors=0
+  writer         pid-000003  calls=2    prompt=500      cached=100      completion=5       latency=0s       repairs=0 errors=0
+  total                      calls=4    prompt=1000     cached=200      completion=10      latency=0s       repairs=0 errors=0
+
+trace (last 8 of 8):
+  #1     15:22:11 coordinator pid-000002 start go [evt-000002]
+  #2     15:22:11 coordinator pid-000002 delegate to=writer goal=draft
+  #3     15:22:11 writer pid-000003 start draft [evt-000004]
+  #4     15:22:11 writer pid-000003 message draft text
+  #5     15:22:11 writer pid-000003 exit code=0 reason=drafted retryable=false [evt-000006]
+  #6     15:22:11 coordinator pid-000002 delegate_result from=writer pid=pid-000003 reason=drafted
+  #7     15:22:11 coordinator pid-000002 delegate to=writer goal=revise
+  #8     15:22:11 writer pid-000004 start revise [evt-000007]</pre>
+  <p>The root process stays <code>ready</code>, because only the engine moves it, at the end. Three processes have no exit record, which is exactly what a kill leaves. Usage totals are the sums of the ledger's records.</p>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>What it shows</th></tr>
+    <tr><td><code>TestInspectReconstructsKilledRun</code></td><td>The SIGKILLed subprocess above. Checks the tree and states, the three non-exited pids, the first writer's agent-origin exit and checkpoint, the coordinator's checkpoint, usage totals and per-process usage, the full trace order, and four kernel-event joins.</td></tr>
+    <tr><td><code>runlog</code> concurrency test</td><td>Five writers (a subprocess plus goroutines) append 40 lines each. No line is lost and seq runs 1..200 with no gaps.</td></tr>
+    <tr><td><code>runlog</code> torn-line test</td><td>A torn last line is skipped by <code>Read</code> and terminated by the next <code>Append</code>, and seq continues.</td></tr>
+    <tr><td><code>inference</code> call-ledger test</td><td>Five calls: extension, repair, extension, then a compaction reset. Bases are [0,1,2,2,0]. Each rebuilt body hashes to both the recorded hash and the hash of the body actually sent.</td></tr>
+    <tr><td><code>TestRunWorkflowReportsGoError</code></td><td>A run cancelled during its first call returns <code>ErrRunCancelled</code>. It writes the report (with the error) and the summary (root pid, code 1, error, trace path). The trace ends with <code>cancelled</code> plus its kernel event, and every process has an exit record.</td></tr>
+    <tr><td><code>TestRunWorkflowReportsBackendFailure</code></td><td>A backend that fails every call is a step-limit workflow failure, not <code>file does not exist</code>.</td></tr>
+    <tr><td><code>internal/inspect</code> tests</td><td>Load against a hand-built state dir: tree order, latest checkpoint, not-exited list, verdict, usage with repairs and errors, the tail, rejection of a non-state dir, and the text and JSON writers.</td></tr>
+    <tr><td>Harbor adapter self-test</td><td>11 tests, including ledger totals that skip a torn last line.</td></tr>
+  </table>
+  <p>Also passing: <code>go test ./...</code>, <code>go vet ./...</code>, <code>-race</code> on the new packages and <code>cmd/aos</code>, and <code>GOOS=windows</code> and <code>GOOS=linux</code> builds of <code>./...</code>.</p>
+
+  <h2>Where This Differs From the Brief</h2>
+  <ul>
+    <li>The system prompt is not stored as a separate <code>inference_prompt</code> artifact. It is the first record of each process's chain in <code>calls.jsonl</code> (base 0). That keeps prompts out of the artifact graph and the hash next to the request it covers.</li>
+    <li>In <code>aos-tui</code>, the trace file holds the engine trace of delegated agents. The interactive root agent's own steps appear only in the call ledger, which covers every call, and in the kernel log.</li>
+    <li>Only the OpenAI-compatible backend records calls. Other <code>JSONCompleter</code>s simply leave <code>calls.jsonl</code> empty.</li>
+  </ul>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>Both files are diagnostic, not authoritative. They sit in the state directory, so anyone who can write there can edit them, the same limit noted for artifacts in phase 13.</li>
+    <li>The trace is only as fine as the engine's trace events. A step killed between its model call and its trace record shows in the ledger but not in the trace.</li>
+  </ul>
+</body>
+</html>

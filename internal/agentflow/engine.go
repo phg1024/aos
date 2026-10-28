@@ -119,19 +119,37 @@ type TraceEvent struct {
 	PID     string
 	Kind    string
 	Detail  string
+	// KernelEvent is the ID of the kernel event this trace event reports
+	// (spawn, exit, capability denial), so the trace joins the kernel log.
+	KernelEvent string
 }
 
 func (e *Engine) emitTrace(agentID, pid, kind, detail string) {
+	e.emitKernelTrace(agentID, pid, kind, detail, "")
+}
+
+func (e *Engine) emitKernelTrace(agentID, pid, kind, detail, kernelEvent string) {
 	if e.Trace == nil {
 		return
 	}
 	e.Trace(TraceEvent{
-		Time:    time.Now(),
-		AgentID: agentID,
-		PID:     pid,
-		Kind:    kind,
-		Detail:  detail,
+		Time:        time.Now(),
+		AgentID:     agentID,
+		PID:         pid,
+		Kind:        kind,
+		Detail:      detail,
+		KernelEvent: kernelEvent,
 	})
+}
+
+// lastKernelEvent is the event behind pid's current record: its spawn
+// right after Spawn, its exit right after Exit.
+func (e *Engine) lastKernelEvent(pid string) string {
+	process, err := e.Kernel.Get(pid)
+	if err != nil {
+		return ""
+	}
+	return process.LastEventID
 }
 
 func NewStdoutTracer() func(TraceEvent) {
@@ -256,8 +274,10 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	}
 	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil)
 	if err != nil {
-		_, _ = e.Kernel.Exit(root.PID, kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false})
-		return RunSummary{}, err
+		// Return what exists so callers can still report on the failed run.
+		summary.ExitStatus = kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
+		_, _ = e.Kernel.Exit(root.PID, summary.ExitStatus)
+		return summary, err
 	}
 	summary.EntryPID = run.PID
 	summary.ResultID = run.ResultID
@@ -333,7 +353,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	if err != nil {
 		return AgentRun{}, err
 	}
-	e.emitTrace(agent.ID, process.PID, "start", req.Goal)
+	e.emitKernelTrace(agent.ID, process.PID, "start", req.Goal, process.LastEventID)
 
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
@@ -348,6 +368,10 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),
+		OnCapabilityDenied: func(event kernel.Event) {
+			e.emitKernelTrace(agent.ID, process.PID, "capability_denied",
+				fmt.Sprintf("action=%s capability=%s path=%s reason=%s", event.Data["action"], event.Data["capability"], event.Data["path"], event.Data["reason"]), event.ID)
+		},
 	}
 	backend, err := e.Factory.BackendFor(agent, spec)
 	if err != nil {
@@ -381,12 +405,14 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 			kind = "cancelled"
 		}
 		_, _ = e.Kernel.Exit(process.PID, status)
-		e.emitTrace(agent.ID, process.PID, kind, err.Error())
+		e.emitKernelTrace(agent.ID, process.PID, kind, err.Error(), e.lastKernelEvent(process.PID))
 		return AgentRun{}, err
 	}
-	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)
-	if err != nil {
-		return AgentRun{}, err
+	session := result.Session
+	if result.CheckpointID != "" {
+		if session, err = agentRuntime.RestoreCheckpoint(result.CheckpointID); err != nil {
+			return AgentRun{}, err
+		}
 	}
 	run := AgentRun{
 		AgentID:       agent.ID,
@@ -397,7 +423,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		FinalMessage:  finalAssistantMessage(session.Messages),
 		ToolArtifacts: append([]string(nil), session.ToolArtifactIDs...),
 	}
-	e.emitTrace(agent.ID, process.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable))
+	e.emitKernelTrace(agent.ID, process.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable), e.lastKernelEvent(process.PID))
 	run.Delegates = delegateMessages(session.Messages)
 	run.Children = append(run.Children, childRuns...)
 	for _, child := range childRuns {

@@ -61,6 +61,19 @@ Kernel state lives under `<state-dir>/kernel` and is reachable only through `ker
 
 Artifacts under `<state-dir>/artifacts` are content-addressed: the index records each payload's sha256 and every read verifies it, so a payload changed on disk fails with `ErrArtifactTampered`. This makes payload edits evident; it does not stop an actor who can write the state directory itself, who could also rewrite or drop the recorded hash (entries without one are trusted as pre-hashing legacy). Keeping agents out of the state directory is the job of confining `run`. Payloads and the index are written atomically under a cross-process lock. An artifact's parents must exist and its producer must be a process the kernel knows, and runs link their artifacts: checkpoints chain to the previous one, records name the checkpoint they ran under, and the `workflow_summary` points at every `agent_run` and the verdict. Runtime types such as `checkpoint`, `verification` and `memory_segment` are reserved; agents publish under `published.<name>`. A process resumes only from its own checkpoints (or its `resumed_from` chain), and compacted history lives in runtime-owned `memory_segment` artifacts that agents read back with `read_memory`.
 
+## Run Record
+
+A run keeps its own record on disk as it goes, so a killed run can still be reconstructed. Under `<state-dir>/run`:
+
+- `trace.jsonl` holds the engine trace (start, delegate, tool calls, exit, `capability_denied`, and so on). Records that match a kernel event, such as start, exit, runtime errors and denials, name it in `kernel_event`.
+- `calls.jsonl` holds one record per model call: process and agent, usage (prompt, cached and completion tokens), latency, error, request params, and the sha256 of the exact request body. Prompts are stored by delta: a call records only the messages added since its process's previous successful call (`base` is how many it carries over). So the system prompt is written once, in the process's first call, and `inference.RebuildRequestBody` reproduces any request byte for byte. Repair calls are flagged `repair`.
+
+Both are append-only JSONL. Each record gets a `seq` assigned under a file lock (`*.lock`), and the line is fsynced before the call returns. Several writers, including other processes, keep `seq` gap-free, and a kill can leave at most a torn last line, which readers skip. These files are diagnostic; the kernel event log stays the source of truth.
+
+`aos inspect <state-dir>` rebuilds a run from these files and the kernel and artifact stores, without a model. It shows the process tree with exit records, which processes never exited, each process's latest checkpoint, the verification verdict, token usage per process and in total, and the trace tail. Use `--json` for machine-readable output and `--tail N` to set the trace length (default 20). The Harbor adapter reads its token counts from `aos inspect --json`, and on a timeout from `calls.jsonl` directly.
+
+If `aos run --workflow` stops on a Go error after the root process started (cancellation, a failed store write), it still writes the report and the summary JSON, with the error in `error`, and it records an exit for every process it started.
+
 ## Verification Policy
 
 Verification is a workflow choice, not a built-in step. `aos run` without `--workflow` takes `--verify none|required|best_effort` (default `none`):

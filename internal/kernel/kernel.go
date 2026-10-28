@@ -187,13 +187,22 @@ func (k *Kernel) Events() ([]Event, error) {
 // LogEvent records a caller event. Types starting with ReservedEventPrefix
 // belong to the kernel and are refused.
 func (k *Kernel) LogEvent(pid, eventType string, data map[string]string) error {
+	_, err := k.RecordEvent(pid, eventType, data)
+	return err
+}
+
+// RecordEvent is LogEvent returning the recorded event, e.g. so a trace can
+// name its kernel event ID.
+func (k *Kernel) RecordEvent(pid, eventType string, data map[string]string) (Event, error) {
 	if strings.HasPrefix(eventType, ReservedEventPrefix) {
-		return fmt.Errorf("%w: %s", ErrReservedEventType, eventType)
+		return Event{}, fmt.Errorf("%w: %s", ErrReservedEventType, eventType)
 	}
-	return k.store.update(func(t *tx) error {
-		t.appendEvent(pid, eventType, data, k.now().UTC())
+	var event Event
+	err := k.store.update(func(t *tx) error {
+		event = t.appendEvent(pid, eventType, data, k.now().UTC())
 		return nil
 	})
+	return event, err
 }
 
 func (k *Kernel) Children(parentPID string) ([]Process, error) {

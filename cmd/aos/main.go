@@ -17,8 +17,10 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/filelock"
 	"aos/internal/inference"
+	"aos/internal/inspect"
 	"aos/internal/kernel"
 	"aos/internal/lease"
+	"aos/internal/runlog"
 	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tools"
@@ -45,9 +47,37 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		run(os.Args[2:])
+	case "inspect":
+		inspectRun(os.Args[2:])
 	default:
 		printUsage()
 	}
+}
+
+// inspectRun prints what a run did from its state directory alone, with
+// no model calls, so it also works after a crash or kill.
+func inspectRun(args []string) {
+	fs := flag.NewFlagSet("inspect", flag.ExitOnError)
+	asJSON := fs.Bool("json", false, "print the report as JSON")
+	tail := fs.Int("tail", 20, "number of trailing trace events to show (-1 for all)")
+	_ = fs.Parse(args)
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: aos inspect [--json] [--tail N] <state-dir>")
+		os.Exit(2)
+	}
+	report, err := inspect.Load(fs.Arg(0), *tail)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if *asJSON {
+		if err := report.WriteJSON(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	report.WriteText(os.Stdout)
 }
 
 func run(args []string) {
@@ -170,23 +200,39 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		Compaction: compaction,
 		Clock:      clock,
 	}
-	if trace {
-		engine.Trace = agentflow.NewStdoutTracer()
+	// The trace and the model-call ledger go to disk as the run happens, so
+	// a killed run can still be inspected (aos inspect).
+	traceLog, err := runlog.Open(runlog.Path(stateDir, runlog.TraceFile))
+	if err != nil {
+		return err
 	}
+	callLog, err := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
+	if err != nil {
+		return err
+	}
+	if recorder, ok := backend.(interface{ SetCallLog(*runlog.Log) }); ok {
+		recorder.SetCallLog(callLog)
+	}
+	var stdoutTrace func(agentflow.TraceEvent)
+	if trace {
+		stdoutTrace = agentflow.NewStdoutTracer()
+	}
+	engine.Trace = agentflow.Tracers(agentflow.TraceToLog(traceLog), stdoutTrace)
 
-	summary, err := engine.Run(ctx, spec, agentflow.RunRequest{
+	summary, runErr := engine.Run(ctx, spec, agentflow.RunRequest{
 		Goal:       goal,
 		InputPaths: inputs,
 		OutputPath: outputPath,
 	})
-	if err != nil {
-		return err
+	if runErr != nil && summary.RootPID == "" {
+		// Nothing ran: the spec was invalid or the root could not start.
+		return runErr
 	}
 
 	if reportPath != "" {
 		report, err := agentflow.CollectRunReport(k, store, "AOS Workflow Run", summary)
 		if err != nil {
-			return err
+			return errors.Join(runErr, err)
 		}
 		report.Decisions = []string{
 			"Executed the user-supplied workflow spec without imposing built-in planner or verifier semantics.",
@@ -198,8 +244,11 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		report.Tests = []string{
 			"Runtime, workflow, and workflow-spec tests were expected to pass before this live run.",
 		}
+		if runErr != nil {
+			report.Issues = append([]string{"The run stopped on an error: " + runErr.Error()}, report.Issues...)
+		}
 		if err := os.WriteFile(reportPath, []byte(agentflow.RenderHTML(report)), 0o644); err != nil {
-			return err
+			return errors.Join(runErr, err)
 		}
 	}
 
@@ -213,6 +262,11 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		"report_path":   reportPath,
 		"agent_run_cnt": countAgentRuns(summary.AgentRuns),
 		"exit_status":   summary.ExitStatus,
+		"trace_path":    traceLog.Path(),
+		"calls_path":    callLog.Path(),
+	}
+	if runErr != nil {
+		result["error"] = runErr.Error()
 	}
 	if summary.Verification != nil {
 		result["verification"] = summary.Verification
@@ -226,6 +280,9 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		return err
 	}
 	fmt.Println(string(bytes))
+	if runErr != nil {
+		return runErr
+	}
 	if summary.ExitStatus.Code != 0 {
 		return workflowFailed{status: summary.ExitStatus}
 	}
@@ -315,6 +372,7 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  aos run --input A --input B --input C --output D [--verify none|required|best_effort] \"assemble files A, B, C into D\"")
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
+	fmt.Println("  aos inspect [--json] [--tail N] <state-dir>")
 }
 
 func getenv(key, fallback string) string {

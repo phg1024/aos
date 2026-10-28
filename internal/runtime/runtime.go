@@ -147,6 +147,9 @@ type AgentRuntime struct {
 	Compaction CompactionPolicy
 	// Clock, when set, adds a time-budget note to the history each step.
 	Clock *Clock
+	// OnCapabilityDenied, when set, receives each capability.denied kernel
+	// event this runtime records.
+	OnCapabilityDenied func(kernel.Event)
 }
 
 // CompactionPolicy decides when older history is compacted. A zero
@@ -358,7 +361,8 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			return RunResult{}, err
 		}
 
-		result, err := r.Backend.Generate(ctx, GenerateRequest{
+		callCtx := WithCallInfo(ctx, CallInfo{PID: pid, AgentID: process.Metadata["agent_id"]})
+		result, err := r.Backend.Generate(callCtx, GenerateRequest{
 			Process:    process,
 			History:    append([]Message(nil), session.Messages...),
 			MemoryRefs: append([]MemoryRef(nil), session.MemoryRefs...),
@@ -788,6 +792,15 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		checkpointID = artifactRecord.ID
 	}
 
+	// Checkpoint the last steps too: ones that ended in a backend error
+	// continued without one, and may be every step the agent took.
+	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
+		"kind": "final",
+	})
+	if err != nil {
+		return RunResult{}, err
+	}
+	checkpointID = artifactRecord.ID
 	exitStatus := kernel.ExitStatus{Code: 1, Reason: "step limit exceeded", Retryable: true}
 	if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
 		return RunResult{}, err
@@ -1199,7 +1212,10 @@ func (r *AgentRuntime) logDenial(pid, action, capabilityName, path, reason strin
 	if path != "" {
 		data["path"] = path
 	}
-	_ = r.Kernel.LogEvent(pid, "capability.denied", data)
+	event, err := r.Kernel.RecordEvent(pid, "capability.denied", data)
+	if err == nil && r.OnCapabilityDenied != nil {
+		r.OnCapabilityDenied(event)
+	}
 }
 
 // refuseAction handles a denied action the way a failed tool call is

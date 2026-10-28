@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"aos/internal/agentflow"
 	"aos/internal/kernel"
+	"aos/internal/runlog"
 	"aos/internal/runtime"
 )
 
@@ -56,6 +60,104 @@ func TestRunWorkflowSucceedsWhenEntrySucceeds(t *testing.T) {
 		writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
+	}
+}
+
+// failingCompleter fails every completion, as a backend that is down does.
+type failingCompleter struct{}
+
+func (failingCompleter) CompleteJSON(context.Context, string, string, any) error {
+	return errors.New("backend unreachable")
+}
+
+// cancellingCompleter cancels the run during its first completion, as Esc
+// or Ctrl-C does.
+type cancellingCompleter struct{ cancel context.CancelFunc }
+
+func (c cancellingCompleter) CompleteJSON(ctx context.Context, _ string, _ string, _ any) error {
+	c.cancel()
+	return ctx.Err()
+}
+
+// captureStdout returns what fn printed.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	saved := os.Stdout
+	os.Stdout = writer
+	done := make(chan string)
+	go func() {
+		bytes, _ := io.ReadAll(reader)
+		done <- string(bytes)
+	}()
+	fn()
+	os.Stdout = saved
+	writer.Close()
+	return <-done
+}
+
+// A backend that fails every call is a failed workflow, not a Go error:
+// the agent runs out of steps and its last checkpoint holds the errors.
+func TestRunWorkflowReportsBackendFailure(t *testing.T) {
+	dir := t.TempDir()
+	var err error
+	captureStdout(t, func() {
+		err = runWorkflow(context.Background(), failingCompleter{}, runtime.CompactionPolicy{}, nil,
+			writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
+	})
+	var failed workflowFailed
+	if !errors.As(err, &failed) || !strings.Contains(failed.Error(), "step limit exceeded") {
+		t.Fatalf("expected a step-limit workflow failure, got %v", err)
+	}
+}
+
+// A run that stops on a Go error after the root started still writes its
+// report and summary, leaves no process without an exit record, and the
+// trace records the stop against its kernel exit event.
+func TestRunWorkflowReportsGoError(t *testing.T) {
+	dir := t.TempDir()
+	report := filepath.Join(dir, "report.html")
+	stateDir := filepath.Join(dir, "state")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var err error
+	out := captureStdout(t, func() {
+		err = runWorkflow(ctx, cancellingCompleter{cancel}, runtime.CompactionPolicy{}, nil,
+			writeSoloWorkflow(t, dir), nil, "", report, stateDir, "go", false)
+	})
+	if !errors.Is(err, runtime.ErrRunCancelled) {
+		t.Fatalf("expected the cancellation, got %v", err)
+	}
+	html, readErr := os.ReadFile(report)
+	if readErr != nil {
+		t.Fatalf("the report should be written on a Go error: %v", readErr)
+	}
+	if !strings.Contains(string(html), "The run stopped on an error") {
+		t.Fatal("the report should name the error")
+	}
+	var summary map[string]any
+	if jsonErr := json.Unmarshal([]byte(out), &summary); jsonErr != nil {
+		t.Fatalf("summary is not JSON: %v\n%s", jsonErr, out)
+	}
+	if summary["root_pid"] != "pid-000001" || !strings.Contains(summary["error"].(string), "cancelled") || summary["trace_path"] != runlog.Path(stateDir, runlog.TraceFile) {
+		t.Fatalf("summary = %v", summary)
+	}
+	if code := summary["exit_status"].(map[string]any)["code"]; code != float64(1) {
+		t.Fatalf("root exit code = %v", code)
+	}
+	trace, _ := runlog.Read[agentflow.TraceRecord](runlog.Path(stateDir, runlog.TraceFile))
+	if len(trace) == 0 || trace[len(trace)-1].Kind != "cancelled" || trace[len(trace)-1].KernelEvent == "" {
+		t.Fatalf("trace = %+v", trace)
+	}
+	k, _ := kernel.New(filepath.Join(stateDir, "kernel"))
+	processes, _ := k.Processes()
+	for _, process := range processes {
+		if process.State != kernel.StateExited {
+			t.Fatalf("%s left without an exit record", process.PID)
+		}
 	}
 }
 

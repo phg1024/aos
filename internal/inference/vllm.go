@@ -40,6 +40,7 @@ type VLLMBackend struct {
 	maxRetries    int
 	onStreamEvent func(StreamEvent)
 	sampling      Sampling
+	calls         *callRecorder
 
 	usageMu sync.Mutex
 	usage   TokenUsage
@@ -213,6 +214,15 @@ type chatCompletionChunk struct {
 }
 
 func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
+	payload := b.request(messages)
+	started := time.Now()
+	var usage *responseUsage
+	content, err := b.send(ctx, payload, &usage)
+	b.recordCall(ctx, payload, usage, time.Since(started), err)
+	return content, err
+}
+
+func (b *VLLMBackend) request(messages []chatMessage) chatCompletionRequest {
 	payload := chatCompletionRequest{
 		Model:                 b.model,
 		Messages:              messages,
@@ -225,6 +235,11 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 	if payload.Stream {
 		payload.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
+	return payload
+}
+
+// send posts payload, retrying timeouts, and sets *usage from the reply.
+func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, usage **responseUsage) (string, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -308,6 +323,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 				return fullResponse.String(), err
 			}
 			b.recordUsage(streamUsage)
+			*usage = streamUsage
 			b.onStreamEvent(StreamEvent{Kind: StreamDone})
 			return fullResponse.String(), nil
 		}
@@ -330,6 +346,7 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 			return "", ErrMalformedModelResponse
 		}
 		b.recordUsage(parsed.Usage)
+		*usage = parsed.Usage
 		return parsed.Choices[0].Message.Content, nil
 	}
 	if lastErr != nil {

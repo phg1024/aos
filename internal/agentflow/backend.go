@@ -140,7 +140,7 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 
 	// Ask for a correction inside the same conversation, so the server can
 	// resume from the transcript it just read instead of starting over.
-	repaired, err := completer.CompleteMessages(ctx, append(append([]runtime.Message(nil), messages...),
+	repaired, err := completer.CompleteMessages(runtime.AsRepair(ctx), append(append([]runtime.Message(nil), messages...),
 		runtime.Message{Role: "assistant", Content: raw},
 		runtime.Message{Role: "user", Content: repairInstruction},
 	))
@@ -173,7 +173,7 @@ func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawComplet
 		return parsed, nil
 	}
 
-	repaired, err := completer.CompleteText(ctx, repairSystemPrompt(), repairUserPrompt(systemPrompt, userPrompt, raw))
+	repaired, err := completer.CompleteText(runtime.AsRepair(ctx), repairSystemPrompt(), repairUserPrompt(systemPrompt, userPrompt, raw))
 	if err != nil {
 		return runtime.GenerateResult{}, err
 	}

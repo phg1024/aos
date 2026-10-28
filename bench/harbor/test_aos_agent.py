@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aos_agent import agent_timeout_sec, container_base_url, parse_run_summary
+from aos_agent import agent_timeout_sec, container_base_url, parse_run_summary, usage_from_ledger
 
 
 class ContainerBaseURLTest(unittest.TestCase):
@@ -57,6 +57,20 @@ class AgentTimeoutTest(unittest.TestCase):
 
     def test_missing_task_toml(self):
         self.assertIsNone(agent_timeout_sec(self.dir / "absent.toml", self.job))
+
+
+class UsageFromLedgerTest(unittest.TestCase):
+    def test_totals_skip_a_torn_last_line(self):
+        path = Path(tempfile.mkdtemp()) / "calls.jsonl"
+        path.write_text(
+            '{"seq":1,"prompt_tokens":100,"cached_tokens":60,"completion_tokens":7}\n'
+            '{"seq":2,"prompt_tokens":120,"cached_tokens":100,"completion_tokens":9}\n'
+            '{"seq":3,"prompt_tok'
+        )
+        self.assertEqual(usage_from_ledger(path), {"requests": 2, "prompt_tokens": 220, "cached_tokens": 160, "completion_tokens": 16})
+
+    def test_missing_ledger(self):
+        self.assertIsNone(usage_from_ledger(Path(tempfile.mkdtemp()) / "absent.jsonl"))
 
 
 if __name__ == "__main__":

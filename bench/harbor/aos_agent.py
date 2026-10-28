@@ -95,6 +95,34 @@ def agent_timeout_sec(task_toml: Path, job_config: Path) -> float | None:
     return float(base) * float(multiplier)
 
 
+def usage_from_ledger(path: Path) -> dict | None:
+    """Total the model-call ledger (calls.jsonl) AOS writes as it runs.
+
+    The ledger survives a killed run, so it is the usage source when the
+    trial timed out. A torn last line from the kill is skipped.
+    """
+    if not path.is_file():
+        return None
+    totals = {"requests": 0, "prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0}
+    with path.open() as ledger:
+        for line in ledger:
+            try:
+                call = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            totals["requests"] += 1
+            for key in ("prompt_tokens", "cached_tokens", "completion_tokens"):
+                totals[key] += call.get(key) or 0
+    return totals
+
+
+def apply_usage(context: AgentContext, usage: dict, source: str) -> None:
+    context.n_input_tokens = usage.get("prompt_tokens")
+    context.n_output_tokens = usage.get("completion_tokens")
+    context.n_cache_tokens = usage.get("cached_tokens")
+    context.metadata = {**(context.metadata or {}), "requests": usage.get("requests") or usage.get("calls"), "usage_source": source}
+
+
 def parse_run_summary(output: str) -> dict | None:
     """Return the JSON summary `aos run` prints last, if present.
 
@@ -185,9 +213,22 @@ class AOSAgent(BaseInstalledAgent):
             metadata["aos_exit"] = output.rsplit("aos_exit=", 1)[1].strip().splitlines()[0]
         if summary:
             metadata["agent_runs"] = summary.get("agent_run_cnt")
-            usage = summary.get("usage") or {}
-            context.n_input_tokens = usage.get("prompt_tokens")
-            context.n_output_tokens = usage.get("completion_tokens")
-            context.n_cache_tokens = usage.get("cached_tokens")
-            metadata["requests"] = usage.get("requests")
         context.metadata = {**(context.metadata or {}), **metadata}
+
+        # Usage comes from the call ledger via aos inspect; the final summary
+        # is only a fallback.
+        inspected = await self.exec_as_agent(
+            environment, command=f"{REMOTE_BIN} inspect --json --tail 0 {LOG_DIR}/aos-state || true"
+        )
+        report = parse_run_summary("\n" + (inspected.stdout or ""))
+        if report and report.get("total_usage"):
+            apply_usage(context, report["total_usage"], "ledger")
+        elif summary and summary.get("usage"):
+            apply_usage(context, summary["usage"], "summary")
+
+    def populate_context_post_run(self, context: AgentContext) -> None:
+        # Harbor calls this when run() recorded nothing, e.g. after an agent
+        # timeout killed it; the synced ledger still has every finished call.
+        usage = usage_from_ledger(self.logs_dir / "aos-state" / "run" / "calls.jsonl")
+        if usage:
+            apply_usage(context, usage, "ledger")

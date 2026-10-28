@@ -20,6 +20,7 @@ import (
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/lease"
+	"aos/internal/runlog"
 	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tokenizer"
@@ -102,6 +103,17 @@ func main() {
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{
 		OnStreamEvent: stream.Handle,
 	})
+	// Model calls and delegated agents' trace go to disk as they happen, so
+	// the session can be inspected later with aos inspect.
+	callLog, err := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
+	if err != nil {
+		fail(err)
+	}
+	backend.SetCallLog(callLog)
+	traceLog, err := runlog.Open(runlog.Path(stateDir, runlog.TraceFile))
+	if err != nil {
+		fail(err)
+	}
 
 	compaction := llmConfig.CompactionPolicy()
 	agentRuntime := &runtime.AgentRuntime{
@@ -143,13 +155,13 @@ func main() {
 				Compaction: compaction,
 			},
 			Compaction: compaction,
-			Trace: func(event agentflow.TraceEvent) {
+			Trace: agentflow.Tracers(agentflow.TraceToLog(traceLog), func(event agentflow.TraceEvent) {
 				if line := progress.Apply(event); line != "" {
 					stream.PrintStatus(line)
 					return
 				}
 				footer.Draw()
-			},
+			}),
 		}
 		agentRuntime.DelegateHandler = engine.DelegateHandler(spec, agentflow.RunRequest{Goal: process.Metadata["goal"]}, agent, nil)
 		observeRoot = func(kind, detail string) {
