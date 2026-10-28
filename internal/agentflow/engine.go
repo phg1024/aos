@@ -536,9 +536,11 @@ func maxSteps(agent AgentSpec) int {
 	return 24
 }
 
+// finalAssistantMessage is the agent's result: its last message, skipping
+// the records of its own tool, delegate and exit actions.
 func finalAssistantMessage(messages []runtime.Message) string {
 	for idx := len(messages) - 1; idx >= 0; idx-- {
-		if messages[idx].Role == "assistant" {
+		if messages[idx].Role == "assistant" && !runtime.IsActionRecord(messages[idx].Content) {
 			return messages[idx].Content
 		}
 	}

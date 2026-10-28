@@ -143,3 +143,36 @@ func TestMessageRecordedNoteOnlyInAutonomousRuns(t *testing.T) {
 		}
 	}
 }
+
+// Every action the runtime records in history is recognisable as a record,
+// so a child's result can skip them; plain messages are not.
+func TestActionRecordsAreRecognisable(t *testing.T) {
+	k, store, process := newCancelFixture(t)
+	steps := []runtime.GenerateResult{
+		toolAction("run", map[string]string{"command": "true"}),
+		{Action: runtime.GenerateAction{Type: "message", Message: "the result"}},
+		exitResult("done"),
+	}
+	backend := &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		return steps[call-1], nil
+	}}
+	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 5}
+	result, err := agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var records, said []string
+	for _, message := range result.Session.Messages {
+		if message.Role != "assistant" {
+			continue
+		}
+		if runtime.IsActionRecord(message.Content) {
+			records = append(records, message.Content)
+		} else {
+			said = append(said, message.Content)
+		}
+	}
+	if len(records) != 2 || len(said) != 1 || said[0] != "the result" {
+		t.Fatalf("records %v, messages %v", records, said)
+	}
+}

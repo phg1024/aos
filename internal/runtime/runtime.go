@@ -828,6 +828,16 @@ func actionRecord(action GenerateAction) string {
 	return strings.TrimSpace(buffer.String())
 }
 
+// actionRecordPrefix starts every action record actionRecord writes.
+const actionRecordPrefix = `{"action":`
+
+// IsActionRecord reports whether an assistant history entry is the record
+// of a non-message action (tool, delegate, exit, ...) rather than something
+// the agent said. A child's result is its last real message.
+func IsActionRecord(content string) bool {
+	return strings.HasPrefix(content, actionRecordPrefix)
+}
+
 func recordableAction(action GenerateAction) bool {
 	switch action.Type {
 	case "tool":

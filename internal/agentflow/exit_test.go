@@ -174,3 +174,33 @@ func TestDelegatedChildExitReachesParent(t *testing.T) {
 		t.Fatalf("DelegateResult.ExitStatus = %+v", result.ExitStatus)
 	}
 }
+
+// A child that sends its result in a message and then exits hands that
+// message to its parent, not the record of its exit action.
+func TestDelegateSummaryIsTheChildsLastMessage(t *testing.T) {
+	completer := &promptCapture{actions: []map[string]any{
+		delegateAction("verifier"),
+		messageAction("<html>merged</html>"),
+		exitWith(0, "delivered", false),
+		exitWith(0, "done", false),
+	}}
+	f := newExitFixture(t, completer)
+	spec := agentflow.WorkflowSpec{
+		Name:       "summary",
+		EntryAgent: "coordinator",
+		Agents: []agentflow.AgentSpec{
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"verifier"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
+			{ID: "verifier", SystemPrompt: "Answer."},
+		},
+	}
+	summary, err := f.engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := summary.AgentRuns[0].Children[0].FinalMessage; got != "<html>merged</html>" {
+		t.Fatalf("child result = %q, want its last message", got)
+	}
+	if after := completer.prompts[3]; !strings.Contains(after, `summary=\u003chtml\u003emerged\u003c/html\u003e`) && !strings.Contains(after, "summary=<html>merged</html>") {
+		t.Fatalf("parent history should carry the message as summary:\n%s", after)
+	}
+}
