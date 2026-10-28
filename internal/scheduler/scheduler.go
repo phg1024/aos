@@ -123,6 +123,11 @@ func (s *Scheduler) dispatch(ctx context.Context, pid string) error {
 
 	decision, err := s.Runner.Step(ctx, pid)
 	if err != nil {
+		// A runner may record its own exit before failing; that exit is final.
+		if current, getErr := s.Kernel.Get(pid); getErr == nil && current.State == kernel.StateExited {
+			s.log(pid, "exit", "error")
+			return nil
+		}
 		exitStatus := kernel.ExitStatus{
 			Code:      1,
 			Reason:    err.Error(),

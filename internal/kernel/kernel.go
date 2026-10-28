@@ -79,10 +79,16 @@ func (k *Kernel) Exit(pid string, status ExitStatus) (Process, error) {
 	if err != nil {
 		return Process{}, err
 	}
-	if process.State != StateExited {
-		if err := ValidateTransition(process.State, StateExited); err != nil {
-			return Process{}, err
+	if process.State == StateExited {
+		// Exit is terminal: repeating the same status is a no-op, any other
+		// status is refused so a recorded exit can never be rewritten.
+		if process.ExitStatus != nil && *process.ExitStatus == status {
+			return process, nil
 		}
+		return Process{}, ErrProcessAlreadyExited
+	}
+	if err := ValidateTransition(process.State, StateExited); err != nil {
+		return Process{}, err
 	}
 	process.State = StateExited
 	process.ExitStatus = &status

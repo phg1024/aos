@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"aos/internal/capability"
@@ -20,6 +21,10 @@ const (
 var ErrInvalidTransition = errors.New("invalid process state transition")
 var ErrProcessNotFound = errors.New("process not found")
 var ErrProcessNotExited = errors.New("process has not exited")
+
+// ErrProcessAlreadyExited is returned when Exit would change the status of a
+// process that has already exited; exit is terminal.
+var ErrProcessAlreadyExited = fmt.Errorf("%w: process already exited", ErrInvalidTransition)
 
 type ExitStatus struct {
 	Code      int    `json:"code"`

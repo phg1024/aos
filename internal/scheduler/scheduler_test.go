@@ -108,3 +108,37 @@ func TestSchedulerExitsRetryableOnRunnerError(t *testing.T) {
 		t.Fatalf("expected retryable exit %#v", exit)
 	}
 }
+
+type selfExitingRunner struct {
+	kernel *kernel.Kernel
+	status kernel.ExitStatus
+}
+
+func (r selfExitingRunner) Step(_ context.Context, pid string) (scheduler.Decision, error) {
+	if _, err := r.kernel.Exit(pid, r.status); err != nil {
+		return scheduler.Decision{}, err
+	}
+	return scheduler.Decision{}, errors.New(r.status.Reason)
+}
+
+func TestSchedulerKeepsExitRecordedByRunner(t *testing.T) {
+	k, err := kernel.New(filepath.Join(t.TempDir(), "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	process, _ := k.Spawn(kernel.ProcessSpec{Role: "worker"})
+	status := kernel.ExitStatus{Code: 1, Reason: "malformed backend output", Retryable: false}
+
+	s := scheduler.New(k, selfExitingRunner{kernel: k, status: status})
+	s.Enqueue(process.PID)
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	got, err := k.Await(process.PID)
+	if err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	if got != status {
+		t.Fatalf("expected runner exit %#v to be kept, got %#v", status, got)
+	}
+}
