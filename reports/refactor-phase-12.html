@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 12 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 12 Report: Authority, Real Runs, and Kernel Integrity</h1>
+    <p>Design-review items 3 and 4, plus three fixes found by running a gated workflow on a real model. Delegation can no longer widen authority. Verdicts hold up against re-running the verifier until it passes. Delegated results reach their parents. Kernel state is written only by the Kernel, with the event log as the source of truth and a lock that works across processes.</p>
+  </div>
+
+  <h2>Item 3: Authority Narrows on Delegation (<code>de0969c</code>, <code>e213f43</code>)</h2>
+  <ul>
+    <li>Agents declare a <code>delegable</code> set: authority they may grant but not use. Validation rejects any <code>allowed_agents</code> edge wider than the parent's capabilities plus delegable set, naming the edge and the excess. At spawn the engine narrows the child to the parent's kernel record, using <code>DeriveChildSet</code> (now based on path containment) and <code>AttenuateMounts</code>.</li>
+    <li>A single check, <code>authorize</code>, covers every tool call, the <code>delegate</code> action (which needs <code>spawn_agent</code>), and <code>send</code>, <code>publish</code> and <code>subscribe</code> (which need <code>message_agent</code>). Each denial is logged as a <code>capability.denied</code> kernel event.</li>
+    <li>Rasterizer coordinators may write only their ledger and <code>final-summary.txt</code>; the workspace and <code>run</code> are delegable.</li>
+    <li>Path checks resolve symlinks first, so a link inside a mount cannot reach outside it.</li>
+  </ul>
+
+  <h2>Real-Model Findings (<code>7549070</code>, <code>055f9fa</code>)</h2>
+  <p><code>live-reviewed-merge</code> was run on the phg-vllm Strata model with good and contradictory inputs.</p>
+  <table>
+    <tr><th>Finding</th><th>Fix</th></tr>
+    <tr><td>The coordinator re-ran the verifier and the latest pass counted.</td><td>A verifier's non-retryable failure stands until a work-changing agent runs again. A retryable failure (step limit, crash) can still be retried.</td></tr>
+    <tr><td>Delegated agents re-sent their message until they hit the step limit.</td><td>In autonomous runs, each message is followed by a <code>message_recorded</code> note.</td></tr>
+    <tr><td>A delegated child's result was its own exit record, so the coordinator never received the merged HTML. This caused an earlier false pass.</td><td>The child's last real message is passed up as its result. <code>runtime.IsActionRecord</code> recognises action records.</td></tr>
+  </table>
+  <p>After the fixes, both runs go merger, then writer, then reviewer, with one message each. Good inputs finish in 104&nbsp;s. The contradictory inputs produce a genuine merge that discloses the conflict.</p>
+
+  <h2>Item 4: The Kernel's Rules Hold for Every Writer</h2>
+  <ul>
+    <li>The store type and its constructor are unexported. <code>kernel.New</code> is the only way in. This is guaranteed at compile time: no other package can name the store.</li>
+    <li><b>The event log is the source of truth.</b> Each update is one transaction. It writes events first, then the process table, then the cached counters. <code>process.spawned</code> carries the whole record; transitions and exits carry their effect. Each record names the event that produced it in <code>last_event_id</code>.</li>
+    <li><b>Repair.</b> Every load replays <code>process.*</code> events that are newer than a record's <code>last_event_id</code>. A table left behind by a crash is therefore repaired in <code>kernel.New</code>, and in any other instance reading the directory.</li>
+    <li><b>Allocation.</b> The next event and process IDs come from the larger of the counter file and what the log and table already contain, so a stale counter cannot reuse an ID.</li>
+    <li><b>Locking.</b> Each read and update holds an in-memory mutex plus <code>flock</code> on <code>kernel.lock</code> (unix). On other platforms only the mutex applies; this is noted in <code>lock_other.go</code>.</li>
+  </ul>
+
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>Option (a) from the brief, the event log as a write-ahead log, rather than a single atomic snapshot. It makes the log authoritative and keeps the existing file layout.</li>
+    <li>Old state directories still load. Records without <code>last_event_id</code> were written table-first, so the table is authoritative for them and they are not replayed. Their next update starts the new order.</li>
+    <li>Repair runs on every load, not only in <code>kernel.New</code>. A long-running instance therefore also heals a table that a crashed peer left behind.</li>
+    <li>The run-level lock in <code>cmd/aos</code> (<code>&lt;state-dir&gt;.lock</code>) stays. It still guards the artifact store, leases and bus, which item 5 and later items address. The kernel no longer depends on it.</li>
+  </ul>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li><code>run</code> is not confined, so a worker can still escape through shell commands (item 8).</li>
+    <li>There is a check-then-use window between resolving a symlink and the file operation that follows.</li>
+    <li>Each kernel update rewrites the whole <code>events.json</code>, as before. A log that only appends would scale better.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 17 packages pass. <code>go vet ./...</code> is clean, and the code builds for Linux and Windows.</li>
+    <li>Crash simulation: events are appended straight to the log for a spawn, a transition and an exit, with no table write. <code>kernel.New</code> rebuilds all three, and an instance opened earlier sees the repaired view. Separate tests cover a stale counter and a state directory in the old format.</li>
+    <li>Concurrency: three subprocesses and two in-process instances share one state directory and run 75 spawn, transition, note and exit cycles. The result is 300 events with gap-free IDs, and every record matches its events. With the <code>flock</code> replaced by a no-op, the same test fails.</li>
+  </ul>
+</body>
+</html>

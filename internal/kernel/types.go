@@ -66,6 +66,9 @@ type Process struct {
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
 	ExitStatus    *ExitStatus        `json:"exit_status,omitempty"`
+	// LastEventID is the event that produced this record; the event log is
+	// authoritative and the table is repaired from events after it.
+	LastEventID string `json:"last_event_id,omitempty"`
 }
 
 type Event struct {
