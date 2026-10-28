@@ -43,6 +43,8 @@ Press Esc while a task is running to cancel it. Cancelling stops the model call,
 
 `make test` uses repo-local `GOCACHE` and `GOTMPDIR` paths so tests run reliably in sandboxed environments too.
 
+`scripts/tui.sh [ollama|vllm|strata|strata-phg|strata-phg-vllm] [aos-tui args...]` starts the TUI against a backend preset. Each session keeps its state in `.aos-sessions/<timestamp>-<backend>` (`AOS_TUI_SESSIONS_DIR` moves it, `--state-dir` overrides it), printed at startup, so `aos inspect` can read it after the TUI exits. A new TUI starts a new session; it does not resume an old one.
+
 ## Workflow Outcomes
 
 A workflow succeeds only if its entry agent's recorded exit code is 0. `aos run --workflow` writes the summary (with `exit_status`) and the report either way, then exits with the entry agent's code when it is non-zero (1 if that code is outside 1–125), with the reason on stderr. Delegated agents' exits reach their parent as `exit_code`, `exit_reason` and `exit_retryable` fields on the `delegate_result`, not only through the child's last message.

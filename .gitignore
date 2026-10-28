@@ -63,3 +63,6 @@ reports/rasterizer-bunny-metal/
 # Terminal-Bench job outputs
 reports/terminal-bench/jobs/
 reports/terminal-bench/*.log
+
+# TUI sessions kept by scripts/tui.sh
+/.aos-sessions/

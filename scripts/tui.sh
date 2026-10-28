@@ -121,6 +121,24 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   fi
 done
 
+# Keep each session in a findable directory, so it can be inspected after
+# the TUI exits (aos inspect <dir>). --state-dir in the arguments wins;
+# AOS_TUI_SESSIONS_DIR moves where new sessions go.
+state_dir_given=false
+for arg in ${args[@]+"${args[@]}"}; do
+  case "$arg" in
+    --state-dir | -state-dir | --state-dir=* | -state-dir=*) state_dir_given=true ;;
+  esac
+done
+if [[ "$state_dir_given" == false ]]; then
+  sessions_dir="${AOS_TUI_SESSIONS_DIR:-$ROOT_DIR/.aos-sessions}"
+  state_dir="$sessions_dir/$(date +%Y%m%d-%H%M%S)-$BACKEND"
+  mkdir -p "$sessions_dir"
+  args+=(--state-dir "$state_dir")
+  echo "state_dir: $state_dir"
+  echo "  inspect later: go run ./cmd/aos inspect $state_dir"
+fi
+
 cd "$ROOT_DIR"
 
 exec go run ./cmd/aos-tui --workdir "$ROOT_DIR" ${args[@]+"${args[@]}"}
