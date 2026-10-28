@@ -30,6 +30,16 @@ See [STATUS.md](./STATUS.md) for the current project snapshot and [RELEASE_CHECK
 
 `make test` uses repo-local `GOCACHE` and `GOTMPDIR` paths so tests run reliably in sandboxed environments too.
 
+## Verification Policy
+
+Verification is a workflow choice, not a built-in step. `aos run` without `--workflow` takes `--verify none|required|best_effort` (default `none`):
+
+- `none` writes the assembled output without a verifier call
+- `required` writes the output only after the verifier approves it
+- `best_effort` runs the verifier and records its verdict, but keeps the output either way
+
+The contract harness in `internal/workflow` uses the same policies: `Engine.Verifier` is optional, and `Engine.Verification` defaults to `required` when a verifier is set and `none` otherwise.
+
 ## LLM Backend Config
 
 AOS now uses backend-agnostic env vars for live model selection:

@@ -1,9 +1,14 @@
+// Package workflow implements the planner/worker contract harness, one
+// workflow pattern built on the AOS kernel. Verification is a policy chosen by
+// the caller, not a fixed step of the engine.
 package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"aos/internal/artifact"
 	"aos/internal/kernel"
@@ -34,6 +39,31 @@ type Verification struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+// VerificationPolicy decides whether and how worker output is verified.
+type VerificationPolicy string
+
+const (
+	// VerificationNone accepts worker output without running a verifier.
+	VerificationNone VerificationPolicy = "none"
+	// VerificationRequired accepts output only once a verifier approves it.
+	VerificationRequired VerificationPolicy = "required"
+	// VerificationBestEffort runs the verifier and retries on rejection, but
+	// accepts the last output even if it is never approved.
+	VerificationBestEffort VerificationPolicy = "best_effort"
+)
+
+var ErrInvalidVerificationPolicy = errors.New("invalid verification policy")
+
+// ParseVerificationPolicy parses a policy name. An empty value yields "".
+func ParseVerificationPolicy(value string) (VerificationPolicy, error) {
+	switch policy := VerificationPolicy(strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "-", "_")); policy {
+	case "", VerificationNone, VerificationRequired, VerificationBestEffort:
+		return policy, nil
+	default:
+		return "", fmt.Errorf("%w: %q (want none, required, or best_effort)", ErrInvalidVerificationPolicy, value)
+	}
+}
+
 type Planner interface {
 	Plan(ctx context.Context, goal string) (Plan, error)
 }
@@ -47,14 +77,16 @@ type Verifier interface {
 }
 
 type TaskResult struct {
-	ContractID           string       `json:"contract_id"`
-	Attempts             int          `json:"attempts"`
-	Approved             bool         `json:"approved"`
-	WorkerPID            string       `json:"worker_pid"`
-	VerifierPID          string       `json:"verifier_pid"`
-	WorkerOutputArtifact string       `json:"worker_output_artifact"`
-	VerificationArtifact string       `json:"verification_artifact"`
-	FinalVerification    Verification `json:"final_verification"`
+	ContractID           string             `json:"contract_id"`
+	Attempts             int                `json:"attempts"`
+	Policy               VerificationPolicy `json:"verification_policy"`
+	Accepted             bool               `json:"accepted"`
+	Approved             bool               `json:"approved"`
+	WorkerPID            string             `json:"worker_pid"`
+	VerifierPID          string             `json:"verifier_pid"`
+	WorkerOutputArtifact string             `json:"worker_output_artifact"`
+	VerificationArtifact string             `json:"verification_artifact"`
+	FinalVerification    Verification       `json:"final_verification"`
 }
 
 type Summary struct {
@@ -63,17 +95,44 @@ type Summary struct {
 }
 
 type Engine struct {
-	Kernel            *kernel.Kernel
-	Artifacts         *artifact.Store
-	Planner           Planner
-	Worker            Worker
-	Verifier          Verifier
+	Kernel    *kernel.Kernel
+	Artifacts *artifact.Store
+	Planner   Planner
+	Worker    Worker
+	// Verifier is optional; it is consulted according to Verification.
+	Verifier Verifier
+	// Verification defaults to VerificationRequired when a Verifier is set
+	// and VerificationNone otherwise.
+	Verification      VerificationPolicy
 	MaxWorkerAttempts int
 }
 
+func (e *Engine) verificationPolicy() (VerificationPolicy, error) {
+	policy, err := ParseVerificationPolicy(string(e.Verification))
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case policy == "" && e.Verifier != nil:
+		return VerificationRequired, nil
+	case policy == "":
+		return VerificationNone, nil
+	case policy == VerificationNone && e.Verifier != nil:
+		return "", fmt.Errorf("%w: verifier configured but policy is %q", ErrInvalidVerificationPolicy, policy)
+	case policy != VerificationNone && e.Verifier == nil:
+		return "", fmt.Errorf("%w: policy %q needs a verifier", ErrInvalidVerificationPolicy, policy)
+	}
+	return policy, nil
+}
+
 func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, error) {
+	policy, err := e.verificationPolicy()
+	if err != nil {
+		return Summary{}, err
+	}
 	attemptLimit := e.MaxWorkerAttempts
-	if attemptLimit <= 0 {
+	if attemptLimit <= 0 || policy == VerificationNone {
+		// Without a verifier there is no signal to retry on.
 		attemptLimit = 1
 	}
 
@@ -102,7 +161,7 @@ func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, erro
 
 	summary := Summary{PlanArtifactID: planArtifact.ID}
 	for _, contract := range plan.Contracts {
-		result, err := e.executeContract(ctx, parentPID, contract, attemptLimit)
+		result, err := e.executeContract(ctx, parentPID, contract, policy, attemptLimit)
 		if err != nil {
 			return Summary{}, err
 		}
@@ -112,7 +171,7 @@ func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, erro
 	return summary, nil
 }
 
-func (e *Engine) executeContract(ctx context.Context, parentPID string, contract TaskContract, attemptLimit int) (TaskResult, error) {
+func (e *Engine) executeContract(ctx context.Context, parentPID string, contract TaskContract, policy VerificationPolicy, attemptLimit int) (TaskResult, error) {
 	var final TaskResult
 	for attempt := 1; attempt <= attemptLimit; attempt++ {
 		workerProcess, err := e.Kernel.Spawn(kernel.ProcessSpec{
@@ -142,6 +201,18 @@ func (e *Engine) executeContract(ctx context.Context, parentPID string, contract
 			return TaskResult{}, err
 		}
 
+		final = TaskResult{
+			ContractID:           contract.ID,
+			Attempts:             attempt,
+			Policy:               policy,
+			Accepted:             policy != VerificationRequired,
+			WorkerPID:            workerProcess.PID,
+			WorkerOutputArtifact: workerArtifact.ID,
+		}
+		if policy == VerificationNone {
+			return final, nil
+		}
+
 		verifierProcess, err := e.Kernel.Spawn(kernel.ProcessSpec{
 			ParentPID: parentPID,
 			Role:      "verifier",
@@ -153,14 +224,20 @@ func (e *Engine) executeContract(ctx context.Context, parentPID string, contract
 		if err != nil {
 			return TaskResult{}, err
 		}
+		final.VerifierPID = verifierProcess.PID
 		verification, err := e.Verifier.Verify(ctx, contract, output)
 		if err != nil {
 			_, _ = e.Kernel.Exit(verifierProcess.PID, kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false})
+			if policy == VerificationBestEffort {
+				final.FinalVerification = Verification{Reason: "verification error: " + err.Error()}
+				return final, nil
+			}
 			return TaskResult{}, err
 		}
 		verificationArtifact, err := e.Artifacts.CreateJSON("verification", verifierProcess.PID, verification, []string{workerArtifact.ID}, map[string]string{
 			"contract_id": contract.ID,
 			"attempt":     strconv.Itoa(attempt),
+			"policy":      string(policy),
 		})
 		if err != nil {
 			return TaskResult{}, err
@@ -169,16 +246,10 @@ func (e *Engine) executeContract(ctx context.Context, parentPID string, contract
 			return TaskResult{}, err
 		}
 
-		final = TaskResult{
-			ContractID:           contract.ID,
-			Attempts:             attempt,
-			Approved:             verification.Approved,
-			WorkerPID:            workerProcess.PID,
-			VerifierPID:          verifierProcess.PID,
-			WorkerOutputArtifact: workerArtifact.ID,
-			VerificationArtifact: verificationArtifact.ID,
-			FinalVerification:    verification,
-		}
+		final.Approved = verification.Approved
+		final.Accepted = final.Accepted || verification.Approved
+		final.VerificationArtifact = verificationArtifact.ID
+		final.FinalVerification = verification
 		if verification.Approved {
 			return final, nil
 		}

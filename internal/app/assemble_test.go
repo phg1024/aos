@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"aos/internal/app"
+	"aos/internal/workflow"
 )
 
 type fakeCompleter struct {
@@ -25,6 +27,16 @@ func (f *fakeCompleter) CompleteJSON(_ context.Context, _ string, _ string, targ
 		}
 	}
 	return nil
+}
+
+// noVerifierCompleter fails if asked for a verification response.
+type noVerifierCompleter struct{}
+
+func (noVerifierCompleter) CompleteJSON(_ context.Context, _ string, _ string, target any) error {
+	if setField(target, "Content", "combined document") || setField(target, "Python", proceduralPython()) {
+		return nil
+	}
+	return errors.New("verifier should not be called")
 }
 
 type rejectingCompleter struct{}
@@ -94,12 +106,16 @@ func TestAssembleFilesWritesVerifiedOutput(t *testing.T) {
 	}
 
 	result, err := app.AssembleFiles(context.Background(), &fakeCompleter{}, app.AssembleRequest{
-		Goal:       "assemble A and B into D",
-		InputPaths: []string{inputA, inputB},
-		OutputPath: output,
+		Goal:         "assemble A and B into D",
+		InputPaths:   []string{inputA, inputB},
+		OutputPath:   output,
+		Verification: workflow.VerificationRequired,
 	})
 	if err != nil {
 		t.Fatalf("assemble files: %v", err)
+	}
+	if !result.Approved || result.Verification != workflow.VerificationRequired {
+		t.Fatalf("expected approved required verification, got %#v", result)
 	}
 	if result.SourceCount != 2 {
 		t.Fatalf("expected 2 sources, got %d", result.SourceCount)
@@ -122,9 +138,10 @@ func TestAssembleFilesFailsWhenVerifierRejects(t *testing.T) {
 	}
 
 	_, err := app.AssembleFiles(context.Background(), rejectingCompleter{}, app.AssembleRequest{
-		Goal:       "assemble A into D",
-		InputPaths: []string{input},
-		OutputPath: output,
+		Goal:         "assemble A into D",
+		InputPaths:   []string{input},
+		OutputPath:   output,
+		Verification: workflow.VerificationRequired,
 	})
 	if err == nil || !errors.Is(err, app.ErrVerificationFailed) {
 		t.Fatalf("expected verification failure, got %v", err)
@@ -167,5 +184,76 @@ func TestAssembleFilesProceduralModeRunsGeneratedPython(t *testing.T) {
 	}
 	if string(bytes) != "alpha\n--\nbeta" {
 		t.Fatalf("unexpected procedural output %q", string(bytes))
+	}
+}
+
+func writeInput(t *testing.T, root string) string {
+	t.Helper()
+	input := filepath.Join(root, "A.txt")
+	if err := os.WriteFile(input, []byte("alpha"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	return input
+}
+
+func TestAssembleFilesSkipsVerifierByDefault(t *testing.T) {
+	root := t.TempDir()
+	input := writeInput(t, root)
+	output := filepath.Join(root, "D.txt")
+
+	result, err := app.AssembleFiles(context.Background(), noVerifierCompleter{}, app.AssembleRequest{
+		Goal:       "assemble A into D",
+		InputPaths: []string{input},
+		OutputPath: output,
+	})
+	if err != nil {
+		t.Fatalf("assemble files: %v", err)
+	}
+	if result.Verification != workflow.VerificationNone || result.Approved || result.VerificationReason != "" {
+		t.Fatalf("expected unverified result, got %#v", result)
+	}
+	if _, err := os.Stat(output); err != nil {
+		t.Fatalf("expected output to be written: %v", err)
+	}
+}
+
+func TestAssembleFilesBestEffortKeepsRejectedOutput(t *testing.T) {
+	root := t.TempDir()
+	input := writeInput(t, root)
+
+	for _, goal := range []string{
+		"assemble A into D",
+		"Write a python program and run it to combine A into one file",
+	} {
+		output := filepath.Join(root, "out-"+strconv.Itoa(len(goal))+".txt")
+		result, err := app.AssembleFiles(context.Background(), rejectingCompleter{}, app.AssembleRequest{
+			Goal:         goal,
+			InputPaths:   []string{input},
+			OutputPath:   output,
+			Verification: workflow.VerificationBestEffort,
+		})
+		if err != nil {
+			t.Fatalf("assemble %q: %v", goal, err)
+		}
+		if result.Approved || result.VerificationReason != "missing details" {
+			t.Fatalf("expected recorded rejection for %q, got %#v", goal, result)
+		}
+		if _, err := os.Stat(output); err != nil {
+			t.Fatalf("expected output to be kept for %q: %v", goal, err)
+		}
+	}
+}
+
+func TestAssembleFilesRejectsUnknownPolicy(t *testing.T) {
+	root := t.TempDir()
+	input := writeInput(t, root)
+	_, err := app.AssembleFiles(context.Background(), noVerifierCompleter{}, app.AssembleRequest{
+		Goal:         "assemble A into D",
+		InputPaths:   []string{input},
+		OutputPath:   filepath.Join(root, "D.txt"),
+		Verification: workflow.VerificationPolicy("sometimes"),
+	})
+	if !errors.Is(err, workflow.ErrInvalidVerificationPolicy) {
+		t.Fatalf("expected invalid policy error, got %v", err)
 	}
 }

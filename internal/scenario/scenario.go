@@ -51,6 +51,7 @@ func (r *Runner) RunDocsAssembly(ctx context.Context) (Report, error) {
 		Planner:           docsPlanner{},
 		Worker:            docsWorker{},
 		Verifier:          docsVerifier{},
+		Verification:      workflow.VerificationRequired,
 		MaxWorkerAttempts: 1,
 	}
 	_, err = engine.Run(ctx, parent.PID, "assemble docs")
@@ -101,6 +102,7 @@ func (r *Runner) RunDataExtraction(ctx context.Context) (Report, error) {
 		Planner:           extractionPlanner{},
 		Worker:            extractionWorker{},
 		Verifier:          extractionVerifier{},
+		Verification:      workflow.VerificationRequired,
 		MaxWorkerAttempts: 2,
 	}
 	_, err = engine.Run(ctx, parent.PID, "extract records")

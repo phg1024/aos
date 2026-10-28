@@ -123,6 +123,7 @@ func main() {
 		}},
 		Worker:            liveWorker{backend: backend},
 		Verifier:          liveVerifier{backend: backend},
+		Verification:      workflow.VerificationRequired,
 		MaxWorkerAttempts: 2,
 	}
 

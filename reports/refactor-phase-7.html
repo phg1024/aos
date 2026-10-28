@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 7 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 7 Report</h1>
+    <p>Verification moves from a hardcoded step to a workflow policy, in both the contract harness and the direct assemble path. This follows the "Verification Must Become Optional" section of <code>AOS_REFACTOR_PLAN.md</code>.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li>Added <code>workflow.VerificationPolicy</code> with <code>none</code>, <code>required</code> and <code>best_effort</code>, plus <code>ParseVerificationPolicy</code>, in <code>internal/workflow/contracts.go</code>.</li>
+    <li><code>workflow.Engine.Verifier</code> is now optional. A new <code>Engine.Verification</code> field picks the policy. Under <code>none</code>, the engine spawns no verifier process and writes no verification artifact.</li>
+    <li><code>TaskResult</code> now carries <code>verification_policy</code> and <code>accepted</code>. <code>approved</code> still means "a verifier approved it".</li>
+    <li><code>internal/app/assemble.go</code> sends both synthesis mode and procedural mode through one <code>verifyOutput</code> helper, controlled by <code>AssembleRequest.Verification</code>.</li>
+    <li><code>aos run</code> gained <code>--verify none|required|best_effort</code> for runs without a workflow spec.</li>
+    <li>The scenario harness and <code>cmd/aos-demo-live</code> now ask for <code>required</code> explicitly, so their behaviour is unchanged.</li>
+  </ul>
+
+  <h2>Policy Semantics</h2>
+  <table>
+    <tr><th>Policy</th><th>Contract engine</th><th>Assemble path</th></tr>
+    <tr><td><code>none</code></td><td>One worker attempt, accepted as-is. Configuring a verifier as well is rejected as a misconfiguration.</td><td>No verifier call. Output is written.</td></tr>
+    <tr><td><code>required</code></td><td>Retries until approved or attempts run out. Accepted only if approved. A verifier error fails the run.</td><td>A rejection returns <code>ErrVerificationFailed</code> and the output is not kept.</td></tr>
+    <tr><td><code>best_effort</code></td><td>Retries on rejection, then accepts the last output. A verifier error is recorded and the output is accepted.</td><td>The verdict and reason are recorded. Output is always kept.</td></tr>
+  </table>
+
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>An empty <code>Engine.Verification</code> resolves to <code>required</code> when a verifier is configured, and to <code>none</code> otherwise. Core never adds a verifier the caller did not supply.</li>
+    <li>The <code>aos run</code> assemble path now defaults to <code>none</code>. This is a behaviour change: earlier it always ran a verifier. Pass <code>--verify required</code> to get the old gate back.</li>
+    <li>The <code>manual</code> policy from the refactor plan is not implemented yet, because it needs a human-approval wait state in the runtime.</li>
+    <li>The planner and worker roles of the contract harness stay as they are. The package is documented as one workflow pattern, not as core semantics.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 15 packages with tests pass.</li>
+    <li><code>go vet ./...</code>: clean.</li>
+    <li>New tests in <code>internal/workflow</code>: no-verifier path, required rejection, best-effort retry/accept, verifier errors under both gating policies, misconfiguration checks, policy parsing.</li>
+    <li>New tests in <code>internal/app</code>: default skips the verifier, best-effort keeps rejected output in both synthesis and procedural modes, unknown policy is rejected.</li>
+    <li>CLI smoke: <code>aos run --verify sometimes ...</code> exits 1 with an invalid-policy error.</li>
+  </ul>
+</body>
+</html>

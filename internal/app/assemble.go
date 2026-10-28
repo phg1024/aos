@@ -12,6 +12,7 @@ import (
 
 	"aos/internal/capability"
 	"aos/internal/tools"
+	"aos/internal/workflow"
 )
 
 var ErrVerificationFailed = errors.New("verification failed")
@@ -24,10 +25,14 @@ type AssembleRequest struct {
 	Goal       string
 	InputPaths []string
 	OutputPath string
+	// Verification defaults to workflow.VerificationNone.
+	Verification workflow.VerificationPolicy
 }
 
 type AssembleResult struct {
 	OutputPath         string
+	Verification       workflow.VerificationPolicy
+	Approved           bool
 	VerificationReason string
 	OutputBytes        int
 	SourceCount        int
@@ -58,6 +63,14 @@ func AssembleFiles(ctx context.Context, completer JSONCompleter, req AssembleReq
 	if strings.TrimSpace(req.OutputPath) == "" {
 		return AssembleResult{}, errors.New("output path is required")
 	}
+	policy, err := workflow.ParseVerificationPolicy(string(req.Verification))
+	if err != nil {
+		return AssembleResult{}, err
+	}
+	if policy == "" {
+		policy = workflow.VerificationNone
+	}
+	req.Verification = policy
 	if proceduralRequested(req.Goal) {
 		return assembleFilesProcedural(ctx, completer, req)
 	}
@@ -88,15 +101,12 @@ func assembleFilesSynthesis(ctx context.Context, completer JSONCompleter, req As
 		return AssembleResult{}, err
 	}
 
-	var verifierOut verifierResponse
 	verifierSystem := "Return only compact JSON matching {\"approved\":true|false,\"reason\":\"...\"}. Approve only if the output satisfies the goal using the provided sources without obvious hallucination."
 	verifierUser := "Goal:\n" + req.Goal + "\n\nSources:\n" + strings.Join(sourceSections, "\n\n---\n\n") +
 		"\n\nCandidate output:\n" + workerOut.Content
-	if err := completer.CompleteJSON(ctx, verifierSystem, verifierUser, &verifierOut); err != nil {
+	verifierOut, err := verifyOutput(ctx, completer, req.Verification, verifierSystem, verifierUser)
+	if err != nil {
 		return AssembleResult{}, err
-	}
-	if !verifierOut.Approved {
-		return AssembleResult{}, fmt.Errorf("%w: %s", ErrVerificationFailed, verifierOut.Reason)
 	}
 
 	if _, err := toolRuntime.Execute(tools.Request{
@@ -113,6 +123,8 @@ func assembleFilesSynthesis(ctx context.Context, completer JSONCompleter, req As
 
 	return AssembleResult{
 		OutputPath:         req.OutputPath,
+		Verification:       req.Verification,
+		Approved:           verifierOut.Approved,
 		VerificationReason: verifierOut.Reason,
 		OutputBytes:        len(workerOut.Content),
 		SourceCount:        len(req.InputPaths),
@@ -160,28 +172,48 @@ func assembleFilesProcedural(ctx context.Context, completer JSONCompleter, req A
 		return AssembleResult{}, err
 	}
 
-	var verifierOut verifierResponse
 	verifierSystem := "Return only compact JSON matching {\"approved\":true|false,\"reason\":\"...\"}. " +
 		"Approve only if the produced file appears to satisfy the goal and is a coherent combined result."
 	verifierUser := "Goal:\n" + req.Goal + "\n\n" +
 		"Input files:\n" + strings.Join(req.InputPaths, "\n") + "\n\n" +
 		"Generated output:\n" + string(bytes)
-	if err := completer.CompleteJSON(ctx, verifierSystem, verifierUser, &verifierOut); err != nil {
+	verifierOut, err := verifyOutput(ctx, completer, req.Verification, verifierSystem, verifierUser)
+	if err != nil {
+		if errors.Is(err, ErrVerificationFailed) {
+			_ = os.Remove(req.OutputPath)
+		}
 		return AssembleResult{}, err
-	}
-	if !verifierOut.Approved {
-		_ = os.Remove(req.OutputPath)
-		return AssembleResult{}, fmt.Errorf("%w: %s", ErrVerificationFailed, verifierOut.Reason)
 	}
 
 	return AssembleResult{
 		OutputPath:         req.OutputPath,
+		Verification:       req.Verification,
+		Approved:           verifierOut.Approved,
 		VerificationReason: verifierOut.Reason,
 		OutputBytes:        len(bytes),
 		SourceCount:        len(req.InputPaths),
 		Mode:               "procedural",
 		ScriptPath:         scriptPath,
 	}, nil
+}
+
+// verifyOutput asks the completer to review a candidate under policy. Only
+// VerificationRequired turns a rejection or verifier error into an error.
+func verifyOutput(ctx context.Context, completer JSONCompleter, policy workflow.VerificationPolicy, systemPrompt, userPrompt string) (verifierResponse, error) {
+	if policy == workflow.VerificationNone {
+		return verifierResponse{}, nil
+	}
+	var out verifierResponse
+	if err := completer.CompleteJSON(ctx, systemPrompt, userPrompt, &out); err != nil {
+		if policy == workflow.VerificationBestEffort {
+			return verifierResponse{Reason: "verification error: " + err.Error()}, nil
+		}
+		return verifierResponse{}, err
+	}
+	if !out.Approved && policy == workflow.VerificationRequired {
+		return verifierResponse{}, fmt.Errorf("%w: %s", ErrVerificationFailed, out.Reason)
+	}
+	return out, nil
 }
 
 func deriveCapabilities(inputPaths []string, outputPath string) ([]capability.Mount, capability.Set) {

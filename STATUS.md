@@ -9,7 +9,7 @@ AOS is a research prototype. It is intended to explore agent runtime design, det
 - Durable file-backed kernel and process model
 - IPC bus, artifact store, and lease management
 - Capability-aware tool runtime and workflow execution
-- Planner/worker/verifier style orchestration
+- Planner/worker contract harness with an optional verifier (`none`, `required`, or `best_effort` policy)
 - Local vLLM backend integration
 - Interactive TUI with workflow loading, skill loading, persistent state, and recovery support
 - Go test coverage across the main internal packages

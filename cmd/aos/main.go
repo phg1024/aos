@@ -20,6 +20,7 @@ import (
 	"aos/internal/lease"
 	"aos/internal/skills"
 	"aos/internal/tools"
+	"aos/internal/workflow"
 )
 
 type arrayFlags []string
@@ -55,12 +56,14 @@ func run(args []string) {
 	var reportPath string
 	var stateDir string
 	var trace bool
+	var verify string
 	fs.Var(&inputs, "input", "input file path (repeatable)")
 	fs.StringVar(&outputPath, "output", "", "output file path")
 	fs.StringVar(&workflowPath, "workflow", "", "workflow JSON spec path")
 	fs.StringVar(&reportPath, "report", "", "optional HTML report output path")
 	fs.StringVar(&stateDir, "state-dir", "", "optional state directory for workflow runs")
 	fs.BoolVar(&trace, "trace", getenvBool("AOS_TRACE", false), "print real-time agent actions during workflow runs")
+	fs.StringVar(&verify, "verify", string(workflow.VerificationNone), "verification policy without --workflow: none, required, or best_effort")
 	_ = fs.Parse(args)
 
 	goal := ""
@@ -79,10 +82,16 @@ func run(args []string) {
 		return
 	}
 
+	policy, err := workflow.ParseVerificationPolicy(verify)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	result, err := app.AssembleFiles(context.Background(), backend, app.AssembleRequest{
-		Goal:       goal,
-		InputPaths: []string(inputs),
-		OutputPath: outputPath,
+		Goal:         goal,
+		InputPaths:   []string(inputs),
+		OutputPath:   outputPath,
+		Verification: policy,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -266,7 +275,7 @@ func countAgentRuns(runs []agentflow.AgentRun) int {
 
 func printUsage() {
 	fmt.Println("Usage:")
-	fmt.Println("  aos run --input A --input B --input C --output D \"assemble files A, B, C into D\"")
+	fmt.Println("  aos run --input A --input B --input C --output D [--verify none|required|best_effort] \"assemble files A, B, C into D\"")
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
 }
 
