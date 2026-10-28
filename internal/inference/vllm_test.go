@@ -372,3 +372,44 @@ func TestVLLMBackendSendsSamplingControls(t *testing.T) {
 		}
 	}
 }
+
+func TestVLLMBackendCompleteMessagesSendsTranscript(t *testing.T) {
+	var body struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	backend := inference.NewVLLMBackend(inference.VLLMConfig{
+		BaseURL: "http://vllm.local",
+		Model:   "local-model",
+		HTTPClient: &http.Client{
+			Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatalf("decode request: %v", err)
+				}
+				return jsonResponse(http.StatusOK, map[string]any{
+					"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+				}), nil
+			}),
+		},
+	})
+	transcript := []runtime.Message{
+		{Role: "system", Content: "rules"},
+		{Role: "user", Content: "task"},
+		{Role: "assistant", Content: "notes: next"},
+		{Role: "user", Content: "read_file:map[path:/w/a]"},
+	}
+	out, err := backend.CompleteMessages(context.Background(), transcript)
+	if err != nil || out != "ok" {
+		t.Fatalf("complete messages: %q, %v", out, err)
+	}
+	if len(body.Messages) != len(transcript) {
+		t.Fatalf("expected %d messages, got %#v", len(transcript), body.Messages)
+	}
+	for i, message := range transcript {
+		if body.Messages[i].Role != message.Role || body.Messages[i].Content != message.Content {
+			t.Fatalf("message %d changed: %#v", i, body.Messages[i])
+		}
+	}
+}

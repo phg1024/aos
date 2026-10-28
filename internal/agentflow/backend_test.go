@@ -2,6 +2,7 @@ package agentflow_test
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -478,6 +479,71 @@ func TestPromptBackendParsesNotesAndDescribesWorkingMemory(t *testing.T) {
 	for _, want := range []string{`"notes":"..."`, "working memory", "hidden reasoning is discarded"} {
 		if !strings.Contains(completer.systemPrompt, want) {
 			t.Fatalf("expected system prompt to mention %q", want)
+		}
+	}
+}
+
+type messagesCompleter struct {
+	transcripts [][]runtime.Message
+}
+
+func (m *messagesCompleter) CompleteJSON(_ context.Context, _ string, _ string, _ any) error {
+	return errors.New("CompleteJSON should not be used when CompleteMessages is available")
+}
+
+func (m *messagesCompleter) CompleteMessages(_ context.Context, messages []runtime.Message) (string, error) {
+	m.transcripts = append(m.transcripts, append([]runtime.Message(nil), messages...))
+	return `{"action":{"type":"exit","exit_status":{"code":0,"reason":"done"}}}`, nil
+}
+
+func TestPromptBackendSendsAppendOnlyTranscript(t *testing.T) {
+	completer := &messagesCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "transcript", EntryAgent: "writer"},
+		Agent:     agentflow.AgentSpec{ID: "writer", SystemPrompt: "write"},
+	}
+	process := kernel.Process{PID: "pid-7", Metadata: map[string]string{"goal": "write vec3.h"}}
+	step1 := []runtime.Message{
+		{Role: "user", Content: "write vec3.h"},
+		{Role: "assistant", Content: "notes: Plan: vec3.h. Next: write it.\naction: tool write_file content=<40 bytes> path=/w/vec3.h"},
+		{Role: "tool", Content: "write_file:map[bytes:40 path:/w/vec3.h]"},
+	}
+	step2 := append(append([]runtime.Message(nil), step1...),
+		runtime.Message{Role: "assistant", Content: "notes: Done: vec3.h. Next: exit.\naction: tool run command=g++ main.cpp"},
+		runtime.Message{Role: "tool", Content: "tool_error name=run error=exit status 1 try_different_strategy=true"},
+	)
+	for _, history := range [][]runtime.Message{step1, step2} {
+		if _, err := backend.Generate(context.Background(), runtime.GenerateRequest{Process: process, History: history}); err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+	}
+
+	first, second := completer.transcripts[0], completer.transcripts[1]
+	if len(first) != 2+len(step1) || len(second) != 2+len(step2) {
+		t.Fatalf("expected system, header, and one message per history entry; got %d and %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("message %d changed between steps:\n%#v\n%#v", i, first[i], second[i])
+		}
+	}
+	wantRoles := []string{"system", "user", "user", "assistant", "user", "assistant", "user"}
+	for i, role := range wantRoles {
+		if second[i].Role != role {
+			t.Fatalf("message %d: expected role %s, got %s", i, role, second[i].Role)
+		}
+	}
+	if second[6].Content != step2[4].Content {
+		t.Fatalf("expected tool result content unchanged, got %q", second[6].Content)
+	}
+	header := second[1].Content
+	if !strings.Contains(header, `"goal": "write vec3.h"`) {
+		t.Fatalf("expected goal in task header:\n%s", header)
+	}
+	for _, perStep := range []string{"tool_errors", "last_tool_observation", `"history"`} {
+		if strings.Contains(header, perStep) {
+			t.Fatalf("task header must not carry per-step field %s:\n%s", perStep, header)
 		}
 	}
 }

@@ -24,6 +24,13 @@ type RawCompleter interface {
 	CompleteText(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 }
 
+// MessagesCompleter sends a whole chat transcript. Backends that implement it
+// get an append-only multi-turn prompt, which lets servers reuse the previous
+// step's prompt cache instead of re-reading the session every step.
+type MessagesCompleter interface {
+	CompleteMessages(ctx context.Context, messages []runtime.Message) (string, error)
+}
+
 type PromptBackend struct {
 	Completer JSONCompleter
 	Workflow  WorkflowSpec
@@ -47,6 +54,9 @@ func (b PromptBackend) Generate(ctx context.Context, request runtime.GenerateReq
 	if result, ok := b.autoExitForCompletedTool(request); ok {
 		return result, nil
 	}
+	if messagesCompleter, ok := b.Completer.(MessagesCompleter); ok {
+		return b.generateFromMessages(ctx, messagesCompleter, request)
+	}
 	if rawCompleter, ok := b.Completer.(RawCompleter); ok {
 		return b.generateFromRaw(ctx, rawCompleter, request)
 	}
@@ -57,11 +67,102 @@ func (b PromptBackend) Generate(ctx context.Context, request runtime.GenerateReq
 	return result, nil
 }
 
+// PromptMessages returns the prompt as an append-only transcript: a static
+// system prompt and task header, then one message per history entry. Each
+// step only appends to the previous step's messages, so nothing that changes
+// per step may precede the history.
 func (b PromptBackend) PromptMessages(request runtime.GenerateRequest) []runtime.Message {
-	return []runtime.Message{
+	compacted := compactHistory(request.History, b.compactionPolicy())
+	messages := []runtime.Message{
 		{Role: "system", Content: b.systemPrompt()},
-		{Role: "user", Content: b.userPrompt(request)},
+		{Role: "user", Content: b.taskHeader(request, compacted)},
 	}
+	for _, message := range compacted.Recent {
+		// Tool results go out as user turns: the OpenAI "tool" role needs a
+		// tool_call_id that AOS JSON actions do not have.
+		role := "user"
+		if message.Role == "assistant" {
+			role = "assistant"
+		}
+		messages = append(messages, runtime.Message{Role: role, Content: message.Content})
+	}
+	return messages
+}
+
+// taskHeader holds the session facts that stay fixed between compactions.
+func (b PromptBackend) taskHeader(request runtime.GenerateRequest, compacted compactedHistory) string {
+	type headerContext struct {
+		Workflow               string              `json:"workflow"`
+		AgentID                string              `json:"agent_id"`
+		ProcessID              string              `json:"process_id"`
+		Goal                   string              `json:"goal"`
+		InputPaths             []string            `json:"input_paths,omitempty"`
+		OutputPath             string              `json:"output_path,omitempty"`
+		Metadata               map[string]string   `json:"metadata,omitempty"`
+		ReadPaths              []string            `json:"read_paths,omitempty"`
+		WritePaths             []string            `json:"write_paths,omitempty"`
+		HistorySummary         string              `json:"history_summary,omitempty"`
+		HistoryMessagesOmitted int                 `json:"history_messages_omitted,omitempty"`
+		MemoryRefs             []runtime.MemoryRef `json:"memory_refs,omitempty"`
+	}
+	payload := headerContext{
+		Workflow:               b.Workflow.Name,
+		AgentID:                b.Agent.ID,
+		ProcessID:              request.Process.PID,
+		Goal:                   request.Process.Metadata["goal"],
+		InputPaths:             splitList(request.Process.Metadata["input_paths"]),
+		OutputPath:             request.Process.Metadata["output_path"],
+		Metadata:               cloneMap(request.Process.Metadata),
+		ReadPaths:              append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
+		WritePaths:             append([]string(nil), request.Process.CapabilitySet.WritePaths...),
+		HistorySummary:         compacted.Summary,
+		HistoryMessagesOmitted: compacted.Omitted,
+		MemoryRefs:             append([]runtime.MemoryRef(nil), request.MemoryRefs...),
+	}
+	bytes, _ := json.MarshalIndent(payload, "", "  ")
+	return fmt.Sprintf(
+		"Here is your task context.\n\n%s\n\n"+
+			"The messages that follow are your session history: assistant turns are your own earlier notes and actions, "+
+			"user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.",
+		string(bytes),
+	)
+}
+
+func (b PromptBackend) generateFromMessages(ctx context.Context, completer MessagesCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	messages := b.PromptMessages(request)
+	raw, err := completer.CompleteMessages(ctx, messages)
+	if err != nil {
+		return runtime.GenerateResult{}, err
+	}
+	if parsed, ok := parseGenerateResult(raw); ok {
+		return parsed, nil
+	}
+
+	repaired, err := completer.CompleteMessages(ctx, []runtime.Message{
+		{Role: "system", Content: repairSystemPrompt()},
+		{Role: "user", Content: repairUserPrompt(messages[0].Content, transcriptText(messages[1:]), raw)},
+	})
+	if err != nil {
+		return runtime.GenerateResult{}, err
+	}
+	if parsed, ok := parseGenerateResult(repaired); ok {
+		return parsed, nil
+	}
+	if message, ok := fallbackMessage(raw); ok {
+		return message, nil
+	}
+	if message, ok := fallbackMessage(repaired); ok {
+		return message, nil
+	}
+	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
+}
+
+func transcriptText(messages []runtime.Message) string {
+	parts := make([]string, 0, len(messages))
+	for _, message := range messages {
+		parts = append(parts, message.Role+": "+message.Content)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {

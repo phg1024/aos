@@ -136,6 +136,15 @@ func (b *VLLMBackend) CompleteJSON(ctx context.Context, systemPrompt, userPrompt
 	return nil
 }
 
+// CompleteMessages sends a whole chat transcript unchanged.
+func (b *VLLMBackend) CompleteMessages(ctx context.Context, messages []runtime.Message) (string, error) {
+	chat := make([]chatMessage, 0, len(messages))
+	for _, message := range messages {
+		chat = append(chat, chatMessage{Role: message.Role, Content: message.Content})
+	}
+	return b.complete(ctx, chat)
+}
+
 func (b *VLLMBackend) CompleteText(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt},
