@@ -138,10 +138,12 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 		return parsed, nil
 	}
 
-	repaired, err := completer.CompleteMessages(ctx, []runtime.Message{
-		{Role: "system", Content: repairSystemPrompt()},
-		{Role: "user", Content: repairUserPrompt(messages[0].Content, transcriptText(messages[1:]), raw)},
-	})
+	// Ask for a correction inside the same conversation, so the server can
+	// resume from the transcript it just read instead of starting over.
+	repaired, err := completer.CompleteMessages(ctx, append(append([]runtime.Message(nil), messages...),
+		runtime.Message{Role: "assistant", Content: raw},
+		runtime.Message{Role: "user", Content: repairInstruction},
+	))
 	if err != nil {
 		return runtime.GenerateResult{}, err
 	}
@@ -157,13 +159,8 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
 }
 
-func transcriptText(messages []runtime.Message) string {
-	parts := make([]string, 0, len(messages))
-	for _, message := range messages {
-		parts = append(parts, message.Role+": "+message.Content)
-	}
-	return strings.Join(parts, "\n\n")
-}
+const repairInstruction = "Your previous reply was not a valid AOS action. Reply again with exactly one action JSON object " +
+	"matching the schema in the system prompt, such as {\"action\":{\"type\":\"tool\",\"notes\":\"...\",\"tool_call\":{...}}}, and nothing else."
 
 func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 	systemPrompt := b.systemPrompt()

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -743,63 +744,68 @@ func assessToolResult(result tools.Result) (bool, string) {
 }
 
 const (
-	maxActionNotesChars = 2000
-	maxActionArgChars   = 300
+	maxActionNotesChars  = 2000
+	maxActionArgChars    = 300
+	maxDelegateGoalChars = 1000
 )
 
 // bulkToolArgs hold file content; their size is recorded instead of the text,
 // which already lives on disk.
 var bulkToolArgs = map[string]bool{"content": true, "old_text": true, "new_text": true}
 
-// actionRecord summarizes an action and its notes for the session history.
-// Message actions are already recorded verbatim, so only their notes are kept.
+// actionRecord renders an action for the session history in the same action
+// JSON the agent is asked to produce, so the history doubles as format
+// examples. Message actions are recorded verbatim elsewhere and return "".
 func actionRecord(action GenerateAction) string {
-	var lines []string
-	if notes := strings.TrimSpace(action.Notes); notes != "" {
-		lines = append(lines, "notes: "+truncateRecord(notes, maxActionNotesChars))
+	record, ok := recordedAction(action)
+	if !ok {
+		return ""
 	}
-	if summary := actionSummary(action); summary != "" {
-		lines = append(lines, "action: "+summary)
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(GenerateResult{Action: record}); err != nil {
+		return ""
 	}
-	return strings.Join(lines, "\n")
+	return strings.TrimSpace(buffer.String())
 }
 
-func actionSummary(action GenerateAction) string {
+// recordedAction copies an action for the history, replacing bulk file content
+// with its size (the text already lives on disk) and trimming long strings.
+func recordedAction(action GenerateAction) (GenerateAction, bool) {
+	record := action
+	record.Notes = truncateRecord(action.Notes, maxActionNotesChars)
 	switch action.Type {
 	case "tool":
 		if action.ToolCall == nil || action.ToolCall.Name == "" {
-			return ""
+			return GenerateAction{}, false
 		}
-		keys := make([]string, 0, len(action.ToolCall.Args))
-		for key := range action.ToolCall.Args {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		parts := []string{"tool " + action.ToolCall.Name}
-		for _, key := range keys {
-			value := action.ToolCall.Args[key]
+		args := make(map[string]string, len(action.ToolCall.Args))
+		for key, value := range action.ToolCall.Args {
 			if bulkToolArgs[key] {
-				parts = append(parts, fmt.Sprintf("%s=<%d bytes>", key, len(value)))
+				args[key] = fmt.Sprintf("<%d bytes>", len(value))
 				continue
 			}
-			parts = append(parts, key+"="+truncateRecord(value, maxActionArgChars))
+			args[key] = truncateRecord(value, maxActionArgChars)
 		}
-		return strings.Join(parts, " ")
+		record.ToolCall = &ToolCall{Name: action.ToolCall.Name, Args: args}
 	case "delegate":
 		if action.Delegate == nil || action.Delegate.AgentID == "" {
-			return ""
+			return GenerateAction{}, false
 		}
-		return fmt.Sprintf("delegate to=%s goal=%s", action.Delegate.AgentID, truncateRecord(action.Delegate.Goal, maxActionArgChars))
+		delegate := *action.Delegate
+		delegate.Goal = truncateRecord(delegate.Goal, maxDelegateGoalChars)
+		record.Delegate = &delegate
 	case "exit":
-		if action.ExitStatus == nil {
-			return "exit"
+		if action.ExitStatus != nil {
+			status := *action.ExitStatus
+			status.Reason = truncateRecord(status.Reason, maxActionArgChars)
+			record.ExitStatus = &status
 		}
-		return fmt.Sprintf("exit code=%d reason=%s", action.ExitStatus.Code, truncateRecord(action.ExitStatus.Reason, maxActionArgChars))
 	case "message", "":
-		return ""
-	default:
-		return action.Type
+		return GenerateAction{}, false
 	}
+	return record, true
 }
 
 func truncateRecord(value string, limit int) string {

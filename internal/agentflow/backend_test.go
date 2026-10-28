@@ -547,3 +547,50 @@ func TestPromptBackendSendsAppendOnlyTranscript(t *testing.T) {
 		}
 	}
 }
+
+type flakyMessagesCompleter struct {
+	transcripts [][]runtime.Message
+}
+
+func (f *flakyMessagesCompleter) CompleteJSON(_ context.Context, _ string, _ string, _ any) error {
+	return errors.New("unused")
+}
+
+func (f *flakyMessagesCompleter) CompleteMessages(_ context.Context, messages []runtime.Message) (string, error) {
+	f.transcripts = append(f.transcripts, append([]runtime.Message(nil), messages...))
+	if len(f.transcripts) == 1 {
+		return "notes: next read a file\naction: tool read_file path=/w/a", nil
+	}
+	return `{"action":{"type":"tool","tool_call":{"name":"read_file","args":{"path":"/w/a"}}}}`, nil
+}
+
+func TestPromptBackendRepairsInsideTheSameTranscript(t *testing.T) {
+	completer := &flakyMessagesCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "repair", EntryAgent: "writer"},
+		Agent:     agentflow.AgentSpec{ID: "writer", SystemPrompt: "write"},
+	}
+	result, err := backend.Generate(context.Background(), runtime.GenerateRequest{
+		Process: kernel.Process{PID: "pid-1", Metadata: map[string]string{"goal": "read a"}},
+		History: []runtime.Message{{Role: "user", Content: "read a"}},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if result.Action.ToolCall == nil || result.Action.ToolCall.Name != "read_file" {
+		t.Fatalf("expected repaired tool action, got %#v", result.Action)
+	}
+	first, repair := completer.transcripts[0], completer.transcripts[1]
+	if len(repair) != len(first)+2 {
+		t.Fatalf("expected repair to append two messages, got %d after %d", len(repair), len(first))
+	}
+	for i := range first {
+		if first[i] != repair[i] {
+			t.Fatalf("repair changed message %d", i)
+		}
+	}
+	if repair[len(first)].Role != "assistant" || repair[len(first)+1].Role != "user" {
+		t.Fatalf("expected the bad reply then a correction, got %#v", repair[len(first):])
+	}
+}

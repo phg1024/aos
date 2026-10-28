@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1331,10 +1332,20 @@ func TestAgentRuntimeRecordsNotesAndActionsInHistory(t *testing.T) {
 	if record.Role != "assistant" {
 		t.Fatalf("expected assistant action record, got %#v", record)
 	}
-	wantRecord := "notes: Plan: vec3.h then main.cpp. Next: vec3.h.\naction: tool write_file content=<" +
-		strconv.Itoa(len(content)) + " bytes> path=" + target
-	if record.Content != wantRecord {
-		t.Fatalf("unexpected action record:\n got %q\nwant %q", record.Content, wantRecord)
+	// The record is valid action JSON, so the history also serves as format examples.
+	var recorded runtime.GenerateResult
+	if err := json.Unmarshal([]byte(record.Content), &recorded); err != nil {
+		t.Fatalf("expected action JSON record, got %q: %v", record.Content, err)
+	}
+	if recorded.Action.Type != "tool" || recorded.Action.Notes != "Plan: vec3.h then main.cpp. Next: vec3.h." {
+		t.Fatalf("unexpected recorded action %#v", recorded.Action)
+	}
+	args := recorded.Action.ToolCall.Args
+	if args["path"] != target || args["content"] != "<"+strconv.Itoa(len(content))+" bytes>" {
+		t.Fatalf("expected path kept and content replaced by its size, got %#v", args)
+	}
+	if strings.Contains(record.Content, `\u003c`) {
+		t.Fatalf("expected unescaped placeholders, got %q", record.Content)
 	}
 	if history[2].Role != "tool" || !strings.HasPrefix(history[2].Content, "write_file:") {
 		t.Fatalf("expected tool result to stay last, got %#v", history[2])
