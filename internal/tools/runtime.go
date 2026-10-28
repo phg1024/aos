@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -25,6 +26,12 @@ import (
 // MaxToolOutputBytes caps file contents and command output returned to an
 // agent, so a single large result cannot overflow the model context.
 const MaxToolOutputBytes = 64 * 1024
+
+// Search endpoints are variables so tests can point them at a local server.
+var (
+	instantAnswerEndpoint = "https://api.duckduckgo.com/"
+	htmlSearchEndpoint    = "https://html.duckduckgo.com/html/"
+)
 
 var ErrToolDenied = errors.New("tool execution denied by capabilities")
 var ErrPathDenied = errors.New("path access denied by capabilities")
@@ -275,7 +282,7 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				timeout = parsed
 			}
 		}
-		searchURL := "https://api.duckduckgo.com/?q=" + url.QueryEscape(query) + "&format=json&no_html=1"
+		searchURL := instantAnswerEndpoint + "?q=" + url.QueryEscape(query) + "&format=json&no_html=1"
 		client := &http.Client{
 			Timeout: timeout,
 		}
@@ -294,7 +301,7 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		}
 		summary := summarizeInstantAnswer(result)
 		if strings.TrimSpace(summary) == "" {
-			htmlSummary, htmlURL, htmlRaw, htmlErr := fallbackHTMLSearch(client, query)
+			htmlSummary, htmlURL, _, htmlErr := fallbackHTMLSearch(client, query)
 			if htmlErr == nil && strings.TrimSpace(htmlSummary) != "" {
 				return Result{
 					Tool:    req.Tool,
@@ -304,7 +311,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 						"status":     "200",
 						"source":     "duckduckgo_html",
 						"search_url": htmlURL,
-						"raw":        htmlRaw,
 						"result":     htmlSummary,
 					},
 				}, nil
@@ -318,7 +324,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				"status":     fmt.Sprintf("%d", resp.StatusCode),
 				"source":     "duckduckgo_instant_answer",
 				"search_url": searchURL,
-				"raw":        string(body),
 				"result":     summary,
 			},
 		}, nil
@@ -350,17 +355,40 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 			return Result{}, fmt.Errorf("failed to read response: %w", err)
 		}
 		contentType := resp.Header.Get("Content-Type")
-		textContent := truncateString(simpleHTMLToText(string(body)), 8000)
+		fullText := string(body)
+		if strings.Contains(strings.ToLower(contentType), "html") || strings.Contains(strings.ToLower(fullText[:min(len(fullText), 512)]), "<html") {
+			fullText = simpleHTMLToText(fullText)
+		}
+		offset := 0
+		if raw := strings.TrimSpace(req.Args["offset"]); raw != "" {
+			parsed, parseErr := strconv.Atoi(raw)
+			if parseErr != nil || parsed < 0 {
+				return Result{}, errors.New("web_fetch offset must be a non-negative byte offset")
+			}
+			offset = min(parsed, len(fullText))
+			for offset > 0 && offset < len(fullText) && !utf8.RuneStart(fullText[offset]) {
+				offset--
+			}
+		}
+		next := min(offset+MaxToolOutputBytes, len(fullText))
+		for next > offset && next < len(fullText) && !utf8.RuneStart(fullText[next]) {
+			next--
+		}
+		text, truncated := capToolOutput(fullText[offset:], fmt.Sprintf("call web_fetch again with offset=%d to continue", next))
+		output := map[string]string{
+			"url":          targetURL,
+			"status":       fmt.Sprintf("%d", resp.StatusCode),
+			"content_type": contentType,
+			"text":         text,
+			"text_bytes":   fmt.Sprintf("%d", len(fullText)),
+		}
+		if truncated {
+			output["truncated"] = "true"
+		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: "web fetch completed",
-			Output: map[string]string{
-				"url":          targetURL,
-				"status":       fmt.Sprintf("%d", resp.StatusCode),
-				"content_type": contentType,
-				"content":      string(body),
-				"text":         textContent,
-			},
+			Output:  output,
 		}, nil
 	default:
 		return Result{}, errors.New("unknown tool")
@@ -533,7 +561,7 @@ func summarizeInstantAnswer(result map[string]interface{}) string {
 }
 
 func fallbackHTMLSearch(client *http.Client, query string) (summary string, searchURL string, raw string, err error) {
-	searchURL = "https://html.duckduckgo.com/html/?q=" + url.QueryEscape(query)
+	searchURL = htmlSearchEndpoint + "?q=" + url.QueryEscape(query)
 	resp, err := getWithUserAgent(client, searchURL)
 	if err != nil {
 		return "", searchURL, "", err

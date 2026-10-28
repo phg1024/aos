@@ -1,8 +1,13 @@
 package tools
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+
+	"aos/internal/capability"
 )
 
 func TestSimpleHTMLToTextHandlesOutOfOrderClosingTags(t *testing.T) {
@@ -58,5 +63,78 @@ func TestSummarizeInstantAnswerReturnsEmptyWhenNoUsefulFields(t *testing.T) {
 	})
 	if got != "" {
 		t.Fatalf("expected empty summary, got %q", got)
+	}
+}
+
+func TestWebSearchReturnsResultsWithoutRawPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/answer" {
+			_, _ = w.Write([]byte(`{"AbstractText":"","RelatedTopics":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`<html><body>` + strings.Repeat("<!-- padding -->", 2000) +
+			`<a class="result__a" href="https://example.com/megakernel">Megakernel <b>notes</b></a>` +
+			`<a class="result__snippet" href="#">Fuse a whole decode step into one kernel launch.</a>` +
+			`</body></html>`))
+	}))
+	defer server.Close()
+	prevAnswer, prevHTML := instantAnswerEndpoint, htmlSearchEndpoint
+	instantAnswerEndpoint, htmlSearchEndpoint = server.URL+"/answer", server.URL+"/html"
+	defer func() { instantAnswerEndpoint, htmlSearchEndpoint = prevAnswer, prevHTML }()
+
+	result, err := NewRuntime().Execute(Request{
+		Tool:          "web_search",
+		Args:          map[string]string{"query": "megakernel"},
+		CapabilitySet: capability.Set{Tools: []string{"web_search"}},
+	})
+	if err != nil {
+		t.Fatalf("web_search: %v", err)
+	}
+	if _, ok := result.Output["raw"]; ok {
+		t.Fatalf("expected no raw payload in output, got %d bytes", len(result.Output["raw"]))
+	}
+	got := result.Output["result"]
+	for _, want := range []string{"Megakernel notes", "https://example.com/megakernel", "one kernel launch"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in result:\n%s", want, got)
+		}
+	}
+}
+
+func TestWebFetchReturnsPagedTextOnly(t *testing.T) {
+	paragraph := strings.Repeat("Tile binning keeps triangles near their pixels. ", 2000)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html><head><script>ignored()</script></head><body><p>" + paragraph + "</p></body></html>"))
+	}))
+	defer server.Close()
+	fetch := func(args map[string]string) Result {
+		t.Helper()
+		args["url"] = server.URL
+		result, err := NewRuntime().Execute(Request{Tool: "web_fetch", Args: args, CapabilitySet: capability.Set{Tools: []string{"web_fetch"}}})
+		if err != nil {
+			t.Fatalf("web_fetch: %v", err)
+		}
+		return result
+	}
+
+	first := fetch(map[string]string{})
+	if _, ok := first.Output["content"]; ok {
+		t.Fatal("expected raw page content to be omitted")
+	}
+	if strings.Contains(first.Output["text"], "ignored()") || first.Output["truncated"] != "true" {
+		t.Fatalf("expected extracted, truncated text; truncated=%q", first.Output["truncated"])
+	}
+	if len(first.Output["text"]) > MaxToolOutputBytes+200 {
+		t.Fatalf("expected text capped near %d bytes, got %d", MaxToolOutputBytes, len(first.Output["text"]))
+	}
+	total, _ := strconv.Atoi(first.Output["text_bytes"])
+	if total <= MaxToolOutputBytes {
+		t.Fatalf("expected total text size above the cap, got %d", total)
+	}
+
+	rest := fetch(map[string]string{"offset": strconv.Itoa(MaxToolOutputBytes)})
+	if rest.Output["truncated"] != "" || !strings.Contains(rest.Output["text"], "Tile binning") {
+		t.Fatalf("expected the remaining text without truncation, got truncated=%q", rest.Output["truncated"])
 	}
 }
