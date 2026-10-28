@@ -329,3 +329,46 @@ func jsonResponse(status int, payload map[string]any) *http.Response {
 		Body:       io.NopCloser(strings.NewReader(string(bytes))),
 	}
 }
+
+func TestVLLMBackendSendsSamplingControls(t *testing.T) {
+	capture := func(sampling inference.Sampling) map[string]any {
+		var body map[string]any
+		backend := inference.NewVLLMBackend(inference.VLLMConfig{
+			BaseURL:  "http://vllm.local",
+			Model:    "local-model",
+			Sampling: sampling,
+			HTTPClient: &http.Client{
+				Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatalf("decode request: %v", err)
+					}
+					return jsonResponse(http.StatusOK, map[string]any{
+						"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+					}), nil
+				}),
+			},
+		})
+		if _, err := backend.CompleteText(context.Background(), "system", "user"); err != nil {
+			t.Fatalf("complete text: %v", err)
+		}
+		return body
+	}
+
+	body := capture(inference.Sampling{})
+	if body["temperature"] != 0.0 {
+		t.Fatalf("expected default temperature 0, got %#v", body["temperature"])
+	}
+	for _, key := range []string{"top_p", "max_tokens", "reasoning_budget_tokens"} {
+		if _, ok := body[key]; ok {
+			t.Fatalf("expected %s to be omitted by default, got %#v", key, body)
+		}
+	}
+
+	body = capture(inference.Sampling{Temperature: 0.6, TopP: 0.95, MaxTokens: 32768, ThinkingBudget: 16384})
+	want := map[string]any{"temperature": 0.6, "top_p": 0.95, "max_tokens": 32768.0, "reasoning_budget_tokens": 16384.0}
+	for key, value := range want {
+		if body[key] != value {
+			t.Fatalf("expected %s=%v, got %#v", key, value, body[key])
+		}
+	}
+}

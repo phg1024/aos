@@ -49,6 +49,8 @@ AOS now uses backend-agnostic env vars for live model selection:
 - `AOS_LLM_MODEL`
 - `AOS_LLM_API_KEY`
 - `AOS_LLM_TIMEOUT_SECONDS`
+- `AOS_LLM_TEMPERATURE` (default `0`), `AOS_LLM_TOP_P`, `AOS_LLM_MAX_TOKENS` optional sampling controls; thinking models such as Qwen should not run greedy, e.g. temperature `0.6` with top_p `0.95`
+- `AOS_LLM_THINKING_BUDGET` optional cap on reasoning tokens, sent as `reasoning_budget_tokens` for llama.cpp-style servers such as Strata
 - `AOS_LLM_CONTEXT_WINDOW` model context size in tokens; when set, workflow runs compact agent history at `AOS_COMPACT_RATIO` (default `0.8`) of it instead of the small built-in limits
 
 Legacy `AOS_VLLM_*` vars are still supported as fallback for existing scripts.

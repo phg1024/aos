@@ -106,3 +106,22 @@ func TestLoadBackendConfigReadsContextWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadBackendConfigReadsSampling(t *testing.T) {
+	t.Setenv("AOS_LLM_TEMPERATURE", "0.6")
+	t.Setenv("AOS_LLM_TOP_P", "0.95")
+	t.Setenv("AOS_LLM_MAX_TOKENS", "32768")
+	t.Setenv("AOS_LLM_THINKING_BUDGET", "16384")
+	got := inference.LoadBackendConfig(time.Minute).Sampling
+	want := inference.Sampling{Temperature: 0.6, TopP: 0.95, MaxTokens: 32768, ThinkingBudget: 16384}
+	if got != want {
+		t.Fatalf("expected %#v, got %#v", want, got)
+	}
+
+	for _, name := range []string{"AOS_LLM_TEMPERATURE", "AOS_LLM_TOP_P", "AOS_LLM_MAX_TOKENS", "AOS_LLM_THINKING_BUDGET"} {
+		t.Setenv(name, "bogus")
+	}
+	if got := inference.LoadBackendConfig(time.Minute).Sampling; got != (inference.Sampling{}) {
+		t.Fatalf("expected invalid values to fall back to defaults, got %#v", got)
+	}
+}

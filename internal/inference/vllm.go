@@ -25,6 +25,7 @@ type VLLMConfig struct {
 	SystemPrompt  string
 	Timeout       time.Duration
 	MaxRetries    int
+	Sampling      Sampling
 	HTTPClient    *http.Client
 	OnStreamEvent func(StreamEvent)
 }
@@ -37,6 +38,7 @@ type VLLMBackend struct {
 	system        string
 	maxRetries    int
 	onStreamEvent func(StreamEvent)
+	sampling      Sampling
 }
 
 type StreamKind string
@@ -52,11 +54,25 @@ type StreamEvent struct {
 	Text string     `json:"text,omitempty"`
 }
 
+// Sampling holds optional generation controls. Zero values leave the
+// server default in place, except Temperature, which is always sent.
+type Sampling struct {
+	Temperature float64
+	TopP        float64
+	MaxTokens   int
+	// ThinkingBudget caps reasoning tokens for servers that accept
+	// reasoning_budget_tokens (llama.cpp-style servers such as Strata).
+	ThinkingBudget int
+}
+
 type chatCompletionRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
-	Stream      bool          `json:"stream,omitempty"`
+	Model                 string        `json:"model"`
+	Messages              []chatMessage `json:"messages"`
+	Temperature           float64       `json:"temperature"`
+	TopP                  float64       `json:"top_p,omitempty"`
+	MaxTokens             int           `json:"max_tokens,omitempty"`
+	ReasoningBudgetTokens int           `json:"reasoning_budget_tokens,omitempty"`
+	Stream                bool          `json:"stream,omitempty"`
 }
 
 type chatMessage struct {
@@ -91,6 +107,7 @@ func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
 		client:        client,
 		maxRetries:    max(1, config.MaxRetries),
 		onStreamEvent: config.OnStreamEvent,
+		sampling:      config.Sampling,
 	}
 }
 
@@ -140,10 +157,13 @@ type chatCompletionChunk struct {
 
 func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
 	payload := chatCompletionRequest{
-		Model:       b.model,
-		Messages:    messages,
-		Temperature: 0,
-		Stream:      b.onStreamEvent != nil,
+		Model:                 b.model,
+		Messages:              messages,
+		Temperature:           b.sampling.Temperature,
+		TopP:                  b.sampling.TopP,
+		MaxTokens:             b.sampling.MaxTokens,
+		ReasoningBudgetTokens: b.sampling.ThinkingBudget,
+		Stream:                b.onStreamEvent != nil,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

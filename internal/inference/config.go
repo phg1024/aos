@@ -23,6 +23,7 @@ type BackendConfig struct {
 	Timeout time.Duration
 	// ContextWindow is the model context size in tokens; 0 means unknown.
 	ContextWindow int
+	Sampling      Sampling
 }
 
 type BackendOptions struct {
@@ -61,6 +62,12 @@ func LoadBackendConfig(defaultTimeout time.Duration) BackendConfig {
 		APIKey:        apiKey,
 		Timeout:       parseTimeoutEnv(defaultTimeout),
 		ContextWindow: parseContextWindowEnv(),
+		Sampling: Sampling{
+			Temperature:    parseFloatEnv("AOS_LLM_TEMPERATURE"),
+			TopP:           parseFloatEnv("AOS_LLM_TOP_P"),
+			MaxTokens:      parsePositiveIntEnv("AOS_LLM_MAX_TOKENS"),
+			ThinkingBudget: parsePositiveIntEnv("AOS_LLM_THINKING_BUDGET"),
+		},
 	}
 }
 
@@ -72,6 +79,7 @@ func NewBackendFromConfig(config BackendConfig, options BackendOptions) *VLLMBac
 		SystemPrompt:  options.SystemPrompt,
 		Timeout:       config.Timeout,
 		OnStreamEvent: options.OnStreamEvent,
+		Sampling:      config.Sampling,
 	})
 }
 
@@ -140,11 +148,25 @@ func parseTimeoutEnv(fallback time.Duration) time.Duration {
 }
 
 func parseContextWindowEnv() int {
-	tokens, err := strconv.Atoi(strings.TrimSpace(os.Getenv("AOS_LLM_CONTEXT_WINDOW")))
-	if err != nil || tokens <= 0 {
+	return parsePositiveIntEnv("AOS_LLM_CONTEXT_WINDOW")
+}
+
+// parsePositiveIntEnv returns 0 when the variable is unset or not a positive integer.
+func parsePositiveIntEnv(name string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name)))
+	if err != nil || value <= 0 {
 		return 0
 	}
-	return tokens
+	return value
+}
+
+// parseFloatEnv returns 0 when the variable is unset, invalid, or negative.
+func parseFloatEnv(name string) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv(name)), 64)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
 }
 
 func firstNonEmpty(values ...string) string {
