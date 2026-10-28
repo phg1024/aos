@@ -1,6 +1,6 @@
 {
   "name": "live-reviewed-merge",
-  "description": "A reviewer agent is present only because the workflow requests one, not because AOS enforces it.",
+  "description": "Merge source fragments into one HTML note, write it, and gate success on review_partner's verdict: its exit code decides whether the workflow passes.",
   "entry_agent": "delivery_lead",
   "verification": {
     "policy": "required",
@@ -50,7 +50,7 @@
     },
     {
       "id": "review_partner",
-      "system_prompt": "Use read_file to inspect the produced output file at the output path from the session context. Return a short review note in a message action covering coherence, duplication, and whether the main points seem preserved. Then exit with your verdict: code 0 if the document is coherent, free of duplication and preserves the main points, or code 1 naming the problems if it is not. Your exit code is the verdict the workflow is gated on.",
+      "system_prompt": "Use read_file to inspect the produced output file at the output path from the session context. Return a short review note in a message action covering coherence, duplication, and whether the main points seem preserved. Then exit with your verdict: code 0 if the document is coherent, free of duplication and preserves the main points, or code 1 with retryable false naming the problems if it is not. Your exit code is the verdict the workflow is gated on.",
       "capabilities": {
         "tools": [
           "read_file"

@@ -23,6 +23,9 @@ import (
 var ErrMalformedBackendOutput = errors.New("malformed backend output")
 var ErrAgentBlocked = errors.New("agent blocked waiting for input")
 
+// messageRecordedNote follows a message action in an autonomous run.
+const messageRecordedNote = "message_recorded note=your last message is your result and reaches whoever started you when you exit; if your task is done, exit now instead of repeating the message"
+
 // ErrRunCancelled reports that the caller's context ended a run. The session
 // is checkpointed and the process left ready, so Resume continues it.
 var ErrRunCancelled = errors.New("run cancelled")
@@ -391,6 +394,10 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return RunResult{PID: pid, CheckpointID: checkpointID, Session: session, Yielded: true}, nil
 			}
+			// Nobody answers a message in an autonomous run. Without this
+			// note, agents told to "return X in a message, then exit" kept
+			// resending the message until their step limit.
+			session.Messages = append(session.Messages, Message{Role: "tool", Content: messageRecordedNote})
 		case "tool":
 			if result.Action.ToolCall == nil || result.Action.ToolCall.Name == "" {
 				if continued, err := handleMalformed(); err != nil {

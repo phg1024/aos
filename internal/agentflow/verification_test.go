@@ -202,3 +202,34 @@ func TestValidateVerification(t *testing.T) {
 		}
 	}
 }
+
+// Re-running the verifier after it judged the work as failing cannot shop
+// for a pass: only a change to the work clears a judgement.
+func TestVerifierJudgementFailureSticksUntilWorkChanges(t *testing.T) {
+	f, summary := runGated(t, "required",
+		delegateAction("writer"), exitWith(0, "wrote", false),
+		delegateAction("verifier"), exitWith(1, "FAIL: output lost content", false),
+		delegateAction("verifier"), exitWith(0, "PASS", false),
+		exitWith(0, "done", false))
+	status := f.rootStatus(t, summary)
+	verdict := summary.Verification
+	if verdict.Status != agentflow.VerdictFail || verdict.VerifierExit.Reason != "FAIL: output lost content" {
+		t.Fatalf("the earlier judgement should stand, got %+v", verdict)
+	}
+	if status.Code != 1 || !strings.Contains(status.Reason, "failed: FAIL: output lost content; later verifier") || !strings.Contains(status.Reason, "does not clear it without a change to the work") {
+		t.Fatalf("root exit = %+v", status)
+	}
+}
+
+// A retryable verifier failure (step limit, crash) is operational, so a
+// later run on the same work may pass.
+func TestRetryableVerifierFailureCanBeRetried(t *testing.T) {
+	f, summary := runGated(t, "required",
+		delegateAction("writer"), exitWith(0, "wrote", false),
+		delegateAction("verifier"), exitWith(1, "step limit exceeded", true),
+		delegateAction("verifier"), exitWith(0, "PASS", false),
+		exitWith(0, "done", false))
+	if status := f.rootStatus(t, summary); status.Code != 0 || summary.Verification.Status != agentflow.VerdictPass {
+		t.Fatalf("a retry after an operational failure should pass, got %+v %+v", status, summary.Verification)
+	}
+}

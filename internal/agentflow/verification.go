@@ -54,32 +54,68 @@ func (e *Engine) judge(spec WorkflowSpec, policy workflow.VerificationPolicy, ro
 		verdict.Reason = "no verifier run"
 		return verdict, nil
 	}
+	// The last change to the work: a work-changing delegated run. The entry
+	// agent is left out because its run spans the whole workflow.
+	var lastChange *exitedRun
+	for idx := range runs {
+		run := runs[idx]
+		if run.pid == entryPID || run.agentID == verdict.Verifier {
+			continue
+		}
+		if agent, ok := spec.Agent(run.agentID); ok && agent.IsWorkChanging() && (lastChange == nil || run.seq > lastChange.seq) {
+			lastChange = &runs[idx]
+		}
+	}
+	if lastChange != nil && lastChange.seq > latest.seq {
+		status, err := e.Kernel.Await(latest.pid)
+		if err != nil {
+			return Verdict{}, err
+		}
+		verdict.VerifierPID, verdict.VerifierExit = latest.pid, &status
+		verdict.Status = VerdictStale
+		verdict.StaleAgent, verdict.StalePID = lastChange.agentID, lastChange.pid
+		verdict.Reason = fmt.Sprintf("verdict stale; %s (%s) ran after verifier %s", lastChange.agentID, lastChange.pid, latest.pid)
+		return verdict, nil
+	}
+
+	// A verifier's own judgement (a non-retryable failure) stands until the
+	// work changes, so re-running the verifier cannot shop for a pass. A
+	// retryable failure (step limit, crash) is operational and a later run
+	// may clear it.
+	var judged *exitedRun
+	var judgedStatus kernel.ExitStatus
+	for idx := range runs {
+		run := runs[idx]
+		if run.agentID != verdict.Verifier || (lastChange != nil && run.seq < lastChange.seq) {
+			continue
+		}
+		status, err := e.Kernel.Await(run.pid)
+		if err != nil {
+			return Verdict{}, err
+		}
+		if status.Code != 0 && !status.Retryable && (judged == nil || run.seq > judged.seq) {
+			judged, judgedStatus = &runs[idx], status
+		}
+	}
+	if judged != nil {
+		verdict.VerifierPID, verdict.VerifierExit = judged.pid, &judgedStatus
+		verdict.Status = VerdictFail
+		verdict.Reason = fmt.Sprintf("verifier %s failed: %s", judged.pid, judgedStatus.Reason)
+		if judged.pid != latest.pid {
+			verdict.Reason += fmt.Sprintf("; later verifier %s does not clear it without a change to the work", latest.pid)
+		}
+		return verdict, nil
+	}
+
 	status, err := e.Kernel.Await(latest.pid)
 	if err != nil {
 		return Verdict{}, err
 	}
-	verdict.VerifierPID = latest.pid
-	verdict.VerifierExit = &status
-
-	var stale *exitedRun
-	for idx := range runs {
-		run := runs[idx]
-		if run.pid == entryPID || run.agentID == verdict.Verifier || run.seq < latest.seq {
-			continue
-		}
-		if agent, ok := spec.Agent(run.agentID); ok && agent.IsWorkChanging() && (stale == nil || run.seq > stale.seq) {
-			stale = &runs[idx]
-		}
-	}
-	switch {
-	case stale != nil:
-		verdict.Status = VerdictStale
-		verdict.StaleAgent, verdict.StalePID = stale.agentID, stale.pid
-		verdict.Reason = fmt.Sprintf("verdict stale; %s (%s) ran after verifier %s", stale.agentID, stale.pid, latest.pid)
-	case status.Code == 0:
+	verdict.VerifierPID, verdict.VerifierExit = latest.pid, &status
+	if status.Code == 0 {
 		verdict.Status = VerdictPass
 		verdict.Reason = fmt.Sprintf("verifier %s passed: %s", latest.pid, status.Reason)
-	default:
+	} else {
 		verdict.Status = VerdictFail
 		verdict.Reason = fmt.Sprintf("verifier %s failed: %s", latest.pid, status.Reason)
 	}

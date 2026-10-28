@@ -114,3 +114,32 @@ func TestPathDenialIsLogged(t *testing.T) {
 		t.Fatalf("expected one path denial event, got %+v", events)
 	}
 }
+
+// In an autonomous run a message is followed by a note that it was
+// recorded, so the agent exits instead of resending it; an interactive run
+// yields to the user instead.
+func TestMessageRecordedNoteOnlyInAutonomousRuns(t *testing.T) {
+	for _, interactive := range []bool{false, true} {
+		k, store, process := newCancelFixture(t)
+		steps := []runtime.GenerateResult{{Action: runtime.GenerateAction{Type: "message", Message: "<html>result</html>"}}, exitResult("done")}
+		backend := &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			return steps[call-1], nil
+		}}
+		agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 4}
+		result, err := agentRuntime.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{StopOnAssistantMessage: interactive})
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		messages := result.Session.Messages
+		index := -1
+		for i, message := range messages {
+			if message.Content == "<html>result</html>" {
+				index = i
+			}
+		}
+		hasNote := index >= 0 && index+1 < len(messages) && strings.HasPrefix(messages[index+1].Content, "message_recorded ")
+		if hasNote == interactive {
+			t.Fatalf("interactive=%v: note present=%v, history %+v", interactive, hasNote, messages)
+		}
+	}
+}
