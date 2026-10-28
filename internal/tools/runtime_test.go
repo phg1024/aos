@@ -3,8 +3,10 @@ package tools_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -291,5 +293,54 @@ func TestEditFileTool(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected missing old_text match error")
+	}
+}
+
+func TestLargeToolOutputIsCapped(t *testing.T) {
+	root := t.TempDir()
+	runtime := tools.NewRuntime()
+	mounts := []capability.Mount{{Name: "workspace", HostPath: root}}
+
+	small := filepath.Join(root, "small.txt")
+	if err := os.WriteFile(small, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write small: %v", err)
+	}
+	// 'é' is two bytes, so the cap falls inside a rune and must back off.
+	big := filepath.Join(root, "image.ppm")
+	bigContent := "P3\n" + strings.Repeat("é", tools.MaxToolOutputBytes)
+	if err := os.WriteFile(big, []byte(bigContent), 0o644); err != nil {
+		t.Fatalf("write big: %v", err)
+	}
+	set := capability.Set{ReadPaths: []string{root}, Tools: []string{"read_file", "run"}}
+
+	result, err := runtime.Execute(tools.Request{Tool: "read_file", Args: map[string]string{"path": small}, Mounts: mounts, CapabilitySet: set})
+	if err != nil {
+		t.Fatalf("read small: %v", err)
+	}
+	if result.Output["content"] != "hello" || result.Output["truncated"] != "" {
+		t.Fatalf("expected small file verbatim, got %#v", result.Output)
+	}
+
+	result, err = runtime.Execute(tools.Request{Tool: "read_file", Args: map[string]string{"path": big}, Mounts: mounts, CapabilitySet: set})
+	if err != nil {
+		t.Fatalf("read big: %v", err)
+	}
+	content := result.Output["content"]
+	if result.Output["truncated"] != "true" || result.Output["size_bytes"] != strconv.Itoa(len(bigContent)) {
+		t.Fatalf("expected truncation metadata, got truncated=%q size=%q", result.Output["truncated"], result.Output["size_bytes"])
+	}
+	if len(content) > tools.MaxToolOutputBytes+200 || !strings.Contains(content, "[truncated: showing") {
+		t.Fatalf("expected capped content with notice, got %d bytes", len(content))
+	}
+	if !utf8.ValidString(content) {
+		t.Fatal("expected truncation on a UTF-8 boundary")
+	}
+
+	result, err = runtime.Execute(tools.Request{Tool: "run", Args: map[string]string{"command": "cat image.ppm"}, Mounts: mounts, CapabilitySet: set})
+	if err != nil {
+		t.Fatalf("run cat: %v", err)
+	}
+	if len(result.Output["stdout"]) > tools.MaxToolOutputBytes+200 || !strings.Contains(result.Output["stdout"], "[truncated: showing") {
+		t.Fatalf("expected capped stdout, got %d bytes", len(result.Output["stdout"]))
 	}
 }

@@ -16,10 +16,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
 )
+
+// MaxToolOutputBytes caps file contents and command output returned to an
+// agent, so a single large result cannot overflow the model context.
+const MaxToolOutputBytes = 64 * 1024
 
 var ErrToolDenied = errors.New("tool execution denied by capabilities")
 var ErrPathDenied = errors.New("path access denied by capabilities")
@@ -80,13 +85,19 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+		content, truncated := capToolOutput(string(contentBytes), "use run with head, tail, sed -n, or a script to inspect the rest")
+		output := map[string]string{
+			"path":    path,
+			"content": content,
+		}
+		if truncated {
+			output["truncated"] = "true"
+			output["size_bytes"] = fmt.Sprintf("%d", len(contentBytes))
+		}
 		return Result{
 			Tool:    req.Tool,
 			Summary: "read file",
-			Output: map[string]string{
-				"path":    path,
-				"content": string(contentBytes),
-			},
+			Output:  output,
 		}, nil
 	case "edit_file":
 		path := filepath.Clean(req.Args["path"])
@@ -247,8 +258,8 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
 			Output: map[string]string{
 				"command":   command,
-				"stdout":    stdoutBuf.String(),
-				"stderr":    stderrBuf.String(),
+				"stdout":    capOutput(stdoutBuf.String()),
+				"stderr":    capOutput(stderrBuf.String()),
 				"exit_code": fmt.Sprintf("%d", exitCode),
 			},
 		}, nil
@@ -375,6 +386,24 @@ func mountRoot(mounts []capability.Mount) string {
 		return "."
 	}
 	return filepath.Clean(mounts[0].HostPath)
+}
+
+// capToolOutput truncates s to MaxToolOutputBytes on a UTF-8 boundary and
+// appends a notice with the dropped size and how to see more.
+func capToolOutput(s, hint string) (string, bool) {
+	if len(s) <= MaxToolOutputBytes {
+		return s, false
+	}
+	cut := MaxToolOutputBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + fmt.Sprintf("\n[truncated: showing %d of %d bytes; %s]", cut, len(s), hint), true
+}
+
+func capOutput(s string) string {
+	capped, _ := capToolOutput(s, "redirect output to a file and inspect it in smaller pieces")
+	return capped
 }
 
 // truncateString truncates a string to maxLen characters
