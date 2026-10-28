@@ -18,7 +18,9 @@ func gatedSpec(policy string) agentflow.WorkflowSpec {
 		Name:       "gated",
 		EntryAgent: "coordinator",
 		Agents: []agentflow.AgentSpec{
-			{ID: "coordinator", SystemPrompt: "Coordinate.", AllowedAgents: []string{"writer", "verifier"}},
+			{ID: "coordinator", SystemPrompt: "Coordinate.", AllowedAgents: []string{"writer", "verifier"},
+				Capabilities: capability.Set{Tools: []string{"spawn_agent"}},
+				Delegable:    capability.Set{Tools: []string{"write_file", "read_file"}}},
 			{ID: "writer", SystemPrompt: "Write.", Capabilities: capability.Set{Tools: []string{"write_file"}}},
 			{ID: "verifier", SystemPrompt: "Verify.", Capabilities: capability.Set{Tools: []string{"read_file"}}},
 		},
@@ -188,6 +190,7 @@ func TestValidateVerification(t *testing.T) {
 	reachedThroughWriter := gatedSpec("required")
 	reachedThroughWriter.Agents[0].AllowedAgents = []string{"writer"}
 	reachedThroughWriter.Agents[1].AllowedAgents = []string{"verifier"}
+	reachedThroughWriter.Agents[1].Delegable = capability.Set{Tools: []string{"read_file"}}
 	if err := reachedThroughWriter.Validate(); err != nil {
 		t.Fatalf("a verifier reachable through another agent is valid: %v", err)
 	}

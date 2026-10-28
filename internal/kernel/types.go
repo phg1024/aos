@@ -50,6 +50,8 @@ type ProcessSpec struct {
 	Metadata      map[string]string  `json:"metadata,omitempty"`
 	Mounts        []capability.Mount `json:"mounts,omitempty"`
 	CapabilitySet capability.Set     `json:"capability_set"`
+	// Delegable is authority the process may grant to children but not use.
+	Delegable capability.Set `json:"delegable"`
 }
 
 type Process struct {
@@ -60,6 +62,7 @@ type Process struct {
 	Metadata      map[string]string  `json:"metadata,omitempty"`
 	Mounts        []capability.Mount `json:"mounts,omitempty"`
 	CapabilitySet capability.Set     `json:"capability_set"`
+	Delegable     capability.Set     `json:"delegable"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
 	ExitStatus    *ExitStatus        `json:"exit_status,omitempty"`

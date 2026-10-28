@@ -16,7 +16,15 @@
         "review_partner"
       ],
       "capabilities": {
-        "tools": []
+        "tools": [
+          "spawn_agent"
+        ]
+      },
+      "delegable": {
+        "tools": [
+          "read_file",
+          "write_file"
+        ]
       },
       "max_steps": 10
     },

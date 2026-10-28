@@ -33,10 +33,14 @@ func (Evaluator) ToolAllowed(tool string, set Set) bool {
 	return slices.Contains(set.Tools, tool)
 }
 
+// DeriveChildSet narrows requested to what parent may grant: tools both
+// name, path scopes that lie within both (a requested scope inside a
+// parent scope is kept as requested; a wider one is cut down to the parent
+// scope), and network only if both allow it.
 func DeriveChildSet(parent, requested Set) Set {
 	return Set{
-		ReadPaths:    intersectStrings(parent.ReadPaths, requested.ReadPaths),
-		WritePaths:   intersectStrings(parent.WritePaths, requested.WritePaths),
+		ReadPaths:    intersectScopes(parent.ReadPaths, requested.ReadPaths),
+		WritePaths:   intersectScopes(parent.WritePaths, requested.WritePaths),
 		Tools:        intersectStrings(parent.Tools, requested.Tools),
 		AllowNetwork: parent.AllowNetwork && requested.AllowNetwork,
 	}

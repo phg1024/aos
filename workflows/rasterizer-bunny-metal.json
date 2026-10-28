@@ -39,7 +39,8 @@
           "/Users/claw/Code/aos/reports/rasterizer-bunny"
         ],
         "write_paths": [
-          "/Users/claw/Code/aos/reports/rasterizer-bunny-metal"
+          "/Users/claw/Code/aos/reports/rasterizer-bunny-metal/metal_coordinator_log.txt",
+          "/Users/claw/Code/aos/reports/rasterizer-bunny-metal/final-summary.txt"
         ],
         "tools": [
           "spawn_agent",
@@ -49,6 +50,14 @@
           "list_dir",
           "web_search",
           "web_fetch"
+        ]
+      },
+      "delegable": {
+        "write_paths": [
+          "/Users/claw/Code/aos/reports/rasterizer-bunny-metal"
+        ],
+        "tools": [
+          "run"
         ]
       }
     },

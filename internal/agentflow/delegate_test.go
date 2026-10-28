@@ -11,6 +11,7 @@ import (
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/tools"
@@ -59,7 +60,7 @@ func TestEngineDelegateHandlerServesExternalRuntime(t *testing.T) {
 		Name:       "interactive-delegation",
 		EntryAgent: "coordinator",
 		Agents: []agentflow.AgentSpec{
-			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}},
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
 			{ID: "writer", SystemPrompt: "Write."},
 		},
 	}
@@ -80,7 +81,7 @@ func TestEngineDelegateHandlerServesExternalRuntime(t *testing.T) {
 		},
 	}
 
-	process, err := k.Spawn(kernel.ProcessSpec{Role: "agent:coordinator", Metadata: map[string]string{"agent_id": "coordinator"}})
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "agent:coordinator", Metadata: map[string]string{"agent_id": "coordinator"}, CapabilitySet: capability.Set{Tools: []string{"spawn_agent"}}})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestEngineDelegateHandlerCancelLeavesParentResumable(t *testing.T) {
 		Name:       "interactive-cancel",
 		EntryAgent: "coordinator",
 		Agents: []agentflow.AgentSpec{
-			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}},
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
 			{ID: "writer", SystemPrompt: "Write."},
 		},
 	}
@@ -190,7 +191,7 @@ func TestEngineDelegateHandlerCancelLeavesParentResumable(t *testing.T) {
 			kinds = append(kinds, event.AgentID+":"+event.Kind)
 		},
 	}
-	process, err := k.Spawn(kernel.ProcessSpec{Role: "agent:coordinator", Metadata: map[string]string{"agent_id": "coordinator"}})
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "agent:coordinator", Metadata: map[string]string{"agent_id": "coordinator"}, CapabilitySet: capability.Set{Tools: []string{"spawn_agent"}}})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -272,7 +273,7 @@ func TestEngineSharesClockWithDelegatedAgents(t *testing.T) {
 		Name:       "clocked",
 		EntryAgent: "coordinator",
 		Agents: []agentflow.AgentSpec{
-			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}},
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
 			{ID: "writer", SystemPrompt: "Write."},
 		},
 	}

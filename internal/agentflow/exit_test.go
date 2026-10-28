@@ -8,6 +8,7 @@ import (
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/tools"
@@ -114,7 +115,7 @@ func TestDelegatedChildExitReachesParent(t *testing.T) {
 		Name:       "verified",
 		EntryAgent: "coordinator",
 		Agents: []agentflow.AgentSpec{
-			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"verifier"}},
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"verifier"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
 			{ID: "verifier", SystemPrompt: "Verify."},
 		},
 	}

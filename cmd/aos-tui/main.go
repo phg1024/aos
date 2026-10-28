@@ -89,6 +89,7 @@ func main() {
 		Metadata:      map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir},
 		Mounts:        agentMounts(agent, absWorkdir),
 		CapabilitySet: agentCapabilities(agent, absWorkdir),
+		Delegable:     agent.Delegable,
 	})
 	if err != nil {
 		fail(err)

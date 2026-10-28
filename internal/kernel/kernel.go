@@ -40,6 +40,7 @@ func (k *Kernel) Spawn(spec ProcessSpec) (Process, error) {
 		Metadata:      cloneMap(spec.Metadata),
 		Mounts:        append([]capability.Mount(nil), spec.Mounts...),
 		CapabilitySet: spec.CapabilitySet,
+		Delegable:     spec.Delegable,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}

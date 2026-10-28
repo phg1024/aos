@@ -33,7 +33,8 @@
           "/Users/claw/Code/aos/reports/rasterizer-team-demo"
         ],
         "write_paths": [
-          "/Users/claw/Code/aos/reports/rasterizer-team-demo"
+          "/Users/claw/Code/aos/reports/rasterizer-team-demo/optimized_coordinator_log.txt",
+          "/Users/claw/Code/aos/reports/rasterizer-team-demo/final-summary.txt"
         ],
         "tools": [
           "spawn_agent",
@@ -41,6 +42,14 @@
           "write_file",
           "edit_file",
           "list_dir"
+        ]
+      },
+      "delegable": {
+        "write_paths": [
+          "/Users/claw/Code/aos/reports/rasterizer-team-demo"
+        ],
+        "tools": [
+          "run"
         ]
       }
     },

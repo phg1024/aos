@@ -103,8 +103,13 @@ func TestWorkflowRunSupportsGenericDelegation(t *testing.T) {
 				ID:            "coordinator",
 				SystemPrompt:  "Delegate work and finish when the delegated agent returns.",
 				AllowedAgents: []string{"writer"},
+				// The coordinator writes nothing itself; it may only grant
+				// write_file to the writer it delegates to.
 				Capabilities: capability.Set{
-					Tools: []string{},
+					Tools: []string{"spawn_agent"},
+				},
+				Delegable: capability.Set{
+					Tools: []string{"write_file"},
 				},
 			},
 			{

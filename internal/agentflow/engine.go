@@ -248,7 +248,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		RootPID:    root.PID,
 		OutputPath: req.OutputPath,
 	}
-	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID)
+	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil)
 	if err != nil {
 		_, _ = e.Kernel.Exit(root.PID, kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false})
 		return RunSummary{}, err
@@ -289,17 +289,31 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	return summary, nil
 }
 
-func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string) (AgentRun, error) {
+// runAgent spawns and runs one agent. grantor is the delegating parent's
+// process record; a child's capabilities, delegable authority and mounts
+// are narrowed to what grantor may grant. The entry agent has no grantor:
+// the workflow spec and run request are the trust root.
+func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string, grantor *kernel.Process) (AgentRun, error) {
 	agent, ok := spec.Agent(agentID)
 	if !ok {
 		return AgentRun{}, fmt.Errorf("%w: %s", ErrUnknownAgent, agentID)
+	}
+	mounts := agentMounts(agent, req)
+	capabilities := agentCapabilities(agent, req)
+	delegable := agent.Delegable
+	if grantor != nil {
+		grantable := capability.Union(grantor.CapabilitySet, grantor.Delegable)
+		capabilities = capability.DeriveChildSet(grantable, capabilities)
+		delegable = capability.DeriveChildSet(grantable, delegable)
+		mounts = capability.AttenuateMounts(grantor.Mounts, mounts)
 	}
 	process, err := e.Kernel.Spawn(kernel.ProcessSpec{
 		ParentPID:     parentPID,
 		Role:          "agent:" + agent.ID,
 		Metadata:      agentMetadata(agent, req),
-		Mounts:        agentMounts(agent, req),
-		CapabilitySet: agentCapabilities(agent, req),
+		Mounts:        mounts,
+		CapabilitySet: capabilities,
+		Delegable:     delegable,
 	})
 	if err != nil {
 		return AgentRun{}, err
@@ -415,7 +429,12 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if strings.TrimSpace(call.Goal) != "" {
 			childReq.Goal = call.Goal
 		}
-		childRun, err := e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID)
+		// Grant from the kernel's record of the parent, not the caller's copy.
+		grantor, err := e.Kernel.Get(parent.PID)
+		if err != nil {
+			return runtime.DelegateResult{}, err
+		}
+		childRun, err := e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor)
 		if err != nil {
 			return runtime.DelegateResult{}, err
 		}

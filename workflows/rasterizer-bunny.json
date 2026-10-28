@@ -33,7 +33,8 @@
           "/Users/claw/Code/aos/reports/rasterizer-bunny"
         ],
         "write_paths": [
-          "/Users/claw/Code/aos/reports/rasterizer-bunny"
+          "/Users/claw/Code/aos/reports/rasterizer-bunny/optimized_coordinator_log.txt",
+          "/Users/claw/Code/aos/reports/rasterizer-bunny/final-summary.txt"
         ],
         "tools": [
           "spawn_agent",
@@ -41,6 +42,14 @@
           "write_file",
           "edit_file",
           "list_dir"
+        ]
+      },
+      "delegable": {
+        "write_paths": [
+          "/Users/claw/Code/aos/reports/rasterizer-bunny"
+        ],
+        "tools": [
+          "run"
         ]
       }
     },

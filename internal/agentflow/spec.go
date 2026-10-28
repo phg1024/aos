@@ -3,6 +3,7 @@ package agentflow
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"aos/internal/capability"
 	"aos/internal/workflow"
@@ -37,7 +38,11 @@ type AgentSpec struct {
 	MaxSteps      int                `json:"max_steps,omitempty"`
 	Mounts        []capability.Mount `json:"mounts,omitempty"`
 	Capabilities  capability.Set     `json:"capabilities"`
-	Metadata      map[string]string  `json:"metadata,omitempty"`
+	// Delegable is authority the agent may grant to agents it delegates to
+	// but may not exercise itself, e.g. a coordinator without run whose
+	// workers need it.
+	Delegable capability.Set    `json:"delegable,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 func (s WorkflowSpec) Validate() error {
@@ -65,7 +70,48 @@ func (s WorkflowSpec) Validate() error {
 			}
 		}
 	}
+	if err := s.validateDelegation(); err != nil {
+		return err
+	}
 	return s.validateVerification(seen)
+}
+
+// validateDelegation checks every allowed_agents edge: a child may request
+// no more than its parent's capabilities and delegable authority, and its
+// mounts must sit inside the parent's without widening read-only ones.
+// Path scopes left empty are derived from the run request at spawn, so they
+// are checked at run time instead.
+func (s WorkflowSpec) validateDelegation() error {
+	for _, parent := range s.Agents {
+		grantable := capability.Union(parent.Capabilities, parent.Delegable)
+		for _, childID := range parent.AllowedAgents {
+			child, _ := s.Agent(childID)
+			excess := capability.Excess(grantable, withDerivedPathsAllowed(grantable, child.Capabilities))
+			for _, item := range capability.Excess(grantable, withDerivedPathsAllowed(grantable, child.Delegable)) {
+				excess = append(excess, "delegable "+item)
+			}
+			if len(parent.Mounts) > 0 && len(child.Mounts) > 0 {
+				excess = append(excess, capability.MountExcess(parent.Mounts, child.Mounts)...)
+			}
+			if len(excess) > 0 {
+				return fmt.Errorf("%w: %s -> %s exceeds what %s may grant: %s", ErrWorkflowSpecInvalid, parent.ID, childID, parent.ID, strings.Join(excess, ", "))
+			}
+		}
+	}
+	return nil
+}
+
+// withDerivedPathsAllowed drops requested path scopes that cannot be
+// checked statically because the parent's own scopes come from the run
+// request.
+func withDerivedPathsAllowed(grantable, requested capability.Set) capability.Set {
+	if len(grantable.ReadPaths) == 0 {
+		requested.ReadPaths = nil
+	}
+	if len(grantable.WritePaths) == 0 {
+		requested.WritePaths = nil
+	}
+	return requested
 }
 
 // VerificationPolicy is the declared policy, none when no block is given.

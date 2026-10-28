@@ -552,6 +552,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return r.failMalformed(pid, checkpointID)
 			}
+			if err := r.authorize(process, "spawn_agent", "delegate"); err != nil {
+				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "delegate", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			}
 			if r.DelegateHandler == nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: "delegate handler not configured", Retryable: false}
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
@@ -605,6 +611,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return r.failMalformed(pid, checkpointID)
 			}
+			if err := r.authorize(process, "message_agent", "send"); err != nil {
+				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "send", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			}
 			if r.Bus == nil {
 				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
 			}
@@ -633,6 +645,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return r.failMalformed(pid, checkpointID)
 			}
+			if err := r.authorize(process, "message_agent", "publish"); err != nil {
+				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "publish", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			}
 			if r.Bus == nil {
 				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
 			}
@@ -659,6 +677,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 					break
 				}
 				return r.failMalformed(pid, checkpointID)
+			}
+			if err := r.authorize(process, "message_agent", "subscribe"); err != nil {
+				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "subscribe", err, options); !continued {
+					return failed, failErr
+				}
+				break
 			}
 			if r.Bus == nil {
 				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
@@ -1064,15 +1088,67 @@ func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {
 }
 
 func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
+	if err := r.authorize(process, call.Name, call.Name); err != nil {
+		return tools.Result{}, err
+	}
 	if isRuntimeTool(call.Name) {
 		return r.executeRuntimeTool(ctx, process, session, checkpointID, call)
 	}
-	return r.Tools.ExecuteContext(ctx, tools.Request{
+	result, err := r.Tools.ExecuteContext(ctx, tools.Request{
 		Tool:          call.Name,
 		Args:          call.Args,
 		CapabilitySet: process.CapabilitySet,
 		Mounts:        process.Mounts,
 	})
+	if errors.Is(err, tools.ErrPathDenied) {
+		path := call.Args["path"]
+		if path == "" {
+			path = call.Args["root"]
+		}
+		r.logDenial(process.PID, call.Name, call.Name, path, "path outside the granted scopes or mounts")
+	}
+	return result, err
+}
+
+// authorize is the single capability check shared by tool calls and by the
+// delegate (spawn_agent) and send/publish/subscribe (message_agent) actions,
+// so no action reaches what its tool form would be denied.
+func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action string) error {
+	if (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+		return nil
+	}
+	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
+	return fmt.Errorf("%w: %s needs %s", tools.ErrToolDenied, action, capabilityName)
+}
+
+// logDenial records a refused capability check in the kernel event log.
+func (r *AgentRuntime) logDenial(pid, action, capabilityName, path, reason string) {
+	data := map[string]string{"action": action, "capability": capabilityName, "reason": reason}
+	if path != "" {
+		data["path"] = path
+	}
+	_ = r.Kernel.LogEvent(pid, "capability.denied", data)
+}
+
+// refuseAction handles a denied action the way a failed tool call is
+// handled: the agent sees a tool_error and continues when allowed to,
+// otherwise the process exits. continued reports which happened.
+func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, action string, err error, options RunOptions) (continued bool, result RunResult, failErr error) {
+	if options.OnToolError != nil {
+		options.OnToolError(ToolCall{Name: action}, err)
+	}
+	session.Messages = append(session.Messages, Message{
+		Role:    "tool",
+		Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", action, err.Error()),
+	})
+	if options.ContinueOnToolError {
+		return true, RunResult{}, nil
+	}
+	exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
+	if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
+		return false, RunResult{}, exitErr
+	}
+	return false, RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
 }
 
 func isRuntimeTool(name string) bool {
@@ -1084,11 +1160,9 @@ func isRuntimeTool(name string) bool {
 	}
 }
 
+// executeRuntimeTool runs a runtime tool; executeToolCall has already
+// authorized it.
 func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
-	evaluator := capability.Evaluator{}
-	if !evaluator.ToolAllowed(call.Name, process.CapabilitySet) {
-		return tools.Result{}, tools.ErrToolDenied
-	}
 
 	switch call.Name {
 	case "spawn_agent":
