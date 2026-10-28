@@ -120,11 +120,15 @@ func (k *Kernel) Exit(pid string, status ExitStatus) (Process, error) {
 			return err
 		}
 		now := k.now().UTC()
-		event := t.appendEvent(pid, "process.exited", map[string]string{
+		data := map[string]string{
 			"code":      strconv.Itoa(status.Code),
 			"reason":    status.Reason,
 			"retryable": strconv.FormatBool(status.Retryable),
-		}, now)
+		}
+		if status.Origin != "" {
+			data["origin"] = status.Origin
+		}
+		event := t.appendEvent(pid, "process.exited", data, now)
 		process.State = StateExited
 		process.ExitStatus = &status
 		process.UpdatedAt = now

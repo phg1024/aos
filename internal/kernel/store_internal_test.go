@@ -162,3 +162,40 @@ func TestLegacyStateDirectoryLoads(t *testing.T) {
 		t.Fatalf("event IDs should continue the legacy sequence, last is %s", last)
 	}
 }
+
+// Origin is part of the exit record: it survives replay, and an exit cannot
+// be repeated with a different origin.
+func TestExitOriginIsRecordedAndReplayed(t *testing.T) {
+	root := t.TempDir()
+	k, err := New(root)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	process, err := k.Spawn(ProcessSpec{Role: "verifier"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	status := ExitStatus{Code: 1, Reason: "FAIL", Retryable: true, Origin: ExitOriginAgent}
+	if _, err := k.Exit(process.PID, status); err != nil {
+		t.Fatalf("exit: %v", err)
+	}
+	if _, err := k.Exit(process.PID, status); err != nil {
+		t.Fatalf("repeating the same exit is a no-op: %v", err)
+	}
+	if _, err := k.Exit(process.PID, ExitStatus{Code: 1, Reason: "FAIL", Retryable: true}); err == nil {
+		t.Fatal("an exit differing only in origin must be refused")
+	}
+
+	other, err := k.Spawn(ProcessSpec{Role: "verifier"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	crashAfterEvent(t, root, other.PID, "process.exited", map[string]string{"code": "1", "reason": "FAIL", "retryable": "false", "origin": ExitOriginAgent})
+	reopened, err := New(root)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if got, err := reopened.Await(other.PID); err != nil || got.Origin != ExitOriginAgent {
+		t.Fatalf("replayed exit lost its origin: %+v %v", got, err)
+	}
+}

@@ -149,7 +149,7 @@ func TestVerificationArtifactIsProducedByRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("await verifier: %v", err)
 	}
-	if verdict.VerifierExit == nil || *verdict.VerifierExit != recorded || recorded != (kernel.ExitStatus{Code: 1, Reason: "FAIL", Retryable: true}) {
+	if verdict.VerifierExit == nil || *verdict.VerifierExit != recorded || recorded != (kernel.ExitStatus{Code: 1, Reason: "FAIL", Retryable: true, Origin: kernel.ExitOriginAgent}) {
 		t.Fatalf("verdict exit %+v should match the kernel record %+v", verdict.VerifierExit, recorded)
 	}
 }
@@ -221,15 +221,39 @@ func TestVerifierJudgementFailureSticksUntilWorkChanges(t *testing.T) {
 	}
 }
 
-// A retryable verifier failure (step limit, crash) is operational, so a
-// later run on the same work may pass.
-func TestRetryableVerifierFailureCanBeRetried(t *testing.T) {
+// A verifier that marks its own FAIL retryable still cannot be re-run into
+// a pass: the exit came from its own action, so it is a judgement.
+func TestAgentFailureSticksEvenIfMarkedRetryable(t *testing.T) {
 	f, summary := runGated(t, "required",
 		delegateAction("writer"), exitWith(0, "wrote", false),
-		delegateAction("verifier"), exitWith(1, "step limit exceeded", true),
+		delegateAction("verifier"), exitWith(1, "FAIL, but please retry me", true),
 		delegateAction("verifier"), exitWith(0, "PASS", false),
 		exitWith(0, "done", false))
+	if status := f.rootStatus(t, summary); status.Code == 0 || summary.Verification.VerifierExit.Origin != kernel.ExitOriginAgent {
+		t.Fatalf("an agent-chosen failure must stick, got %+v %+v", status, summary.Verification)
+	}
+}
+
+// A failure the runtime recorded (here a real step limit) is operational,
+// so a later verifier run on the same work may pass.
+func TestRuntimeVerifierFailureCanBeRetried(t *testing.T) {
+	spec := gatedSpec("required")
+	spec.Agents[2].MaxSteps = 1
+	f := newExitFixture(t, &sequenceCompleter{actions: []map[string]any{
+		delegateAction("writer"), exitWith(0, "wrote", false),
+		delegateAction("verifier"), messageAction("still checking"),
+		delegateAction("verifier"), exitWith(0, "PASS", false),
+		exitWith(0, "done", false),
+	}})
+	summary, err := f.engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
 	if status := f.rootStatus(t, summary); status.Code != 0 || summary.Verification.Status != agentflow.VerdictPass {
-		t.Fatalf("a retry after an operational failure should pass, got %+v %+v", status, summary.Verification)
+		t.Fatalf("a retry after a runtime-recorded failure should pass, got %+v %+v", status, summary.Verification)
+	}
+	first := summary.AgentRuns[0].Children[1]
+	if first.ExitStatus.Reason != "step limit exceeded" || first.ExitStatus.Origin != "" {
+		t.Fatalf("the first verifier run should be a runtime step limit, got %+v", first.ExitStatus)
 	}
 }

@@ -78,10 +78,10 @@ func (e *Engine) judge(spec WorkflowSpec, policy workflow.VerificationPolicy, ro
 		return verdict, nil
 	}
 
-	// A verifier's own judgement (a non-retryable failure) stands until the
-	// work changes, so re-running the verifier cannot shop for a pass. A
-	// retryable failure (step limit, crash) is operational and a later run
-	// may clear it.
+	// A verifier's own judgement (a failure from its own exit action, whatever
+	// Retryable it claims) stands until the work changes, so re-running the
+	// verifier cannot shop for a pass. A failure the runtime recorded (step
+	// limit, crash) is operational and a later run may clear it.
 	var judged *exitedRun
 	var judgedStatus kernel.ExitStatus
 	for idx := range runs {
@@ -93,7 +93,7 @@ func (e *Engine) judge(spec WorkflowSpec, policy workflow.VerificationPolicy, ro
 		if err != nil {
 			return Verdict{}, err
 		}
-		if status.Code != 0 && !status.Retryable && (judged == nil || run.seq > judged.seq) {
+		if status.Code != 0 && status.Origin == kernel.ExitOriginAgent && (judged == nil || run.seq > judged.seq) {
 			judged, judgedStatus = &runs[idx], status
 		}
 	}

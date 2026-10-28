@@ -63,7 +63,7 @@
 
   <h2>Tests Run</h2>
   <ul>
-    <li><code>make test</code>: all 17 packages pass. <code>go vet ./...</code> is clean, and the code builds for Linux and Windows.</li>
+    <li><code>make test</code>: all 17 packages pass. <code>go vet ./...</code> is clean. Everything builds for Linux. For Windows, <code>./internal/...</code> builds (the kernel uses the mutex-only fallback), but <code>cmd/aos</code> does not: its own state-directory lock calls <code>syscall.Flock</code> directly. This predates item 4. That lock moves onto a shared, build-tagged <code>internal/filelock</code> helper in item 5.</li>
     <li>Crash simulation: events are appended straight to the log for a spawn, a transition and an exit, with no table write. <code>kernel.New</code> rebuilds all three, and an instance opened earlier sees the repaired view. Separate tests cover a stale counter and a state directory in the old format.</li>
     <li>Concurrency: three subprocesses and two in-process instances share one state directory and run 75 spawn, transition, note and exit cycles. The result is 300 events with gap-free IDs, and every record matches its events. With the <code>flock</code> replaced by a no-op, the same test fails.</li>
   </ul>

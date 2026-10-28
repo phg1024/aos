@@ -736,7 +736,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				return RunResult{}, err
 			}
 			checkpointID = artifactRecord.ID
-			process, err = r.Kernel.Exit(pid, *result.Action.ExitStatus)
+			// The one place an agent's own exit is recorded; Origin marks it so
+			// whatever the model put there is overwritten.
+			agentExit := *result.Action.ExitStatus
+			agentExit.Origin = kernel.ExitOriginAgent
+			process, err = r.Kernel.Exit(pid, agentExit)
 			if err != nil {
 				return RunResult{}, err
 			}

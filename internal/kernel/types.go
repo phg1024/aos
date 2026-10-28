@@ -42,7 +42,15 @@ type ExitStatus struct {
 	Code      int    `json:"code"`
 	Reason    string `json:"reason"`
 	Retryable bool   `json:"retryable"`
+	// Origin says who decided the exit: ExitOriginAgent for an agent's own
+	// exit action; empty for exits the runtime, engine or scheduler recorded
+	// (step limit, crash, cancel, errors). An agent cannot set it: the
+	// runtime overwrites it at the one place it executes exit actions.
+	Origin string `json:"origin,omitempty"`
 }
+
+// ExitOriginAgent marks an exit the agent chose itself.
+const ExitOriginAgent = "agent"
 
 type ProcessSpec struct {
 	ParentPID     string             `json:"parent_pid,omitempty"`
