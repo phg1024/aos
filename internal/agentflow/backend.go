@@ -156,6 +156,9 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 	if message, ok := fallbackMessage(repaired); ok {
 		return message, nil
 	}
+	if message, ok := notesAsMessage(repaired, raw); ok {
+		return message, nil
+	}
 	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
 }
 
@@ -184,6 +187,9 @@ func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawComplet
 		return message, nil
 	}
 	if message, ok := fallbackMessage(repaired); ok {
+		return message, nil
+	}
+	if message, ok := notesAsMessage(repaired, raw); ok {
 		return message, nil
 	}
 	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
@@ -549,7 +555,31 @@ func repairUserPrompt(systemPrompt, userPrompt, raw string) string {
 	return "Original system prompt:\n" + systemPrompt + "\n\nOriginal user prompt:\n" + userPrompt + "\n\nMalformed output:\n" + raw + "\n\nRewrite the malformed output as one valid AOS action JSON object."
 }
 
+// parseGenerateResult reads one action from raw model output. A message
+// action without text is not an action: the model put its reply where the
+// user cannot see it, so the caller asks for a repair instead of showing
+// nothing.
 func parseGenerateResult(raw string) (runtime.GenerateResult, bool) {
+	result, ok := parseAction(raw)
+	if ok && result.Action.Type == "message" && strings.TrimSpace(result.Action.Message) == "" {
+		return result, false
+	}
+	return result, ok
+}
+
+// notesAsMessage is the last resort for a reply that stayed a message
+// without text after repair: its notes, which beat silence.
+func notesAsMessage(raws ...string) (runtime.GenerateResult, bool) {
+	for _, raw := range raws {
+		if result, ok := parseAction(raw); ok && result.Action.Type == "message" && strings.TrimSpace(result.Action.Notes) != "" {
+			result.Action.Message = result.Action.Notes
+			return result, true
+		}
+	}
+	return runtime.GenerateResult{}, false
+}
+
+func parseAction(raw string) (runtime.GenerateResult, bool) {
 	raw = repairLooseJSONObject(extractTrailingJSONObject(raw))
 
 	var nested runtime.GenerateResult
@@ -669,7 +699,7 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 
 	switch result.Action.Type {
 	case "message":
-		result.Action.Message = firstString(actionData, "message", "content", "text")
+		result.Action.Message = firstString(actionData, "message", "content", "text", "response", "answer", "reply")
 	case "tool":
 		callData := mapValue(actionData, "tool_call", "tool", "call")
 		if len(callData) == 0 {
@@ -780,7 +810,9 @@ func implicitToolArgs(data map[string]any, exclude ...string) map[string]string 
 
 func actionUsable(action runtime.GenerateAction) bool {
 	switch action.Type {
-	case "message", "wait":
+	case "message":
+		return strings.TrimSpace(action.Message) != ""
+	case "wait":
 		return true
 	case "tool":
 		return action.ToolCall != nil && action.ToolCall.Name != ""
