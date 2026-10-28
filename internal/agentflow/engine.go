@@ -69,12 +69,28 @@ type AgentRun struct {
 }
 
 type RunSummary struct {
-	Workflow   string     `json:"workflow"`
-	RootPID    string     `json:"root_pid"`
-	EntryPID   string     `json:"entry_pid"`
-	ResultID   string     `json:"result_id,omitempty"`
-	AgentRuns  []AgentRun `json:"agent_runs"`
-	OutputPath string     `json:"output_path,omitempty"`
+	Workflow string `json:"workflow"`
+	RootPID  string `json:"root_pid"`
+	EntryPID string `json:"entry_pid"`
+	// ExitStatus is the workflow root's recorded exit, derived from the entry
+	// agent's: the workflow succeeded only if Code is 0.
+	ExitStatus kernel.ExitStatus `json:"exit_status"`
+	ResultID   string            `json:"result_id,omitempty"`
+	AgentRuns  []AgentRun        `json:"agent_runs"`
+	OutputPath string            `json:"output_path,omitempty"`
+}
+
+// rootExitStatus derives the workflow root's exit from the entry agent's
+// recorded exit, so success never rests on the model's prose.
+func rootExitStatus(entry AgentRun) kernel.ExitStatus {
+	if entry.ExitStatus.Code == 0 {
+		return kernel.ExitStatus{Code: 0, Reason: "workflow completed", Retryable: false}
+	}
+	return kernel.ExitStatus{
+		Code:      entry.ExitStatus.Code,
+		Reason:    fmt.Sprintf("entry agent %s exited with code %d: %s", entry.AgentID, entry.ExitStatus.Code, entry.ExitStatus.Reason),
+		Retryable: entry.ExitStatus.Retryable,
+	}
 }
 
 type Engine struct {
@@ -231,6 +247,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	summary.EntryPID = run.PID
 	summary.ResultID = run.ResultID
 	summary.AgentRuns = append(summary.AgentRuns, run)
+	summary.ExitStatus = rootExitStatus(run)
 
 	allRuns, err := e.Artifacts.CreateJSON("workflow_summary", root.PID, summary, nil, map[string]string{
 		"workflow": spec.Name,
@@ -239,7 +256,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		return RunSummary{}, err
 	}
 	summary.ResultID = allRuns.ID
-	if _, err := e.Kernel.Exit(root.PID, kernel.ExitStatus{Code: 0, Reason: "workflow completed", Retryable: false}); err != nil {
+	if _, err := e.Kernel.Exit(root.PID, summary.ExitStatus); err != nil {
 		return RunSummary{}, err
 	}
 	return summary, nil
@@ -382,6 +399,7 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		return runtime.DelegateResult{
 			AgentID:      childRun.AgentID,
 			PID:          childRun.PID,
+			ExitStatus:   childRun.ExitStatus,
 			Summary:      childRun.FinalMessage,
 			ResultID:     childRun.ResultID,
 			CheckpointID: childRun.CheckpointID,

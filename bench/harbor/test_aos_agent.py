@@ -24,6 +24,11 @@ class ParseRunSummaryTest(unittest.TestCase):
         self.assertEqual(summary["workflow"], "terminal-bench")
         self.assertEqual(summary["usage"]["prompt_tokens"], 10)
 
+    def test_ignores_failure_line_after_summary(self):
+        output = '{\n  "exit_status": {"code": 3, "reason": "entry agent solver exited with code 3: bad {x}"}\n}\nworkflow failed: entry agent solver exited with code 3: bad {x}\n'
+        summary = parse_run_summary(output)
+        self.assertEqual(summary["exit_status"]["code"], 3)
+
     def test_missing_summary(self):
         self.assertIsNone(parse_run_summary("panic: boom\n"))
 

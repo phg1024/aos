@@ -96,16 +96,20 @@ def agent_timeout_sec(task_toml: Path, job_config: Path) -> float | None:
 
 
 def parse_run_summary(output: str) -> dict | None:
-    """Return the JSON summary `aos run` prints last, if present."""
+    """Return the JSON summary `aos run` prints last, if present.
+
+    A failed workflow prints "workflow failed: ..." after the summary, so
+    only the JSON object itself is decoded.
+    """
     start = output.rfind("\n{")
-    candidate = output[start + 1 :] if start >= 0 else output
-    end = candidate.rfind("}")
-    if end < 0:
+    start = start + 1 if start >= 0 else output.find("{")
+    if start < 0:
         return None
     try:
-        return json.loads(candidate[: end + 1])
+        summary, _ = json.JSONDecoder().raw_decode(output[start:])
     except json.JSONDecodeError:
         return None
+    return summary if isinstance(summary, dict) else None
 
 
 class AOSAgent(BaseInstalledAgent):

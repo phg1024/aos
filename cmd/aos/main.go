@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -84,6 +85,10 @@ func run(args []string) {
 		}
 		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), clock, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			var failed workflowFailed
+			if errors.As(err, &failed) {
+				os.Exit(failed.exitCode())
+			}
 			os.Exit(1)
 		}
 		return
@@ -207,6 +212,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		"state_dir":     stateDir,
 		"report_path":   reportPath,
 		"agent_run_cnt": countAgentRuns(summary.AgentRuns),
+		"exit_status":   summary.ExitStatus,
 	}
 	if metered, ok := backend.(interface{ Usage() inference.TokenUsage }); ok {
 		result["usage"] = metered.Usage()
@@ -216,7 +222,29 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		return err
 	}
 	fmt.Println(string(bytes))
+	if summary.ExitStatus.Code != 0 {
+		return workflowFailed{status: summary.ExitStatus}
+	}
 	return nil
+}
+
+// workflowFailed reports a workflow whose root exited non-zero, after its
+// summary and report were written.
+type workflowFailed struct {
+	status kernel.ExitStatus
+}
+
+func (w workflowFailed) Error() string {
+	return "workflow failed: " + w.status.Reason
+}
+
+// exitCode passes the root's code through when it is a usable process exit
+// code, and uses 1 otherwise.
+func (w workflowFailed) exitCode() int {
+	if w.status.Code >= 1 && w.status.Code <= 125 {
+		return w.status.Code
+	}
+	return 1
 }
 
 func acquireStateLock(stateDir string) (func(), error) {

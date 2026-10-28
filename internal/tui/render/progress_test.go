@@ -131,3 +131,17 @@ func TestIsLoneEsc(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkflowProgressMarksFailedChildExit(t *testing.T) {
+	clock := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	progress := testProgress(&clock)
+	progress.Apply(event(clock, "coordinator", "pid-2", "start", ""))
+	progress.Apply(event(clock, "writer", "pid-3", "start", ""))
+	if line := progress.Apply(event(clock, "writer", "pid-3", "exit", "code=1 reason=FAIL retryable=false")); line != "  └ writer failed code=1 reason=FAIL retryable=false" {
+		t.Fatalf("non-zero exit should read as a failure, got %q", line)
+	}
+	progress.Apply(event(clock, "writer", "pid-4", "start", ""))
+	if line := progress.Apply(event(clock, "writer", "pid-4", "exit", "code=0 reason=done retryable=false")); !strings.HasPrefix(line, "  └ writer exited") {
+		t.Fatalf("zero exit should read as a normal exit, got %q", line)
+	}
+}

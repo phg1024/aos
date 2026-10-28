@@ -148,6 +148,10 @@ func (p *WorkflowProgress) Render(event agentflow.TraceEvent) string {
 	case "message":
 		return indent + "│ " + p.ui.AgentBlock(agent+"> ", clipLine(event.Detail, 160))
 	case "exit":
+		// Engine exit details start with "code=N"; anything but 0 is a failure.
+		if !strings.HasPrefix(event.Detail, "code=0 ") {
+			return indent + p.ui.Error("└ "+agent+" failed") + p.ui.Subtle(" "+clipLine(event.Detail, 120))
+		}
 		return p.ui.Header(indent+"└ "+agent+" exited") + p.ui.Subtle(" "+clipLine(event.Detail, 120))
 	case "runtime_error":
 		return indent + p.ui.Error("└ "+agent+" failed: "+event.Detail)

@@ -195,11 +195,14 @@ const (
 )
 
 type DelegateResult struct {
-	AgentID      string `json:"agent_id"`
-	PID          string `json:"pid"`
-	Summary      string `json:"summary"`
-	ResultID     string `json:"result_id,omitempty"`
-	CheckpointID string `json:"checkpoint_id,omitempty"`
+	AgentID string `json:"agent_id"`
+	PID     string `json:"pid"`
+	// ExitStatus is the child's recorded exit, so the parent sees whether it
+	// succeeded as data rather than inferring it from Summary.
+	ExitStatus   kernel.ExitStatus `json:"exit_status"`
+	Summary      string            `json:"summary"`
+	ResultID     string            `json:"result_id,omitempty"`
+	CheckpointID string            `json:"checkpoint_id,omitempty"`
 }
 
 type DelegateHandler func(ctx context.Context, parent kernel.Process, call DelegateCall, session Session) (DelegateResult, error)
@@ -582,9 +585,12 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			session.Messages = append(session.Messages, Message{
 				Role: "tool",
 				Content: fmt.Sprintf(
-					"delegate_result agent=%s pid=%s summary=%s result_artifact=%s checkpoint=%s",
+					"delegate_result agent=%s pid=%s exit_code=%d exit_reason=%q exit_retryable=%t summary=%s result_artifact=%s checkpoint=%s",
 					delegateResult.AgentID,
 					delegateResult.PID,
+					delegateResult.ExitStatus.Code,
+					delegateResult.ExitStatus.Reason,
+					delegateResult.ExitStatus.Retryable,
 					delegateResult.Summary,
 					delegateResult.ResultID,
 					delegateResult.CheckpointID,
