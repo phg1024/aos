@@ -13,8 +13,8 @@ BACKEND="${AOS_LLM_BACKEND:-${1:-ollama}}"
 case "$BACKEND" in
   ollama)
     export AOS_LLM_BACKEND="ollama"
-    export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://lenovo-px.local:11434}"
-    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-gemma4:31b}"
+    export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://localhost:11434}"
+    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-qwen3.6:35b-a3b-mtp-q4_K_M}"
     export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-}"
     export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-600}"
     ;;

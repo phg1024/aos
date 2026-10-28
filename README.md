@@ -68,8 +68,8 @@ Example using Ollama:
 
 ```sh
 AOS_LLM_BACKEND=ollama \
-AOS_LLM_BASE_URL=http://lenovo-px.local:11434 \
-AOS_LLM_MODEL=qwen3.6:35b \
+AOS_LLM_BASE_URL=http://localhost:11434 \
+AOS_LLM_MODEL=qwen3.6:35b-a3b-mtp-q4_K_M \
 go run ./cmd/aos run --workflow ./workflows/rasterizer-optimized-tail.json --output ./reports/rasterizer-team-demo/final-summary.txt
 ```
 

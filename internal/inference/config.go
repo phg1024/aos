@@ -121,7 +121,7 @@ func defaultBaseURL(kind BackendKind) string {
 func defaultModel(kind BackendKind) string {
 	switch kind {
 	case BackendOllama:
-		return "qwen3.6:35b"
+		return "qwen3.6:35b-a3b-mtp-q4_K_M"
 	default:
 		return "Qwen/Qwen3.5-27B"
 	}
