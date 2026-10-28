@@ -58,6 +58,7 @@
   <h2>Known Gaps</h2>
   <ul>
     <li>Tampering is detected but not prevented. An unconfined <code>run</code> can still rewrite a payload (item 8).</li>
+    <li>Hashing makes payload edits evident; it does not protect against an actor who can write the state directory. Removing an entry's <code>sha256</code> falls back to legacy trust, and anyone able to edit <code>index.json</code> could recompute the hash anyway. The fix is to keep agents out of the state directory (item 8). A <code>hashed_since</code> marker in <code>state.json</code> was considered and left out, since that file is just as writable.</li>
     <li>Legacy entries without a hash are trusted.</li>
     <li>The lease manager and bus are not yet safe across processes. <code>internal/filelock</code> is ready to use for them.</li>
   </ul>
