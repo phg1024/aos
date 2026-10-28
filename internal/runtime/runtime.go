@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -113,6 +114,10 @@ type Session struct {
 	ToolAttempts        []ToolAttempt `json:"tool_attempts,omitempty"`
 	MemoryRefs          []MemoryRef   `json:"memory_refs,omitempty"`
 	MemorySequence      int           `json:"memory_sequence,omitempty"`
+	// MailboxSeen lists the IDs of the messages already in this session, so
+	// a message delivered again (the bus delivers at least once) is
+	// recorded only once.
+	MailboxSeen []string `json:"mailbox_seen,omitempty"`
 }
 
 // MemoryRef points at a compacted stretch of history: a memory_segment
@@ -230,7 +235,15 @@ type DelegateResult struct {
 	Summary      string            `json:"summary"`
 	ResultID     string            `json:"result_id,omitempty"`
 	CheckpointID string            `json:"checkpoint_id,omitempty"`
+	// Status is DelegateWaiting when the child paused in a wait instead of
+	// exiting; Question is what it asked. Empty means it exited.
+	Status   string `json:"status,omitempty"`
+	Question string `json:"question,omitempty"`
 }
+
+// DelegateWaiting marks a delegated child parked in a wait: blocked with
+// its checkpoint, resumed when its delegator delegates to it again.
+const DelegateWaiting = "waiting"
 
 type DelegateHandler func(ctx context.Context, parent kernel.Process, call DelegateCall, session Session) (DelegateResult, error)
 
@@ -299,6 +312,13 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err != nil {
 		return RunResult{}, err
 	}
+	if r.Bus != nil {
+		if _, err := r.Bus.Transfer(pid, recovered.PID); err != nil {
+			status := kernel.ExitStatus{Code: 1, Reason: "mail transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+			_, _ = r.Kernel.Exit(recovered.PID, status)
+			return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+		}
+	}
 	if r.Leases != nil {
 		if _, err := r.Leases.Transfer(pid, recovered.PID); err != nil {
 			status := kernel.ExitStatus{Code: 1, Reason: "lease transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
@@ -336,7 +356,15 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	}
 	track := runTrack{checkpointID: resumedFrom, session: session}
 	result, runErr := r.runSteps(ctx, process, session, options, resumedFrom, &track)
-	return r.closeRun(pid, track, result, runErr)
+	result, runErr = r.closeRun(pid, track, result, runErr)
+	if r.Bus != nil {
+		// An exited process reads nothing more; its pending mail stays for a
+		// Recover to take over.
+		if final, err := r.Kernel.Get(pid); err == nil && final.State == kernel.StateExited {
+			_ = r.Bus.Unsubscribe(pid)
+		}
+	}
+	return result, runErr
 }
 
 // runTrack is the latest checkpoint and session runSteps had, for closeRun.
@@ -401,6 +429,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	}
 
 	var checkpointID string
+	// unacked are received messages no checkpoint records yet; the next
+	// checkpoint acknowledges them.
+	var unacked []string
 	defer func() {
 		if checkpointID != "" {
 			track.checkpointID = checkpointID
@@ -445,21 +476,24 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	}
 	for step := 0; step < maxSteps; step++ {
 		if ctx.Err() != nil {
-			return r.cancelRun(ctx, pid, session, latest())
+			return r.cancelRun(ctx, pid, session, latest(), &unacked)
 		}
 		if r.Clock != nil {
 			session.Messages = append(session.Messages, Message{Role: "tool", Content: r.Clock.Note()})
 		}
-		var inboxMessages []ipc.Message
 		if r.Bus != nil {
-			inboxMessages, err = r.Bus.ReceiveAll(pid)
+			// The first step also takes messages handed out before but never
+			// acknowledged: a crash or an interruption left them unrecorded.
+			inboxMessages, err := r.Bus.Receive(pid, step == 0)
 			if err != nil {
 				return RunResult{}, err
 			}
-			session, err = r.appendInboxArtifacts(pid, session, inboxMessages)
+			var received []string
+			session, received, err = r.appendInboxArtifacts(pid, session, inboxMessages)
 			if err != nil {
 				return RunResult{}, err
 			}
+			unacked = append(unacked, received...)
 		}
 		session, err = r.compactSessionMemory(process, session, latest())
 		if err != nil {
@@ -474,7 +508,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		})
 		if ctx.Err() != nil {
 			// Drop whatever the interrupted call produced, action or error.
-			return r.cancelRun(ctx, pid, session, latest())
+			return r.cancelRun(ctx, pid, session, latest(), &unacked)
 		}
 		if err != nil {
 			if options.ContinueOnToolError {
@@ -516,9 +550,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Role:    "assistant",
 				Content: result.Action.Message,
 			})
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-				"kind": "yield",
-			})
+			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "yield", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -577,9 +609,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				})
 				if loopWarningIssued {
 					exitStatus := kernel.ExitStatus{Code: 1, Reason: repeatErr.Error(), Retryable: false}
-					artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-						"kind": "loop_retry_suppressed",
-					})
+					artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "loop_retry_suppressed", &unacked)
 					if err != nil {
 						return RunResult{}, err
 					}
@@ -629,7 +659,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 						Role:    "tool",
 						Content: fmt.Sprintf("tool_cancelled name=%s reason=interrupted_by_user", result.Action.ToolCall.Name),
 					})
-					return r.cancelRun(ctx, pid, session, latest())
+					return r.cancelRun(ctx, pid, session, latest(), &unacked)
 				}
 				if options.ContinueOnToolError {
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
@@ -716,7 +746,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					Role:    "tool",
 					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=interrupted_by_user", result.Action.Delegate.AgentID),
 				})
-				return r.cancelRun(ctx, pid, session, latest())
+				return r.cancelRun(ctx, pid, session, latest(), &unacked)
 			}
 			if err != nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
@@ -734,6 +764,18 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.DelegateArtifactIDs = append(session.DelegateArtifactIDs, delegateArtifact.ID)
+			if delegateResult.Status == DelegateWaiting {
+				session.Messages = append(session.Messages, Message{
+					Role: "tool",
+					Content: fmt.Sprintf(
+						"delegate_result agent=%s pid=%s status=waiting question=%q checkpoint=%s note=%q",
+						delegateResult.AgentID, delegateResult.PID, delegateResult.Question, delegateResult.CheckpointID,
+						"The agent paused to ask you this and has not exited. Answer by delegating to "+delegateResult.AgentID+
+							" again with your answer as the goal: that resumes the same process. If you exit without answering, it is closed as abandoned.",
+					),
+				})
+				break
+			}
 			session.Messages = append(session.Messages, Message{
 				Role: "tool",
 				Content: fmt.Sprintf(
@@ -767,6 +809,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			message, err := r.Bus.Send(pid, result.Action.Send.To, result.Action.Send.Body)
+			if errors.Is(err, ipc.ErrUnknownRecipient) || errors.Is(err, ipc.ErrRecipientExited) {
+				// The agent named a process that cannot read it: its mistake to
+				// correct, not a failure of the bus.
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "send", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			}
 			if err != nil {
 				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
@@ -855,9 +905,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				session.Messages = append(session.Messages, Message{Role: "assistant", Content: result.Action.Message})
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-				"kind": "blocked",
-			})
+			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "blocked", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -875,9 +923,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				return r.failMalformed(pid, lastCheckpoint())
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-				"kind": "final",
-			})
+			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "final", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -901,9 +947,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return r.failMalformed(pid, lastCheckpoint())
 		}
 
-		artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-			"kind": "intermediate",
-		})
+		artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "intermediate", &unacked)
 		if err != nil {
 			return RunResult{}, err
 		}
@@ -912,9 +956,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 
 	// Checkpoint the last steps too: ones that ended in a backend error
 	// continued without one, and may be every step the agent took.
-	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
-		"kind": "final",
-	})
+	artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "final", &unacked)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -1237,12 +1279,26 @@ func truncateMemorySummary(value string, limit int) string {
 	return value[:limit-3] + "..."
 }
 
+// saveCheckpoint writes session as a checkpoint of pid, then acknowledges
+// the messages it now records. An acknowledgement that fails only means
+// they are delivered again, and the session drops the repeats.
+func (r *AgentRuntime) saveCheckpoint(pid string, session Session, parents []string, kind string, unacked *[]string) (artifact.Artifact, error) {
+	record, err := r.Artifacts.CreateJSON("checkpoint", pid, session, parents, map[string]string{"kind": kind})
+	if err != nil {
+		return artifact.Artifact{}, err
+	}
+	if r.Bus != nil && len(*unacked) > 0 {
+		if r.Bus.Ack(pid, *unacked) == nil {
+			*unacked = nil
+		}
+	}
+	return record, nil
+}
+
 // cancelRun checkpoints session and parks the process as ready so a later
 // Resume picks up where the cancelled run stopped.
-func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Session, parents []string) (RunResult, error) {
-	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, parents, map[string]string{
-		"kind": "cancelled",
-	})
+func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Session, parents []string, unacked *[]string) (RunResult, error) {
+	artifactRecord, err := r.saveCheckpoint(pid, session, parents, "cancelled", unacked)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -1663,29 +1719,56 @@ func (r *AgentRuntime) failRuntime(pid, checkpointID string, runErr error) (RunR
 	return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, runErr
 }
 
-func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, messages []ipc.Message) (Session, error) {
+// appendInboxArtifacts records the messages new to the session and adds
+// them to its history; repeats of messages it already holds are skipped.
+// It returns every received ID, repeats included, for acknowledgement.
+//
+// Only the user speaks as the user. A peer's message names its sender and
+// reaches the model as information, ranked below the task and the user by
+// the system prompt, so a peer cannot redefine another agent's work.
+func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, messages []ipc.Message) (Session, []string, error) {
+	var received []string
 	for _, message := range messages {
+		received = append(received, message.ID)
+		if slices.Contains(session.MailboxSeen, message.ID) {
+			continue
+		}
 		artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, nil, map[string]string{
 			"direction": "receive",
 			"from":      message.From,
 			"topic":     message.Topic,
 		})
 		if err != nil {
-			return Session{}, err
+			return Session{}, received, err
 		}
 		session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-		role := "mailbox"
-		content := fmt.Sprintf("from=%s topic=%s body=%s", message.From, message.Topic, message.Body)
+		session.MailboxSeen = append(session.MailboxSeen, message.ID)
 		if message.From == "user" {
-			role = "user"
-			content = message.Body
+			session.Messages = append(session.Messages, Message{Role: "user", Content: message.Body})
+			continue
 		}
-		session.Messages = append(session.Messages, Message{
-			Role:    role,
-			Content: content,
-		})
+		session.Messages = append(session.Messages, Message{Role: "mailbox", Content: r.peerMessage(message)})
 	}
-	return session, nil
+	return session, received, nil
+}
+
+// PeerMessagePrefix starts every message from another agent in the history.
+const PeerMessagePrefix = "message from "
+
+// peerMessage is how a message from another agent reads in the history:
+// sender first, so it is never mistaken for the user.
+func (r *AgentRuntime) peerMessage(message ipc.Message) string {
+	sender := message.From
+	if r.Kernel != nil {
+		if process, err := r.Kernel.Get(message.From); err == nil && process.Metadata["agent_id"] != "" {
+			sender = fmt.Sprintf("%s (%s)", process.Metadata["agent_id"], message.From)
+		}
+	}
+	via := ""
+	if message.Topic != "" {
+		via = " on topic " + message.Topic
+	}
+	return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, message.Body)
 }
 
 // nonEmpty is a one-element parent list, or nil for no parent.

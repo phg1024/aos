@@ -18,6 +18,7 @@ import (
 	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/skills"
+	"aos/internal/statedir"
 	"aos/internal/tools"
 	"aos/internal/workflow"
 )
@@ -67,6 +68,10 @@ type AgentRun struct {
 	ToolArtifacts []string          `json:"tool_artifacts,omitempty"`
 	Delegates     []runtime.Message `json:"delegates,omitempty"`
 	Children      []AgentRun        `json:"children,omitempty"`
+	// Status is runtime.DelegateWaiting for an agent parked in a wait, with
+	// Question what it asked; empty for one that exited.
+	Status   string `json:"status,omitempty"`
+	Question string `json:"question,omitempty"`
 }
 
 type RunSummary struct {
@@ -284,6 +289,12 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		_, _ = e.Kernel.Exit(root.PID, summary.ExitStatus)
 		return summary, err
 	}
+	if run.Status == runtime.DelegateWaiting {
+		// In a workflow nobody answers the entry agent.
+		if entry, err := e.Kernel.Get(run.PID); err == nil {
+			run.ExitStatus = e.abandon(entry, AbandonedReason+" (the entry agent has nobody to answer it): "+run.Question)
+		}
+	}
 	summary.EntryPID = run.PID
 	summary.ResultID = run.ResultID
 	summary.AgentRuns = append(summary.AgentRuns, run)
@@ -359,7 +370,34 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		return AgentRun{}, err
 	}
 	e.emitKernelTrace(agent.ID, process.PID, "start", req.Goal, process.LastEventID)
+	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
+	return e.drive(spec, req, agent, process, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+		return agentRuntime.RunWithOptions(ctx, process.PID, initial, options)
+	})
+}
 
+// resumeAgent continues a child parked in a wait, from its blocked
+// checkpoint, with its delegator's answer.
+func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, answer string, delegator kernel.Process) (AgentRun, error) {
+	checkpoints, err := e.latestCheckpoints()
+	if err != nil {
+		return AgentRun{}, err
+	}
+	checkpointID := checkpoints[process.PID]
+	if checkpointID == "" {
+		return AgentRun{}, fmt.Errorf("parked agent %s (%s) has no checkpoint", agent.ID, process.PID)
+	}
+	e.emitKernelTrace(agent.ID, process.PID, "resumed", answer, process.LastEventID)
+	reply := []runtime.Message{{Role: "user", Content: fmt.Sprintf("Answer from %s (%s), who delegated your task: %s", delegator.Metadata["agent_id"], delegator.PID, answer)}}
+	return e.drive(spec, req, agent, process, process.ParentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+		return agentRuntime.Resume(ctx, process.PID, checkpointID, reply, options)
+	})
+}
+
+// drive runs one agent process with start (a fresh run or a resume) and
+// records how it ended: an exit, or a park in a wait. Once the process has
+// exited, any of its children still parked are closed as abandoned.
+func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, parentPID string, start func(*runtime.AgentRuntime, runtime.RunOptions) (runtime.RunResult, error)) (AgentRun, error) {
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
 		Kernel:     e.Kernel,
@@ -384,8 +422,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	}
 	agentRuntime.Backend = backend
 
-	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
-	result, err := agentRuntime.RunWithOptions(ctx, process.PID, initial, runtime.RunOptions{
+	result, err := start(agentRuntime, runtime.RunOptions{
 		ContinueOnToolError: true,
 		OnAssistantMessage: func(message string) {
 			e.emitTrace(agent.ID, process.PID, "message", message)
@@ -400,7 +437,35 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 			e.emitTrace(agent.ID, process.PID, "tool_error", fmt.Sprintf("%s error=%s", formatToolCall(call), err.Error()))
 		},
 	})
+	if errors.Is(err, runtime.ErrAgentBlocked) {
+		// Parked, not failed: blocked with its checkpoint until its
+		// delegator answers by delegating to it again.
+		run := AgentRun{
+			AgentID:      agent.ID,
+			PID:          process.PID,
+			ParentPID:    parentPID,
+			CheckpointID: result.CheckpointID,
+			Status:       runtime.DelegateWaiting,
+			Question:     runtime.WaitText(result.Session.Messages),
+			Children:     childRuns,
+		}
+		e.emitKernelTrace(agent.ID, process.PID, "waiting", run.Question, e.lastKernelEvent(process.PID))
+		var parents []string
+		if run.CheckpointID != "" {
+			parents = []string{run.CheckpointID}
+		}
+		record, err := e.Artifacts.CreateJSON("agent_run", process.PID, run, parents, map[string]string{
+			"agent_id": agent.ID,
+			"status":   runtime.DelegateWaiting,
+		})
+		if err != nil {
+			return AgentRun{}, err
+		}
+		run.ResultID = record.ID
+		return run, nil
+	}
 	if err != nil {
+		e.abandonChildren(process.PID)
 		// Close out the child so a later delegation to the same agent is not
 		// rejected as already active.
 		status := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
@@ -429,6 +494,7 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		ToolArtifacts: append([]string(nil), session.ToolArtifactIDs...),
 	}
 	e.emitKernelTrace(agent.ID, process.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable), e.lastKernelEvent(process.PID))
+	e.abandonChildren(process.PID)
 	run.Delegates = delegateMessages(session.Messages)
 	run.Children = append(run.Children, childRuns...)
 	for _, child := range childRuns {
@@ -467,13 +533,17 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if err != nil {
 			return runtime.DelegateResult{}, err
 		}
+		// A child of this agent still parked in a wait is resumed, not
+		// duplicated; any other live one means the delegation is a repeat.
+		var parked *kernel.Process
 		for _, child := range children {
-			if child.State == kernel.StateExited {
+			if child.State == kernel.StateExited || child.Metadata["agent_id"] != call.AgentID {
 				continue
 			}
-			if child.Metadata["agent_id"] == call.AgentID {
+			if child.State != kernel.StateBlocked {
 				return runtime.DelegateResult{}, fmt.Errorf("%w: %s", ErrDelegateAlreadyActive, call.AgentID)
 			}
+			parked = &child
 		}
 		childReq := req
 		if strings.TrimSpace(call.Goal) != "" {
@@ -484,7 +554,13 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if err != nil {
 			return runtime.DelegateResult{}, err
 		}
-		childRun, err := e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor)
+		var childRun AgentRun
+		if parked != nil {
+			childAgent, _ := spec.Agent(call.AgentID)
+			childRun, err = e.resumeAgent(ctx, spec, childReq, childAgent, *parked, call.Goal, grantor)
+		} else {
+			childRun, err = e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor)
+		}
 		if err != nil {
 			return runtime.DelegateResult{}, err
 		}
@@ -499,8 +575,57 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			Summary:      childRun.FinalMessage,
 			ResultID:     childRun.ResultID,
 			CheckpointID: childRun.CheckpointID,
+			Status:       childRun.Status,
+			Question:     childRun.Question,
 		}, nil
 	}
+}
+
+// AbandonedReason is the exit recorded for an agent left parked in a wait
+// when the agent that could answer it finished.
+const AbandonedReason = "abandoned while waiting"
+
+// abandonChildren closes every live descendant of pid: after pid's run
+// ends nobody can answer a child parked in a wait, so it gets a retryable
+// runtime-origin exit naming its checkpoint instead of staying blocked.
+func (e *Engine) abandonChildren(pid string) {
+	children, err := e.Kernel.Children(pid)
+	if err != nil {
+		return
+	}
+	for _, child := range children {
+		if child.State != kernel.StateExited {
+			e.abandon(child, AbandonedReason)
+		}
+	}
+}
+
+// abandon exits process, and first its own live descendants.
+func (e *Engine) abandon(process kernel.Process, reason string) kernel.ExitStatus {
+	e.abandonChildren(process.PID)
+	checkpoints, _ := e.latestCheckpoints()
+	status := kernel.ExitStatus{Code: 1, Reason: reason, Retryable: true, Checkpoint: checkpoints[process.PID]}
+	if _, err := e.Kernel.Exit(process.PID, status); err == nil {
+		e.emitKernelTrace(process.Metadata["agent_id"], process.PID, "abandoned", reason, e.lastKernelEvent(process.PID))
+		if e.Bus != nil {
+			_ = e.Bus.Unsubscribe(process.PID)
+		}
+	}
+	return status
+}
+
+func (e *Engine) latestCheckpoints() (map[string]string, error) {
+	records, err := e.Artifacts.List()
+	if err != nil {
+		return nil, err
+	}
+	latest := map[string]string{}
+	for _, record := range records {
+		if record.Type == "checkpoint" && statedir.Newer(record.ID, latest[record.ProducerPID]) {
+			latest[record.ProducerPID] = record.ID
+		}
+	}
+	return latest, nil
 }
 
 // agentRunIDs lists the agent_run artifact IDs of run and every descendant.

@@ -110,6 +110,22 @@ The gated rasterizer workflows give the verifier read-only access to the workspa
 
 `acquire_lease` and `release_lease` use `<state-dir>/leases/leases.json`. The file is read and written under a file lock and replaced atomically, so managers in different processes never both hold a resource. A lease ends when it expires, when its owner releases it, or when its owner exits. The owner can renew a lease, which extends its TTL and keeps its token. Every new grant, takeover or transfer gets a fencing token, strictly increasing per resource, which write sites can compare (nothing enforces it yet). Grants, renewals, releases, takeovers (`reason: expired` or `owner_exited`) and transfers are logged as `lease.*` kernel events, and `aos inspect` lists the live leases. Files from before versioning, a bare map of leases, are still read.
 
+## Agent Messaging
+
+Agents message each other through the mailbox bus in `<state-dir>/bus`. That covers `send` to a PID, `publish` to a topic and `subscribe`, and they need the `message_agent` capability. `aos run --workflow` and `aos-tui` both wire the bus. Its files (`state.json`, `mailboxes.json`, `subscriptions.json`) are read and written under `bus.lock` and replaced atomically, so buses in several processes never lose or duplicate a message.
+
+Delivery is at least once, and exactly once into a session:
+- Every message has a stable ID (`msg-NNNNNN`).
+- Receiving marks a message delivered (`deliveries`, `delivered_at` in `mailboxes.json`) but keeps it. The runtime acknowledges it only after a checkpoint records it, and the acknowledgement removes it.
+- A run that starts from a checkpoint, after a crash, a cancel or a resume, gets every unacknowledged message again. The session records the IDs it holds (`mailbox_seen`) and drops the repeats.
+- Mailboxes written before acknowledgements load as pending.
+
+Mail to an unknown or exited process is refused. The sender sees a tool error, and the refusal is an `ipc.rejected` event. An exited process loses its subscriptions. `Recover` moves the old process's unacknowledged mail and subscriptions to the new one, along with its leases. Sends, deliveries, redeliveries, acknowledgements and transfers are `ipc.*` kernel events, and `aos inspect` lists mail not yet acknowledged.
+
+A message from another agent reaches the model as `message from <agent> (<pid>) [<id>]: …`. The system prompt ranks it below the task and the user, so a peer cannot redefine another agent's work. Only the user's own lines speak as the user.
+
+A delegated agent that uses `wait` is parked: blocked, with its checkpoint, not exited. Its delegator gets `delegate_result … status=waiting question=…`. Delegating to that agent again with the answer as the goal resumes the same process, which reads `Answer from <agent> (<pid>), who delegated your task: …`. When an agent finishes, any child it left parked is closed with `{1, "abandoned while waiting", retryable}` and its checkpoint, so nothing stays blocked. An entry agent that waits has nobody to answer it, so it is closed the same way and the workflow fails with its question.
+
 ## Verification Policy
 
 Verification is a workflow choice, not a built-in step. `aos run` without `--workflow` takes `--verify none|required|best_effort` (default `none`):

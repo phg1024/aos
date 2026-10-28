@@ -18,6 +18,7 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/inspect"
+	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/lease"
 	"aos/internal/runlog"
@@ -225,11 +226,18 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 	if err != nil {
 		return err
 	}
+	// The same mailbox bus aos-tui uses, so agents can send, publish and
+	// subscribe in batch runs too.
+	bus, err := ipc.New(filepath.Join(stateDir, "bus"), k)
+	if err != nil {
+		return err
+	}
 
 	engine := agentflow.Engine{
 		Kernel:    k,
 		Artifacts: store,
 		Leases:    leaseManager,
+		Bus:       bus,
 		Tools:     toolRuntime(stateDir),
 		Factory: agentflow.StaticBackendFactory{
 			Completer:  backend,

@@ -297,7 +297,7 @@ func TestAgentRuntimeSupportsMailboxWaitAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new artifact store: %v", err)
 	}
-	bus, err := ipc.New(filepath.Join(root, "bus"))
+	bus, err := ipc.New(filepath.Join(root, "bus"), k)
 	if err != nil {
 		t.Fatalf("new bus: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestAgentRuntimeRuntimeTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new artifact store: %v", err)
 	}
-	bus, err := ipc.New(filepath.Join(root, "bus"))
+	bus, err := ipc.New(filepath.Join(root, "bus"), nil) // the test messages a made-up PID
 	if err != nil {
 		t.Fatalf("new bus: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestAgentRuntimeRuntimeTools(t *testing.T) {
 			t.Fatalf("expected session to contain %q, got %s", needle, all)
 		}
 	}
-	received, err := bus.ReceiveAll("proc-external")
+	received, err := bus.Receive("proc-external", false)
 	if err != nil {
 		t.Fatalf("receive mailbox: %v", err)
 	}

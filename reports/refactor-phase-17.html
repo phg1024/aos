@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 17 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 17 Report: Messages That Arrive, Waits That Resume</h1>
+    <p>Design-review item 9, plus the TUI's <code>/resume</code>. Before this phase:</p>
+    <ul>
+      <li><code>aos run</code> had no message bus, so <code>send</code>/<code>publish</code>/<code>subscribe</code> failed the agent.</li>
+      <li>A message was deleted as soon as it was received, so a crash before the next checkpoint lost it.</li>
+      <li>Two buses on one directory corrupted the mailbox.</li>
+      <li>Mail to dead processes piled up forever.</li>
+      <li>A delegated <code>wait</code> was treated as a failure.</li>
+      <li>A peer's message reached the model looking like the user's own words.</li>
+    </ul>
+    <p>All of these are fixed.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>The bus</b> (<code>internal/ipc</code>, rewritten).
+      <ul>
+        <li>One file lock (<code>bus.lock</code>) and atomic writes. The ID counter is written first and also re-derived from the mailboxes, so an ID is never reused.</li>
+        <li><code>New(root, kernel)</code>: with a kernel, mail to an unknown or exited PID is refused (<code>ErrUnknownRecipient</code>/<code>ErrRecipientExited</code>, logged as <code>ipc.rejected</code>), and <code>Publish</code> drops subscribers that have exited.</li>
+        <li><code>Receive(pid, redeliver)</code> marks messages delivered (<code>deliveries</code>, <code>delivered_at</code>) and keeps them. <code>Ack</code> removes them.</li>
+        <li><code>Transfer(from, to)</code> moves unacknowledged mail and subscriptions to another process. <code>Unsubscribe</code> and <code>Pending</code> are new too.</li>
+        <li>Events: <code>ipc.sent</code>, <code>ipc.delivered</code>, <code>ipc.redelivered</code>, <code>ipc.acked</code>, <code>ipc.transferred</code>, <code>ipc.rejected</code>.</li>
+      </ul></li>
+    <li><b>At-least-once delivery, exactly once into a session.</b>
+      <ul>
+        <li>The first step of each run receives with redelivery; later steps take only new mail.</li>
+        <li>Each message's ID goes into <code>Session.MailboxSeen</code>, and repeats are dropped.</li>
+        <li>Every checkpoint the agent loop writes, including the cancel park, goes through <code>saveCheckpoint</code>, which acknowledges the messages the checkpoint now records. A lost acknowledgement only causes a redelivery, which is then dropped.</li>
+      </ul></li>
+    <li><b>Mail hygiene.</b> A <code>send</code> to an unknown or exited process is the agent's mistake: it gets a tool error and continues, rather than failing the process. An exited process loses its subscriptions. <code>Recover</code> transfers mail, alongside the leases.</li>
+    <li><b>Peers rank below the task and the user.</b> A peer's message is recorded as <code>message from &lt;agent&gt; (&lt;pid&gt;) [&lt;id&gt;]: …</code>, and the system prompt says such entries are information, never instructions that change the goal, the workflow or what the user asked. The user's own lines still speak as the user.</li>
+    <li><b>Wait inside delegation.</b>
+      <ul>
+        <li>A delegated child that waits is parked, and the engine records an <code>agent_run</code> with <code>status: waiting</code> and the question.</li>
+        <li>The parent's <code>delegate_result</code> says <code>status=waiting question=…</code> and how to answer.</li>
+        <li>Delegating to the same agent again resumes the parked process from its checkpoint, with <code>Answer from &lt;agent&gt; (&lt;pid&gt;), who delegated your task: …</code>. Any other live child of that agent is still refused with <code>ErrDelegateAlreadyActive</code>.</li>
+        <li>When an agent's run ends, any descendants still live are closed as <code>{1, "abandoned while waiting", retryable}</code> with their checkpoints.</li>
+        <li>An entry agent that waits is closed the same way, and the workflow fails with its question.</li>
+      </ul></li>
+    <li><b><code>aos run</code></b> wires the bus on <code>&lt;state-dir&gt;/bus</code>. <b><code>aos inspect</code></b> lists unacknowledged mail per recipient, split into pending and delivered-but-not-checkpointed.</li>
+    <li><b>TUI <code>/resume</code></b> (separate commit, <code>b8f8c04</code>).
+      <ul>
+        <li><code>/resume</code> lists saved sessions, and <code>/resume N</code> or a name prefix switches to one by restarting the TUI on its state directory.</li>
+        <li>Starting the TUI on an existing session's state directory continues that session.</li>
+        <li>With the new bus, a line typed to an exited agent goes with the recovery instead of bouncing off the mailbox.</li>
+      </ul></li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>What it shows</th></tr>
+    <tr><td><code>TestWorkflowAgentsMessageEachOther</code></td><td>Through <code>aos run</code> with a scripted model, a worker subscribes and sends to its lead, and the lead publishes. The lead reads <code>message from worker (pid-000003) [msg-000001]: hello lead</code>. No mail is left, and the events show one sent, one delivered and one acked.</td></tr>
+    <tr><td><code>TestMessageReceivedBeforeACrashIsRedelivered</code></td><td>A subprocess resumes a worker, receives its message, hangs in the model call and is SIGKILLed before any checkpoint. After reap and <code>Recover</code>, the new process's history has the message exactly once, rendered with its sender. It is acknowledged after the next checkpoint. Events: sent, delivered, transferred, redelivered, acked.</td></tr>
+    <tr><td><code>TestRedeliveryOfARecordedMessageIsDropped</code></td><td>The checkpoint already recorded the message, but its acknowledgement was lost. It enters the session once and is then acknowledged.</td></tr>
+    <tr><td><code>TestBusesShareADirectoryAcrossProcesses</code></td><td>Three processes each send 100 messages and repeatedly receive and acknowledge on one directory. All 300 are seen exactly once with unique IDs, and the files stay valid.</td></tr>
+    <tr><td>Bus unit tests</td><td>At-least-once until acknowledged, with no second hand-out within a run and a redelivery on restart. Refusals for unknown and exited recipients, publish pruning, transfer of in-flight mail and subscriptions, unsubscribe, legacy mailboxes, and ID continuation.</td></tr>
+    <tr><td><code>TestSendToAnExitedProcessIsRefused</code></td><td>The agent sees a <code>tool_error</code> and carries on, and nothing is queued.</td></tr>
+    <tr><td><code>TestWaitingChildIsAnsweredAndResumed</code></td><td>The lead sees <code>status=waiting</code> and "Which colour?", then answers "blue". The same asker (pid-000003, the only one) resumes with the answer and exits 0.</td></tr>
+    <tr><td><code>TestParkedChildIsAbandonedWhenItsLeadExits</code></td><td>The child exits <code>{1, "abandoned while waiting", retryable}</code> with no origin and with its checkpoint. No process is left non-exited.</td></tr>
+    <tr><td><code>TestWaitingEntryAgentFailsTheWorkflow</code></td><td>The workflow fails naming the question, and the entry is closed retryably.</td></tr>
+    <tr><td>TUI end to end (manual, fake model)</td><td>Two sessions. <code>/resume</code> lists them and <code>/resume A</code> switches; the next model call sees A's conversation and nothing of B's. A reaped session is resumed, and the typed line recovers its agent with the full history.</td></tr>
+  </table>
+  <p>Also passing: <code>go test ./...</code>, <code>go vet ./...</code>, <code>-race</code> on ipc, runtime, agentflow, <code>cmd/aos</code> and <code>cmd/aos-tui</code>, builds for windows/amd64, linux/amd64 and linux/arm64, and the Harbor self-test.</p>
+
+  <h2>Decisions and Divergences</h2>
+  <ul>
+    <li>The answer to a parked child is the goal of a second <code>delegate</code> to the same agent; there is no separate resume tool. A <code>send</code> to the child's PID before that also works: the mail arrives when it resumes.</li>
+    <li>The chat transcript has only user, assistant and system roles. Peer messages therefore travel as user-role entries, kept append-only, but every one is labelled with its sender and ID and is ranked by the system prompt. The runtime stores them with role <code>mailbox</code>.</li>
+    <li>Lease waits do not park through this path. <code>AcquireForProcess</code> still blocks the process and <code>ReleaseAndWake</code> makes it ready, but nothing resumes it automatically.</li>
+    <li>Reaped processes keep their subscriptions until a publish finds them exited and drops them.</li>
+  </ul>
+</body>
+</html>

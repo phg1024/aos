@@ -37,7 +37,7 @@ func newLifecycleFixture(t *testing.T) lifecycleFixture {
 	if err != nil {
 		t.Fatalf("new artifact store: %v", err)
 	}
-	bus, err := ipc.New(filepath.Join(root, "bus"))
+	bus, err := ipc.New(filepath.Join(root, "bus"), k)
 	if err != nil {
 		t.Fatalf("new bus: %v", err)
 	}

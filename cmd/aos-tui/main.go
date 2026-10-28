@@ -106,7 +106,7 @@ func runTUI() []string {
 	if err != nil {
 		fail(err)
 	}
-	bus, err := ipc.New(filepath.Join(stateDir, "bus"))
+	bus, err := ipc.New(filepath.Join(stateDir, "bus"), k)
 	if err != nil {
 		fail(err)
 	}
@@ -371,7 +371,13 @@ func runTUI() []string {
 			message = interruptedPrefix + line
 			interrupted = false
 		}
-		if _, err := bus.Send("user", process.PID, message); err != nil {
+		// The line reaches the agent through its mailbox. An agent that
+		// exited cannot receive mail; resuming it recovers it, and the line
+		// goes with the recovery instead.
+		var appended []runtime.Message
+		if _, err := bus.Send("user", process.PID, message); errors.Is(err, ipc.ErrRecipientExited) {
+			appended = []runtime.Message{{Role: "user", Content: message}}
+		} else if err != nil {
 			footer.Println(ui.Error("send error: " + err.Error()))
 			continue
 		}
@@ -385,7 +391,7 @@ func runTUI() []string {
 				seed = nil
 				return agentRuntime.RunWithOptions(ctx, process.PID, initial, interactiveRunOptions(ui, stream, footer, observeRoot))
 			}
-			return agentRuntime.Resume(ctx, process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+			return agentRuntime.Resume(ctx, process.PID, checkpointID, appended, interactiveRunOptions(ui, stream, footer, observeRoot))
 		})
 		if errors.Is(err, runtime.ErrRunCancelled) {
 			interrupted = true

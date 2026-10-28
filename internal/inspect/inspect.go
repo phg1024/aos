@@ -18,6 +18,7 @@ import (
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
 	"aos/internal/inference"
+	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/lease"
 	"aos/internal/runlog"
@@ -31,8 +32,10 @@ type Report struct {
 	NotExited []string  `json:"not_exited"`
 	// RunActive says a run holds the state directory now. If none does, the
 	// not-exited processes are orphans that aos reap can close.
-	RunActive    bool                    `json:"run_active"`
-	Leases       []lease.Lease           `json:"leases"`
+	RunActive bool          `json:"run_active"`
+	Leases    []lease.Lease `json:"leases"`
+	// Mail is the messages not yet acknowledged, by recipient.
+	Mail         []Mailbox               `json:"mail,omitempty"`
 	Verification *agentflow.Verdict      `json:"verification,omitempty"`
 	VerdictID    string                  `json:"verification_id,omitempty"`
 	Usage        []Usage                 `json:"usage"`
@@ -53,6 +56,14 @@ type Process struct {
 	LatestCheckpoint string             `json:"latest_checkpoint,omitempty"`
 	// UnconfinedRun marks a process whose run commands skip the sandbox.
 	UnconfinedRun bool `json:"unconfined_run,omitempty"`
+}
+
+// Mailbox counts one recipient's unacknowledged messages: Pending never
+// handed out, Delivered handed out but not yet recorded by a checkpoint.
+type Mailbox struct {
+	PID       string `json:"pid"`
+	Pending   int    `json:"pending"`
+	Delivered int    `json:"delivered"`
 }
 
 // Usage totals model calls, per process or for the whole run.
@@ -131,6 +142,28 @@ func Load(stateDir string, tail int) (Report, error) {
 	}
 	if report.RunActive, err = statedir.InUse(stateDir); err != nil {
 		return report, err
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "bus", "mailboxes.json")); err == nil {
+		bus, err := ipc.New(filepath.Join(stateDir, "bus"), nil)
+		if err != nil {
+			return report, err
+		}
+		pending, err := bus.Pending()
+		if err != nil {
+			return report, err
+		}
+		for pid, messages := range pending {
+			box := Mailbox{PID: pid}
+			for _, message := range messages {
+				if message.Deliveries > 0 {
+					box.Delivered++
+				} else {
+					box.Pending++
+				}
+			}
+			report.Mail = append(report.Mail, box)
+		}
+		sort.Slice(report.Mail, func(i, j int) bool { return report.Mail[i].PID < report.Mail[j].PID })
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "leases", "leases.json")); err == nil {
 		leases, err := lease.New(filepath.Join(stateDir, "leases"), k)
@@ -268,6 +301,12 @@ func (r Report) WriteText(w io.Writer) {
 		fmt.Fprintf(w, "\nleases held (%d):\n", len(r.Leases))
 		for _, held := range r.Leases {
 			fmt.Fprintf(w, "  %s  %s  token=%d  until %s\n", held.Resource, held.OwnerPID, held.Token, held.ExpiresAt.Local().Format("15:04:05"))
+		}
+	}
+	if len(r.Mail) > 0 {
+		fmt.Fprintln(w, "\nmail not yet acknowledged:")
+		for _, box := range r.Mail {
+			fmt.Fprintf(w, "  %s  %d pending, %d delivered but not checkpointed\n", box.PID, box.Pending, box.Delivered)
 		}
 	}
 	if v := r.Verification; v != nil {
