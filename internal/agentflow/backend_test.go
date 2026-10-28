@@ -594,3 +594,27 @@ func TestPromptBackendRepairsInsideTheSameTranscript(t *testing.T) {
 		t.Fatalf("expected the bad reply then a correction, got %#v", repair[len(first):])
 	}
 }
+
+func TestPromptBackendListsToolSignatures(t *testing.T) {
+	completer := &capturingCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer: completer,
+		Workflow:  agentflow.WorkflowSpec{Name: "signatures", EntryAgent: "writer"},
+		Agent: agentflow.AgentSpec{ID: "writer", SystemPrompt: "write", Capabilities: capability.Set{
+			Tools: []string{"edit_file", "web_fetch", "custom_tool"},
+		}},
+	}
+	if _, err := backend.Generate(context.Background(), runtime.GenerateRequest{}); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for _, want := range []string{
+		"- edit_file(path, old_text, new_text, replace_all?)\n",
+		"- web_fetch(url, offset?, timeout?)\n",
+		"- custom_tool\n",
+		"the marker is never valid content",
+	} {
+		if !strings.Contains(completer.systemPrompt, want) {
+			t.Fatalf("expected system prompt to contain %q:\n%s", want, completer.systemPrompt)
+		}
+	}
+}

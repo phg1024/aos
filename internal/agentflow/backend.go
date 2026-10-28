@@ -207,6 +207,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Use notes as your working memory: a few short lines holding the plan, what is already done, and the next step, so you never have to re-derive them. ")
 	builder.WriteString("Write notes on every action of a multi-step task and update them as the plan changes. ")
 	builder.WriteString("History entries from the assistant role are your own earlier notes and actions; trust them and continue from them instead of re-reading or rewriting files you already handled. ")
+	builder.WriteString("In those entries, file text you sent is replaced by a marker like \"(content omitted from history: 1436 bytes; the file on disk has the full text)\"; the marker is never valid content, so always send the complete real text when you write or edit a file. ")
 	builder.WriteString("Keeping the envelope compact never applies to string values: file content passed to write_file or edit_file must be formatted exactly as it should appear on disk, with normal line breaks and indentation encoded as \\n in the JSON string. Never squash source code onto fewer lines to shorten the response. ")
 	builder.WriteString("Use 'tool' only for allowed tools. ")
 	builder.WriteString("Use 'delegate' only for allowed agents. ")
@@ -247,11 +248,43 @@ func (b PromptBackend) systemPrompt() string {
 			builder.WriteString("\n")
 		}
 	}
-	builder.WriteString("\n\nAllowed tools:\n")
-	builder.WriteString(strings.Join(sortedStrings(b.Agent.Capabilities.Tools), ", "))
-	builder.WriteString("\n\nAllowed agents:\n")
+	builder.WriteString("\n\nAllowed tools (tool_call args; ? marks optional args):\n")
+	for _, tool := range sortedStrings(b.Agent.Capabilities.Tools) {
+		builder.WriteString("- ")
+		builder.WriteString(toolSignature(tool))
+		builder.WriteString("\n")
+	}
+	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
 	return builder.String()
+}
+
+// toolArgs lists each tool's tool_call args, so agents do not guess names.
+var toolArgs = map[string]string{
+	"read_file":        "path",
+	"write_file":       "path, content",
+	"edit_file":        "path, old_text, new_text, replace_all?",
+	"list_dir":         "path",
+	"find_files":       "root, pattern",
+	"run":              "command, timeout?",
+	"web_search":       "query, timeout?",
+	"web_fetch":        "url, offset?, timeout?",
+	"spawn_agent":      "agent_id, goal",
+	"message_agent":    "to, body",
+	"await_agent":      "pid",
+	"checkpoint":       "",
+	"list_artifacts":   "type?, producer_pid?, scope?",
+	"publish_artifact": "type, body",
+	"acquire_lease":    "resource, ttl?",
+	"release_lease":    "resource",
+}
+
+func toolSignature(tool string) string {
+	args, ok := toolArgs[tool]
+	if !ok {
+		return tool
+	}
+	return tool + "(" + args + ")"
 }
 
 func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {

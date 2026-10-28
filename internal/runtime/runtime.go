@@ -783,7 +783,7 @@ func recordedAction(action GenerateAction) (GenerateAction, bool) {
 		args := make(map[string]string, len(action.ToolCall.Args))
 		for key, value := range action.ToolCall.Args {
 			if bulkToolArgs[key] {
-				args[key] = fmt.Sprintf("<%d bytes>", len(value))
+				args[key] = tools.OmittedContent(len(value))
 				continue
 			}
 			args[key] = truncateRecord(value, maxActionArgChars)

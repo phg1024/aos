@@ -344,3 +344,46 @@ func TestLargeToolOutputIsCapped(t *testing.T) {
 		t.Fatalf("expected capped stdout, got %d bytes", len(result.Output["stdout"]))
 	}
 }
+
+func TestFileToolsRejectHistoryPlaceholders(t *testing.T) {
+	root := t.TempDir()
+	runtime := tools.NewRuntime()
+	mounts := []capability.Mount{{Name: "workspace", HostPath: root}}
+	set := capability.Set{ReadPaths: []string{root}, WritePaths: []string{root}, Tools: []string{"write_file", "edit_file"}}
+	target := filepath.Join(root, "main.cpp")
+	if err := os.WriteFile(target, []byte("int main() { return 0; }\n"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	execute := func(tool string, args map[string]string) error {
+		_, err := runtime.Execute(tools.Request{Tool: tool, Args: args, Mounts: mounts, CapabilitySet: set})
+		return err
+	}
+
+	for _, placeholder := range []string{tools.OmittedContent(1436), "<10 bytes>"} {
+		if !tools.IsOmittedContent(placeholder) {
+			t.Fatalf("expected %q to be recognized as a placeholder", placeholder)
+		}
+		if err := execute("write_file", map[string]string{"path": target, "content": placeholder}); err == nil {
+			t.Fatalf("expected write_file to reject %q", placeholder)
+		}
+		if err := execute("edit_file", map[string]string{"path": target, "old_text": "return 0;", "new_text": placeholder}); err == nil {
+			t.Fatalf("expected edit_file to reject %q", placeholder)
+		}
+	}
+	if err := execute("write_file", map[string]string{"path": target}); err == nil {
+		t.Fatal("expected write_file without content to fail instead of truncating the file")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil || string(data) != "int main() { return 0; }\n" {
+		t.Fatalf("expected the file to be untouched, got %q, %v", data, err)
+	}
+
+	for _, real := range []string{"", "<html></html>\n", "// (content omitted from history: 3 bytes) is just a comment\nint x;\n"} {
+		if tools.IsOmittedContent(real) {
+			t.Fatalf("expected %q to count as real content", real)
+		}
+	}
+	if err := execute("write_file", map[string]string{"path": target, "content": ""}); err != nil {
+		t.Fatalf("expected an explicit empty write to succeed: %v", err)
+	}
+}

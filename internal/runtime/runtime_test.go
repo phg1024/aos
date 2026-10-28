@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -1341,11 +1340,11 @@ func TestAgentRuntimeRecordsNotesAndActionsInHistory(t *testing.T) {
 		t.Fatalf("unexpected recorded action %#v", recorded.Action)
 	}
 	args := recorded.Action.ToolCall.Args
-	if args["path"] != target || args["content"] != "<"+strconv.Itoa(len(content))+" bytes>" {
-		t.Fatalf("expected path kept and content replaced by its size, got %#v", args)
+	if args["path"] != target || args["content"] != tools.OmittedContent(len(content)) {
+		t.Fatalf("expected path kept and content replaced by an omission marker, got %#v", args)
 	}
-	if strings.Contains(record.Content, `\u003c`) {
-		t.Fatalf("expected unescaped placeholders, got %q", record.Content)
+	if !tools.IsOmittedContent(args["content"]) {
+		t.Fatalf("expected the write_file tool to recognize the marker %q", args["content"])
 	}
 	if history[2].Role != "tool" || !strings.HasPrefix(history[2].Content, "write_file:") {
 		t.Fatalf("expected tool result to stay last, got %#v", history[2])
