@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -157,6 +158,54 @@ func TestRunWorkflowReportsGoError(t *testing.T) {
 	for _, process := range processes {
 		if process.State != kernel.StateExited {
 			t.Fatalf("%s left without an exit record", process.PID)
+		}
+	}
+}
+
+// rootWatcher exits at once, noting the workflow root's state as it does.
+type rootWatcher struct {
+	stateDir string
+	seen     *kernel.ProcessState
+}
+
+func (c rootWatcher) CompleteJSON(ctx context.Context, system string, user string, target any) error {
+	if k, err := kernel.New(filepath.Join(c.stateDir, "kernel")); err == nil {
+		if root, err := k.Get("pid-000001"); err == nil {
+			*c.seen = root.State
+		}
+	}
+	return exitCompleter{kernel.ExitStatus{Code: 0, Reason: "done"}}.CompleteJSON(ctx, system, user, target)
+}
+
+func TestWorkflowRootRunsWhileTheWorkflowDoes(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	var during kernel.ProcessState
+	captureStdout(t, func() {
+		if err := runWorkflow(context.Background(), rootWatcher{stateDir, &during}, runtime.CompactionPolicy{}, nil,
+			writeSoloWorkflow(t, dir), nil, "", "", stateDir, "go", false); err != nil {
+			t.Errorf("run: %v", err)
+		}
+	})
+	k, _ := kernel.New(filepath.Join(stateDir, "kernel"))
+	root, _ := k.Get("pid-000001")
+	if during != kernel.StateRunning || root.State != kernel.StateExited {
+		t.Fatalf("root was %q during the run and %q after", during, root.State)
+	}
+}
+
+func TestParseInterspersedFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"--json", "--tail", "5", "DIR"},
+		{"DIR", "--json", "--tail", "5"},
+		{"--tail", "5", "DIR", "--json"},
+	} {
+		fs := flag.NewFlagSet("inspect", flag.ContinueOnError)
+		asJSON := fs.Bool("json", false, "")
+		tail := fs.Int("tail", 20, "")
+		positional := parseInterspersed(fs, args)
+		if len(positional) != 1 || positional[0] != "DIR" || !*asJSON || *tail != 5 {
+			t.Fatalf("%v: positional %v json=%v tail=%d", args, positional, *asJSON, *tail)
 		}
 	}
 }

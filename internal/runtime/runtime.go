@@ -40,6 +40,14 @@ const messageRecordedNote = "message_recorded note=your last message is your res
 // is checkpointed and the process left ready, so Resume continues it.
 var ErrRunCancelled = errors.New("run cancelled")
 
+// ErrProcessExited: a run was asked of a process that has already exited.
+// Nothing runs; Recover makes a new process from its checkpoint.
+var ErrProcessExited = errors.New("process has exited")
+
+// ErrNotRecoverable: Recover (or Resume of an exited process) was asked of
+// a process that is still live or whose exit is not retryable.
+var ErrNotRecoverable = errors.New("process is not recoverable")
+
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -259,17 +267,21 @@ func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, app
 		}
 	}
 	if process.State == kernel.StateExited {
-		if process.ExitStatus == nil || !process.ExitStatus.Retryable {
-			return RunResult{}, errors.New("process exited and is not retryable")
-		}
 		return r.Recover(ctx, pid, checkpointID, appended, options)
 	}
 	return r.runSession(ctx, pid, session, options, checkpointID)
 }
 
+// Recover runs a new process from an exited one's checkpoint. Only an
+// exited process with a retryable record (runtime- or agent-origin) can be
+// recovered; a live one never can, so two processes never run the same
+// work. The new process takes over the old one's leases.
 func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
 	process, err := r.Kernel.Get(pid)
 	if err != nil {
+		return RunResult{}, err
+	}
+	if err := recoverable(process); err != nil {
 		return RunResult{}, err
 	}
 	session, err := r.ownedCheckpoint(pid, checkpointID)
@@ -287,17 +299,101 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err != nil {
 		return RunResult{}, err
 	}
+	if r.Leases != nil {
+		if _, err := r.Leases.Transfer(pid, recovered.PID); err != nil {
+			status := kernel.ExitStatus{Code: 1, Reason: "lease transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+			_, _ = r.Kernel.Exit(recovered.PID, status)
+			return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+		}
+	}
 	return r.runSession(ctx, recovered.PID, session, options, checkpointID)
+}
+
+// recoverable refuses a process that is live or whose exit is final.
+func recoverable(process kernel.Process) error {
+	if process.State != kernel.StateExited || process.ExitStatus == nil {
+		return fmt.Errorf("%w: %s is %s; only an exited process can be recovered", ErrNotRecoverable, process.PID, process.State)
+	}
+	if !process.ExitStatus.Retryable {
+		return fmt.Errorf("%w: %s exited with a non-retryable status: %s", ErrNotRecoverable, process.PID, process.ExitStatus.Reason)
+	}
+	return nil
 }
 
 // runSession runs pid from session. resumedFrom is the checkpoint the
 // session was restored from, if any; it heads the run's checkpoint chain.
+// An exited process is refused before anything runs. Every run ends in a
+// recorded exit or a checkpointed park (yield, wait, cancel); closeRun
+// exits any path that returned while the process was still running.
 func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Session, options RunOptions, resumedFrom string) (RunResult, error) {
 	r.bindArtifactProducers()
 	process, err := r.Kernel.Get(pid)
 	if err != nil {
 		return RunResult{}, err
 	}
+	if process.State == kernel.StateExited {
+		return RunResult{}, fmt.Errorf("%w: %s", ErrProcessExited, pid)
+	}
+	track := runTrack{checkpointID: resumedFrom, session: session}
+	result, runErr := r.runSteps(ctx, process, session, options, resumedFrom, &track)
+	return r.closeRun(pid, track, result, runErr)
+}
+
+// runTrack is the latest checkpoint and session runSteps had, for closeRun.
+type runTrack struct {
+	checkpointID string
+	session      Session
+}
+
+// closeRun exits pid if runSteps returned while it was still running, from
+// an error (artifact store, kernel, bus) or a path that forgot to close.
+// The exit is runtime-origin, names the latest checkpoint, and is
+// retryable unless the error is a contract violation. Exits and parks
+// runSteps recorded itself pass through.
+func (r *AgentRuntime) closeRun(pid string, track runTrack, result RunResult, runErr error) (RunResult, error) {
+	process, err := r.Kernel.Get(pid)
+	if err != nil {
+		return result, errors.Join(runErr, err)
+	}
+	if process.State != kernel.StateRunning {
+		return result, runErr
+	}
+	if runErr == nil {
+		runErr = errors.New("run returned without exiting or parking")
+	}
+	checkpointID := track.checkpointID
+	if result.CheckpointID != "" {
+		checkpointID = result.CheckpointID
+	}
+	status := kernel.ExitStatus{Code: 1, Reason: runErr.Error(), Retryable: retryableError(runErr), Checkpoint: checkpointID}
+	if _, err := r.Kernel.Exit(pid, status); err != nil {
+		return result, errors.Join(runErr, err)
+	}
+	return RunResult{PID: pid, ExitStatus: status, CheckpointID: checkpointID, Session: track.session}, runErr
+}
+
+// retryableError reports whether a run that failed with err may succeed if
+// recovered: infrastructure failures (storage, kernel, bus, backend) may;
+// contract violations, such as a tampered or foreign artifact or an
+// invalid transition, will fail the same way again.
+func retryableError(err error) bool {
+	for _, violation := range []error{
+		artifact.ErrArtifactTampered, artifact.ErrReservedType, artifact.ErrUnknownParent, artifact.ErrUnknownProducer,
+		ErrNotACheckpoint, ErrCheckpointNotOwned, ErrMalformedBackendOutput, kernel.ErrInvalidTransition,
+	} {
+		if errors.Is(err, violation) {
+			return false
+		}
+	}
+	return true
+}
+
+// runSteps is the agent loop. Exits it records itself (agent exit, step
+// limit, refusals) name the latest checkpoint; anything else that returns
+// with the process running is closed by closeRun.
+func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, session Session, options RunOptions, resumedFrom string, track *runTrack) (RunResult, error) {
+	pid := process.PID
+	var err error
 	if process.State == kernel.StateReady || process.State == kernel.StateBlocked || process.State == kernel.StateSleeping {
 		if _, err := r.Kernel.Transition(pid, kernel.StateRunning); err != nil {
 			return RunResult{}, err
@@ -305,14 +401,23 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	}
 
 	var checkpointID string
-	// latest names the newest checkpoint of this run, or the one it resumed
-	// from, as the parent of new checkpoints and records, so a run's
-	// artifacts form a chain an operator can walk.
-	latest := func() []string {
+	defer func() {
 		if checkpointID != "" {
-			return []string{checkpointID}
+			track.checkpointID = checkpointID
 		}
-		return nonEmpty(resumedFrom)
+		track.session = session
+	}()
+	// lastCheckpoint is the newest checkpoint of this run, or the one it
+	// resumed from; latest gives it as the parent of new checkpoints and
+	// records, so a run's artifacts form a chain an operator can walk.
+	lastCheckpoint := func() string {
+		if checkpointID != "" {
+			return checkpointID
+		}
+		return resumedFrom
+	}
+	latest := func() []string {
+		return nonEmpty(lastCheckpoint())
 	}
 
 	maxSteps := r.MaxSteps
@@ -389,10 +494,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				continue
 			}
 			exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
+			exitStatus.Checkpoint = lastCheckpoint()
 			if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 				return RunResult{}, exitErr
 			}
-			return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
+			return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, err
 		}
 
 		// Record what the agent decided before acting, so later steps see their
@@ -434,7 +540,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			if options.OnToolCall != nil {
 				options.OnToolCall(*result.Action.ToolCall)
@@ -478,6 +584,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 						return RunResult{}, err
 					}
 					checkpointID = artifactRecord.ID
+					exitStatus.Checkpoint = lastCheckpoint()
 					if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
 						return RunResult{}, err
 					}
@@ -548,10 +655,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 					break
 				}
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
+				exitStatus.Checkpoint = lastCheckpoint()
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 					return RunResult{}, exitErr
 				}
-				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
+				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, err
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("tool_result", pid, toolResult, latest(), map[string]string{
 				"tool": toolResult.Tool,
@@ -586,20 +694,21 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			if err := r.authorize(process, "spawn_agent", "delegate"); err != nil {
-				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "delegate", err, options); !continued {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "delegate", err, options); !continued {
 					return failed, failErr
 				}
 				break
 			}
 			if r.DelegateHandler == nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: "delegate handler not configured", Retryable: false}
+				exitStatus.Checkpoint = lastCheckpoint()
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 					return RunResult{}, exitErr
 				}
-				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, errors.New(exitStatus.Reason)
+				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, errors.New(exitStatus.Reason)
 			}
 			delegateResult, err := r.DelegateHandler(ctx, process, *result.Action.Delegate, session)
 			if err != nil && ctx.Err() != nil {
@@ -611,10 +720,11 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			}
 			if err != nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
+				exitStatus.Checkpoint = lastCheckpoint()
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 					return RunResult{}, exitErr
 				}
-				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
+				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, err
 			}
 			delegateArtifact, err := r.Artifacts.CreateJSON("delegate_result", pid, delegateResult, nonEmpty(delegateResult.CheckpointID), map[string]string{
 				"agent_id": delegateResult.AgentID,
@@ -645,20 +755,20 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			if err := r.authorize(process, "message_agent", "send"); err != nil {
-				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "send", err, options); !continued {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "send", err, options); !continued {
 					return failed, failErr
 				}
 				break
 			}
 			if r.Bus == nil {
-				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
+				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			message, err := r.Bus.Send(pid, result.Action.Send.To, result.Action.Send.Body)
 			if err != nil {
-				return r.failRuntime(pid, checkpointID, err)
+				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, latest(), map[string]string{
 				"direction": "send",
@@ -679,20 +789,20 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			if err := r.authorize(process, "message_agent", "publish"); err != nil {
-				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "publish", err, options); !continued {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "publish", err, options); !continued {
 					return failed, failErr
 				}
 				break
 			}
 			if r.Bus == nil {
-				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
+				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			messages, err := r.Bus.Publish(pid, result.Action.Publish.Topic, result.Action.Publish.Body)
 			if err != nil {
-				return r.failRuntime(pid, checkpointID, err)
+				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_publish", pid, messages, latest(), map[string]string{
 				"topic": result.Action.Publish.Topic,
@@ -712,19 +822,19 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			if err := r.authorize(process, "message_agent", "subscribe"); err != nil {
-				if continued, failed, failErr := r.refuseAction(pid, checkpointID, &session, "subscribe", err, options); !continued {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "subscribe", err, options); !continued {
 					return failed, failErr
 				}
 				break
 			}
 			if r.Bus == nil {
-				return r.failRuntime(pid, checkpointID, errors.New("mailbox bus not configured"))
+				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			if err := r.Bus.Subscribe(pid, result.Action.Subscribe.Topic); err != nil {
-				return r.failRuntime(pid, checkpointID, err)
+				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_subscription", pid, result.Action.Subscribe, latest(), map[string]string{
 				"topic": result.Action.Subscribe.Topic,
@@ -756,7 +866,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				} else if continued {
 					break
 				}
-				return r.failMalformed(pid, checkpointID)
+				return r.failMalformed(pid, lastCheckpoint())
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 				"kind": "final",
@@ -769,6 +879,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			// whatever the model put there is overwritten.
 			agentExit := *result.Action.ExitStatus
 			agentExit.Origin = kernel.ExitOriginAgent
+			agentExit.Checkpoint = checkpointID
 			process, err = r.Kernel.Exit(pid, agentExit)
 			if err != nil {
 				return RunResult{}, err
@@ -780,7 +891,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			} else if continued {
 				break
 			}
-			return r.failMalformed(pid, checkpointID)
+			return r.failMalformed(pid, lastCheckpoint())
 		}
 
 		artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
@@ -801,7 +912,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		return RunResult{}, err
 	}
 	checkpointID = artifactRecord.ID
-	exitStatus := kernel.ExitStatus{Code: 1, Reason: "step limit exceeded", Retryable: true}
+	exitStatus := kernel.ExitStatus{Code: 1, Reason: "step limit exceeded", Retryable: true, Checkpoint: checkpointID}
 	if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
 		return RunResult{}, err
 	}
@@ -1233,6 +1344,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 		return true, RunResult{}, nil
 	}
 	exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
+	exitStatus.Checkpoint = checkpointID
 	if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
 		return false, RunResult{}, exitErr
 	}
@@ -1499,6 +1611,7 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 
 func (r *AgentRuntime) failMalformed(pid, checkpointID string) (RunResult, error) {
 	exitStatus := kernel.ExitStatus{Code: 1, Reason: ErrMalformedBackendOutput.Error(), Retryable: false}
+	exitStatus.Checkpoint = checkpointID
 	if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
 		return RunResult{}, err
 	}
@@ -1507,6 +1620,7 @@ func (r *AgentRuntime) failMalformed(pid, checkpointID string) (RunResult, error
 
 func (r *AgentRuntime) failRuntime(pid, checkpointID string, runErr error) (RunResult, error) {
 	exitStatus := kernel.ExitStatus{Code: 1, Reason: runErr.Error(), Retryable: false}
+	exitStatus.Checkpoint = checkpointID
 	if _, err := r.Kernel.Exit(pid, exitStatus); err != nil {
 		return RunResult{}, err
 	}

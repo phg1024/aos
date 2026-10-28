@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,14 +19,20 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runlog"
+	"aos/internal/statedir"
 )
 
 // Report is everything inspect recovers about a run.
 type Report struct {
-	StateDir     string                  `json:"state_dir"`
-	Processes    []Process               `json:"processes"`
-	NotExited    []string                `json:"not_exited"`
+	StateDir  string    `json:"state_dir"`
+	Processes []Process `json:"processes"`
+	NotExited []string  `json:"not_exited"`
+	// RunActive says a run holds the state directory now. If none does, the
+	// not-exited processes are orphans that aos reap can close.
+	RunActive    bool                    `json:"run_active"`
+	Leases       []lease.Lease           `json:"leases"`
 	Verification *agentflow.Verdict      `json:"verification,omitempty"`
 	VerdictID    string                  `json:"verification_id,omitempty"`
 	Usage        []Usage                 `json:"usage"`
@@ -91,7 +96,10 @@ func Load(stateDir string, tail int) (Report, error) {
 		return report, err
 	}
 
-	checkpoints := map[string]string{}
+	checkpoints, err := statedir.LatestCheckpoints(stateDir)
+	if err != nil {
+		return report, err
+	}
 	if store, err := openArtifacts(filepath.Join(stateDir, "artifacts")); err != nil {
 		return report, err
 	} else if store != nil {
@@ -101,15 +109,8 @@ func Load(stateDir string, tail int) (Report, error) {
 		}
 		var verdictID string
 		for _, record := range artifacts {
-			switch record.Type {
-			case "checkpoint":
-				if newer(record.ID, checkpoints[record.ProducerPID]) {
-					checkpoints[record.ProducerPID] = record.ID
-				}
-			case "verification":
-				if newer(record.ID, verdictID) {
-					verdictID = record.ID
-				}
+			if record.Type == "verification" && statedir.Newer(record.ID, verdictID) {
+				verdictID = record.ID
 			}
 		}
 		if verdictID != "" {
@@ -124,6 +125,18 @@ func Load(stateDir string, tail int) (Report, error) {
 	for _, process := range report.Processes {
 		if process.State != string(kernel.StateExited) {
 			report.NotExited = append(report.NotExited, process.PID)
+		}
+	}
+	if report.RunActive, err = statedir.InUse(stateDir); err != nil {
+		return report, err
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "leases", "leases.json")); err == nil {
+		leases, err := lease.New(filepath.Join(stateDir, "leases"), k)
+		if err != nil {
+			return report, err
+		}
+		if report.Leases, err = leases.List(); err != nil {
+			return report, err
 		}
 	}
 
@@ -205,22 +218,6 @@ func processTree(processes []kernel.Process, checkpoints map[string]string) []Pr
 	return out
 }
 
-// newer compares artifact IDs such as "art-000042" by number.
-func newer(id, than string) bool {
-	if than == "" {
-		return true
-	}
-	return idNumber(id) > idNumber(than)
-}
-
-func idNumber(id string) int {
-	if i := strings.LastIndex(id, "-"); i >= 0 {
-		n, _ := strconv.Atoi(id[i+1:])
-		return n
-	}
-	return 0
-}
-
 // WriteJSON writes the report as indented JSON.
 func (r Report) WriteJSON(w io.Writer) error {
 	encoder := json.NewEncoder(w)
@@ -255,6 +252,17 @@ func (r Report) WriteText(w io.Writer) {
 	}
 	if len(r.NotExited) > 0 {
 		fmt.Fprintf(w, "\nnot exited (no exit record): %s\n", strings.Join(r.NotExited, ", "))
+		if r.RunActive {
+			fmt.Fprintln(w, "a run holds this state directory; these may still be running")
+		} else {
+			fmt.Fprintf(w, "no run holds this state directory: %d orphaned (run aos reap to close them so they can be recovered)\n", len(r.NotExited))
+		}
+	}
+	if len(r.Leases) > 0 {
+		fmt.Fprintf(w, "\nleases held (%d):\n", len(r.Leases))
+		for _, held := range r.Leases {
+			fmt.Fprintf(w, "  %s  %s  token=%d  until %s\n", held.Resource, held.OwnerPID, held.Token, held.ExpiresAt.Local().Format("15:04:05"))
+		}
 	}
 	if v := r.Verification; v != nil {
 		fmt.Fprintf(w, "\nverification (%s, %s): %s  %s\n", v.Policy, r.VerdictID, v.Status, clip(v.Reason, 120))

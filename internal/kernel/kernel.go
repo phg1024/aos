@@ -128,6 +128,9 @@ func (k *Kernel) Exit(pid string, status ExitStatus) (Process, error) {
 		if status.Origin != "" {
 			data["origin"] = status.Origin
 		}
+		if status.Checkpoint != "" {
+			data["checkpoint"] = status.Checkpoint
+		}
 		event := t.appendEvent(pid, "process.exited", data, now)
 		process.State = StateExited
 		process.ExitStatus = &status

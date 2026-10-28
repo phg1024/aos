@@ -236,7 +236,7 @@ func applyEvent(record Process, known bool, event Event) (Process, bool, error) 
 			return record, false, err
 		}
 		record.State = StateExited
-		record.ExitStatus = &ExitStatus{Code: code, Reason: event.Data["reason"], Retryable: event.Data["retryable"] == "true", Origin: event.Data["origin"]}
+		record.ExitStatus = &ExitStatus{Code: code, Reason: event.Data["reason"], Retryable: event.Data["retryable"] == "true", Origin: event.Data["origin"], Checkpoint: event.Data["checkpoint"]}
 	default:
 		return record, false, nil
 	}

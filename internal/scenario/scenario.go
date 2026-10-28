@@ -66,7 +66,7 @@ func (r *Runner) RunParallelRefactor(ctx context.Context) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	manager, err := lease.New(filepath.Join(r.root, "leases-refactor"))
+	manager, err := lease.New(filepath.Join(r.root, "leases-refactor"), r.Kernel)
 	if err != nil {
 		return Report{}, err
 	}

@@ -17,11 +17,13 @@ import (
 	"time"
 
 	"aos/internal/agentflow"
+	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/inspect"
 	"aos/internal/kernel"
 	"aos/internal/runlog"
 	"aos/internal/runtime"
+	"aos/internal/statedir"
 )
 
 const killHelperStateEnv = "AOS_KILL_HELPER_STATE"
@@ -114,7 +116,7 @@ func TestInspectReconstructsKilledRun(t *testing.T) {
 	for _, process := range report.Processes {
 		tree = append(tree, strings.Repeat(" ", process.Depth)+process.AgentID+":"+process.State)
 	}
-	if got := strings.Join(tree, ","); got != ":ready, coordinator:running,  writer:exited,  writer:running" {
+	if got := strings.Join(tree, ","); got != ":running, coordinator:running,  writer:exited,  writer:running" {
 		t.Fatalf("process tree = %q", got)
 	}
 	if len(report.NotExited) != 3 {
@@ -147,5 +149,32 @@ func TestInspectReconstructsKilledRun(t *testing.T) {
 	}
 	if joined != 4 {
 		t.Fatalf("start and exit events should name their kernel events, %d did", joined)
+	}
+	if report.RunActive {
+		t.Fatal("the killed run no longer holds the state directory")
+	}
+
+	// With the run gone, reap closes the three orphans so they can be
+	// recovered, each exit naming its latest checkpoint.
+	reaped, err := statedir.Reap(stateDir)
+	if err != nil || strings.Join(reaped, ",") != "pid-000004,pid-000002,pid-000001" {
+		t.Fatalf("reap = %v, %v", reaped, err)
+	}
+	if after, _ := inspect.Load(stateDir, 0); len(after.NotExited) != 0 {
+		t.Fatalf("still not exited after reap: %v", after.NotExited)
+	}
+	k, _ := kernel.New(filepath.Join(stateDir, "kernel"))
+	coordinator, _ := k.Await("pid-000002")
+	if !coordinator.Retryable || coordinator.Reason != statedir.OrphanReason || coordinator.Checkpoint != report.Processes[1].LatestCheckpoint {
+		t.Fatalf("reaped coordinator = %+v", coordinator)
+	}
+	store, _ := artifact.New(filepath.Join(stateDir, "artifacts"))
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Backend: &runtime.FakeBackend{}}
+	recovered, err := agent.Recover(context.Background(), "pid-000002", coordinator.Checkpoint, nil, runtime.RunOptions{})
+	if err != nil || recovered.PID == "pid-000002" || recovered.ExitStatus.Code != 0 {
+		t.Fatalf("recover after reap = %+v, %v", recovered, err)
+	}
+	if again, err := statedir.Reap(stateDir); err != nil || len(again) != 0 {
+		t.Fatalf("a second reap found %v, %v", again, err)
 	}
 }

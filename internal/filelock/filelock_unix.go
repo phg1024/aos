@@ -30,3 +30,6 @@ func lock(file *os.File, wait bool) error {
 func unlock(file *os.File) {
 	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 }
+
+// Supported reports whether locks coordinate separate processes here.
+const Supported = true

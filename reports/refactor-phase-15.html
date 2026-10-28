@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 15 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #111827; color: #e5e7eb; padding: 14px; border-radius: 10px; overflow-x: auto; font-size: 12.5px; line-height: 1.4; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 15 Report: No Process Left Running</h1>
+    <p>Design-review item 7. Every run now ends in a recorded exit or a checkpointed park. Recovery is refused unless the process is exited and retryable. Leases are safe across processes, end when their owner exits, and move to a recovered process. A run that dies leaves orphans that <code>aos reap</code> turns into recoverable exits.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>One closer.</b> <code>runSession</code> runs the agent loop (<code>runSteps</code>) and then <code>closeRun</code>. If the process is still <code>running</code>, whatever path returned, the closer exits it as <code>{1, error}</code> with no origin, naming the latest checkpoint (or the one the run resumed from). Infrastructure errors (storage, bus, backend) are retryable. Contract violations are not: a tampered, foreign or reserved artifact, an unknown parent or producer, malformed output, or an invalid transition. Exits and parks the loop records itself pass through unchanged. This replaces patching the roughly 20 bare <code>return RunResult{}, err</code> sites.</li>
+    <li><b>Exit records name their checkpoint.</b> <code>kernel.ExitStatus</code> gains <code>checkpoint</code>, which goes into the <code>process.exited</code> event and is replayed. The runtime sets it on agent exits (overwriting any value from the model), step limits, refusals, failures and the closer's exits.</li>
+    <li><b>Exited PIDs are refused.</b> <code>runSession</code> returns <code>ErrProcessExited</code> before any model call, tool or artifact.</li>
+    <li><b>Guarded recovery.</b> <code>Recover</code> returns <code>ErrNotRecoverable</code> unless the process has exited with a retryable status, from either origin. <code>Resume</code> of an exited process goes through the same check, and the item-5 ownership check still applies. The recovered process takes over the old one's unexpired leases. If that transfer fails, the new process is exited retryable rather than left <code>ready</code>.</li>
+    <li><b>Leases</b> (<code>internal/lease</code>, rewritten).
+      <ul>
+        <li>The lease file is read and written under <code>internal/filelock</code> and replaced atomically through a synced temp file.</li>
+        <li><code>New(root, kernel)</code>: with a kernel, a lease whose owner has exited is free on acquire, get and list.</li>
+        <li>The same owner renews (TTL extended, token kept).</li>
+        <li>Each new grant, takeover or transfer gets a fencing token, strictly increasing per resource. The last token per resource is kept after release, so no token is reused.</li>
+        <li><code>Transfer(from, to)</code> is new, and so is <code>List()</code>.</li>
+        <li><code>lease.acquired</code>, <code>lease.renewed</code>, <code>lease.released</code>, <code>lease.taken_over</code> (reason <code>expired</code> or <code>owner_exited</code>) and <code>lease.transferred</code> are kernel events, each written before the lease file changes.</li>
+        <li>Unversioned lease files from before this change are still read.</li>
+      </ul></li>
+    <li><b>Workflow root lifecycle.</b> <code>Engine.Run</code> moves the root to <code>running</code> as soon as it spawns it. A crashed workflow's root now reads as orphaned, not unstarted. The TUI has no separate root: its interactive agent is the top process and already runs through <code>runSession</code>.</li>
+    <li><b><code>internal/statedir</code></b> (new): <code>Lock</code> (moved from <code>cmd/aos</code>), <code>InUse</code>, <code>LatestCheckpoints</code>, and <code>Reap</code>. <code>aos-tui</code> now takes the state-directory lock as well, so reap can never close a live session's processes.</li>
+    <li><b><code>aos reap &lt;state-dir&gt;</code></b>: if no run holds the lock, it exits every process that has no exit record with <code>{1, "orphaned: owning run is gone", retryable}</code>, naming its latest checkpoint. It refuses where <code>flock</code> is unavailable (<code>filelock.Supported</code>).</li>
+    <li><b><code>aos inspect</code></b> accepts flags after the path. It says whether a run holds the directory, or how many processes are orphaned (with a pointer to <code>aos reap</code>), and lists live leases with owner and token.</li>
+    <li><b>TUI.</b> After a turn, the TUI follows <code>result.PID</code>, so resuming an exited process continues as the recovered PID. Because results now carry the latest checkpoint even on errors, the TUI no longer loses its place after a failure.</li>
+  </ul>
+
+  <h2>A Killed Run, Reaped</h2>
+  <p>The scripted coordinator/writer run from phase 14, using the real CLI. While the run was alive, <code>inspect</code> said "a run holds this state directory" and <code>aos reap</code> refused with "state directory is in use by another aos run". After SIGKILL:</p>
+  <pre>processes (4, 3 not exited):
+  pid-000001 workflow:killed  running
+    pid-000002 coordinator  running  checkpoint art-000006
+      pid-000003 writer  exited  code=0 origin=agent &quot;drafted&quot;  checkpoint art-000003
+      pid-000004 writer  running
+
+not exited (no exit record): pid-000001, pid-000002, pid-000004
+no run holds this state directory: 3 orphaned (run aos reap to close them so they can be recovered)
+</pre>
+  <pre>$ aos reap state
+reaped 3 orphaned processes (exit 1, retryable, &quot;orphaned: owning run is gone&quot;): pid-000004, pid-000002, pid-000001</pre>
+  <pre>processes (4, 0 not exited):
+  pid-000001 workflow:killed  exited  code=1 retryable &quot;orphaned: owning run is gone&quot;
+    pid-000002 coordinator  exited  code=1 retryable &quot;orphaned: owning run is gone&quot;  checkpoint art-000006
+      pid-000003 writer  exited  code=0 origin=agent &quot;drafted&quot;  checkpoint art-000003
+      pid-000004 writer  exited  code=1 retryable &quot;orphaned: owning run is gone&quot;
+
+</pre>
+  <p>The root now reads <code>running</code> rather than <code>ready</code>. Each reaped exit is retryable and names its latest checkpoint, and the test then recovers the coordinator from it.</p>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>What it shows</th></tr>
+    <tr><td><code>TestInfrastructureFailuresCloseTheProcess</code></td><td>Each case checkpoints once and then fails: the backend returns an error, the artifact index is corrupted, or the bus mailbox is corrupted. Every case ends <code>exited</code> with code 1, no origin, retryable, and the exit's and result's checkpoint set to the latest checkpoint. Before this change the store and bus cases left the process <code>running</code>.</td></tr>
+    <tr><td><code>TestKernelFailureIsReapable</code></td><td>A read-only kernel directory: no exit can be recorded, so the run returns the error. Once writable again, <code>Reap</code> exits the process as retryable with the checkpoint written before the failure.</td></tr>
+    <tr><td><code>TestRunRefusesExitedProcess</code></td><td><code>ErrProcessExited</code>, with 0 model calls and 0 artifacts.</td></tr>
+    <tr><td><code>TestRecoverRefusesLiveAndFinalProcesses</code></td><td>Recovering a parked live process gives <code>ErrNotRecoverable</code> and spawns nothing. So does recovering a non-retryable agent exit, and so does resuming one. No model calls.</td></tr>
+    <tr><td><code>TestRecoverCarriesLeasesOver</code></td><td>The process takes a lease, then hits a backend error. While it is exited, its lease reads as free. <code>Recover</code> moves the lease to the new PID (seen from inside its run), which releases it, and a <code>lease.transferred</code> event names both PIDs.</td></tr>
+    <tr><td><code>TestLeaseExclusiveAcrossProcesses</code></td><td>Three managers in separate processes make 200 attempts each on one lease, and each holder increments an unlocked counter. The counter equals the number of grants (93 in one run), so no two holders ever overlapped. The tokens are exactly 1..N with no repeats, and strictly increasing within each process.</td></tr>
+    <tr><td>Lease unit tests</td><td>Renewal keeps the token and extends the TTL. An exited owner's lease is free and a takeover gets a larger token, while the old owner can no longer release it. An expired lease is taken over. Transfer moves only the predecessor's leases. Events, in order: <code>acquired</code>, then <code>taken_over:owner_exited</code>. A legacy file is still read and still binds.</td></tr>
+    <tr><td><code>TestWorkflowRootRunsWhileTheWorkflowDoes</code></td><td>The root is <code>running</code> during the entry agent's model call and <code>exited</code> afterwards.</td></tr>
+    <tr><td><code>TestInspectReconstructsKilledRun</code> (extended)</td><td>After SIGKILL, <code>run_active</code> is false. Reap closes pid-4, pid-2 and pid-1 (children first), after which inspect shows none not exited. The coordinator's reaped exit names its latest checkpoint, and <code>Recover</code> from it succeeds under a new PID. A second reap finds nothing.</td></tr>
+    <tr><td><code>TestReapRefusesWhileARunHoldsTheLock</code></td><td>A second <code>Lock</code> fails with <code>ErrInUse</code>, <code>InUse</code> is true, and <code>Reap</code> refuses and leaves the live process alone. After release, Reap closes it.</td></tr>
+    <tr><td><code>TestParseInterspersedFlags</code></td><td><code>--json --tail 5 DIR</code>, <code>DIR --json --tail 5</code> and <code>--tail 5 DIR --json</code> all parse the same way.</td></tr>
+    <tr><td>inspect unit tests (extended)</td><td>Live leases are listed, while an exited owner's lease is not. The text output includes the orphan count with the reap hint, and the lease line with its token.</td></tr>
+  </table>
+  <p>Also passing: <code>go test ./...</code>, <code>go vet ./...</code>, <code>-race</code> on lease, runtime, statedir, inspect, agentflow and <code>cmd/aos</code>, <code>GOOS=windows</code> and <code>GOOS=linux</code> builds, Windows vet of the changed packages, and the Harbor adapter self-test. Three existing tests compared exit records exactly; they now expect the checkpoint name.</p>
+
+  <h2>Decisions and Divergences</h2>
+  <ul>
+    <li>The closer acts only on a process left <code>running</code>. A process that stayed <code>ready</code> because its first transition failed never ran, so it is left alone. The loop's own exits keep their existing retryable flags: backend errors and the step limit are retryable; tool errors, refusals and malformed output are not.</li>
+    <li>Agent-origin retryable exits are recoverable, as you suggested. Resume already gated on <code>Retryable</code> alone.</li>
+    <li>The checkpoint is a new <code>ExitStatus.Checkpoint</code> field in the kernel record, not part of the reason.</li>
+    <li>A lease of a PID the kernel does not know is freed only by expiry, not treated as dead.</li>
+    <li>Leases are not deleted when their owner exits. They read as free, which leaves them for <code>Transfer</code> after a <code>Recover</code>.</li>
+    <li>The engine still exits a cancelled child as <code>{130, cancelled}</code> (its own policy). For other errors, its item-1 exit is now a no-op, because the closer has already recorded the exit.</li>
+  </ul>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>If the kernel cannot be written, no exit can be recorded at the time. <code>aos reap</code> is the recovery path once the run is gone.</li>
+    <li>Fencing tokens are issued but not yet checked at write sites.</li>
+    <li>On non-unix platforms, file locks do not coordinate processes, so leases are exclusive only within one process, and reap refuses.</li>
+    <li>A lease event is written before the lease file. A crash between the two leaves an event for a grant that did not happen; the file stays authoritative.</li>
+  </ul>
+</body>
+</html>

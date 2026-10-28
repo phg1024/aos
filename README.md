@@ -70,9 +70,21 @@ A run keeps its own record on disk as it goes, so a killed run can still be reco
 
 Both are append-only JSONL. Each record gets a `seq` assigned under a file lock (`*.lock`), and the line is fsynced before the call returns. Several writers, including other processes, keep `seq` gap-free, and a kill can leave at most a torn last line, which readers skip. These files are diagnostic; the kernel event log stays the source of truth.
 
-`aos inspect <state-dir>` rebuilds a run from these files and the kernel and artifact stores, without a model. It shows the process tree with exit records, which processes never exited, each process's latest checkpoint, the verification verdict, token usage per process and in total, and the trace tail. Use `--json` for machine-readable output and `--tail N` to set the trace length (default 20). The Harbor adapter reads its token counts from `aos inspect --json`, and on a timeout from `calls.jsonl` directly.
+`aos inspect <state-dir>` rebuilds a run from these files and the kernel and artifact stores, without a model. It shows the process tree with exit records, which processes never exited (and whether a run still holds the state directory, or they are orphans), each process's latest checkpoint, the leases held, the verification verdict, token usage per process and in total, and the trace tail. Use `--json` for machine-readable output and `--tail N` to set the trace length (default 20); flags may come before or after the path. The Harbor adapter reads its token counts from `aos inspect --json`, and on a timeout from `calls.jsonl` directly.
 
 If `aos run --workflow` stops on a Go error after the root process started (cancellation, a failed store write), it still writes the report and the summary JSON, with the error in `error`, and it records an exit for every process it started.
+
+## Run Lifecycle and Recovery
+
+Every agent run ends in one of two ways. Either the process exits with a recorded status, or it parks in a checkpoint: `ready` after a yield or a cancel, `blocked` after `wait`. Exits the runtime decides (step limit, refusals, errors) carry no origin and name the process's latest checkpoint in `checkpoint`. A run can also fail on an error with nothing recorded: the artifact store, the bus or a kernel call fails. In that case one closer exits the process `{1, error}`. The exit is retryable unless the error is a contract violation, such as a tampered or foreign artifact, a reserved type or an invalid transition. If the kernel itself cannot be written, nothing can be recorded; `aos reap` closes the process once the run is gone. The workflow root is `running` for as long as its workflow runs.
+
+A run of a process that has already exited is refused with `ErrProcessExited`, before any model call or artifact. `Recover` (and `Resume` of an exited process) is refused with `ErrNotRecoverable` unless the process has exited with a retryable status, whether an agent or the runtime recorded it. A live process can never be recovered, so the same work never runs twice. The checkpoint must still be the process's own. The recovered process takes over its predecessor's unexpired leases.
+
+`aos run --workflow` and `aos-tui` each hold the state directory's lock (`<state-dir>.lock`) while they run. A run that dies, for example from SIGKILL or a power loss, leaves processes that look live. `aos reap <state-dir>` refuses while any run holds the lock. Otherwise it exits every process without an exit record with `{1, "orphaned: owning run is gone", retryable}`, naming its latest checkpoint, so each one can be recovered. On platforms without `flock`, reap refuses, since it cannot tell whether a run is alive.
+
+## Leases
+
+`acquire_lease` and `release_lease` use `<state-dir>/leases/leases.json`. The file is read and written under a file lock and replaced atomically, so managers in different processes never both hold a resource. A lease ends when it expires, when its owner releases it, or when its owner exits. The owner can renew a lease, which extends its TTL and keeps its token. Every new grant, takeover or transfer gets a fencing token, strictly increasing per resource, which write sites can compare (nothing enforces it yet). Grants, renewals, releases, takeovers (`reason: expired` or `owner_exited`) and transfers are logged as `lease.*` kernel events, and `aos inspect` lists the live leases. Files from before versioning, a bare map of leases, are still read.
 
 ## Verification Policy
 

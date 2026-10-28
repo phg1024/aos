@@ -149,7 +149,7 @@ func TestVerificationArtifactIsProducedByRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("await verifier: %v", err)
 	}
-	if verdict.VerifierExit == nil || *verdict.VerifierExit != recorded || recorded != (kernel.ExitStatus{Code: 1, Reason: "FAIL", Retryable: true, Origin: kernel.ExitOriginAgent}) {
+	if verdict.VerifierExit == nil || *verdict.VerifierExit != recorded || recorded.Checkpoint == "" || recorded != (kernel.ExitStatus{Code: 1, Reason: "FAIL", Retryable: true, Origin: kernel.ExitOriginAgent, Checkpoint: recorded.Checkpoint}) {
 		t.Fatalf("verdict exit %+v should match the kernel record %+v", verdict.VerifierExit, recorded)
 	}
 }

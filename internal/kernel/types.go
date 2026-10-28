@@ -47,6 +47,9 @@ type ExitStatus struct {
 	// (step limit, crash, cancel, errors). An agent cannot set it: the
 	// runtime overwrites it at the one place it executes exit actions.
 	Origin string `json:"origin,omitempty"`
+	// Checkpoint is the process's latest checkpoint when it exited, if any:
+	// where a Recover would resume from.
+	Checkpoint string `json:"checkpoint,omitempty"`
 }
 
 // ExitOriginAgent marks an exit the agent chose itself.

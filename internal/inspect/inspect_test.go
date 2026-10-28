@@ -12,6 +12,7 @@ import (
 	"aos/internal/artifact"
 	"aos/internal/inference"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runlog"
 	"aos/internal/workflow"
 )
@@ -49,6 +50,11 @@ func buildState(t *testing.T) string {
 	must(second, err)
 	must(k.Exit(done.PID, kernel.ExitStatus{Code: 0, Reason: "wrote it", Origin: kernel.ExitOriginAgent}))
 	must(store.CreateJSON("verification", root.PID, agentflow.Verdict{Policy: workflow.VerificationRequired, Verifier: "checker", Status: agentflow.VerdictMissing, Reason: "no verifier run"}, nil, nil))
+
+	leases, err := lease.New(filepath.Join(stateDir, "leases"), k)
+	must(leases, err)
+	must(leases.Acquire("src/main.go", running.PID, time.Hour))
+	must(leases.Acquire("notes.md", done.PID, time.Hour)) // free: its owner has exited
 
 	calls, err := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
 	must(calls, err)
@@ -93,6 +99,9 @@ func TestLoad(t *testing.T) {
 	if len(report.Usage) != 2 || report.Usage[0].Calls != 2 || report.Usage[1].Errors != 1 {
 		t.Fatalf("per process = %+v", report.Usage)
 	}
+	if len(report.Leases) != 1 || report.Leases[0].Resource != "src/main.go" || report.Leases[0].OwnerPID != "pid-000003" || report.RunActive {
+		t.Fatalf("leases = %+v, run active = %v", report.Leases, report.RunActive)
+	}
 	if report.TraceCount != 3 || len(report.TraceTail) != 2 || report.TraceTail[0].Seq != 2 {
 		t.Fatalf("trace tail = %+v of %d", report.TraceTail, report.TraceCount)
 	}
@@ -121,7 +130,7 @@ func TestWriters(t *testing.T) {
 	}
 	var text bytes.Buffer
 	report.WriteText(&text)
-	for _, want := range []string{"pid-000002 writer  exited  code=0 origin=agent \"wrote it\"  checkpoint art-000002", "not exited (no exit record): pid-000001, pid-000003", "verification (required", "total", "calls=3", "[evt-000002]"} {
+	for _, want := range []string{"pid-000002 writer  exited  code=0 origin=agent \"wrote it\"  checkpoint art-000002", "not exited (no exit record): pid-000001, pid-000003", "verification (required", "total", "calls=3", "[evt-000002]", "2 orphaned (run aos reap", "src/main.go  pid-000003  token=1"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("text output lacks %q:\n%s", want, text.String())
 		}

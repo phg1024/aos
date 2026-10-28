@@ -383,7 +383,7 @@ func TestAgentRuntimeRuntimeTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new bus: %v", err)
 	}
-	leaseManager, err := lease.New(filepath.Join(root, "leases"))
+	leaseManager, err := lease.New(filepath.Join(root, "leases"), k)
 	if err != nil {
 		t.Fatalf("new lease manager: %v", err)
 	}

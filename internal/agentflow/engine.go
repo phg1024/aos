@@ -267,6 +267,11 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if err != nil {
 		return RunSummary{}, err
 	}
+	// The root runs for as long as the workflow does; a crash leaves it
+	// running, which inspect and reap read as orphaned, not unstarted.
+	if _, err := e.Kernel.Transition(root.PID, kernel.StateRunning); err != nil {
+		return RunSummary{}, err
+	}
 	summary := RunSummary{
 		Workflow:   spec.Name,
 		RootPID:    root.PID,

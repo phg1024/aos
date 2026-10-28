@@ -23,6 +23,7 @@ import (
 	"aos/internal/runlog"
 	"aos/internal/runtime"
 	"aos/internal/skills"
+	"aos/internal/statedir"
 	"aos/internal/tokenizer"
 	"aos/internal/tools"
 	"aos/internal/tui/render"
@@ -60,6 +61,13 @@ func main() {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		fail(err)
 	}
+	// One run per state directory, as for aos run; aos reap relies on it to
+	// tell a live session's processes from orphans.
+	releaseState, err := statedir.Lock(stateDir)
+	if err != nil {
+		fail(err)
+	}
+	defer releaseState()
 
 	absWorkdir, err := filepath.Abs(workdir)
 	if err != nil {
@@ -76,7 +84,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"))
+	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"), k)
 	if err != nil {
 		fail(err)
 	}
@@ -313,6 +321,10 @@ func main() {
 			footer.Println(ui.Error("runtime error: " + err.Error()))
 		}
 		observeRoot("exit", "")
+		if result.PID != "" {
+			// Resuming an exited process recovers it as a new one.
+			process.PID = result.PID
+		}
 		checkpointID = result.CheckpointID
 		currentSession = result.Session
 		stream.Clear()

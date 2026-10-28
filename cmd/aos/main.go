@@ -15,7 +15,6 @@ import (
 	"aos/internal/agentflow"
 	"aos/internal/app"
 	"aos/internal/artifact"
-	"aos/internal/filelock"
 	"aos/internal/inference"
 	"aos/internal/inspect"
 	"aos/internal/kernel"
@@ -23,6 +22,7 @@ import (
 	"aos/internal/runlog"
 	"aos/internal/runtime"
 	"aos/internal/skills"
+	"aos/internal/statedir"
 	"aos/internal/tools"
 	"aos/internal/workflow"
 )
@@ -49,9 +49,46 @@ func main() {
 		run(os.Args[2:])
 	case "inspect":
 		inspectRun(os.Args[2:])
+	case "reap":
+		reapRun(os.Args[2:])
 	default:
 		printUsage()
 	}
+}
+
+// parseInterspersed parses flags wherever they appear among args and
+// returns the other arguments in order, so "inspect DIR --json" works as
+// well as "inspect --json DIR".
+func parseInterspersed(fs *flag.FlagSet, args []string) []string {
+	var positional []string
+	for {
+		_ = fs.Parse(args)
+		if fs.NArg() == 0 {
+			return positional
+		}
+		positional = append(positional, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
+}
+
+// reapRun closes the processes a dead run left without an exit record.
+func reapRun(args []string) {
+	fs := flag.NewFlagSet("reap", flag.ExitOnError)
+	positional := parseInterspersed(fs, args)
+	if len(positional) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: aos reap <state-dir>")
+		os.Exit(2)
+	}
+	reaped, err := statedir.Reap(positional[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if len(reaped) == 0 {
+		fmt.Println("nothing to reap: every process has an exit record")
+		return
+	}
+	fmt.Printf("reaped %d orphaned processes (exit 1, retryable, %q): %s\n", len(reaped), statedir.OrphanReason, strings.Join(reaped, ", "))
 }
 
 // inspectRun prints what a run did from its state directory alone, with
@@ -60,12 +97,12 @@ func inspectRun(args []string) {
 	fs := flag.NewFlagSet("inspect", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	tail := fs.Int("tail", 20, "number of trailing trace events to show (-1 for all)")
-	_ = fs.Parse(args)
-	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: aos inspect [--json] [--tail N] <state-dir>")
+	positional := parseInterspersed(fs, args)
+	if len(positional) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: aos inspect [--json] [--tail N] <state-dir>  (flags may also follow the path)")
 		os.Exit(2)
 	}
-	report, err := inspect.Load(fs.Arg(0), *tail)
+	report, err := inspect.Load(positional[0], *tail)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -168,7 +205,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return err
 	}
-	releaseLock, err := acquireStateLock(stateDir)
+	releaseLock, err := statedir.Lock(stateDir)
 	if err != nil {
 		return err
 	}
@@ -182,7 +219,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 	if err != nil {
 		return err
 	}
-	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"))
+	leaseManager, err := lease.New(filepath.Join(stateDir, "leases"), k)
 	if err != nil {
 		return err
 	}
@@ -308,21 +345,6 @@ func (w workflowFailed) exitCode() int {
 	return 1
 }
 
-func acquireStateLock(stateDir string) (func(), error) {
-	held, err := filelock.TryAcquire(filepath.Clean(stateDir) + ".lock")
-	if errors.Is(err, filelock.ErrLocked) {
-		return nil, fmt.Errorf("state directory is already in use by another aos run: %s", stateDir)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if file := held.File(); file.Truncate(0) == nil {
-		_, _ = file.WriteString(fmt.Sprintf("pid=%d\nstarted_at=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339)))
-		_, _ = file.Seek(0, 0)
-	}
-	return held.Release, nil
-}
-
 func resolveSkillRoots(roots []string, baseDir string) []string {
 	out := make([]string, 0, len(roots))
 	for _, root := range roots {
@@ -373,6 +395,7 @@ func printUsage() {
 	fmt.Println("  aos run --input A --input B --input C --output D [--verify none|required|best_effort] \"assemble files A, B, C into D\"")
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
 	fmt.Println("  aos inspect [--json] [--tail N] <state-dir>")
+	fmt.Println("  aos reap <state-dir>   exit processes left running by a run that is gone, so they can be recovered")
 }
 
 func getenv(key, fallback string) string {

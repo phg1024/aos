@@ -145,7 +145,7 @@ func TestDelegatedChildExitReachesParent(t *testing.T) {
 		if err := f.store.ReadJSON(record.ID, &result); err != nil {
 			t.Fatalf("read delegate_result: %v", err)
 		}
-		if result.ExitStatus != (kernel.ExitStatus{Code: 1, Reason: "FAIL: 2 of 5 checks failed", Origin: kernel.ExitOriginAgent}) {
+		if result.ExitStatus.Checkpoint == "" || result.ExitStatus != (kernel.ExitStatus{Code: 1, Reason: "FAIL: 2 of 5 checks failed", Origin: kernel.ExitOriginAgent, Checkpoint: result.ExitStatus.Checkpoint}) {
 			t.Fatalf("delegate_result artifact exit = %+v", result.ExitStatus)
 		}
 		found = true
@@ -170,7 +170,7 @@ func TestDelegatedChildExitReachesParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delegate: %v", err)
 	}
-	if result.ExitStatus != (kernel.ExitStatus{Code: 2, Reason: "flaky check", Retryable: true, Origin: kernel.ExitOriginAgent}) {
+	if result.ExitStatus != (kernel.ExitStatus{Code: 2, Reason: "flaky check", Retryable: true, Origin: kernel.ExitOriginAgent, Checkpoint: result.CheckpointID}) {
 		t.Fatalf("DelegateResult.ExitStatus = %+v", result.ExitStatus)
 	}
 }

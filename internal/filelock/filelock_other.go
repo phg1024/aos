@@ -9,3 +9,6 @@ import "os"
 func lock(file *os.File, wait bool) error { return nil }
 
 func unlock(file *os.File) {}
+
+// Supported reports whether locks coordinate separate processes here.
+const Supported = false
