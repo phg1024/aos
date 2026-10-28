@@ -60,6 +60,22 @@ TIME_BUDGET_MARGIN_SEC = 20
 MIN_TIME_BUDGET_SEC = 60
 
 
+def time_budget_flag(timeout: float | None, elapsed: float) -> str:
+    """AOS flags for Harbor's deadline, less what setup used and a margin.
+
+    The budget is strict: AOS cancels the model call or command in flight
+    and exits with a checkpoint when it runs out, so it stops on its own
+    before Harbor kills the trial. Its agents are told to commit an answer
+    with a tenth of it left.
+    """
+    if timeout is None:
+        return ""
+    budget = int(timeout - elapsed - TIME_BUDGET_MARGIN_SEC)
+    if budget < MIN_TIME_BUDGET_SEC:
+        return ""
+    return f"--time-budget {budget}s --strict-time-budget "
+
+
 def container_base_url(url: str) -> str:
     """Point a host-loopback URL at the Docker host as seen from a container."""
     parts = urlsplit(url)
@@ -189,12 +205,7 @@ class AOSAgent(BaseInstalledAgent):
         # runtime. Turning it off costs nothing for this I/O-bound process.
         env["GODEBUG"] = "asyncpreemptoff=1"
 
-        # Let AOS see Harbor's deadline, less what setup used and a margin.
-        budget_flag = ""
-        if timeout is not None:
-            budget = int(timeout - (time.monotonic() - started) - TIME_BUDGET_MARGIN_SEC)
-            if budget >= MIN_TIME_BUDGET_SEC:
-                budget_flag = f"--time-budget {budget}s "
+        budget_flag = time_budget_flag(timeout, time.monotonic() - started)
 
         # Record the exit code instead of failing the trial: the hidden tests
         # decide the outcome even when the agent stops early.

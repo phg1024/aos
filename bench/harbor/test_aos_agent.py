@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aos_agent import agent_timeout_sec, container_base_url, parse_run_summary, usage_from_ledger
+from aos_agent import agent_timeout_sec, container_base_url, parse_run_summary, time_budget_flag, usage_from_ledger
 
 
 class ContainerBaseURLTest(unittest.TestCase):
@@ -71,6 +71,15 @@ class UsageFromLedgerTest(unittest.TestCase):
 
     def test_missing_ledger(self):
         self.assertIsNone(usage_from_ledger(Path(tempfile.mkdtemp()) / "absent.jsonl"))
+
+
+class TimeBudgetFlagTest(unittest.TestCase):
+    def test_strict_budget_leaves_a_margin(self):
+        self.assertEqual(time_budget_flag(900, 30), "--time-budget 850s --strict-time-budget ")
+
+    def test_no_budget_without_a_timeout_or_room(self):
+        self.assertEqual(time_budget_flag(None, 0), "")
+        self.assertEqual(time_budget_flag(90, 20), "")
 
 
 if __name__ == "__main__":
