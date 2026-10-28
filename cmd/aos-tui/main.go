@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"aos/internal/agentflow"
@@ -172,7 +174,7 @@ func main() {
 		fmt.Println(ui.Subtle("Tokenizer: heuristic fallback"))
 	}
 	fmt.Println(ui.Subtle("State: " + stateDir))
-	fmt.Println(ui.Subtle("Commands: /quit, /state, /recover"))
+	fmt.Println(ui.Subtle("Commands: /quit, /state, /recover  ·  Esc cancels a running task"))
 
 	if workflowPath != "" {
 		fmt.Println(ui.Subtle(fmt.Sprintf("Workflow: %s  entry=%s  delegates=%s", spec.Name, agent.ID, strings.Join(agent.AllowedAgents, ","))))
@@ -180,6 +182,9 @@ func main() {
 
 	var checkpointID string
 	var currentSession runtime.Session
+	// interrupted marks that Esc stopped the last run, so the next message
+	// tells the agent its previous task was cut short.
+	var interrupted bool
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		footer.Update(render.FooterStatus{
@@ -211,8 +216,13 @@ func main() {
 				footer.Println(ui.Warn("no checkpoint yet"))
 				continue
 			}
-			result, err := agentRuntime.Recover(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
-			if err != nil && err != runtime.ErrAgentBlocked {
+			result, err := runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
+				return agentRuntime.Recover(ctx, process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+			})
+			if errors.Is(err, runtime.ErrRunCancelled) {
+				interrupted = true
+				footer.Println(ui.Warn(cancelledNotice))
+			} else if err != nil && err != runtime.ErrAgentBlocked {
 				stream.Clear()
 				footer.Println(ui.Error("recover error: " + err.Error()))
 				continue
@@ -227,19 +237,29 @@ func main() {
 			continue
 		}
 
-		if _, err := bus.Send("user", process.PID, line); err != nil {
+		message := line
+		if interrupted {
+			message = interruptedPrefix + line
+			interrupted = false
+		}
+		if _, err := bus.Send("user", process.PID, message); err != nil {
 			footer.Println(ui.Error("send error: " + err.Error()))
 			continue
 		}
 
 		var result runtime.RunResult
 		observeRoot("start", line)
-		if checkpointID == "" {
-			result, err = agentRuntime.RunWithOptions(context.Background(), process.PID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
-		} else {
-			result, err = agentRuntime.Resume(context.Background(), process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
-		}
-		if err != nil && err != runtime.ErrAgentBlocked {
+		result, err = runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
+			if checkpointID == "" {
+				return agentRuntime.RunWithOptions(ctx, process.PID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+			}
+			return agentRuntime.Resume(ctx, process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+		})
+		if errors.Is(err, runtime.ErrRunCancelled) {
+			interrupted = true
+			stream.Clear()
+			footer.Println(ui.Warn(cancelledNotice))
+		} else if err != nil && err != runtime.ErrAgentBlocked {
 			stream.Clear()
 			footer.Println(ui.Error("runtime error: " + err.Error()))
 		}
@@ -249,6 +269,26 @@ func main() {
 		stream.Clear()
 		printResult(ui, footer, result)
 	}
+}
+
+const (
+	cancelledNotice   = "cancelled (esc). Your next message continues from here."
+	interruptedPrefix = "[The user pressed Esc and interrupted your previous task before it finished. Do not resume it unless asked.]\n"
+)
+
+// runCancellable runs fn with a context that an Esc press cancels.
+func runCancellable(ui render.Palette, stream *render.StreamRenderer, fn func(ctx context.Context) (runtime.RunResult, error)) (runtime.RunResult, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var once sync.Once
+	stop := render.WatchEsc(os.Stdin, func() {
+		once.Do(func() {
+			stream.PrintStatus(ui.Warn("esc: cancelling…"))
+			cancel()
+		})
+	})
+	defer stop()
+	return fn(ctx)
 }
 
 // startProgressTicker redraws the footer every second while workflow agents

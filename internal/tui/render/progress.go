@@ -53,7 +53,7 @@ func (p *WorkflowProgress) Observe(event agentflow.TraceEvent) {
 			started = p.now()
 		}
 		p.stack = append(p.stack, progressFrame{agentID: event.AgentID, pid: event.PID, started: started, activity: "starting"})
-	case "exit", "runtime_error":
+	case "exit", "runtime_error", "cancelled":
 		if idx := p.indexLocked(event.PID); idx >= 0 {
 			p.stack = p.stack[:idx]
 			// Only delegated runs count; the entry agent ends every turn.
@@ -151,6 +151,8 @@ func (p *WorkflowProgress) Render(event agentflow.TraceEvent) string {
 		return p.ui.Header(indent+"└ "+agent+" exited") + p.ui.Subtle(" "+clipLine(event.Detail, 120))
 	case "runtime_error":
 		return indent + p.ui.Error("└ "+agent+" failed: "+event.Detail)
+	case "cancelled":
+		return indent + p.ui.Warn("└ "+agent+" cancelled")
 	}
 	return ""
 }

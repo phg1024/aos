@@ -295,7 +295,16 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		},
 	})
 	if err != nil {
-		e.emitTrace(agent.ID, process.PID, "runtime_error", err.Error())
+		// Close out the child so a later delegation to the same agent is not
+		// rejected as already active.
+		status := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
+		kind := "runtime_error"
+		if errors.Is(err, runtime.ErrRunCancelled) {
+			status = kernel.ExitStatus{Code: 130, Reason: "cancelled", Retryable: true}
+			kind = "cancelled"
+		}
+		_, _ = e.Kernel.Exit(process.PID, status)
+		e.emitTrace(agent.ID, process.PID, kind, err.Error())
 		return AgentRun{}, err
 	}
 	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)

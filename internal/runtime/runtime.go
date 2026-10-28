@@ -23,6 +23,10 @@ import (
 var ErrMalformedBackendOutput = errors.New("malformed backend output")
 var ErrAgentBlocked = errors.New("agent blocked waiting for input")
 
+// ErrRunCancelled reports that the caller's context ended a run. The session
+// is checkpointed and the process left ready, so Resume continues it.
+var ErrRunCancelled = errors.New("run cancelled")
+
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -110,6 +114,7 @@ type RunResult struct {
 	Session      Session           `json:"session"`
 	Yielded      bool              `json:"yielded,omitempty"`
 	Blocked      bool              `json:"blocked,omitempty"`
+	Cancelled    bool              `json:"cancelled,omitempty"`
 }
 
 type AgentRuntime struct {
@@ -298,6 +303,9 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		return false, nil
 	}
 	for step := 0; step < maxSteps; step++ {
+		if ctx.Err() != nil {
+			return r.cancelRun(ctx, pid, session)
+		}
 		var inboxMessages []ipc.Message
 		if r.Bus != nil {
 			inboxMessages, err = r.Bus.ReceiveAll(pid)
@@ -319,6 +327,10 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			History:    append([]Message(nil), session.Messages...),
 			MemoryRefs: append([]MemoryRef(nil), session.MemoryRefs...),
 		})
+		if ctx.Err() != nil {
+			// Drop whatever the interrupted call produced, action or error.
+			return r.cancelRun(ctx, pid, session)
+		}
 		if err != nil {
 			if options.ContinueOnToolError {
 				artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
@@ -461,6 +473,13 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				if options.OnToolError != nil {
 					options.OnToolError(*result.Action.ToolCall, err)
 				}
+				if ctx.Err() != nil {
+					session.Messages = append(session.Messages, Message{
+						Role:    "tool",
+						Content: fmt.Sprintf("tool_cancelled name=%s reason=interrupted_by_user", result.Action.ToolCall.Name),
+					})
+					return r.cancelRun(ctx, pid, session)
+				}
 				if options.ContinueOnToolError {
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 						"tool":  result.Action.ToolCall.Name,
@@ -533,6 +552,13 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, errors.New(exitStatus.Reason)
 			}
 			delegateResult, err := r.DelegateHandler(ctx, process, *result.Action.Delegate, session)
+			if err != nil && ctx.Err() != nil {
+				session.Messages = append(session.Messages, Message{
+					Role:    "tool",
+					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=interrupted_by_user", result.Action.Delegate.AgentID),
+				})
+				return r.cancelRun(ctx, pid, session)
+			}
 			if err != nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
@@ -1005,6 +1031,21 @@ func truncateMemorySummary(value string, limit int) string {
 	return value[:limit-3] + "..."
 }
 
+// cancelRun checkpoints session and parks the process as ready so a later
+// Resume picks up where the cancelled run stopped.
+func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Session) (RunResult, error) {
+	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+		"kind": "cancelled",
+	})
+	if err != nil {
+		return RunResult{}, err
+	}
+	if _, err := r.Kernel.Transition(pid, kernel.StateReady); err != nil {
+		return RunResult{}, err
+	}
+	return RunResult{PID: pid, CheckpointID: artifactRecord.ID, Session: session, Cancelled: true}, fmt.Errorf("%w: %w", ErrRunCancelled, context.Cause(ctx))
+}
+
 func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {
 	var session Session
 	err := r.Artifacts.ReadJSON(id, &session)
@@ -1015,7 +1056,7 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 	if isRuntimeTool(call.Name) {
 		return r.executeRuntimeTool(ctx, process, session, checkpointID, call)
 	}
-	return r.Tools.Execute(tools.Request{
+	return r.Tools.ExecuteContext(ctx, tools.Request{
 		Tool:          call.Name,
 		Args:          call.Args,
 		CapabilitySet: process.CapabilitySet,

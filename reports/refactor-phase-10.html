@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 10 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code, pre { background: #f3f4f6; border-radius: 4px; }
+    code { padding: 2px 5px; }
+    pre { padding: 12px 14px; overflow-x: auto; font-size: 13px; line-height: 1.35; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 10 Report</h1>
+    <p>Pressing Esc in <code>aos-tui</code> cancels the running task: the model call, any running shell command, and any delegated agents. The conversation is checkpointed, so the next message continues from there.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>Runtime.</b> The runtime has a new <code>runtime.ErrRunCancelled</code> error and a <code>RunResult.Cancelled</code> flag. The loop checks the context at the start of each step, right after each model call (discarding whatever that call returned), and after a tool or delegation fails. A cancelled run saves a <code>cancelled</code> checkpoint and goes back to <code>ready</code>, so <code>Resume</code> continues it. Notes <code>tool_cancelled</code> and <code>delegate_cancelled</code> are added to the history so the model knows what was cut short.</li>
+    <li><b>Tools.</b> <code>Runtime.ExecuteContext</code> passes the context into tools. A cancelled <code>run</code> kills its process group and returns <code>ErrToolCancelled</code>, separate from a timeout. <code>Execute</code> still works for existing callers.</li>
+    <li><b>Engine.</b> When a delegated agent's run fails or is cancelled, its kernel process is now exited (code 130 for a cancel) and a <code>cancelled</code> trace event is emitted. Before, a failed child stayed active, and any later delegation to the same agent was rejected.</li>
+    <li><b>TUI.</b> While a run is active, <code>render.WatchEsc</code> switches the terminal to cbreak mode (no line buffering or echo, Ctrl-C still signals) and reads with a 100&nbsp;ms timeout. A single Esc byte cancels; arrow and function keys arrive as longer sequences and are ignored. The terminal is restored when the run ends or on SIGINT/SIGTERM. The next message starts with a note telling the agent that its previous task was interrupted.</li>
+  </ul>
+
+  <h2>Smoke Run</h2>
+  <p>Run in a pseudo-terminal against a scripted local model server. Esc was pressed while the delegated writer was running <code>sleep 20</code>:</p>
+<pre>│ writer › run command=sleep 20; echo built
+esc: cancelling…
+│   ✗ run command=sleep 20; echo built error=tool cancelled: context canceled
+└ writer cancelled
+cancelled (esc). Your next message continues from here.
+you&gt; what happened?</pre>
+  <p>The server saw no further writer call. The coordinator's next request began with the interrupt note. No <code>sleep</code> process was left behind, and the follow-up input was echoed normally.</p>
+
+  <h2>Decisions Made</h2>
+  <ul>
+    <li>A cancelled process is parked as <code>ready</code> rather than exited, so the interactive agent keeps its PID and history.</li>
+    <li>A delegated child is closed (code 130) rather than kept around to resume later. When the coordinator resumes, it decides whether to delegate again; the child's files on disk remain.</li>
+    <li>Keys typed while a task is running are consumed by the Esc watcher and discarded.</li>
+  </ul>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>Esc is only watched on macOS and Linux. Other platforms can only stop a task with Ctrl-C, which quits the TUI.</li>
+    <li><code>aos run</code> has no cancel key. It can use the same runtime support once it handles signals.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 16 packages pass. <code>go vet ./...</code> is clean. The TUI render package also builds for Linux and Windows.</li>
+    <li>New runtime tests: cancelling during a model call stops at once even with <code>ContinueOnToolError</code> (before this change the loop recorded a backend error and carried on), leaves the process ready, and resumes with earlier work intact. Cancelling during <code>sleep 30</code> returns in about 0.2&nbsp;s.</li>
+    <li>New engine test: cancelling during a delegation leaves the parent resumable, exits the child with code 130, and lets the same agent be delegated again.</li>
+    <li>New tool and render tests: <code>ExecuteContext</code> cancellation, lone-Esc detection, and how a cancelled child appears in the progress view.</li>
+  </ul>
+</body>
+</html>

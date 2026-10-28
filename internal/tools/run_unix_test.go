@@ -3,6 +3,8 @@
 package tools_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,5 +54,25 @@ func TestRunToolTimeoutKillsDescendants(t *testing.T) {
 			t.Fatalf("background child %d survived the timeout", pid)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestRunToolCancelledByContext(t *testing.T) {
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+
+	start := time.Now()
+	_, err := tools.NewRuntime().ExecuteContext(ctx, tools.Request{
+		Tool:          "run",
+		Args:          map[string]string{"command": "sleep 30", "timeout": "60s"},
+		Mounts:        []capability.Mount{{Name: "workspace", HostPath: root}},
+		CapabilitySet: capability.Set{Tools: []string{"run"}},
+	})
+	if !errors.Is(err, tools.ErrToolCancelled) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected ErrToolCancelled wrapping context.Canceled, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("cancel took %s", elapsed)
 	}
 }

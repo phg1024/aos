@@ -62,7 +62,15 @@ func NewRuntime() *Runtime {
 	return &Runtime{evaluator: capability.Evaluator{}}
 }
 
+// ErrToolCancelled reports that the caller's context stopped a tool.
+var ErrToolCancelled = errors.New("tool cancelled")
+
 func (r *Runtime) Execute(req Request) (Result, error) {
+	return r.ExecuteContext(context.Background(), req)
+}
+
+// ExecuteContext runs a tool; cancelling ctx kills a running command.
+func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, error) {
 	if !r.evaluator.ToolAllowed(req.Tool, req.CapabilitySet) {
 		return Result{}, ErrToolDenied
 	}
@@ -248,7 +256,7 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 				timeout = parsed
 			}
 		}
-		cmdCtx, cancel := context.WithTimeout(context.Background(), timeout)
+		cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
 		isolateProcessGroup(cmd)
@@ -262,6 +270,9 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		err := cmd.Run()
 		exitCode := 0
 		if err != nil {
+			if ctx.Err() != nil {
+				return Result{}, fmt.Errorf("%w: %w", ErrToolCancelled, ctx.Err())
+			}
 			if cmdCtx.Err() != nil {
 				return Result{}, errors.New("command execution timed out")
 			}

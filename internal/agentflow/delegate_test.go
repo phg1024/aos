@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aos/internal/agentflow"
@@ -119,5 +120,113 @@ func TestEngineDelegateHandlerServesExternalRuntime(t *testing.T) {
 	denied := engine.DelegateHandler(spec, agentflow.RunRequest{}, coordinator, nil)
 	if _, err := denied(context.Background(), process, runtime.DelegateCall{AgentID: "benchmarker"}, runtime.Session{}); !errors.Is(err, agentflow.ErrDelegationDenied) {
 		t.Fatalf("expected ErrDelegationDenied for an agent outside allowed_agents, got %v", err)
+	}
+}
+
+// funcCompleter answers each completion with fn(call number, ctx).
+type funcCompleter struct {
+	calls int
+	fn    func(call int, ctx context.Context) (map[string]any, error)
+}
+
+func (f *funcCompleter) CompleteJSON(ctx context.Context, _ string, _ string, target any) error {
+	f.calls++
+	action, err := f.fn(f.calls, ctx)
+	if err != nil {
+		return err
+	}
+	bytes, err := json.Marshal(map[string]any{"action": action})
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bytes, target)
+}
+
+// Cancelling while a delegated agent works stops both levels, leaves the
+// parent resumable, and closes the child so the agent can be delegated again.
+func TestEngineDelegateHandlerCancelLeavesParentResumable(t *testing.T) {
+	root := t.TempDir()
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	store, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	spec := agentflow.WorkflowSpec{
+		Name:       "interactive-cancel",
+		EntryAgent: "coordinator",
+		Agents: []agentflow.AgentSpec{
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"writer"}},
+			{ID: "writer", SystemPrompt: "Write."},
+		},
+	}
+	coordinator, _ := spec.Agent("coordinator")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	completer := &funcCompleter{fn: func(call int, ctx context.Context) (map[string]any, error) {
+		switch call {
+		case 1, 3: // coordinator
+			return delegateAction("writer"), nil
+		case 2: // writer, interrupted mid-generation
+			cancel()
+			<-ctx.Done()
+			return nil, ctx.Err()
+		case 4: // writer after resume
+			return exitAction("writer-done"), nil
+		default: // coordinator
+			return exitAction("coordinator-done"), nil
+		}
+	}}
+	var kinds []string
+	engine := &agentflow.Engine{
+		Kernel:    k,
+		Artifacts: store,
+		Tools:     tools.NewRuntime(),
+		Factory:   agentflow.StaticBackendFactory{Completer: completer},
+		Trace: func(event agentflow.TraceEvent) {
+			kinds = append(kinds, event.AgentID+":"+event.Kind)
+		},
+	}
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "agent:coordinator", Metadata: map[string]string{"agent_id": "coordinator"}})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:          k,
+		Artifacts:       store,
+		Tools:           engine.Tools,
+		MaxSteps:        6,
+		Backend:         agentflow.PromptBackend{Completer: completer, Workflow: spec, Agent: coordinator},
+		DelegateHandler: engine.DelegateHandler(spec, agentflow.RunRequest{Goal: "interactive"}, coordinator, nil),
+	}
+	options := runtime.RunOptions{ContinueOnToolError: true}
+
+	result, err := agentRuntime.RunWithOptions(ctx, process.PID, []runtime.Message{{Role: "user", Content: "go"}}, options)
+	if !errors.Is(err, runtime.ErrRunCancelled) || !result.Cancelled {
+		t.Fatalf("expected a cancelled parent run, got result=%+v err=%v", result, err)
+	}
+	children, err := k.Children(process.PID)
+	if err != nil || len(children) != 1 {
+		t.Fatalf("expected one child, got %v (err %v)", children, err)
+	}
+	if children[0].State != kernel.StateExited || children[0].ExitStatus == nil || children[0].ExitStatus.Code != 130 {
+		t.Fatalf("cancelled child should be exited with code 130, got %+v", children[0])
+	}
+	if strings.Join(kinds, ",") != "coordinator:delegate,writer:start,writer:cancelled" {
+		t.Fatalf("unexpected trace %v", kinds)
+	}
+	last := result.Session.Messages[len(result.Session.Messages)-1]
+	if last.Content != "delegate_cancelled agent=writer reason=interrupted_by_user" {
+		t.Fatalf("expected delegate_cancelled note, got %q", last.Content)
+	}
+
+	resumed, err := agentRuntime.Resume(context.Background(), process.PID, result.CheckpointID, nil, options)
+	if err != nil {
+		t.Fatalf("resume after cancel: %v", err)
+	}
+	if resumed.ExitStatus.Reason != "coordinator-done" {
+		t.Fatalf("unexpected resumed exit %+v", resumed.ExitStatus)
 	}
 }

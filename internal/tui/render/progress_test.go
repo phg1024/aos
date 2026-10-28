@@ -100,3 +100,34 @@ func TestFormatElapsedAndClipLine(t *testing.T) {
 		t.Fatalf("clipLine should cut on runes, got %q", got)
 	}
 }
+
+func TestWorkflowProgressRendersCancelledChild(t *testing.T) {
+	clock := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	progress := testProgress(&clock)
+	progress.Apply(event(clock, "coordinator", "pid-2", "start", ""))
+	progress.Apply(event(clock, "writer", "pid-3", "start", ""))
+	line := progress.Apply(event(clock, "writer", "pid-3", "cancelled", "run cancelled: context canceled"))
+	if line != "  └ writer cancelled" {
+		t.Fatalf("unexpected cancelled line %q", line)
+	}
+	if status := progress.StatusLine(); strings.Contains(status, "writer") || !strings.Contains(status, "finished=1") {
+		t.Fatalf("cancelled child should be popped and counted, got %q", status)
+	}
+}
+
+func TestIsLoneEsc(t *testing.T) {
+	for _, tc := range []struct {
+		input []byte
+		want  bool
+	}{
+		{[]byte{0x1b}, true},
+		{[]byte("\x1b[A"), false}, // up arrow
+		{[]byte("\x1bOP"), false}, // F1
+		{[]byte("a"), false},
+		{nil, false},
+	} {
+		if got := isLoneEsc(tc.input); got != tc.want {
+			t.Fatalf("isLoneEsc(%q) = %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
