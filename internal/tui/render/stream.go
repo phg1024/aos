@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"aos/internal/inference"
 	"aos/internal/runtime"
@@ -14,15 +15,24 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// spinnerFrames animate the thinking line; spinnerInterval is how often it
+// advances while the model thinks.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+const spinnerInterval = 120 * time.Millisecond
+
 type StreamRenderer struct {
-	thinking    string
-	thinkingLen int
-	pending     string
-	inThink     bool
-	active      bool
-	mu          sync.Mutex
-	ui          Palette
-	footer      *FooterBar
+	thinking      string
+	thinkingLen   int
+	thinkingStart time.Time
+	frame         int
+	stopSpinner   chan struct{}
+	pending       string
+	inThink       bool
+	active        bool
+	mu            sync.Mutex
+	ui            Palette
+	footer        *FooterBar
 }
 
 func NewStreamRenderer(ui Palette) *StreamRenderer {
@@ -58,6 +68,10 @@ func (r *StreamRenderer) Clear() {
 	defer r.mu.Unlock()
 	if r.active && r.ui.Enabled {
 		fmt.Fprint(os.Stdout, ansi.EraseEntireLine, "\r")
+	}
+	if r.stopSpinner != nil {
+		close(r.stopSpinner)
+		r.stopSpinner = nil
 	}
 	r.active = false
 	r.thinking = ""
@@ -123,24 +137,48 @@ func (r *StreamRenderer) appendThinking(text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	r.thinkingLen += len(text)
-	preview := thinkingStatus(r.thinkingLen)
-	width, _ := TerminalSize()
-	preview = clampDisplayWidth(preview, maxInt(width-len("thinking> ")-1, 32))
-	if preview == r.thinking && r.active {
-		return
+	if !r.active {
+		r.thinkingStart = time.Now()
+		r.frame = 0
+		r.startSpinnerLocked()
 	}
-	r.thinking = preview
+	r.thinkingLen += len(text)
 	r.renderThinkingLocked()
 }
 
+// startSpinnerLocked keeps the thinking line moving between stream events
+// until Clear stops it.
+func (r *StreamRenderer) startSpinnerLocked() {
+	stop := make(chan struct{})
+	r.stopSpinner = stop
+	go func() {
+		ticker := time.NewTicker(spinnerInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				r.mu.Lock()
+				if r.active {
+					r.frame++
+					r.renderThinkingLocked()
+				}
+				r.mu.Unlock()
+			}
+		}
+	}()
+}
+
 func (r *StreamRenderer) renderThinkingLocked() {
-	if r.thinking == "" || !r.ui.Enabled {
+	if !r.ui.Enabled {
 		return
 	}
 	r.active = true
-	fmt.Fprint(os.Stdout, ansi.EraseEntireLine, "\r")
-	fmt.Fprint(os.Stdout, r.ui.ThinkingPhase("thinking> "+r.thinking, 0))
+	width, _ := TerminalSize()
+	line := thinkingLine(r.frame, time.Since(r.thinkingStart), r.thinkingLen)
+	line = clampDisplayWidth(line, maxInt(width-1, 32))
+	fmt.Fprint(os.Stdout, ansi.EraseEntireLine+"\r"+r.ui.ThinkingPhase(line))
 	if r.footer != nil {
 		r.footer.Draw()
 	}
@@ -160,14 +198,26 @@ func maxInt(left, right int) int {
 	return right
 }
 
-func thinkingStatus(chars int) string {
-	if chars < 512 {
-		return "working"
+// thinkingLine reads like "⠹ thinking 14s · ~580 tokens"; tokens are
+// estimated at four characters each.
+func thinkingLine(frame int, elapsed time.Duration, chars int) string {
+	spinner := spinnerFrames[frame%len(spinnerFrames)]
+	return fmt.Sprintf("%s thinking %s · ~%s tokens", spinner, formatElapsedShort(elapsed), formatCount((chars+3)/4))
+}
+
+func formatElapsedShort(d time.Duration) string {
+	d = d.Truncate(time.Second)
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
-	if chars < 2048 {
-		return "working through context"
+	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+}
+
+func formatCount(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
 	}
-	return "working through a long response"
+	return fmt.Sprintf("%.1fk", float64(n)/1000)
 }
 
 func clampDisplayWidth(value string, limit int) string {

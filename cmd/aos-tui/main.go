@@ -174,7 +174,7 @@ func main() {
 		fmt.Println(ui.Subtle("Tokenizer: heuristic fallback"))
 	}
 	fmt.Println(ui.Subtle("State: " + stateDir))
-	fmt.Println(ui.Subtle("Commands: /quit, /state, /recover  ·  Esc cancels a running task"))
+	fmt.Println(ui.Subtle("Type / for commands (Tab completes, /help lists them)  ·  Esc cancels a running task"))
 
 	if workflowPath != "" {
 		fmt.Println(ui.Subtle(fmt.Sprintf("Workflow: %s  entry=%s  delegates=%s", spec.Name, agent.ID, strings.Join(agent.AllowedAgents, ","))))
@@ -185,6 +185,8 @@ func main() {
 	// interrupted marks that Esc stopped the last run, so the next message
 	// tells the agent its previous task was cut short.
 	var interrupted bool
+	editor := render.NewLineEditor(ui, os.Stdin, tuiCommands)
+	useEditor := true
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		footer.Update(render.FooterStatus{
@@ -195,19 +197,53 @@ func main() {
 			Counter:      tokenCounter,
 			Backend:      agentRuntime.Backend.(agentflow.PromptBackend),
 		})
-		fmt.Print(ui.Prompt("you> "))
 		footer.Draw()
-		if !scanner.Scan() {
-			fmt.Println()
-			return
+		var line string
+		if useEditor {
+			typed, err := editor.ReadLine(ui.Prompt("you> "))
+			switch {
+			case errors.Is(err, render.ErrLineEditorUnavailable):
+				useEditor = false
+			case err != nil:
+				return
+			default:
+				line = typed
+			}
 		}
-		line := strings.TrimSpace(scanner.Text())
+		if !useEditor {
+			fmt.Print(ui.Prompt("you> "))
+			if !scanner.Scan() {
+				fmt.Println()
+				return
+			}
+			line = scanner.Text()
+		}
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		switch line {
+		command := ""
+		switch {
+		case strings.HasPrefix(line, "//"):
+			// A doubled slash sends the line to the agent with one slash.
+			line = line[1:]
+		case strings.HasPrefix(line, "/"):
+			known, ok := render.LookupCommand(tuiCommands, line)
+			if !ok {
+				footer.Println(ui.Warn(unknownCommandNotice(line)))
+				continue
+			}
+			command = known.Name
+		}
+		switch command {
 		case "/quit":
 			return
+		case "/help":
+			footer.Println(helpText(ui))
+			continue
+		case "/clear":
+			fmt.Print("\x1b[2J\x1b[H")
+			continue
 		case "/state":
 			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s", process.PID, checkpointID, stateDir)))
 			continue
@@ -269,6 +305,38 @@ func main() {
 		stream.Clear()
 		printResult(ui, footer, result)
 	}
+}
+
+// tuiCommands are the slash commands the input line highlights and completes.
+var tuiCommands = []render.Command{
+	{Name: "/help", Summary: "list commands and keys"},
+	{Name: "/state", Summary: "show the process, checkpoint and state directory"},
+	{Name: "/recover", Summary: "restart the agent from its last checkpoint"},
+	{Name: "/clear", Summary: "clear the screen"},
+	{Name: "/quit", Summary: "exit"},
+}
+
+func helpText(ui render.Palette) string {
+	var builder strings.Builder
+	builder.WriteString(ui.Header(" Commands ") + "\n")
+	for _, command := range tuiCommands {
+		builder.WriteString(fmt.Sprintf("  %s  %s\n", ui.CommandName(fmt.Sprintf("%-9s", command.Name)), command.Summary))
+	}
+	builder.WriteString(ui.Subtle("  Tab completes a command · ↑/↓ recall input · Esc cancels a running task · //text sends a line starting with /"))
+	return builder.String()
+}
+
+func unknownCommandNotice(line string) string {
+	word, _, _ := strings.Cut(line, " ")
+	notice := "unknown command " + word + " · /help lists commands · start with // to send it to the agent"
+	if matches := render.MatchCommands(tuiCommands, word[:min(len(word), 2)]); len(matches) > 0 && len(word) > 1 {
+		names := make([]string, 0, len(matches))
+		for _, match := range matches {
+			names = append(names, match.Name)
+		}
+		notice += " · did you mean " + strings.Join(names, " ") + "?"
+	}
+	return notice
 }
 
 const (

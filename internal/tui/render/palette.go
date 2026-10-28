@@ -3,8 +3,6 @@ package render
 import (
 	"os"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 type Palette struct {
@@ -28,6 +26,16 @@ func (p Palette) Header(text string) string {
 
 func (p Palette) Footer(text string) string {
 	return p.wrap(text, "0;38;5;255;48;5;24")
+}
+
+// FooterRow styles a pinned status row and carries its background to the
+// right edge: erase-to-end-of-line paints with the active background colour,
+// which also covers the last column that fitFooter leaves unwritten.
+func (p Palette) FooterRow(text string) string {
+	if !p.Enabled {
+		return text
+	}
+	return "\033[0;38;5;255;48;5;24m" + text + "\033[K\033[0m"
 }
 
 func (p Palette) Banner(text string) string {
@@ -80,15 +88,30 @@ func (p Palette) ToolError(text string) string {
 	return p.wrap(text, "1;38;5;203")
 }
 
-func (p Palette) ThinkingPhase(text string, _ int) string {
-	if !p.Enabled {
-		return text
-	}
-	return lipgloss.NewStyle().
-		Blink(true).
-		Faint(true).
-		Foreground(lipgloss.Color("67")).
-		Render(text)
+// ThinkingPhase styles the live thinking line: steady, full brightness and
+// mid blue so it stays readable on dark and light backgrounds alike.
+func (p Palette) ThinkingPhase(text string) string {
+	return p.wrap(text, "38;5;75")
+}
+
+// CommandName marks a complete, known slash command as typed.
+func (p Palette) CommandName(text string) string {
+	return p.wrap(text, "1;38;5;45")
+}
+
+// CommandPartial marks a command word that is still a prefix of known commands.
+func (p Palette) CommandPartial(text string) string {
+	return p.wrap(text, "38;5;221")
+}
+
+// CommandUnknown marks a slash word that matches no command.
+func (p Palette) CommandUnknown(text string) string {
+	return p.wrap(text, "38;5;203")
+}
+
+// Hint styles inline completion suggestions.
+func (p Palette) Hint(text string) string {
+	return p.wrap(text, "38;5;244")
 }
 
 func (p Palette) Warn(text string) string {

@@ -112,16 +112,16 @@ func (f *FooterBar) drawLocked() {
 	if !f.pinned {
 		f.Pin()
 	}
-	_, rows := TerminalSize()
+	width, rows := TerminalSize()
 	if f.pinned && rows != f.rows && rows >= f.height()+1 {
 		fmt.Fprint(os.Stdout, ansi.SetTopBottomMargins(1, rows-f.height()))
 		f.rows = rows
 	}
 	lines := make([]string, 0, 2)
 	if f.progress != nil {
-		lines = append(lines, f.ui.Footer(truncateFooter(f.progress.StatusLine())))
+		lines = append(lines, f.ui.FooterRow(fitFooter(f.progress.StatusLine(), width)))
 	}
-	lines = append(lines, f.ui.Footer(truncateFooter(formatFooter(f.status))))
+	lines = append(lines, f.ui.FooterRow(fitFooter(formatFooter(f.status), width)))
 	// One write per redraw so a concurrent redraw cannot split the
 	// save/restore cursor sequence of another writer.
 	var builder strings.Builder
@@ -191,6 +191,24 @@ func shortID(value string) string {
 		return value
 	}
 	return value[:8]
+}
+
+// fitFooter pads or truncates a row to one column short of the window width,
+// so the bar spans the window without writing the bottom-right cell, which
+// makes some terminals scroll.
+func fitFooter(value string, width int) string {
+	limit := width - 1
+	if limit <= 0 {
+		return value
+	}
+	visible := ansi.StringWidth(value)
+	if visible > limit {
+		if limit <= 3 {
+			return ansi.Truncate(value, limit, "")
+		}
+		return ansi.Truncate(value, limit, "...")
+	}
+	return value + strings.Repeat(" ", limit-visible)
 }
 
 func truncateFooter(value string) string {

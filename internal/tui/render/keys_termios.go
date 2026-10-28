@@ -16,28 +16,15 @@ import (
 // nothing.
 func WatchEsc(in *os.File, onEsc func()) (stop func()) {
 	fd := int(in.Fd())
-	original, err := getTermios(fd)
+	restore, err := enterTermMode(fd, func(mode *syscall.Termios) {
+		mode.Lflag &^= syscall.ICANON | syscall.ECHO
+		// Return from read after 100ms without input so the loop can see stop.
+		mode.Cc[syscall.VMIN] = 0
+		mode.Cc[syscall.VTIME] = 1
+	})
 	if err != nil {
 		return func() {}
 	}
-	cbreak := *original
-	cbreak.Lflag &^= syscall.ICANON | syscall.ECHO
-	// Return from read after 100ms without input so the loop can see stop.
-	cbreak.Cc[syscall.VMIN] = 0
-	cbreak.Cc[syscall.VTIME] = 1
-	if err := setTermios(fd, &cbreak); err != nil {
-		return func() {}
-	}
-
-	var restoreOnce sync.Once
-	restore := func() {
-		restoreOnce.Do(func() { _ = setTermios(fd, original) })
-	}
-
-	// Ctrl-C must not leave the shell without echo.
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-
 	done := make(chan struct{})
 	finished := make(chan struct{})
 	go func() {
@@ -46,11 +33,6 @@ func WatchEsc(in *os.File, onEsc func()) (stop func()) {
 		for {
 			select {
 			case <-done:
-				return
-			case sig := <-signals:
-				restore()
-				signal.Reset(os.Interrupt, syscall.SIGTERM)
-				_ = syscall.Kill(os.Getpid(), sig.(syscall.Signal))
 				return
 			default:
 			}
@@ -66,9 +48,44 @@ func WatchEsc(in *os.File, onEsc func()) (stop func()) {
 	return func() {
 		close(done)
 		<-finished
-		signal.Stop(signals)
 		restore()
 	}
+}
+
+// enterTermMode switches fd to a changed copy of its current mode and returns
+// a function that restores the original. Until then, SIGINT or SIGTERM
+// restores the terminal before the signal ends the process, so Ctrl-C never
+// leaves the shell without echo.
+func enterTermMode(fd int, change func(*syscall.Termios)) (restore func(), err error) {
+	original, err := getTermios(fd)
+	if err != nil {
+		return nil, err
+	}
+	mode := *original
+	change(&mode)
+	if err := setTermios(fd, &mode); err != nil {
+		return nil, err
+	}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case sig := <-signals:
+			_ = setTermios(fd, original)
+			signal.Reset(os.Interrupt, syscall.SIGTERM)
+			_ = syscall.Kill(os.Getpid(), sig.(syscall.Signal))
+		case <-done:
+		}
+	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			close(done)
+			signal.Stop(signals)
+			_ = setTermios(fd, original)
+		})
+	}, nil
 }
 
 func getTermios(fd int) (*syscall.Termios, error) {

@@ -15,6 +15,13 @@ if [[ $# -gt 0 && "$1" != -* ]]; then
   shift
 fi
 
+# hermes_api_key PROVIDER prints that provider's api_key from ~/.hermes/config.yaml.
+hermes_api_key() {
+  [[ -f "$HOME/.hermes/config.yaml" ]] || return 0
+  awk -v section="  $1:" '$0 == section {f=1; next} f && /^  [a-z]/ {exit} f && /api_key:/ {print $2; exit}' \
+    "$HOME/.hermes/config.yaml" | tr -d "\"'"
+}
+
 # Qwen thinking-mode sampling and a 256k window, shared by the Strata presets.
 strata_sampling_defaults() {
   export AOS_LLM_TIMEOUT_SECONDS="${AOS_LLM_TIMEOUT_SECONDS:-3600}"
@@ -52,19 +59,29 @@ case "$BACKEND" in
     export AOS_LLM_BACKEND="openai-compatible"
     export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://phg-gpu.local:8080}"
     export AOS_LLM_MODEL="${AOS_LLM_MODEL:-qwen3.8-flash-next-nvfp4-nvfp4}"
-    if [[ -z "${AOS_LLM_API_KEY:-}" && -f "$HOME/.hermes/config.yaml" ]]; then
-      AOS_LLM_API_KEY="$(awk '/^  strata-phg-gpu:/{f=1;next} f&&/api_key:/{print $2; exit}' "$HOME/.hermes/config.yaml" | tr -d "\"'")"
-    fi
-    export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-}"
+    export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-$(hermes_api_key strata-phg-gpu)}"
     if [[ -z "$AOS_LLM_API_KEY" ]]; then
       echo "strata-phg: set AOS_LLM_API_KEY or add strata-phg-gpu to ~/.hermes/config.yaml" >&2
       exit 1
     fi
     strata_sampling_defaults
     ;;
+  strata-phg-vllm)
+    # Strata on phg-vllm (Intel B70). It also serves an image model and swaps
+    # models on demand, so the first request may wait for the chat model to load.
+    export AOS_LLM_BACKEND="openai-compatible"
+    export AOS_LLM_BASE_URL="${AOS_LLM_BASE_URL:-http://phg-vllm.local:8081}"
+    export AOS_LLM_MODEL="${AOS_LLM_MODEL:-qwen3.8-flash-next-iq3_s}"
+    export AOS_LLM_API_KEY="${AOS_LLM_API_KEY:-$(hermes_api_key strata-phg-vllm)}"
+    if [[ -z "$AOS_LLM_API_KEY" ]]; then
+      echo "strata-phg-vllm: set AOS_LLM_API_KEY or add strata-phg-vllm to ~/.hermes/config.yaml" >&2
+      exit 1
+    fi
+    strata_sampling_defaults
+    ;;
   *)
     echo "unsupported backend: $BACKEND" >&2
-    echo "usage: $0 [ollama|vllm|strata|strata-phg] [extra aos-tui args...]" >&2
+    echo "usage: $0 [ollama|vllm|strata|strata-phg|strata-phg-vllm] [extra aos-tui args...]" >&2
     exit 1
     ;;
 esac
