@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 18 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 18 Report: Budgets</h1>
+    <p>Design-review item 10, the last in the contract list. Before this phase, the time budget was only a note, there was no token budget, and resuming a process reset its step count. Now budgets are hierarchical, persistent and visible. Token budgets are enforced whenever they are set. A time budget is <b>advisory unless <code>strict_time</code> is set</b>, as the user asked: strict enforcement is opt-in.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b><code>capability.Budget</code></b> <code>{tokens, seconds, strict_time}</code>, in every capability set as <code>budget</code>.
+      <ul>
+        <li><code>DeriveChildSet</code> takes the tighter limit, and a strict parent makes the child strict.</li>
+        <li><code>Union</code> takes the larger budget either set names. A delegable set that names none adds nothing, so it does not make the grant unlimited.</li>
+        <li><code>Excess</code> reports <code>budget tokens N (at most M)</code>, so <code>Validate</code> rejects a child that asks for more than its parent may grant. A child naming no budget inherits its parent's.</li>
+      </ul></li>
+    <li><b>Accounts</b> (<code>runtime/budget.go</code>).
+      <ul>
+        <li>Each run of a process opens an account, chained through the context to its delegator's account, with the run's own account at the top (as cgroups nest).</li>
+        <li>Tokens are charged to the account and every ancestor. Time accrues while the owner runs.</li>
+        <li>Limits are checked as the tightest remaining budget over the chain, and the owner of that budget is named in the exit.</li>
+      </ul></li>
+    <li><b>Tokens.</b> The runtime puts a <code>TokenMeter</code> and a <code>MaxTokens</code> cap in each call's <code>CallInfo</code>.
+      <ul>
+        <li>The backend caps <code>max_tokens</code> to what is left and adds the reported prompt+completion tokens to the meter, cached prompt tokens and repairs included.</li>
+        <li>The limit is checked before each call. A budget can be overshot by at most one call's prompt.</li>
+        <li>A spent budget ends the process with <code>{1, "token budget exceeded: U of L tokens used (budget of …)", retryable}</code> and a final checkpoint.</li>
+      </ul></li>
+    <li><b>Time.</b>
+      <ul>
+        <li>Each step adds a note with the time and tokens left, and once per kind, with less than 10% left, a warning to commit the best answer now (the Terminal-Bench lesson).</li>
+        <li>With <code>strict_time</code>, the run's context gets a deadline whose cause is <code>ErrTimeBudgetExceeded</code>, which cancels the in-flight model call or command, killing a command's whole process group. The process then ends with <code>{1, "time budget exceeded: Ns strict budget of …", retryable}</code> and a checkpoint.</li>
+        <li>Cancel notes say <code>reason=time_budget_exceeded</code> rather than <code>interrupted_by_user</code>.</li>
+        <li>The old <code>Clock</code> is removed: <code>--time-budget</code> now sets the run's budget, advisory unless <code>--strict-time-budget</code> is given. <code>--token-budget N</code> is new.</li>
+      </ul></li>
+    <li><b>Persistence.</b>
+      <ul>
+        <li>The session keeps <code>usage {steps, tokens, seconds}</code>, <code>step_base</code>, <code>extended</code> and <code>budget_warned</code>.</li>
+        <li>Steps count from the checkpoint, so Resume and Recover cannot reset the step limit, and warnings are not repeated.</li>
+        <li><code>RunOptions.Extend {steps, tokens, seconds}</code> is the operator's explicit grant, accumulated in the session.</li>
+        <li><code>RunOptions.NewTurn</code> starts a fresh step allowance. The TUI sets it for each message you type; nothing else does.</li>
+      </ul></li>
+    <li><b>Visibility.</b> <code>aos inspect</code> (text and JSON) and the HTML report's new Budget column show each process's budget and usage from its latest checkpoint, and the exit reason names the budget that ended it.</li>
+    <li><b>Also:</b> a peer message's body lines that imitate a sender label are quoted with <code>&gt; </code>. This was the book session's optional suggestion from its item-9 probe.</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>What it shows</th></tr>
+    <tr><td><code>TestStrictTimeBudgetCancelsTheModelCall</code></td><td>A model call that never answers is cancelled with cause <code>ErrTimeBudgetExceeded</code> about 1s into a strict 1s budget. The process exits <code>{1, "time budget exceeded: 1s strict budget of worker (pid-000001)", retryable}</code> with no origin and with a checkpoint, and the kernel record matches.</td></tr>
+    <tr><td><code>TestStrictTimeBudgetKillsARunningCommand</code></td><td>A sandboxed <code>sleep 30 &amp; …; wait</code> is stopped by the budget. The process exits in time, and the backgrounded sleep's PID is gone.</td></tr>
+    <tr><td><code>TestAdvisoryTimeBudgetWarnsOnceAndNeverStops</code></td><td>With a 1s budget and no <code>strict_time</code>, the agent runs past the budget and exits on its own. It sees one time note per step and exactly one warning.</td></tr>
+    <tr><td><code>TestTokenBudgetCapsAndStops</code></td><td>With 300 tokens per call against 1000, the reply caps are 1000, 700, 400 and 100. The agent is warned once and stopped before a fifth call with <code>"token budget exceeded: 1200 of 1000 tokens used (budget of worker (pid-000001))"</code>. Usage in the checkpoint: 1200 tokens, 5 steps.</td></tr>
+    <tr><td><code>TestRecoverDoesNotResetTheStepLimit</code></td><td>After a step-limited exit, Recover makes no model calls and exits on the step limit again. Recover with <code>Extend{Steps: 3}</code> makes exactly 3 more calls. The session shows 5 steps used and 3 extended.</td></tr>
+    <tr><td><code>TestDelegateTokensCountAgainstTheRunBudget</code></td><td>Through <code>aos run --token-budget 1000</code>: the lead (own budget 5000) delegates, and the worker inherits the 5000. Both are stopped by the run's budget after 4 calls ("budget of run"). Inspect shows the lead at 1200 tokens (the worker's 900 included), the budgets, and the reason.</td></tr>
+    <tr><td><code>TestOverBudgetChildIsRejectedAtValidation</code></td><td>A worker asking for 9000 tokens under a lead with 5000 fails validation with <code>budget tokens 9000 (at most 5000)</code>, before any model call.</td></tr>
+    <tr><td><code>TestBudgetsAttenuate</code></td><td>Derive, Union, Excess and inheritance work as described above.</td></tr>
+    <tr><td><code>TestEngineSharesTheRunBudgetWithDelegatedAgents</code> (updated)</td><td>Every agent, delegates included, sees the run's time budget.</td></tr>
+    <tr><td><code>TestPeerBodyCannotImitateAnotherSender</code></td><td>A forged label line stays quoted inside the real sender's message.</td></tr>
+  </table>
+  <p>Also passing: <code>go test ./...</code>, <code>go vet ./...</code>, <code>-race</code> on runtime, agentflow, capability, <code>cmd/aos</code> and <code>cmd/aos-tui</code>, builds for windows/amd64, linux/amd64 and linux/arm64, and the Harbor self-test. One existing Recover test now passes <code>Extend{Steps: 1}</code>, because recovering no longer grants fresh steps.</p>
+
+  <h2>Divergences and Limits</h2>
+  <ul>
+    <li>Strict time is opt-in (<code>strict_time</code> / <code>--strict-time-budget</code>), at the user's request. An unset or non-strict time budget only advises.</li>
+    <li>Usage is saved in checkpoints. A delegate's tokens are added to its parent's account in memory, so a crash after the delegate finished but before the parent's next checkpoint undercounts the parent. The call ledger (<code>run/calls.jsonl</code>) still has every call.</li>
+    <li>Only backends that report usage are metered (the OpenAI-compatible one does); a server that omits usage costs nothing.</li>
+    <li>Extension is an API (<code>RunOptions.Extend</code>). There is no <code>aos recover --extend</code> CLI yet, since aos has no recover command.</li>
+    <li>The warning fires once, at 10% left (the old clock warned at every step from 20% left). Tokens are the unit; there is no price table.</li>
+  </ul>
+</body>
+</html>

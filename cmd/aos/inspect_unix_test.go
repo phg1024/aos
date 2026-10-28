@@ -18,6 +18,7 @@ import (
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/inference"
 	"aos/internal/inspect"
 	"aos/internal/kernel"
@@ -61,7 +62,7 @@ func TestKillHelperProcess(t *testing.T) {
 	defer server.Close()
 	workflow := filepath.Join(filepath.Dir(stateDir), "workflow.json")
 	backend := inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: server.URL, Model: "scripted", Timeout: time.Hour})
-	_ = runWorkflow(context.Background(), backend, runtime.CompactionPolicy{}, nil, workflow, nil, "", "", stateDir, "go", false)
+	_ = runWorkflow(context.Background(), backend, runtime.CompactionPolicy{}, capability.Budget{}, workflow, nil, "", "", stateDir, "go", false)
 }
 
 // A run killed mid-step can be reconstructed from disk: the trace and call

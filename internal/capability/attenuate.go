@@ -20,6 +20,20 @@ func Union(a, b Set) Set {
 	if a.MaxRunSeconds > 0 || b.MaxRunSeconds > 0 {
 		union.MaxRunSeconds = max(effectiveRunSeconds(a.MaxRunSeconds), effectiveRunSeconds(b.MaxRunSeconds))
 	}
+	// For budgets, a set that names none (delegable usually does not) adds
+	// no authority: the union is the larger budget either one names.
+	union.Budget = Budget{
+		Tokens:  largerSpecified(a.Budget.Tokens, b.Budget.Tokens),
+		Seconds: largerSpecified(a.Budget.Seconds, b.Budget.Seconds),
+	}
+	switch {
+	case a.Budget.Seconds > 0 && b.Budget.Seconds > 0:
+		union.Budget.StrictTime = a.Budget.StrictTime && b.Budget.StrictTime
+	case a.Budget.Seconds > 0:
+		union.Budget.StrictTime = a.Budget.StrictTime
+	default:
+		union.Budget.StrictTime = b.Budget.StrictTime && b.Budget.Seconds > 0
+	}
 	return union
 }
 
@@ -56,6 +70,14 @@ func Excess(grantable, requested Set) []string {
 	}
 	if effectiveRunSeconds(requested.MaxRunSeconds) > effectiveRunSeconds(grantable.MaxRunSeconds) {
 		excess = append(excess, fmt.Sprintf("max_run_seconds %d", requested.MaxRunSeconds))
+	}
+	// A child asking for no budget of its own inherits its parent's; only
+	// asking for more than the parent has is an excess.
+	if grantable.Budget.Tokens > 0 && requested.Budget.Tokens > grantable.Budget.Tokens {
+		excess = append(excess, fmt.Sprintf("budget tokens %d (at most %d)", requested.Budget.Tokens, grantable.Budget.Tokens))
+	}
+	if grantable.Budget.Seconds > 0 && requested.Budget.Seconds > grantable.Budget.Seconds {
+		excess = append(excess, fmt.Sprintf("budget seconds %d (at most %d)", requested.Budget.Seconds, grantable.Budget.Seconds))
 	}
 	return excess
 }
@@ -156,4 +178,12 @@ func appendUnique(values []string, value string) []string {
 		return values
 	}
 	return append(values, value)
+}
+
+// largerSpecified is the larger of two budgets, ignoring an unnamed (zero) one.
+func largerSpecified(a, b int) int {
+	if a == 0 || b == 0 {
+		return a + b
+	}
+	return max(a, b)
 }

@@ -215,10 +215,18 @@ type chatCompletionChunk struct {
 
 func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
 	payload := b.request(messages)
+	info, _ := runtime.CallInfoFrom(ctx)
+	if info.MaxTokens > 0 && (payload.MaxTokens == 0 || payload.MaxTokens > info.MaxTokens) {
+		// What is left of the caller's token budget.
+		payload.MaxTokens = info.MaxTokens
+	}
 	started := time.Now()
 	var usage *responseUsage
 	content, err := b.send(ctx, payload, &usage)
 	b.recordCall(ctx, payload, usage, time.Since(started), err)
+	if info.Meter != nil && usage != nil {
+		info.Meter.Add(usage.PromptTokens + usage.CompletionTokens)
+	}
 	return content, err
 }
 

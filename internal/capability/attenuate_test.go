@@ -103,3 +103,28 @@ func TestRunScopes(t *testing.T) {
 		t.Fatalf("read %v write %v read-only %v", read, write, readOnly)
 	}
 }
+
+// Budgets attenuate like cgroups: a child gets at most its parent's, a
+// strict parent makes the child strict, a request for more is an excess,
+// and a delegable set naming no budget grants none beyond the parent's own.
+func TestBudgetsAttenuate(t *testing.T) {
+	parent := capability.Set{Budget: capability.Budget{Tokens: 1000, Seconds: 600, StrictTime: true}}
+	derived := capability.DeriveChildSet(parent, capability.Set{Budget: capability.Budget{Tokens: 5000, Seconds: 60}})
+	if derived.Budget != (capability.Budget{Tokens: 1000, Seconds: 60, StrictTime: true}) {
+		t.Fatalf("derived = %+v", derived.Budget)
+	}
+	if inherited := capability.DeriveChildSet(parent, capability.Set{}); inherited.Budget != parent.Budget {
+		t.Fatalf("a child naming no budget inherits the parent's: %+v", inherited.Budget)
+	}
+	grantable := capability.Union(capability.Set{Budget: capability.Budget{Tokens: 1000}}, capability.Set{Tools: []string{"run"}})
+	if grantable.Budget.Tokens != 1000 {
+		t.Fatalf("a delegable set without a budget must not make the grant unlimited: %+v", grantable.Budget)
+	}
+	excess := capability.Excess(grantable, capability.Set{Budget: capability.Budget{Tokens: 5000}})
+	if strings.Join(excess, "; ") != "budget tokens 5000 (at most 1000)" {
+		t.Fatalf("excess = %v", excess)
+	}
+	if excess := capability.Excess(grantable, capability.Set{}); len(excess) != 0 {
+		t.Fatalf("asking for no budget is inheriting, not excess: %v", excess)
+	}
+}

@@ -384,14 +384,18 @@ func runTUI() []string {
 
 		var result runtime.RunResult
 		observeRoot("start", line)
+		// Each message starts a turn with a fresh step allowance; tokens and
+		// time keep counting against the session's budget.
+		turnOptions := interactiveRunOptions(ui, stream, footer, observeRoot)
+		turnOptions.NewTurn = true
 		result, err = runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
 			if checkpointID == "" {
 				// A new agent continuing an ended one starts from its conversation.
 				initial := seed
 				seed = nil
-				return agentRuntime.RunWithOptions(ctx, process.PID, initial, interactiveRunOptions(ui, stream, footer, observeRoot))
+				return agentRuntime.RunWithOptions(ctx, process.PID, initial, turnOptions)
 			}
-			return agentRuntime.Resume(ctx, process.PID, checkpointID, appended, interactiveRunOptions(ui, stream, footer, observeRoot))
+			return agentRuntime.Resume(ctx, process.PID, checkpointID, appended, turnOptions)
 		})
 		if errors.Is(err, runtime.ErrRunCancelled) {
 			interrupted = true

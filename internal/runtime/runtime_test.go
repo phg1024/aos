@@ -749,7 +749,9 @@ func TestAgentRuntimeCanRecoverRetryableProcessFromCheckpoint(t *testing.T) {
 		},
 	}
 
-	recovered, err := agentRuntime.Recover(context.Background(), process.PID, first.CheckpointID, nil, runtime.RunOptions{})
+	// The first run used its one step; recovering grants another only
+	// because the operator asks for it.
+	recovered, err := agentRuntime.Recover(context.Background(), process.PID, first.CheckpointID, nil, runtime.RunOptions{Extend: runtime.Extension{Steps: 1}})
 	if err != nil {
 		t.Fatalf("recover: %v", err)
 	}

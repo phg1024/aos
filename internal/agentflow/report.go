@@ -9,6 +9,7 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/kernel"
+	"aos/internal/runtime"
 )
 
 type RunReport struct {
@@ -21,6 +22,8 @@ type RunReport struct {
 	Decisions   []string
 	Issues      []string
 	Tests       []string
+	// Usage is each process's consumption, from its latest checkpoint.
+	Usage map[string]runtime.Usage
 }
 
 func CollectRunReport(k *kernel.Kernel, store *artifact.Store, title string, summary RunSummary) (RunReport, error) {
@@ -39,7 +42,12 @@ func CollectRunReport(k *kernel.Kernel, store *artifact.Store, title string, sum
 	sort.Slice(processes, func(i, j int) bool { return processes[i].CreatedAt.Before(processes[j].CreatedAt) })
 	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].CreatedAt.Before(artifacts[j].CreatedAt) })
 	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
+	usage, err := ProcessUsage(store)
+	if err != nil {
+		return RunReport{}, err
+	}
 	return RunReport{
+		Usage:       usage,
 		Title:       title,
 		Summary:     summary,
 		Processes:   processes,
@@ -66,6 +74,7 @@ func RenderHTML(report RunReport) string {
 		} else {
 			processRows.WriteString(td(""))
 		}
+		processRows.WriteString(td(FormatBudget(process.CapabilitySet.Budget, report.Usage[process.PID])))
 		processRows.WriteString("</tr>\n")
 	}
 
@@ -113,7 +122,7 @@ func RenderHTML(report RunReport) string {
 		renderListSection("Issues And Resolutions", report.Issues) +
 		renderListSection("Tests", report.Tests) +
 		"  <h2>Processes</h2>\n" +
-		"  <table>\n    <tr><th>PID</th><th>Role</th><th>Parent</th><th>State</th><th>Exit</th></tr>\n" + processRows.String() + "  </table>\n" +
+		"  <table>\n    <tr><th>PID</th><th>Role</th><th>Parent</th><th>State</th><th>Exit</th><th>Budget</th></tr>\n" + processRows.String() + "  </table>\n" +
 		"  <h2>Artifacts</h2>\n" +
 		"  <table>\n    <tr><th>ID</th><th>Type</th><th>Producer PID</th><th>Parents</th></tr>\n" + artifactRows.String() + "  </table>\n" +
 		"  <h2>Event Trace</h2>\n" +

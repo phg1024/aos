@@ -118,6 +118,15 @@ type Session struct {
 	// a message delivered again (the bus delivers at least once) is
 	// recorded only once.
 	MailboxSeen []string `json:"mailbox_seen,omitempty"`
+	// Usage is what the process has consumed, so a resumed or recovered
+	// process continues against the same budget and step limit. StepBase
+	// is where the current turn's steps began (an interactive turn starts
+	// a fresh step allowance; nothing else does), Extended what an
+	// operator added, and BudgetWarned which final warnings were given.
+	Usage        Usage     `json:"usage,omitzero"`
+	StepBase     int       `json:"step_base,omitempty"`
+	Extended     Extension `json:"extended,omitzero"`
+	BudgetWarned []string  `json:"budget_warned,omitempty"`
 }
 
 // MemoryRef points at a compacted stretch of history: a memory_segment
@@ -158,8 +167,6 @@ type AgentRuntime struct {
 	MaxSteps        int
 	// Compaction defaults to DefaultCompactionPolicy when left zero.
 	Compaction CompactionPolicy
-	// Clock, when set, adds a time-budget note to the history each step.
-	Clock *Clock
 	// OnCapabilityDenied, when set, receives each capability.denied kernel
 	// event this runtime records.
 	OnCapabilityDenied func(kernel.Event)
@@ -256,6 +263,13 @@ func (r *AgentRuntime) RunWithOptions(ctx context.Context, pid string, initial [
 }
 
 type RunOptions struct {
+	// NewTurn starts a fresh step allowance, as a new user message in an
+	// interactive session does; otherwise steps continue from the
+	// checkpoint, so resuming or recovering cannot reset the step limit.
+	NewTurn bool
+	// Extend grants extra steps, tokens or seconds, for an operator
+	// recovering a process that ran out. It is recorded in the session.
+	Extend                 Extension
 	StopOnAssistantMessage bool
 	ContinueOnToolError    bool
 	OnToolCall             func(ToolCall)
@@ -428,11 +442,49 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 	}
 
+	// The budget: the process's own (plus any operator extension), chained
+	// to its delegator's through ctx, continuing from the usage its
+	// checkpoint recorded.
+	if options.NewTurn {
+		session.StepBase = session.Usage.Steps
+	}
+	session.Extended = session.Extended.add(options.Extend)
+	limit := process.CapabilitySet.Budget
+	if limit.Tokens > 0 {
+		limit.Tokens += session.Extended.Tokens
+	}
+	if limit.Seconds > 0 {
+		limit.Seconds += session.Extended.Seconds
+	}
+	owner := pid
+	if agentID := process.Metadata["agent_id"]; agentID != "" {
+		owner = fmt.Sprintf("%s (%s)", agentID, pid)
+	}
+	account := NewAccount(owner, limit, session.Usage, AccountFrom(ctx))
+	account.Start()
+	ctx = WithAccount(ctx, account)
+	if strict := account.timeLeft(true); strict.ok {
+		// Only a strict time budget stops the run; the in-flight model call
+		// and any running command are cancelled with it.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeoutCause(ctx, time.Duration(max(strict.Left, 0)*float64(time.Second)), timeBudgetError(strict))
+		defer cancel()
+	}
+	syncUsage := func() {
+		session.Usage.Tokens, session.Usage.Seconds = account.Used()
+	}
+	synced := func() Session {
+		syncUsage()
+		return session
+	}
+
 	var checkpointID string
 	// unacked are received messages no checkpoint records yet; the next
 	// checkpoint acknowledges them.
 	var unacked []string
 	defer func() {
+		account.Stop()
+		syncUsage()
 		if checkpointID != "" {
 			track.checkpointID = checkpointID
 		}
@@ -455,6 +507,29 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	if maxSteps <= 0 {
 		maxSteps = 32
 	}
+	maxSteps += session.Extended.Steps
+	// budgetExit ends the process when a budget runs out: retryable, since
+	// an operator may grant more, with a checkpoint that keeps the usage.
+	budgetExit := func(reason string) (RunResult, error) {
+		record, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
+		if err != nil {
+			return RunResult{}, err
+		}
+		checkpointID = record.ID
+		status := kernel.ExitStatus{Code: 1, Reason: reason, Retryable: true, Checkpoint: checkpointID}
+		if _, err := r.Kernel.Exit(pid, status); err != nil {
+			return RunResult{}, err
+		}
+		return RunResult{PID: pid, ExitStatus: status, CheckpointID: checkpointID, Session: session}, nil
+	}
+	// stop handles a cancelled ctx: a strict time budget running out ends
+	// the process; anything else (the user's Esc) parks it.
+	stop := func() (RunResult, error) {
+		if cause := context.Cause(ctx); errors.Is(cause, ErrTimeBudgetExceeded) {
+			return budgetExit(cause.Error())
+		}
+		return r.cancelRun(ctx, pid, synced(), latest(), &unacked)
+	}
 	handleMalformed := func() (bool, error) {
 		if options.ContinueOnToolError {
 			artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
@@ -474,12 +549,15 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		return false, nil
 	}
-	for step := 0; step < maxSteps; step++ {
+	// Steps count across resumes and recoveries (Usage.Steps is saved), from
+	// the start of the current turn.
+	for step := 0; session.Usage.Steps-session.StepBase < maxSteps; step++ {
 		if ctx.Err() != nil {
-			return r.cancelRun(ctx, pid, session, latest(), &unacked)
+			return stop()
 		}
-		if r.Clock != nil {
-			session.Messages = append(session.Messages, Message{Role: "tool", Content: r.Clock.Note()})
+		session.Usage.Steps++
+		for _, note := range budgetNotes(account, &session) {
+			session.Messages = append(session.Messages, Message{Role: "tool", Content: note})
 		}
 		if r.Bus != nil {
 			// The first step also takes messages handed out before but never
@@ -500,15 +578,27 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return RunResult{}, err
 		}
 
-		callCtx := WithCallInfo(ctx, CallInfo{PID: pid, AgentID: process.Metadata["agent_id"]})
+		// Check the token budget before the call, and cap the reply to what
+		// is left of it; its prompt may still overshoot, by at most one call.
+		meter := &TokenMeter{}
+		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"], Meter: meter}
+		if tokens := account.tokensLeft(); tokens.ok {
+			if tokens.Left <= 0 {
+				return budgetExit(fmt.Sprintf("token budget exceeded: %d of %d tokens used (budget of %s)", tokens.Limit-int(tokens.Left), tokens.Limit, tokens.Owner))
+			}
+			info.MaxTokens = int(tokens.Left)
+		}
+		callCtx := WithCallInfo(ctx, info)
 		result, err := r.Backend.Generate(callCtx, GenerateRequest{
 			Process:    process,
 			History:    append([]Message(nil), session.Messages...),
 			MemoryRefs: append([]MemoryRef(nil), session.MemoryRefs...),
 		})
+		account.AddTokens(meter.Total())
+		syncUsage()
 		if ctx.Err() != nil {
 			// Drop whatever the interrupted call produced, action or error.
-			return r.cancelRun(ctx, pid, session, latest(), &unacked)
+			return stop()
 		}
 		if err != nil {
 			if options.ContinueOnToolError {
@@ -550,7 +640,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Role:    "assistant",
 				Content: result.Action.Message,
 			})
-			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "yield", &unacked)
+			artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "yield", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -609,7 +699,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				})
 				if loopWarningIssued {
 					exitStatus := kernel.ExitStatus{Code: 1, Reason: repeatErr.Error(), Retryable: false}
-					artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "loop_retry_suppressed", &unacked)
+					artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "loop_retry_suppressed", &unacked)
 					if err != nil {
 						return RunResult{}, err
 					}
@@ -657,9 +747,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				if ctx.Err() != nil {
 					session.Messages = append(session.Messages, Message{
 						Role:    "tool",
-						Content: fmt.Sprintf("tool_cancelled name=%s reason=interrupted_by_user", result.Action.ToolCall.Name),
+						Content: fmt.Sprintf("tool_cancelled name=%s reason=%s", result.Action.ToolCall.Name, cancelReason(ctx)),
 					})
-					return r.cancelRun(ctx, pid, session, latest(), &unacked)
+					return stop()
 				}
 				if options.ContinueOnToolError {
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
@@ -744,9 +834,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if err != nil && ctx.Err() != nil {
 				session.Messages = append(session.Messages, Message{
 					Role:    "tool",
-					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=interrupted_by_user", result.Action.Delegate.AgentID),
+					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=%s", result.Action.Delegate.AgentID, cancelReason(ctx)),
 				})
-				return r.cancelRun(ctx, pid, session, latest(), &unacked)
+				return stop()
 			}
 			if err != nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
@@ -905,7 +995,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				session.Messages = append(session.Messages, Message{Role: "assistant", Content: result.Action.Message})
 			}
-			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "blocked", &unacked)
+			artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "blocked", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -923,7 +1013,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				return r.failMalformed(pid, lastCheckpoint())
 			}
-			artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "final", &unacked)
+			artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -947,7 +1037,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return r.failMalformed(pid, lastCheckpoint())
 		}
 
-		artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "intermediate", &unacked)
+		artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "intermediate", &unacked)
 		if err != nil {
 			return RunResult{}, err
 		}
@@ -956,7 +1046,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 
 	// Checkpoint the last steps too: ones that ended in a backend error
 	// continued without one, and may be every step the agent took.
-	artifactRecord, err := r.saveCheckpoint(pid, session, latest(), "final", &unacked)
+	artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -1277,6 +1367,15 @@ func truncateMemorySummary(value string, limit int) string {
 		return value[:limit]
 	}
 	return value[:limit-3] + "..."
+}
+
+// cancelReason says why ctx stopped a tool or delegate: the user, or a
+// strict time budget.
+func cancelReason(ctx context.Context) string {
+	if errors.Is(context.Cause(ctx), ErrTimeBudgetExceeded) {
+		return "time_budget_exceeded"
+	}
+	return "interrupted_by_user"
 }
 
 // saveCheckpoint writes session as a checkpoint of pid, then acknowledges
@@ -1768,7 +1867,15 @@ func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 	if message.Topic != "" {
 		via = " on topic " + message.Topic
 	}
-	return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, message.Body)
+	// A body line that looks like a sender label is quoted, so it cannot pass
+	// for a separate message from someone else.
+	lines := strings.Split(message.Body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimLeft(line, " \t"), PeerMessagePrefix) {
+			lines[i] = "> " + line
+		}
+	}
+	return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, strings.Join(lines, "\n"))
 }
 
 // nonEmpty is a one-element parent list, or nil for no parent.

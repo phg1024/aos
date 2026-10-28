@@ -16,6 +16,7 @@ import (
 	"aos/internal/agentflow"
 	"aos/internal/app"
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/inference"
 	"aos/internal/inspect"
 	"aos/internal/ipc"
@@ -129,6 +130,8 @@ func run(args []string) {
 	var trace bool
 	var verify string
 	var timeBudget time.Duration
+	var strictTime bool
+	var tokenBudget int
 	fs.Var(&inputs, "input", "input file path (repeatable)")
 	fs.StringVar(&outputPath, "output", "", "output file path")
 	fs.StringVar(&workflowPath, "workflow", "", "workflow JSON spec path")
@@ -136,7 +139,9 @@ func run(args []string) {
 	fs.StringVar(&stateDir, "state-dir", "", "optional state directory for workflow runs")
 	fs.BoolVar(&trace, "trace", getenvBool("AOS_TRACE", false), "print real-time agent actions during workflow runs")
 	fs.StringVar(&verify, "verify", string(workflow.VerificationNone), "verification policy without --workflow: none, required, or best_effort")
-	fs.DurationVar(&timeBudget, "time-budget", 0, "wall-clock budget for a --workflow run (e.g. 15m); agents see the time used and left each step")
+	fs.DurationVar(&timeBudget, "time-budget", 0, "wall-clock budget for a --workflow run (e.g. 15m); agents see the time used and left each step and are told to commit near the end")
+	fs.BoolVar(&strictTime, "strict-time-budget", false, "enforce --time-budget: stop the run, cancelling the model call or command in flight, when it runs out")
+	fs.IntVar(&tokenBudget, "token-budget", 0, "model tokens (prompt+completion, cached included) the whole --workflow run may use; enforced")
 	_ = fs.Parse(args)
 
 	goal := ""
@@ -148,11 +153,9 @@ func run(args []string) {
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	if workflowPath != "" {
-		var clock *runtime.Clock
-		if timeBudget > 0 {
-			clock = runtime.NewClock(timeBudget)
-		}
-		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), clock, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
+		budget := capability.Budget{Seconds: int(timeBudget.Round(time.Second).Seconds()), Tokens: tokenBudget}
+		budget.StrictTime = strictTime && budget.Seconds > 0
+		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), budget, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			var failed workflowFailed
 			if errors.As(err, &failed) {
@@ -187,7 +190,7 @@ func run(args []string) {
 	fmt.Println(string(bytes))
 }
 
-func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, clock *runtime.Clock, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
+func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, budget capability.Budget, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -245,7 +248,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 			Compaction: compaction,
 		},
 		Compaction: compaction,
-		Clock:      clock,
+		Budget:     budget,
 	}
 	// The trace and the model-call ledger go to disk as the run happens, so
 	// a killed run can still be inspected (aos inspect).

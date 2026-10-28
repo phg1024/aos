@@ -30,6 +30,34 @@ type Set struct {
 	// MaxRunSeconds bounds the timeout of a run command; 0 means
 	// DefaultMaxRunSeconds.
 	MaxRunSeconds int `json:"max_run_seconds,omitempty"`
+	// Budget limits what the process, together with everything it
+	// delegates to, may consume.
+	Budget Budget `json:"budget,omitzero"`
+}
+
+// Budget limits model tokens and active time, for a process and its
+// descendants together (their use counts against it). Zero is unlimited.
+// Tokens count prompt and completion tokens of every model call, cached
+// prompt tokens included, since the server still processes them. Time is
+// wall-clock time spent running, not time parked between turns. A time
+// budget is advisory unless StrictTime: the agent sees how much is left
+// and is told to commit its answer near the end, but only a strict budget
+// stops it.
+type Budget struct {
+	Tokens     int  `json:"tokens,omitempty"`
+	Seconds    int  `json:"seconds,omitempty"`
+	StrictTime bool `json:"strict_time,omitempty"`
+}
+
+// tighter is the stricter of two limits, 0 meaning unlimited.
+func tighter(a, b int) int {
+	switch {
+	case a == 0:
+		return b
+	case b == 0:
+		return a
+	}
+	return min(a, b)
 }
 
 // DefaultMaxRunSeconds bounds a run command's timeout when the set does
@@ -114,6 +142,13 @@ func DeriveChildSet(parent, requested Set) Set {
 	if parent.MaxRunSeconds > 0 || requested.MaxRunSeconds > 0 {
 		derived.MaxRunSeconds = min(effectiveRunSeconds(parent.MaxRunSeconds), effectiveRunSeconds(requested.MaxRunSeconds))
 	}
+	// A child's budget never exceeds its parent's, and a strict parent
+	// makes the child strict.
+	derived.Budget = Budget{
+		Tokens:  tighter(parent.Budget.Tokens, requested.Budget.Tokens),
+		Seconds: tighter(parent.Budget.Seconds, requested.Budget.Seconds),
+	}
+	derived.Budget.StrictTime = derived.Budget.Seconds > 0 && (parent.Budget.StrictTime || requested.Budget.StrictTime)
 	return derived
 }
 

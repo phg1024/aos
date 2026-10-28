@@ -9,6 +9,12 @@ type CallInfo struct {
 	AgentID string
 	// Repair marks a retry that asks the model to fix a malformed reply.
 	Repair bool
+	// MaxTokens, when positive, caps the completion: what is left of the
+	// process's token budget.
+	MaxTokens int
+	// Meter, when set, receives the tokens each call (repairs included)
+	// used, as the server reports them.
+	Meter *TokenMeter
 }
 
 type callInfoKey struct{}

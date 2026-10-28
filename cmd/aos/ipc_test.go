@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"aos/internal/agentflow"
+	"aos/internal/capability"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
@@ -42,7 +43,7 @@ func runTeam(t *testing.T, actions []map[string]any) (string, []string, error) {
 	var prompts []string
 	var err error
 	captureStdout(t, func() {
-		err = runWorkflow(context.Background(), recordingCompleter{actions: actions, prompts: &prompts}, runtime.CompactionPolicy{}, nil,
+		err = runWorkflow(context.Background(), recordingCompleter{actions: actions, prompts: &prompts}, runtime.CompactionPolicy{}, capability.Budget{},
 			writeSpec(t, dir, teamSpec), nil, "", "", stateDir, "go", false)
 	})
 	return stateDir, prompts, err
@@ -160,7 +161,7 @@ func TestWaitingEntryAgentFailsTheWorkflow(t *testing.T) {
 	var err error
 	captureStdout(t, func() {
 		err = runWorkflow(context.Background(), recordingCompleter{prompts: &prompts, actions: []map[string]any{{"type": "wait", "message": "Which file?"}}},
-			runtime.CompactionPolicy{}, nil, writeSoloWorkflow(t, dir), nil, "", "", stateDir, "go", false)
+			runtime.CompactionPolicy{}, capability.Budget{}, writeSoloWorkflow(t, dir), nil, "", "", stateDir, "go", false)
 	})
 	if err == nil || !strings.Contains(err.Error(), "abandoned while waiting") || !strings.Contains(err.Error(), "Which file?") {
 		t.Fatalf("expected the abandoned entry to fail the workflow, got %v", err)

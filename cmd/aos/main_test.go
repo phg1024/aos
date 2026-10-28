@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"aos/internal/agentflow"
+	"aos/internal/capability"
 	"aos/internal/kernel"
 	"aos/internal/runlog"
 	"aos/internal/runtime"
@@ -41,7 +42,7 @@ func writeSoloWorkflow(t *testing.T, dir string) string {
 func TestRunWorkflowReportsEntryFailure(t *testing.T) {
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.html")
-	err := runWorkflow(context.Background(), exitCompleter{kernel.ExitStatus{Code: 3, Reason: "tests failed"}}, runtime.CompactionPolicy{}, nil,
+	err := runWorkflow(context.Background(), exitCompleter{kernel.ExitStatus{Code: 3, Reason: "tests failed"}}, runtime.CompactionPolicy{}, capability.Budget{},
 		writeSoloWorkflow(t, dir), nil, "", report, filepath.Join(dir, "state"), "go", false)
 	var failed workflowFailed
 	if !errors.As(err, &failed) {
@@ -57,7 +58,7 @@ func TestRunWorkflowReportsEntryFailure(t *testing.T) {
 
 func TestRunWorkflowSucceedsWhenEntrySucceeds(t *testing.T) {
 	dir := t.TempDir()
-	err := runWorkflow(context.Background(), exitCompleter{kernel.ExitStatus{Code: 0, Reason: "done"}}, runtime.CompactionPolicy{}, nil,
+	err := runWorkflow(context.Background(), exitCompleter{kernel.ExitStatus{Code: 0, Reason: "done"}}, runtime.CompactionPolicy{}, capability.Budget{},
 		writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
@@ -106,7 +107,7 @@ func TestRunWorkflowReportsBackendFailure(t *testing.T) {
 	dir := t.TempDir()
 	var err error
 	captureStdout(t, func() {
-		err = runWorkflow(context.Background(), failingCompleter{}, runtime.CompactionPolicy{}, nil,
+		err = runWorkflow(context.Background(), failingCompleter{}, runtime.CompactionPolicy{}, capability.Budget{},
 			writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
 	})
 	var failed workflowFailed
@@ -126,7 +127,7 @@ func TestRunWorkflowReportsGoError(t *testing.T) {
 	defer cancel()
 	var err error
 	out := captureStdout(t, func() {
-		err = runWorkflow(ctx, cancellingCompleter{cancel}, runtime.CompactionPolicy{}, nil,
+		err = runWorkflow(ctx, cancellingCompleter{cancel}, runtime.CompactionPolicy{}, capability.Budget{},
 			writeSoloWorkflow(t, dir), nil, "", report, stateDir, "go", false)
 	})
 	if !errors.Is(err, runtime.ErrRunCancelled) {
@@ -182,7 +183,7 @@ func TestWorkflowRootRunsWhileTheWorkflowDoes(t *testing.T) {
 	stateDir := filepath.Join(dir, "state")
 	var during kernel.ProcessState
 	captureStdout(t, func() {
-		if err := runWorkflow(context.Background(), rootWatcher{stateDir, &during}, runtime.CompactionPolicy{}, nil,
+		if err := runWorkflow(context.Background(), rootWatcher{stateDir, &during}, runtime.CompactionPolicy{}, capability.Budget{},
 			writeSoloWorkflow(t, dir), nil, "", "", stateDir, "go", false); err != nil {
 			t.Errorf("run: %v", err)
 		}

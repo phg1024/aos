@@ -126,6 +126,16 @@ A message from another agent reaches the model as `message from <agent> (<pid>) 
 
 A delegated agent that uses `wait` is parked: blocked, with its checkpoint, not exited. Its delegator gets `delegate_result … status=waiting question=…`. Delegating to that agent again with the answer as the goal resumes the same process, which reads `Answer from <agent> (<pid>), who delegated your task: …`. When an agent finishes, any child it left parked is closed with `{1, "abandoned while waiting", retryable}` and its checkpoint, so nothing stays blocked. An entry agent that waits has nobody to answer it, so it is closed the same way and the workflow fails with its question.
 
+## Budgets
+
+A capability set may carry a budget: `"budget": {"tokens": N, "seconds": N, "strict_time": true}`. `aos run --workflow` sets the whole run's budget with `--token-budget N`, `--time-budget 15m` and `--strict-time-budget`. Zero means unlimited.
+
+- **Tokens** count the prompt and completion tokens of every model call, repairs included. Cached prompt tokens are counted too, because the server still processes them. The limit is checked before each call and the reply's `max_tokens` is capped to what is left, so the budget can be overshot by at most one call's prompt. A spent budget ends the process with `{1, "token budget exceeded: <used> of <limit> tokens used (budget of <owner>)", retryable}` and a checkpoint.
+- **Time** is wall-clock time spent running, not time parked between turns. It is **advisory by default**: each step the agent sees the time used and left, and once, with less than a tenth left, it is told to commit its best answer now. Only `strict_time` (`--strict-time-budget`) enforces it. When a strict budget runs out, the in-flight model call or command is cancelled (a command's whole process group is killed) and the process ends with `{1, "time budget exceeded: <N>s strict budget of <owner>", retryable}`. Tokens get the same one-time warning.
+- **Hierarchy:** a delegate's budget is at most its parent's (strictness carries down), and its consumption counts against every ancestor and the run. The tightest remaining budget in the chain binds it, and an exit names whose budget ran out. A spec whose child asks for more than its parent may grant fails validation. A child that names no budget inherits its parent's.
+- **Persistence:** steps, tokens and time are saved in each checkpoint, so Resume and Recover continue against the same budget and step limit. Running out and recovering does not reset them. An operator grants more explicitly with `RunOptions.Extend` (steps, tokens, seconds), recorded in the session. In the TUI each message you type starts a fresh step allowance; tokens and time keep counting.
+- **Visibility:** `aos inspect` and the HTML report show each process's budget and consumption (`steps 7 · tokens 1200/5000 · time 95s/900s strict`), and the exit reason names the budget that ended it.
+
 ## Verification Policy
 
 Verification is a workflow choice, not a built-in step. `aos run` without `--workflow` takes `--verify none|required|best_effort` (default `none`):

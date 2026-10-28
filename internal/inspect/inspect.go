@@ -17,11 +17,13 @@ import (
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/inference"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/lease"
 	"aos/internal/runlog"
+	"aos/internal/runtime"
 	"aos/internal/statedir"
 )
 
@@ -56,6 +58,10 @@ type Process struct {
 	LatestCheckpoint string             `json:"latest_checkpoint,omitempty"`
 	// UnconfinedRun marks a process whose run commands skip the sandbox.
 	UnconfinedRun bool `json:"unconfined_run,omitempty"`
+	// Budget and Usage are its limits and what it consumed by its latest
+	// checkpoint; an exit caused by a budget names it in the reason.
+	Budget capability.Budget `json:"budget,omitzero"`
+	Usage  runtime.Usage     `json:"usage,omitzero"`
 }
 
 // Mailbox counts one recipient's unacknowledged messages: Pending never
@@ -135,6 +141,13 @@ func Load(stateDir string, tail int) (Report, error) {
 		}
 	}
 	report.Processes = processTree(processes, checkpoints)
+	if store, err := openArtifacts(filepath.Join(stateDir, "artifacts")); err == nil && store != nil {
+		if usage, err := agentflow.ProcessUsage(store); err == nil {
+			for i := range report.Processes {
+				report.Processes[i].Usage = usage[report.Processes[i].PID]
+			}
+		}
+	}
 	for _, process := range report.Processes {
 		if process.State != string(kernel.StateExited) {
 			report.NotExited = append(report.NotExited, process.PID)
@@ -241,6 +254,7 @@ func processTree(processes []kernel.Process, checkpoints map[string]string) []Pr
 			AgentID: process.Metadata["agent_id"], Role: process.Role, State: string(process.State),
 			Exit: process.ExitStatus, LatestCheckpoint: checkpoints[process.PID],
 			UnconfinedRun: process.CapabilitySet.UnconfinedRun,
+			Budget:        process.CapabilitySet.Budget,
 		})
 		list := children[process.PID]
 		byPID(list)
@@ -286,6 +300,9 @@ func (r Report) WriteText(w io.Writer) {
 		}
 		if process.LatestCheckpoint != "" {
 			line += "  checkpoint " + process.LatestCheckpoint
+		}
+		if budget := agentflow.FormatBudget(process.Budget, process.Usage); budget != "" {
+			line += "  [" + budget + "]"
 		}
 		fmt.Fprintln(w, line)
 	}

@@ -113,9 +113,10 @@ type Engine struct {
 	Trace     func(TraceEvent)
 	// Compaction is passed to every agent runtime; zero uses runtime defaults.
 	Compaction runtime.CompactionPolicy
-	// Clock, when set, is shared by every agent so the whole workflow works
-	// against one deadline.
-	Clock *runtime.Clock
+	// Budget is the whole run's: every agent's consumption counts against
+	// it, and the entry agent's budget is bounded by it. A time budget is
+	// advisory unless StrictTime.
+	Budget capability.Budget
 }
 
 type TraceEvent struct {
@@ -277,6 +278,11 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if _, err := e.Kernel.Transition(root.PID, kernel.StateRunning); err != nil {
 		return RunSummary{}, err
 	}
+	// The run's own account heads the chain every agent's account joins.
+	runAccount := runtime.NewAccount("run", e.Budget, runtime.Usage{}, runtime.AccountFrom(ctx))
+	runAccount.Start()
+	defer runAccount.Stop()
+	ctx = runtime.WithAccount(ctx, runAccount)
 	summary := RunSummary{
 		Workflow:   spec.Name,
 		RootPID:    root.PID,
@@ -407,7 +413,6 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		Leases:     e.Leases,
 		MaxSteps:   maxSteps(agent),
 		Compaction: e.Compaction,
-		Clock:      e.Clock,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

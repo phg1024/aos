@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"aos/internal/agentflow"
+	"aos/internal/capability"
 	"aos/internal/inspect"
 	"aos/internal/runtime"
 )
@@ -48,7 +49,7 @@ func TestUnconfinedRunIsAttenuatedAndVisible(t *testing.T) {
 		{"id":"lead","system_prompt":"Lead.","allowed_agents":["worker"],"capabilities":{"tools":["spawn_agent"]},"delegable":{"tools":["run"]}},
 		{"id":"worker","system_prompt":"Work.","capabilities":{"tools":["run"],"unconfined_run":true}}]}`
 	next := 0
-	err := runWorkflow(context.Background(), sequenceCompleter{next: &next}, runtime.CompactionPolicy{}, nil, writeSpec(t, dir, refused), nil, "", "", filepath.Join(dir, "refused"), "go", false)
+	err := runWorkflow(context.Background(), sequenceCompleter{next: &next}, runtime.CompactionPolicy{}, capability.Budget{}, writeSpec(t, dir, refused), nil, "", "", filepath.Join(dir, "refused"), "go", false)
 	if !errors.Is(err, agentflow.ErrWorkflowSpecInvalid) || !strings.Contains(err.Error(), "unconfined_run") {
 		t.Fatalf("a worker asking for unconfined_run its lead cannot grant: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestUnconfinedRunIsAttenuatedAndVisible(t *testing.T) {
 	next = 0
 	completer := sequenceCompleter{next: &next, actions: []map[string]any{{"type": "delegate", "delegate": map[string]any{"agent_id": "worker", "goal": "build"}}}}
 	captureStdout(t, func() {
-		if err := runWorkflow(context.Background(), completer, runtime.CompactionPolicy{}, nil, writeSpec(t, dir, granted), nil, "", report, stateDir, "go", false); err != nil {
+		if err := runWorkflow(context.Background(), completer, runtime.CompactionPolicy{}, capability.Budget{}, writeSpec(t, dir, granted), nil, "", report, stateDir, "go", false); err != nil {
 			t.Errorf("run: %v", err)
 		}
 	})

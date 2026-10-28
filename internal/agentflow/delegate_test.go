@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"aos/internal/agentflow"
 	"aos/internal/artifact"
@@ -251,7 +250,7 @@ func (p *promptCapture) CompleteJSON(_ context.Context, system string, user stri
 	return json.Unmarshal(bytes, target)
 }
 
-func TestEngineSharesClockWithDelegatedAgents(t *testing.T) {
+func TestEngineSharesTheRunBudgetWithDelegatedAgents(t *testing.T) {
 	root := t.TempDir()
 	k, err := kernel.New(filepath.Join(root, "kernel"))
 	if err != nil {
@@ -267,7 +266,7 @@ func TestEngineSharesClockWithDelegatedAgents(t *testing.T) {
 		Artifacts: store,
 		Tools:     tools.NewRuntime(),
 		Factory:   agentflow.StaticBackendFactory{Completer: completer},
-		Clock:     runtime.NewClock(15 * time.Minute),
+		Budget:    capability.Budget{Seconds: 900},
 	}
 	spec := agentflow.WorkflowSpec{
 		Name:       "clocked",
@@ -284,8 +283,8 @@ func TestEngineSharesClockWithDelegatedAgents(t *testing.T) {
 		t.Fatalf("expected 3 prompts, got %d", len(completer.prompts))
 	}
 	for idx, prompt := range completer.prompts {
-		if !strings.Contains(prompt, "clock time_budget=15m0s") {
-			t.Fatalf("prompt %d (writer is #1) has no clock note", idx)
+		if !strings.Contains(prompt, "budget time=900s") {
+			t.Fatalf("prompt %d (writer is #1) has no time budget note", idx)
 		}
 	}
 }
