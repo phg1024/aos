@@ -848,6 +848,13 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Content: "subscribe:topic=" + result.Action.Subscribe.Topic,
 			})
 		case "wait":
+			// A question asked while waiting is the agent's reply to the user.
+			if result.Action.Message != "" {
+				if options.OnAssistantMessage != nil {
+					options.OnAssistantMessage(result.Action.Message)
+				}
+				session.Messages = append(session.Messages, Message{Role: "assistant", Content: result.Action.Message})
+			}
 			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 				"kind": "blocked",
 			})
@@ -989,6 +996,29 @@ const actionRecordPrefix = `{"action":`
 // the agent said. A child's result is its last real message.
 func IsActionRecord(content string) bool {
 	return strings.HasPrefix(content, actionRecordPrefix)
+}
+
+// WaitText is what a run that ended in a wait has to say: the message the
+// agent asked with, or failing that the notes of its wait action.
+func WaitText(messages []Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		message := messages[i]
+		if message.Role != "assistant" {
+			continue
+		}
+		if !IsActionRecord(message.Content) {
+			return message.Content
+		}
+		var record GenerateResult
+		if json.Unmarshal([]byte(message.Content), &record) == nil && record.Action.Type == "wait" {
+			if record.Action.Message != "" {
+				return record.Action.Message
+			}
+			return record.Action.Notes
+		}
+		return ""
+	}
+	return ""
 }
 
 func recordableAction(action GenerateAction) bool {

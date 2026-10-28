@@ -570,7 +570,10 @@ func printResult(ui render.Palette, footer *render.FooterBar, result runtime.Run
 		}
 	}
 	if result.Blocked {
-		footer.Println(ui.Warn("agent> waiting for more input"))
+		if text := runtime.WaitText(result.Session.Messages); text != "" {
+			footer.Println(ui.AgentBlock("agent> ", text))
+		}
+		footer.Println(ui.Subtle("(the agent is waiting for your reply)"))
 		return
 	}
 	if result.ExitStatus.Reason != "" {

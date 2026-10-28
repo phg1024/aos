@@ -211,7 +211,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Use 'tool' only for allowed tools. ")
 	builder.WriteString("Use 'delegate' only for allowed agents. ")
 	builder.WriteString("Use 'send', 'publish', or 'subscribe' only when mailbox collaboration is actually needed. ")
-	builder.WriteString("Use 'wait' when you need more user or mailbox input before acting further. ")
+	builder.WriteString("Use 'wait' when you need more user or mailbox input before acting further, and put what you need in its message: the user sees that message, not your notes. ")
 	builder.WriteString("Use 'message' only for user-facing output or a concise visible status update when the user would benefit from seeing it. ")
 	builder.WriteString("Do not use 'message' for hidden chain-of-thought or internal scratch work. ")
 	builder.WriteString("Use 'exit' only when your assigned task is complete or blocked. ")
@@ -662,7 +662,8 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 	}
 	result := runtime.GenerateResult{
 		Action: runtime.GenerateAction{
-			Type: strings.ToLower(strings.TrimSpace(actionType)),
+			Type:  strings.ToLower(strings.TrimSpace(actionType)),
+			Notes: firstString(actionData, "notes"),
 		},
 	}
 
@@ -727,6 +728,8 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 		}
 		result.Action.Subscribe = &runtime.SubscribeCall{Topic: topic}
 	case "wait":
+		// What the agent is waiting for; in a terminal it is all the user sees.
+		result.Action.Message = firstString(actionData, "message", "content", "text", "question")
 	case "exit":
 		statusData := mapValue(actionData, "exit_status")
 		if len(statusData) == 0 {
