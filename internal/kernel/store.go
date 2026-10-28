@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"aos/internal/filelock"
 )
 
 // The kernel's files are written only through fileStore, which only the
@@ -24,9 +26,9 @@ import (
 //  3. kernel_state.json only caches the next IDs; allocation also looks at
 //     the log and table, so a stale counter can never reuse an ID.
 //
-// Every read-modify-write holds an exclusive lock: an in-memory mutex plus,
-// on unix, flock on kernel.lock, so several processes may share a state
-// directory. Elsewhere only the mutex applies (see lock_other.go).
+// Every read-modify-write holds an exclusive lock: an in-memory mutex plus a
+// filelock on kernel.lock, so several processes may share a state
+// directory. Where filelock cannot lock (non-unix), only the mutex applies.
 
 type storeState struct {
 	NextProcessID int `json:"next_process_id"`
@@ -82,13 +84,13 @@ func (s *fileStore) lockPath() string      { return filepath.Join(s.root, "kerne
 // lock takes the store's exclusive lock for one operation.
 func (s *fileStore) lock() (func(), error) {
 	s.mu.Lock()
-	unlockFile, err := lockFile(s.lockPath())
+	held, err := filelock.Acquire(s.lockPath())
 	if err != nil {
 		s.mu.Unlock()
 		return nil, err
 	}
 	return func() {
-		unlockFile()
+		held.Release()
 		s.mu.Unlock()
 	}, nil
 }

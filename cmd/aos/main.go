@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"aos/internal/agentflow"
 	"aos/internal/app"
 	"aos/internal/artifact"
+	"aos/internal/filelock"
 	"aos/internal/inference"
 	"aos/internal/kernel"
 	"aos/internal/lease"
@@ -252,26 +252,18 @@ func (w workflowFailed) exitCode() int {
 }
 
 func acquireStateLock(stateDir string) (func(), error) {
-	lockPath := filepath.Clean(stateDir) + ".lock"
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	held, err := filelock.TryAcquire(filepath.Clean(stateDir) + ".lock")
+	if errors.Is(err, filelock.ErrLocked) {
+		return nil, fmt.Errorf("state directory is already in use by another aos run: %s", stateDir)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = lockFile.Close()
-		if err == syscall.EWOULDBLOCK {
-			return nil, fmt.Errorf("state directory is already in use by another aos run: %s", stateDir)
-		}
-		return nil, err
+	if file := held.File(); file.Truncate(0) == nil {
+		_, _ = file.WriteString(fmt.Sprintf("pid=%d\nstarted_at=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339)))
+		_, _ = file.Seek(0, 0)
 	}
-	if err := lockFile.Truncate(0); err == nil {
-		_, _ = lockFile.WriteString(fmt.Sprintf("pid=%d\nstarted_at=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339)))
-		_, _ = lockFile.Seek(0, 0)
-	}
-	return func() {
-		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
-		_ = lockFile.Close()
-	}, nil
+	return held.Release, nil
 }
 
 func resolveSkillRoots(roots []string, baseDir string) []string {
