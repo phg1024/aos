@@ -152,7 +152,7 @@ func TestAgentRuntimeSingleAgentFlowWithCheckpointRestore(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeCompactsLongHistoryIntoMemoryFiles(t *testing.T) {
+func TestAgentRuntimeCompactsLongHistoryIntoMemorySegments(t *testing.T) {
 	root := t.TempDir()
 	workspace := filepath.Join(root, "workspace")
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
@@ -219,15 +219,21 @@ func TestAgentRuntimeCompactsLongHistoryIntoMemoryFiles(t *testing.T) {
 		t.Fatalf("expected one memory ref in backend request, got %#v", fake.Requests[0].MemoryRefs)
 	}
 	ref := fake.Requests[0].MemoryRefs[0]
-	if !strings.HasPrefix(ref.Path, filepath.Join(workspace, ".aos-memory")) {
-		t.Fatalf("unexpected memory ref path %q", ref.Path)
+	if ref.ArtifactID == "" || ref.Path != "" || ref.MessageCount != 18 {
+		t.Fatalf("expected an artifact-backed memory ref of 18 messages, got %+v", ref)
 	}
-	content, err := os.ReadFile(ref.Path)
-	if err != nil {
-		t.Fatalf("read memory file: %v", err)
+	segment, err := artifactStore.Metadata(ref.ArtifactID)
+	if err != nil || segment.Type != "memory_segment" || segment.ProducerPID != process.PID {
+		t.Fatalf("memory segment artifact = %+v (err %v)", segment, err)
 	}
-	if !strings.Contains(string(content), `"message_count": 18`) {
-		t.Fatalf("expected dumped message count in memory file, got:\n%s", string(content))
+	var payload struct {
+		MessageCount int `json:"message_count"`
+	}
+	if err := artifactStore.ReadJSON(ref.ArtifactID, &payload); err != nil || payload.MessageCount != 18 {
+		t.Fatalf("segment payload = %+v (err %v)", payload, err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".aos-memory")); !os.IsNotExist(err) {
+		t.Fatalf("compaction must not write into the workspace, stat err %v", err)
 	}
 
 	session, err := agentRuntime.RestoreCheckpoint(result.CheckpointID)

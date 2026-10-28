@@ -224,7 +224,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Do not repeat the exact same failing call with unchanged arguments more than once. ")
 	builder.WriteString("When inspecting a codebase, prefer using list_dir or find_files before guessing file paths. ")
 	builder.WriteString("History entries beginning with tool_notice or tool_error mean the previous approach was not enough and you should adapt. ")
-	builder.WriteString("If memory_refs are present, older session context has been compacted into durable JSON files. Use read_file on those paths when you need deeper prior context beyond the live history and summary. ")
+	builder.WriteString("If memory_refs are present, older session context has been compacted into runtime-owned memory segments. Call the read_memory tool with a ref's artifact_id when you need deeper prior context beyond the live history and summary; it is always available. ")
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
@@ -274,6 +274,7 @@ var toolArgs = map[string]string{
 	"checkpoint":       "",
 	"list_artifacts":   "type?, producer_pid?, scope?",
 	"publish_artifact": "type, body",
+	"read_memory":      "artifact_id",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
 }

@@ -57,6 +57,10 @@ A delegated agent never gets more than its parent may grant. Each agent's `capab
 
 Kernel state lives under `<state-dir>/kernel` and is reachable only through `kernel.New`. The event log (`events.json`) is the source of truth: every state change appends its event, with the data needed to rebuild it, before the process table (`processes.json`) is written, and the table is repaired from newer events whenever it is read. Each update holds an exclusive lock (`flock` on `kernel.lock` on unix), so `aos run`, `aos-tui` and other processes can share a state directory, and event IDs stay gap-free and totally ordered across them.
 
+## Artifacts
+
+Artifacts under `<state-dir>/artifacts` are content-addressed: the index records each payload's sha256 and every read verifies it, so a payload changed on disk fails with `ErrArtifactTampered`. Payloads and the index are written atomically under a cross-process lock. An artifact's parents must exist and its producer must be a process the kernel knows, and runs link their artifacts: checkpoints chain to the previous one, records name the checkpoint they ran under, and the `workflow_summary` points at every `agent_run` and the verdict. Runtime types such as `checkpoint`, `verification` and `memory_segment` are reserved; agents publish under `published.<name>`. A process resumes only from its own checkpoints (or its `resumed_from` chain), and compacted history lives in runtime-owned `memory_segment` artifacts that agents read back with `read_memory`.
+
 ## Verification Policy
 
 Verification is a workflow choice, not a built-in step. `aos run` without `--workflow` takes `--verify none|required|best_effort` (default `none`):

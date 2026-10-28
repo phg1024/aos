@@ -6,9 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +21,17 @@ import (
 
 var ErrMalformedBackendOutput = errors.New("malformed backend output")
 var ErrAgentBlocked = errors.New("agent blocked waiting for input")
+
+// ErrNotACheckpoint: a restore was asked to use an artifact that is not a
+// checkpoint.
+var ErrNotACheckpoint = errors.New("artifact is not a checkpoint")
+
+// ErrCheckpointNotOwned: the checkpoint was produced by a process outside
+// the resuming process's resumed_from chain.
+var ErrCheckpointNotOwned = errors.New("checkpoint belongs to another process")
+
+// maxResumeChain bounds the resumed_from walk.
+const maxResumeChain = 64
 
 // messageRecordedNote follows a message action in an autonomous run.
 const messageRecordedNote = "message_recorded note=your last message is your result and reaches whoever started you when you exit; if your task is done, exit now instead of repeating the message"
@@ -97,8 +107,12 @@ type Session struct {
 	MemorySequence      int           `json:"memory_sequence,omitempty"`
 }
 
+// MemoryRef points at a compacted stretch of history: a memory_segment
+// artifact the runtime owns, read back with the read_memory tool. Path is
+// only set on refs from before segments were artifacts.
 type MemoryRef struct {
-	Path         string `json:"path"`
+	ArtifactID   string `json:"artifact_id,omitempty"`
+	Path         string `json:"path,omitempty"`
 	Summary      string `json:"summary,omitempty"`
 	MessageCount int    `json:"message_count"`
 }
@@ -193,7 +207,6 @@ const (
 	sessionMemoryKeepMessages = 12
 	sessionMemoryMaxMessages  = 24
 	sessionMemoryMaxChars     = 8000
-	sessionMemoryDirName      = ".aos-memory"
 	sessionMemorySummaryLimit = 180
 )
 
@@ -211,11 +224,11 @@ type DelegateResult struct {
 type DelegateHandler func(ctx context.Context, parent kernel.Process, call DelegateCall, session Session) (DelegateResult, error)
 
 func (r *AgentRuntime) Run(ctx context.Context, pid string, initial []Message) (RunResult, error) {
-	return r.runSession(ctx, pid, Session{Messages: append([]Message(nil), initial...)}, RunOptions{})
+	return r.runSession(ctx, pid, Session{Messages: append([]Message(nil), initial...)}, RunOptions{}, "")
 }
 
 func (r *AgentRuntime) RunWithOptions(ctx context.Context, pid string, initial []Message, options RunOptions) (RunResult, error) {
-	return r.runSession(ctx, pid, Session{Messages: append([]Message(nil), initial...)}, options)
+	return r.runSession(ctx, pid, Session{Messages: append([]Message(nil), initial...)}, options, "")
 }
 
 type RunOptions struct {
@@ -228,7 +241,7 @@ type RunOptions struct {
 }
 
 func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
-	session, err := r.RestoreCheckpoint(checkpointID)
+	session, err := r.ownedCheckpoint(pid, checkpointID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -248,7 +261,7 @@ func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, app
 		}
 		return r.Recover(ctx, pid, checkpointID, appended, options)
 	}
-	return r.runSession(ctx, pid, session, options)
+	return r.runSession(ctx, pid, session, options, checkpointID)
 }
 
 func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
@@ -256,7 +269,7 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err != nil {
 		return RunResult{}, err
 	}
-	session, err := r.RestoreCheckpoint(checkpointID)
+	session, err := r.ownedCheckpoint(pid, checkpointID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -271,10 +284,13 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err != nil {
 		return RunResult{}, err
 	}
-	return r.runSession(ctx, recovered.PID, session, options)
+	return r.runSession(ctx, recovered.PID, session, options, checkpointID)
 }
 
-func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Session, options RunOptions) (RunResult, error) {
+// runSession runs pid from session. resumedFrom is the checkpoint the
+// session was restored from, if any; it heads the run's checkpoint chain.
+func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Session, options RunOptions, resumedFrom string) (RunResult, error) {
+	r.bindArtifactProducers()
 	process, err := r.Kernel.Get(pid)
 	if err != nil {
 		return RunResult{}, err
@@ -286,6 +302,15 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	}
 
 	var checkpointID string
+	// latest names the newest checkpoint of this run, or the one it resumed
+	// from, as the parent of new checkpoints and records, so a run's
+	// artifacts form a chain an operator can walk.
+	latest := func() []string {
+		if checkpointID != "" {
+			return []string{checkpointID}
+		}
+		return nonEmpty(resumedFrom)
+	}
 
 	maxSteps := r.MaxSteps
 	if maxSteps <= 0 {
@@ -295,7 +320,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		if options.ContinueOnToolError {
 			artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
 				"error": ErrMalformedBackendOutput.Error(),
-			}, nil, map[string]string{
+			}, latest(), map[string]string{
 				"kind": "backend_error",
 			})
 			if recordErr != nil {
@@ -312,7 +337,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	}
 	for step := 0; step < maxSteps; step++ {
 		if ctx.Err() != nil {
-			return r.cancelRun(ctx, pid, session)
+			return r.cancelRun(ctx, pid, session, latest())
 		}
 		if r.Clock != nil {
 			session.Messages = append(session.Messages, Message{Role: "tool", Content: r.Clock.Note()})
@@ -328,7 +353,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				return RunResult{}, err
 			}
 		}
-		session, err = r.compactSessionMemory(process, session)
+		session, err = r.compactSessionMemory(process, session, latest())
 		if err != nil {
 			return RunResult{}, err
 		}
@@ -340,13 +365,13 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		})
 		if ctx.Err() != nil {
 			// Drop whatever the interrupted call produced, action or error.
-			return r.cancelRun(ctx, pid, session)
+			return r.cancelRun(ctx, pid, session, latest())
 		}
 		if err != nil {
 			if options.ContinueOnToolError {
 				artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
 					"error": err.Error(),
-				}, nil, map[string]string{
+				}, latest(), map[string]string{
 					"kind": "backend_error",
 				})
 				if recordErr != nil {
@@ -381,7 +406,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				Role:    "assistant",
 				Content: result.Action.Message,
 			})
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 				"kind": "yield",
 			})
 			if err != nil {
@@ -423,7 +448,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 					"tool":  result.Action.ToolCall.Name,
 					"error": repeatErr.Error(),
-				}, nil, map[string]string{
+				}, latest(), map[string]string{
 					"tool": result.Action.ToolCall.Name,
 				})
 				if recordErr != nil {
@@ -442,7 +467,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				})
 				if loopWarningIssued {
 					exitStatus := kernel.ExitStatus{Code: 1, Reason: repeatErr.Error(), Retryable: false}
-					artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+					artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 						"kind": "loop_retry_suppressed",
 					})
 					if err != nil {
@@ -464,7 +489,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 					"tool":  result.Action.ToolCall.Name,
 					"error": repeatErr.Error(),
-				}, nil, map[string]string{
+				}, latest(), map[string]string{
 					"tool": result.Action.ToolCall.Name,
 				})
 				if recordErr != nil {
@@ -493,13 +518,13 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 						Role:    "tool",
 						Content: fmt.Sprintf("tool_cancelled name=%s reason=interrupted_by_user", result.Action.ToolCall.Name),
 					})
-					return r.cancelRun(ctx, pid, session)
+					return r.cancelRun(ctx, pid, session, latest())
 				}
 				if options.ContinueOnToolError {
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 						"tool":  result.Action.ToolCall.Name,
 						"error": err.Error(),
-					}, nil, map[string]string{
+					}, latest(), map[string]string{
 						"tool": result.Action.ToolCall.Name,
 					})
 					if recordErr != nil {
@@ -524,7 +549,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("tool_result", pid, toolResult, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("tool_result", pid, toolResult, latest(), map[string]string{
 				"tool": toolResult.Tool,
 			})
 			if err != nil {
@@ -578,7 +603,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 					Role:    "tool",
 					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=interrupted_by_user", result.Action.Delegate.AgentID),
 				})
-				return r.cancelRun(ctx, pid, session)
+				return r.cancelRun(ctx, pid, session, latest())
 			}
 			if err != nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
@@ -587,7 +612,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: checkpointID}, err
 			}
-			delegateArtifact, err := r.Artifacts.CreateJSON("delegate_result", pid, delegateResult, nil, map[string]string{
+			delegateArtifact, err := r.Artifacts.CreateJSON("delegate_result", pid, delegateResult, nonEmpty(delegateResult.CheckpointID), map[string]string{
 				"agent_id": delegateResult.AgentID,
 				"pid":      delegateResult.PID,
 			})
@@ -631,7 +656,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			if err != nil {
 				return r.failRuntime(pid, checkpointID, err)
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, latest(), map[string]string{
 				"direction": "send",
 				"to":        message.To,
 			})
@@ -665,7 +690,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			if err != nil {
 				return r.failRuntime(pid, checkpointID, err)
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_publish", pid, messages, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_publish", pid, messages, latest(), map[string]string{
 				"topic": result.Action.Publish.Topic,
 			})
 			if err != nil {
@@ -697,7 +722,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			if err := r.Bus.Subscribe(pid, result.Action.Subscribe.Topic); err != nil {
 				return r.failRuntime(pid, checkpointID, err)
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_subscription", pid, result.Action.Subscribe, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_subscription", pid, result.Action.Subscribe, latest(), map[string]string{
 				"topic": result.Action.Subscribe.Topic,
 			})
 			if err != nil {
@@ -709,7 +734,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				Content: "subscribe:topic=" + result.Action.Subscribe.Topic,
 			})
 		case "wait":
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 				"kind": "blocked",
 			})
 			if err != nil {
@@ -729,7 +754,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 				}
 				return r.failMalformed(pid, checkpointID)
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+			artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 				"kind": "final",
 			})
 			if err != nil {
@@ -754,7 +779,7 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 			return r.failMalformed(pid, checkpointID)
 		}
 
-		artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+		artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, latest(), map[string]string{
 			"kind": "intermediate",
 		})
 		if err != nil {
@@ -945,7 +970,11 @@ func loopSensitiveTool(name string) bool {
 	}
 }
 
-func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session) (Session, error) {
+// compactSessionMemory moves older history into a memory_segment artifact
+// the runtime owns, cut from the checkpoint named by parents. It needs no
+// writable path, the agent's file tools cannot reach it, and every
+// compaction gets its own artifact, so resumes never collide.
+func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session, parents []string) (Session, error) {
 	policy := r.compactionPolicy()
 	if !policy.ShouldCompact(session.Messages) {
 		return session, nil
@@ -954,72 +983,39 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		return session, nil
 	}
 
-	root, ok := compactibleMemoryRoot(process)
-	if !ok {
-		return session, nil
-	}
-
 	cut := len(session.Messages) - policy.KeepMessages
 	older := append([]Message(nil), session.Messages[:cut]...)
 	recent := append([]Message(nil), session.Messages[cut:]...)
-	ref, err := persistSessionMemory(root, process.PID, session.MemorySequence+1, older)
+	segment := memorySegment{
+		ProcessID:    process.PID,
+		Sequence:     session.MemorySequence + 1,
+		MessageCount: len(older),
+		Summary:      summarizeMemoryMessages(older),
+		Messages:     older,
+	}
+	record, err := r.Artifacts.CreateJSON("memory_segment", process.PID, segment, parents, map[string]string{
+		"sequence": strconv.Itoa(segment.Sequence),
+	})
 	if err != nil {
 		return Session{}, err
 	}
-	session.MemoryRefs = append(session.MemoryRefs, ref)
+	session.MemoryRefs = append(session.MemoryRefs, MemoryRef{
+		ArtifactID:   record.ID,
+		Summary:      segment.Summary,
+		MessageCount: segment.MessageCount,
+	})
 	session.MemorySequence++
 	session.Messages = recent
 	return session, nil
 }
 
-func compactibleMemoryRoot(process kernel.Process) (string, bool) {
-	evaluator := capability.Evaluator{}
-	for _, candidate := range process.CapabilitySet.WritePaths {
-		candidate = filepath.Clean(candidate)
-		if evaluator.CanWrite(candidate, process.Mounts, process.CapabilitySet) && evaluator.CanRead(candidate, process.Mounts, process.CapabilitySet) {
-			return candidate, true
-		}
-	}
-	return "", false
-}
-
-func persistSessionMemory(root, pid string, sequence int, messages []Message) (MemoryRef, error) {
-	dir := filepath.Join(root, sessionMemoryDirName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return MemoryRef{}, err
-	}
-	fileName := fmt.Sprintf("%s-memory-%04d.json", sanitizeMemoryFileComponent(pid), sequence)
-	path := filepath.Join(dir, fileName)
-	payload := struct {
-		ProcessID    string    `json:"process_id"`
-		Sequence     int       `json:"sequence"`
-		MessageCount int       `json:"message_count"`
-		Summary      string    `json:"summary,omitempty"`
-		Messages     []Message `json:"messages"`
-	}{
-		ProcessID:    pid,
-		Sequence:     sequence,
-		MessageCount: len(messages),
-		Summary:      summarizeMemoryMessages(messages),
-		Messages:     messages,
-	}
-	content, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return MemoryRef{}, err
-	}
-	if err := os.WriteFile(path, content, 0o644); err != nil {
-		return MemoryRef{}, err
-	}
-	return MemoryRef{
-		Path:         path,
-		Summary:      payload.Summary,
-		MessageCount: len(messages),
-	}, nil
-}
-
-func sanitizeMemoryFileComponent(value string) string {
-	replacer := strings.NewReplacer("/", "-", "\\", "-", " ", "-")
-	return replacer.Replace(strings.TrimSpace(value))
+// memorySegment is the payload of a memory_segment artifact.
+type memorySegment struct {
+	ProcessID    string    `json:"process_id"`
+	Sequence     int       `json:"sequence"`
+	MessageCount int       `json:"message_count"`
+	Summary      string    `json:"summary,omitempty"`
+	Messages     []Message `json:"messages"`
 }
 
 func summarizeMemoryMessages(messages []Message) string {
@@ -1089,8 +1085,8 @@ func truncateMemorySummary(value string, limit int) string {
 
 // cancelRun checkpoints session and parks the process as ready so a later
 // Resume picks up where the cancelled run stopped.
-func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Session) (RunResult, error) {
-	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, nil, map[string]string{
+func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Session, parents []string) (RunResult, error) {
+	artifactRecord, err := r.Artifacts.CreateJSON("checkpoint", pid, session, parents, map[string]string{
 		"kind": "cancelled",
 	})
 	if err != nil {
@@ -1102,10 +1098,63 @@ func (r *AgentRuntime) cancelRun(ctx context.Context, pid string, session Sessio
 	return RunResult{PID: pid, CheckpointID: artifactRecord.ID, Session: session, Cancelled: true}, fmt.Errorf("%w: %w", ErrRunCancelled, context.Cause(ctx))
 }
 
+// RestoreCheckpoint reads a checkpoint artifact; anything else is refused.
+// Resume and Recover additionally require the checkpoint to be the
+// process's own (ownedCheckpoint).
 func (r *AgentRuntime) RestoreCheckpoint(id string) (Session, error) {
+	record, err := r.Artifacts.Metadata(id)
+	if err != nil {
+		return Session{}, err
+	}
+	if record.Type != "checkpoint" {
+		return Session{}, fmt.Errorf("%w: %s is a %s", ErrNotACheckpoint, id, record.Type)
+	}
 	var session Session
-	err := r.Artifacts.ReadJSON(id, &session)
+	err = r.Artifacts.ReadJSON(id, &session)
 	return session, err
+}
+
+// ownedCheckpoint restores id for pid only if it is a checkpoint produced
+// by pid or a process pid was recovered from (its resumed_from chain).
+func (r *AgentRuntime) ownedCheckpoint(pid, id string) (Session, error) {
+	record, err := r.Artifacts.Metadata(id)
+	if err != nil {
+		return Session{}, err
+	}
+	if err := r.ownedBy(pid, record); err != nil {
+		return Session{}, err
+	}
+	return r.RestoreCheckpoint(id)
+}
+
+// ownedBy reports whether record was produced by pid or its resumed_from
+// chain.
+func (r *AgentRuntime) ownedBy(pid string, record artifact.Artifact) error {
+	current := pid
+	for hops := 0; current != "" && hops < maxResumeChain; hops++ {
+		if record.ProducerPID == current {
+			return nil
+		}
+		process, err := r.Kernel.Get(current)
+		if err != nil {
+			return err
+		}
+		current = process.Metadata["resumed_from"]
+	}
+	return fmt.Errorf("%w: %s was produced by %s, not %s", ErrCheckpointNotOwned, record.ID, record.ProducerPID, pid)
+}
+
+// bindArtifactProducers makes the artifact store refuse producer PIDs the
+// kernel does not know.
+func (r *AgentRuntime) bindArtifactProducers() {
+	if r.Artifacts == nil || r.Kernel == nil {
+		return
+	}
+	k := r.Kernel
+	r.Artifacts.BindProducers(func(pid string) error {
+		_, err := k.Get(pid)
+		return err
+	})
 }
 
 func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
@@ -1135,7 +1184,9 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 // delegate (spawn_agent) and send/publish/subscribe (message_agent) actions,
 // so no action reaches what its tool form would be denied.
 func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action string) error {
-	if (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+	// read_memory only returns the process's own compacted history, which was
+	// already in its context, so every agent may use it.
+	if capabilityName == "read_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
 		return nil
 	}
 	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
@@ -1174,7 +1225,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 
 func isRuntimeTool(name string) bool {
 	switch name {
-	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease":
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory":
 		return true
 	default:
 		return false
@@ -1260,7 +1311,7 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		}
 		return result, nil
 	case "checkpoint":
-		record, err := r.Artifacts.CreateJSON("checkpoint", process.PID, session, nil, map[string]string{
+		record, err := r.Artifacts.CreateJSON("checkpoint", process.PID, session, nonEmpty(checkpointID), map[string]string{
 			"kind": "manual",
 		})
 		if err != nil {
@@ -1308,15 +1359,50 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 				"artifacts": strings.Join(lines, "\n"),
 			},
 		}, nil
+	case "read_memory":
+		id := strings.TrimSpace(call.Args["artifact_id"])
+		record, err := r.Artifacts.Metadata(id)
+		if err != nil {
+			return tools.Result{}, fmt.Errorf("read_memory %q: %w", id, err)
+		}
+		if record.Type != "memory_segment" {
+			return tools.Result{}, fmt.Errorf("read_memory: %s is not a memory segment", id)
+		}
+		if err := r.ownedBy(process.PID, record); err != nil {
+			return tools.Result{}, err
+		}
+		var segment memorySegment
+		if err := r.Artifacts.ReadJSON(id, &segment); err != nil {
+			return tools.Result{}, err
+		}
+		lines := make([]string, 0, len(segment.Messages))
+		for _, message := range segment.Messages {
+			lines = append(lines, message.Role+": "+message.Content)
+		}
+		return tools.Result{
+			Tool:    call.Name,
+			Summary: "read memory segment",
+			Output: map[string]string{
+				"artifact_id":   id,
+				"message_count": strconv.Itoa(segment.MessageCount),
+				"messages":      strings.Join(lines, "\n"),
+			},
+		}, nil
 	case "publish_artifact":
-		artifactType := strings.TrimSpace(call.Args["type"])
-		if artifactType == "" {
-			artifactType = "note"
+		requested := strings.TrimPrefix(strings.TrimSpace(call.Args["type"]), artifact.PublishedPrefix)
+		if requested == "" {
+			requested = "note"
+		}
+		if artifact.IsReserved(requested) {
+			r.logDenial(process.PID, call.Name, call.Name, "", "reserved artifact type "+requested)
+			return tools.Result{}, fmt.Errorf("%w: %s", artifact.ErrReservedType, requested)
 		}
 		body := call.Args["body"]
-		record, err := r.Artifacts.CreateJSON(artifactType, process.PID, map[string]string{
+		// Agent publications live under their own prefix, so they can never
+		// pass for a checkpoint, verdict or other runtime record.
+		record, err := r.Artifacts.CreateJSON(artifact.PublishedPrefix+requested, process.PID, map[string]string{
 			"body": body,
-		}, nil, map[string]string{
+		}, nonEmpty(checkpointID), map[string]string{
 			"kind": "published",
 		})
 		if err != nil {
@@ -1328,7 +1414,6 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 			Output: map[string]string{
 				"artifact_id": record.ID,
 				"type":        record.Type,
-				"path":        record.Path,
 			},
 		}, nil
 	case "acquire_lease":
@@ -1435,6 +1520,14 @@ func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, message
 		})
 	}
 	return session, nil
+}
+
+// nonEmpty is a one-element parent list, or nil for no parent.
+func nonEmpty(id string) []string {
+	if id == "" {
+		return nil
+	}
+	return []string{id}
 }
 
 func recoveredMetadata(in map[string]string, previousPID string) map[string]string {

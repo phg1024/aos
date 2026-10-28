@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Refactor Phase 13 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Phase 13 Report: Trustworthy Artifacts</h1>
+    <p>Design-review item 5 and the exit-origin follow-up. Artifacts are now tamper-evident, durable across processes, linked into a graph that can be walked from a run's summary, and owned. Agents can no longer publish what looks like a runtime record, resume someone else's checkpoint, or overwrite their own compacted history.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>Exit origin</b> (<code>4c27580</code>). <code>ExitStatus.Origin</code> is <code>"agent"</code> only for an agent's own exit action, set by the runtime. A verifier failure with that origin stands until the work changes, whatever <code>retryable</code> flag the model chose. Only failures the runtime recorded can be retried.</li>
+    <li><b>Shared lock</b> (<code>bc97698</code>). <code>internal/filelock</code> (flock on unix) now backs the kernel, the artifact store and <code>cmd/aos</code>'s run lock, so <code>./...</code> builds for Windows.</li>
+    <li><b>Content addressing.</b> Each index entry records the sha256 of its payload. Every <code>ReadJSON</code> verifies it and returns <code>ErrArtifactTampered</code> on a mismatch. Payloads are written read-only (0444).</li>
+    <li><b>Durability.</b> Payloads and <code>index.json</code> are written as a temp file and renamed into place, under a mutex plus <code>filelock</code> on <code>artifacts.lock</code>. Artifact IDs come from the larger of the stored counter and the index, so a stale counter cannot reuse one.</li>
+    <li><b>Lineage.</b> <code>CreateJSON</code> rejects unknown parents (<code>ErrUnknownParent</code>), and, once bound, unknown producers (<code>ErrUnknownProducer</code>). The runtime and engine bind the kernel through <code>Store.BindProducers</code>, so every caller is covered without changing how a store is built.</li>
+    <li><b>Parent links.</b>
+      <ul>
+        <li>Checkpoints chain to the previous checkpoint, or to the checkpoint the run resumed from.</li>
+        <li>Tool results, errors, mailbox records, published artifacts and memory segments name the checkpoint they ran under.</li>
+        <li>A <code>delegate_result</code> names the child's final checkpoint, and an <code>agent_run</code> its own.</li>
+        <li><code>verification</code> names the verifier's final checkpoint.</li>
+        <li><code>workflow_summary</code> names every <code>agent_run</code> and the verdict.</li>
+      </ul>
+    </li>
+    <li><b>Reserved types.</b> <code>artifact.IsReserved</code> covers every type the runtime, engine and contract harness produce. <code>publish_artifact</code> refuses those (logging <code>capability.denied</code>) and stores everything else as <code>published.&lt;name&gt;</code>. Its result no longer includes the payload path.</li>
+    <li><b>Checkpoint ownership.</b> <code>RestoreCheckpoint</code> accepts only checkpoints (<code>ErrNotACheckpoint</code>). <code>Resume</code> and <code>Recover</code> also require the checkpoint to have been produced by the process or by its <code>resumed_from</code> chain (<code>ErrCheckpointNotOwned</code>).</li>
+    <li><b>Runtime-owned memory.</b> Compaction writes a <code>memory_segment</code> artifact and no longer needs a writable path. <code>MemoryRef.ArtifactID</code> replaces the workspace path, and the <code>read_memory</code> tool returns a process's own segments.</li>
+  </ul>
+
+  <h2>Decisions Made</h2>
+  <table>
+    <tr><th>Choice</th><th>Why</th></tr>
+    <tr><td>Producer check bound by the runtime and engine, not by each <code>main</code>.</td><td>Every run already holds the kernel. Binding at run start covers <code>aos run</code>, the TUI and the demos without changing their construction code.</td></tr>
+    <tr><td><code>read_memory</code> needs no capability grant.</td><td>It returns only the process's own compacted history, which was already in its context, so it grants nothing new. It is limited to segments produced by the process or its <code>resumed_from</code> chain.</td></tr>
+    <tr><td><code>Metadata</code> and <code>List</code> do not hash payloads.</td><td>They return index entries only. Payload contents are only ever read through <code>ReadJSON</code>, which verifies.</td></tr>
+  </table>
+
+  <h2>Compatibility</h2>
+  <ul>
+    <li>Index entries without <code>sha256</code>, from before this change, are read without verification. New entries are always hashed.</li>
+    <li>A <code>MemoryRef</code> with only a <code>path</code> (old checkpoints) still decodes. Old <code>.aos-memory</code> files are left where they are.</li>
+    <li>New on-disk items: an index <code>sha256</code> field, read-only payload files, and <code>artifacts/artifacts.lock</code>.</li>
+  </ul>
+
+  <h2>Known Gaps</h2>
+  <ul>
+    <li>Tampering is detected but not prevented. An unconfined <code>run</code> can still rewrite a payload (item 8).</li>
+    <li>Legacy entries without a hash are trusted.</li>
+    <li>The lease manager and bus are not yet safe across processes. <code>internal/filelock</code> is ready to use for them.</li>
+  </ul>
+
+  <h2>Tests Run</h2>
+  <ul>
+    <li><code>make test</code>: all 18 packages pass. <code>go vet ./...</code> is clean, and <code>./...</code> builds for Linux and Windows.</li>
+    <li>Artifact store:
+      <ul>
+        <li>a tampered payload is detected, and the file is 0444;</li>
+        <li>a crash leftover (stray temp index) and a stale counter break nothing;</li>
+        <li>unknown parents and producers are rejected;</li>
+        <li>an old-format store loads;</li>
+        <li>three subprocesses plus two in-process stores create 125 artifacts, none lost, with gap-free IDs. The same test fails on the old store with a torn <code>index.json</code>.</li>
+      </ul>
+    </li>
+    <li>Runtime:
+      <ul>
+        <li>a reserved publish is refused and logged;</li>
+        <li>resuming another process's checkpoint, or a tool result, is refused, while a recovered process may use its predecessor's;</li>
+        <li>compaction works without a write path, <code>write_file</code> cannot reach a segment, and <code>read_memory</code> returns only the process's own history;</li>
+        <li>two resumes from one checkpoint keep separate segments;</li>
+        <li>checkpoints and tool results form a chain.</li>
+      </ul>
+    </li>
+    <li>Engine: walking from <code>workflow_summary</code> reaches all three <code>agent_run</code>s and their checkpoints, and the verdict with the verifier's checkpoint.</li>
+  </ul>
+</body>
+</html>

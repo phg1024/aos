@@ -236,6 +236,12 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if err != nil {
 		return RunSummary{}, err
 	}
+	// Artifacts may only name processes the kernel knows.
+	k := e.Kernel
+	e.Artifacts.BindProducers(func(pid string) error {
+		_, err := k.Get(pid)
+		return err
+	})
 	root, err := e.Kernel.Spawn(kernel.ProcessSpec{
 		Role:     "workflow:" + spec.Name,
 		Metadata: map[string]string{"goal": req.Goal},
@@ -262,7 +268,11 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		if err != nil {
 			return RunSummary{}, err
 		}
-		record, err := e.Artifacts.CreateJSON("verification", root.PID, verdict, nil, map[string]string{
+		var verifierCheckpoint []string
+		if verifierRun, ok := findRun(run, verdict.VerifierPID); ok && verifierRun.CheckpointID != "" {
+			verifierCheckpoint = []string{verifierRun.CheckpointID}
+		}
+		record, err := e.Artifacts.CreateJSON("verification", root.PID, verdict, verifierCheckpoint, map[string]string{
 			"policy":       string(policy),
 			"verifier":     verdict.Verifier,
 			"verifier_pid": verdict.VerifierPID,
@@ -276,7 +286,12 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		summary.ExitStatus = gateExit(summary.ExitStatus, policy, verdict)
 	}
 
-	allRuns, err := e.Artifacts.CreateJSON("workflow_summary", root.PID, summary, nil, map[string]string{
+	// The summary heads the run's graph: every agent_run, and the verdict.
+	summaryParents := agentRunIDs(run)
+	if summary.VerificationID != "" {
+		summaryParents = append(summaryParents, summary.VerificationID)
+	}
+	allRuns, err := e.Artifacts.CreateJSON("workflow_summary", root.PID, summary, summaryParents, map[string]string{
 		"workflow": spec.Name,
 	})
 	if err != nil {
@@ -388,7 +403,11 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	for _, child := range childRuns {
 		run.ResultID = child.ResultID
 	}
-	artifactRecord, err := e.Artifacts.CreateJSON("agent_run", process.PID, run, nil, map[string]string{
+	var finalCheckpoint []string
+	if run.CheckpointID != "" {
+		finalCheckpoint = []string{run.CheckpointID}
+	}
+	artifactRecord, err := e.Artifacts.CreateJSON("agent_run", process.PID, run, finalCheckpoint, map[string]string{
 		"agent_id": agent.ID,
 	})
 	if err != nil {
@@ -451,6 +470,31 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			CheckpointID: childRun.CheckpointID,
 		}, nil
 	}
+}
+
+// agentRunIDs lists the agent_run artifact IDs of run and every descendant.
+func agentRunIDs(run AgentRun) []string {
+	var ids []string
+	if run.ResultID != "" {
+		ids = append(ids, run.ResultID)
+	}
+	for _, child := range run.Children {
+		ids = append(ids, agentRunIDs(child)...)
+	}
+	return ids
+}
+
+// findRun finds the run of pid in run's tree.
+func findRun(run AgentRun, pid string) (AgentRun, bool) {
+	if run.PID == pid {
+		return run, true
+	}
+	for _, child := range run.Children {
+		if found, ok := findRun(child, pid); ok {
+			return found, true
+		}
+	}
+	return AgentRun{}, false
 }
 
 func formatToolCall(call runtime.ToolCall) string {

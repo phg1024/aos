@@ -13,9 +13,13 @@ func TestArtifactStoreCreatesAndReadsJSON(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 
+	root, err := store.CreateJSON("goal", "pid-1", map[string]string{"goal": "plan it"}, nil, nil)
+	if err != nil {
+		t.Fatalf("create root: %v", err)
+	}
 	created, err := store.CreateJSON("plan", "pid-1", map[string]any{
 		"steps": []string{"a", "b"},
-	}, []string{"art-root"}, map[string]string{"role": "planner"})
+	}, []string{root.ID}, map[string]string{"role": "planner"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -24,7 +28,7 @@ func TestArtifactStoreCreatesAndReadsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metadata: %v", err)
 	}
-	if len(meta.ParentIDs) != 1 || meta.ParentIDs[0] != "art-root" {
+	if len(meta.ParentIDs) != 1 || meta.ParentIDs[0] != root.ID {
 		t.Fatalf("unexpected parents %#v", meta.ParentIDs)
 	}
 
