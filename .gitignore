@@ -43,7 +43,7 @@ pi_compute
 pi_compute.cpp
 pi_compute.py
 compute_pi.py
-aos-tui
+/aos-tui
 
 # Generated demo/report outputs
 reports/rasterizer-team-demo/
