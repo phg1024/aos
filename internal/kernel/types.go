@@ -23,8 +23,20 @@ var ErrProcessNotFound = errors.New("process not found")
 var ErrProcessNotExited = errors.New("process has not exited")
 
 // ErrProcessAlreadyExited is returned when Exit would change the status of a
-// process that has already exited; exit is terminal.
+// process that has already exited, or Transition would move it; exit is
+// terminal.
 var ErrProcessAlreadyExited = fmt.Errorf("%w: process already exited", ErrInvalidTransition)
+
+// ErrExitRequiresStatus: only Exit, which records an exit status, may move a
+// process to exited, so every exited process has a record Await can return.
+var ErrExitRequiresStatus = fmt.Errorf("%w: only Exit can move a process to exited", ErrInvalidTransition)
+
+// ErrReservedEventType: event types under ReservedEventPrefix are written by
+// the kernel alone, so callers cannot log a false lifecycle event.
+var ErrReservedEventType = errors.New("event type is reserved for the kernel")
+
+// ReservedEventPrefix marks the kernel's own lifecycle events.
+const ReservedEventPrefix = "process."
 
 type ExitStatus struct {
 	Code      int    `json:"code"`

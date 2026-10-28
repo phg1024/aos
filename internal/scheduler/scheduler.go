@@ -149,6 +149,20 @@ func (s *Scheduler) dispatch(ctx context.Context, pid string) error {
 	}
 
 	nextState := decision.NextState
+	if nextState == kernel.StateExited {
+		// Only Exit may end a process. Keep an exit the runner recorded
+		// itself; otherwise record that it gave no status.
+		if current, getErr := s.Kernel.Get(pid); getErr == nil && current.State == kernel.StateExited {
+			s.log(pid, "exit", "recorded by runner")
+			return nil
+		}
+		missing := kernel.ExitStatus{Code: 1, Reason: "runner returned exited without an exit status", Retryable: false}
+		if _, err := s.Kernel.Exit(pid, missing); err != nil {
+			return err
+		}
+		s.log(pid, "exit", missing.Reason)
+		return nil
+	}
 	if nextState == "" {
 		nextState = kernel.StateReady
 	}

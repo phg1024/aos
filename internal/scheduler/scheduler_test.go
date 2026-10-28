@@ -142,3 +142,58 @@ func TestSchedulerKeepsExitRecordedByRunner(t *testing.T) {
 		t.Fatalf("expected runner exit %#v to be kept, got %#v", status, got)
 	}
 }
+
+// A runner that asks for exited without a status must not leave a process
+// that is exited but has no exit record.
+func TestSchedulerRecordsExitWhenRunnerOmitsStatus(t *testing.T) {
+	k, err := kernel.New(filepath.Join(t.TempDir(), "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	process, _ := k.Spawn(kernel.ProcessSpec{Role: "worker"})
+	runner := &fakeRunner{steps: map[string][]scheduler.Decision{process.PID: {{NextState: kernel.StateExited}}}}
+
+	s := scheduler.New(k, runner)
+	s.Enqueue(process.PID)
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	status, err := k.Await(process.PID)
+	if err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	if status.Code != 1 || status.Retryable || status.Reason != "runner returned exited without an exit status" {
+		t.Fatalf("unexpected exit record %#v", status)
+	}
+}
+
+// A runner that records its own exit and then reports exited keeps that exit.
+func TestSchedulerKeepsRunnerExitWhenDecisionSaysExited(t *testing.T) {
+	k, err := kernel.New(filepath.Join(t.TempDir(), "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	process, _ := k.Spawn(kernel.ProcessSpec{Role: "worker"})
+	status := kernel.ExitStatus{Code: 0, Reason: "finished by runner"}
+
+	s := scheduler.New(k, exitedDecisionRunner{kernel: k, status: status})
+	s.Enqueue(process.PID)
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got, err := k.Await(process.PID); err != nil || got != status {
+		t.Fatalf("expected runner exit %#v, got %#v (err %v)", status, got, err)
+	}
+}
+
+type exitedDecisionRunner struct {
+	kernel *kernel.Kernel
+	status kernel.ExitStatus
+}
+
+func (r exitedDecisionRunner) Step(_ context.Context, pid string) (scheduler.Decision, error) {
+	if _, err := r.kernel.Exit(pid, r.status); err != nil {
+		return scheduler.Decision{}, err
+	}
+	return scheduler.Decision{NextState: kernel.StateExited}, nil
+}

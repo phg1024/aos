@@ -1,7 +1,9 @@
 package kernel
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"aos/internal/capability"
@@ -54,9 +56,15 @@ func (k *Kernel) Spawn(spec ProcessSpec) (Process, error) {
 }
 
 func (k *Kernel) Transition(pid string, next ProcessState) (Process, error) {
+	if next == StateExited {
+		return Process{}, ErrExitRequiresStatus
+	}
 	process, err := k.store.LoadProcess(pid)
 	if err != nil {
 		return Process{}, err
+	}
+	if process.State == StateExited {
+		return Process{}, ErrProcessAlreadyExited
 	}
 	if err := ValidateTransition(process.State, next); err != nil {
 		return Process{}, err
@@ -120,7 +128,13 @@ func (k *Kernel) Await(pid string) (ExitStatus, error) {
 func (k *Kernel) Get(pid string) (Process, error) { return k.store.LoadProcess(pid) }
 func (k *Kernel) Processes() ([]Process, error)   { return k.store.ListProcesses() }
 func (k *Kernel) Events() ([]Event, error)        { return k.store.ListEvents() }
+
+// LogEvent records a caller event. Types starting with ReservedEventPrefix
+// belong to the kernel and are refused.
 func (k *Kernel) LogEvent(pid, eventType string, data map[string]string) error {
+	if strings.HasPrefix(eventType, ReservedEventPrefix) {
+		return fmt.Errorf("%w: %s", ErrReservedEventType, eventType)
+	}
 	return k.appendEvent(pid, eventType, data)
 }
 
