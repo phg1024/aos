@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -743,80 +742,35 @@ func assessToolResult(result tools.Result) (bool, string) {
 	return true, ""
 }
 
-const (
-	maxActionNotesChars  = 2000
-	maxActionArgChars    = 300
-	maxDelegateGoalChars = 1000
-)
-
-// bulkToolArgs hold file content; their size is recorded instead of the text,
-// which already lives on disk.
-var bulkToolArgs = map[string]bool{"content": true, "old_text": true, "new_text": true}
-
-// actionRecord renders an action for the session history in the same action
-// JSON the agent is asked to produce, so the history doubles as format
-// examples. Message actions are recorded verbatim elsewhere and return "".
+// actionRecord renders an action for the session history exactly as the
+// agent sent it, in the action JSON the agent is asked to produce. Nothing is
+// elided: models copy whatever shape their own past turns have, so a summary
+// or placeholder here gets written back as real output. Message actions are
+// recorded verbatim elsewhere and return "".
 func actionRecord(action GenerateAction) string {
-	record, ok := recordedAction(action)
-	if !ok {
+	if !recordableAction(action) {
 		return ""
 	}
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(GenerateResult{Action: record}); err != nil {
+	if err := encoder.Encode(GenerateResult{Action: action}); err != nil {
 		return ""
 	}
 	return strings.TrimSpace(buffer.String())
 }
 
-// recordedAction copies an action for the history, replacing bulk file content
-// with its size (the text already lives on disk) and trimming long strings.
-func recordedAction(action GenerateAction) (GenerateAction, bool) {
-	record := action
-	record.Notes = truncateRecord(action.Notes, maxActionNotesChars)
+func recordableAction(action GenerateAction) bool {
 	switch action.Type {
 	case "tool":
-		if action.ToolCall == nil || action.ToolCall.Name == "" {
-			return GenerateAction{}, false
-		}
-		args := make(map[string]string, len(action.ToolCall.Args))
-		for key, value := range action.ToolCall.Args {
-			if bulkToolArgs[key] {
-				args[key] = tools.OmittedContent(len(value))
-				continue
-			}
-			args[key] = truncateRecord(value, maxActionArgChars)
-		}
-		record.ToolCall = &ToolCall{Name: action.ToolCall.Name, Args: args}
+		return action.ToolCall != nil && action.ToolCall.Name != ""
 	case "delegate":
-		if action.Delegate == nil || action.Delegate.AgentID == "" {
-			return GenerateAction{}, false
-		}
-		delegate := *action.Delegate
-		delegate.Goal = truncateRecord(delegate.Goal, maxDelegateGoalChars)
-		record.Delegate = &delegate
-	case "exit":
-		if action.ExitStatus != nil {
-			status := *action.ExitStatus
-			status.Reason = truncateRecord(status.Reason, maxActionArgChars)
-			record.ExitStatus = &status
-		}
+		return action.Delegate != nil && action.Delegate.AgentID != ""
 	case "message", "":
-		return GenerateAction{}, false
+		return false
+	default:
+		return true
 	}
-	return record, true
-}
-
-func truncateRecord(value string, limit int) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= limit {
-		return value
-	}
-	for limit > 0 && !utf8.RuneStart(value[limit]) {
-		limit--
-	}
-	return value[:limit] + "..."
 }
 
 func toolCallSignature(call ToolCall) string {

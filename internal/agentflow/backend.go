@@ -207,7 +207,6 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Use notes as your working memory: a few short lines holding the plan, what is already done, and the next step, so you never have to re-derive them. ")
 	builder.WriteString("Write notes on every action of a multi-step task and update them as the plan changes. ")
 	builder.WriteString("History entries from the assistant role are your own earlier notes and actions; trust them and continue from them instead of re-reading or rewriting files you already handled. ")
-	builder.WriteString("In those entries, file text you sent is replaced by a marker like \"(content omitted from history: 1436 bytes; the file on disk has the full text)\"; the marker is never valid content, so always send the complete real text when you write or edit a file. ")
 	builder.WriteString("Keeping the envelope compact never applies to string values: file content passed to write_file or edit_file must be formatted exactly as it should appear on disk, with normal line breaks and indentation encoded as \\n in the JSON string. Never squash source code onto fewer lines to shorten the response. ")
 	builder.WriteString("Use 'tool' only for allowed tools. ")
 	builder.WriteString("Use 'delegate' only for allowed agents. ")

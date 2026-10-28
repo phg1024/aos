@@ -1340,11 +1340,10 @@ func TestAgentRuntimeRecordsNotesAndActionsInHistory(t *testing.T) {
 		t.Fatalf("unexpected recorded action %#v", recorded.Action)
 	}
 	args := recorded.Action.ToolCall.Args
-	if args["path"] != target || args["content"] != tools.OmittedContent(len(content)) {
-		t.Fatalf("expected path kept and content replaced by an omission marker, got %#v", args)
-	}
-	if !tools.IsOmittedContent(args["content"]) {
-		t.Fatalf("expected the write_file tool to recognize the marker %q", args["content"])
+	// Recorded verbatim: models copy the shape of their own past turns, so no
+	// argument may be summarized or elided.
+	if args["path"] != target || args["content"] != content {
+		t.Fatalf("expected the action recorded verbatim, got %#v", args)
 	}
 	if history[2].Role != "tool" || !strings.HasPrefix(history[2].Content, "write_file:") {
 		t.Fatalf("expected tool result to stay last, got %#v", history[2])

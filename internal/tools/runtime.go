@@ -35,24 +35,6 @@ var (
 
 var ErrToolDenied = errors.New("tool execution denied by capabilities")
 
-// errOmittedContent is returned when an agent sends a history placeholder in
-// place of real file text.
-var errOmittedContent = errors.New("content is a history placeholder, not file text; send the complete text you want written")
-
-// omittedContentPattern matches OmittedContent markers and the earlier "<N bytes>" form.
-var omittedContentPattern = regexp.MustCompile(`^\s*(?:\(content omitted from history: \d+ bytes[^)]*\)|<\d+ bytes>)\s*$`)
-
-// OmittedContent is what agent history shows instead of file content an agent
-// sent, since that text already lives on disk.
-func OmittedContent(size int) string {
-	return fmt.Sprintf("(content omitted from history: %d bytes; the file on disk has the full text)", size)
-}
-
-// IsOmittedContent reports whether value is a history placeholder rather than real content.
-func IsOmittedContent(value string) bool {
-	return omittedContentPattern.MatchString(value)
-}
-
 var ErrPathDenied = errors.New("path access denied by capabilities")
 
 type Request struct {
@@ -87,9 +69,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		content, ok := req.Args["content"]
 		if !ok {
 			return Result{}, errors.New("write_file requires content")
-		}
-		if IsOmittedContent(content) {
-			return Result{}, fmt.Errorf("write_file %w", errOmittedContent)
 		}
 		if !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
 			return Result{}, ErrPathDenied
@@ -141,9 +120,6 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 		}
 		if oldText == "" {
 			return Result{}, errors.New("edit_file requires old_text")
-		}
-		if IsOmittedContent(oldText) || IsOmittedContent(newText) {
-			return Result{}, fmt.Errorf("edit_file %w", errOmittedContent)
 		}
 		if !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) || !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) {
 			return Result{}, ErrPathDenied

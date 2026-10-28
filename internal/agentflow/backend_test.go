@@ -611,7 +611,6 @@ func TestPromptBackendListsToolSignatures(t *testing.T) {
 		"- edit_file(path, old_text, new_text, replace_all?)\n",
 		"- web_fetch(url, offset?, timeout?)\n",
 		"- custom_tool\n",
-		"the marker is never valid content",
 	} {
 		if !strings.Contains(completer.systemPrompt, want) {
 			t.Fatalf("expected system prompt to contain %q:\n%s", want, completer.systemPrompt)
