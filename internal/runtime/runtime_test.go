@@ -1191,3 +1191,94 @@ func TestAgentRuntimeSuppressesRepeatedUnhelpfulToolCall(t *testing.T) {
 		t.Fatalf("expected repeated-call suppression in session %#v", result.Session.Messages)
 	}
 }
+
+func TestContextCompactionPolicyTriggersAtRatioOfWindow(t *testing.T) {
+	policy := runtime.ContextCompactionPolicy(262144, 0.8)
+	if want := 209715 * runtime.EstimatedCharsPerToken; policy.MaxChars != want {
+		t.Fatalf("expected max chars %d, got %d", want, policy.MaxChars)
+	}
+	if policy.MaxMessages != 0 {
+		t.Fatalf("expected no message-count trigger, got %d", policy.MaxMessages)
+	}
+
+	small := []runtime.Message{{Role: "user", Content: strings.Repeat("x", 1000)}}
+	if policy.ShouldCompact(small) {
+		t.Fatal("expected small history not to compact")
+	}
+	var many []runtime.Message
+	for i := 0; i < 500; i++ {
+		many = append(many, runtime.Message{Role: "tool", Content: "ok"})
+	}
+	if policy.ShouldCompact(many) {
+		t.Fatal("expected many short messages not to compact without a count trigger")
+	}
+	large := []runtime.Message{{Role: "tool", Content: strings.Repeat("x", policy.MaxChars)}}
+	if !policy.ShouldCompact(large) {
+		t.Fatal("expected history above the budget to compact")
+	}
+}
+
+func TestAgentRuntimeUsesConfiguredCompactionPolicy(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatalf("new kernel: %v", err)
+	}
+	artifactStore, err := artifact.New(filepath.Join(root, "artifacts"))
+	if err != nil {
+		t.Fatalf("new artifact store: %v", err)
+	}
+	spawn := func() kernel.Process {
+		process, err := k.Spawn(kernel.ProcessSpec{
+			Role:          "worker",
+			Mounts:        []capability.Mount{{Name: "workspace", HostPath: workspace}},
+			CapabilitySet: capability.Set{ReadPaths: []string{workspace}, WritePaths: []string{workspace}},
+		})
+		if err != nil {
+			t.Fatalf("spawn: %v", err)
+		}
+		return process
+	}
+	exitStep := runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}}
+
+	var initial []runtime.Message
+	for i := 0; i < 30; i++ {
+		initial = append(initial, runtime.Message{Role: "user", Content: "history item " + strings.Repeat("x", 40)})
+	}
+
+	// The same history compacts under the defaults but fits a 262k window.
+	fake := &runtime.FakeBackend{Steps: []runtime.GenerateResult{exitStep}}
+	agentRuntime := &runtime.AgentRuntime{
+		Kernel:     k,
+		Artifacts:  artifactStore,
+		Tools:      tools.NewRuntime(),
+		Backend:    fake,
+		Compaction: runtime.ContextCompactionPolicy(262144, 0.8),
+	}
+	if _, err := agentRuntime.Run(context.Background(), spawn().PID, initial); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := len(fake.Requests[0].History); got != len(initial) {
+		t.Fatalf("expected full history under a large window, got %d messages", got)
+	}
+	if len(fake.Requests[0].MemoryRefs) != 0 {
+		t.Fatalf("expected no memory refs, got %#v", fake.Requests[0].MemoryRefs)
+	}
+
+	fake = &runtime.FakeBackend{Steps: []runtime.GenerateResult{exitStep}}
+	agentRuntime.Backend = fake
+	agentRuntime.Compaction = runtime.CompactionPolicy{MaxChars: 500, KeepMessages: 4}
+	if _, err := agentRuntime.Run(context.Background(), spawn().PID, initial); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := len(fake.Requests[0].History); got != 4 {
+		t.Fatalf("expected 4 kept messages, got %d", got)
+	}
+	if len(fake.Requests[0].MemoryRefs) != 1 {
+		t.Fatalf("expected one memory ref, got %#v", fake.Requests[0].MemoryRefs)
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"aos/internal/inference"
 	"aos/internal/kernel"
 	"aos/internal/lease"
+	"aos/internal/runtime"
 	"aos/internal/skills"
 	"aos/internal/tools"
 	"aos/internal/workflow"
@@ -75,7 +76,7 @@ func run(args []string) {
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
 
 	if workflowPath != "" {
-		if err := runWorkflow(context.Background(), backend, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
+		if err := runWorkflow(context.Background(), backend, llmConfig.ContextWindow, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -106,7 +107,7 @@ func run(args []string) {
 	fmt.Println(string(bytes))
 }
 
-func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
+func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, contextWindow int, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -145,15 +146,18 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, workflowP
 		return err
 	}
 
+	compaction := compactionPolicy(contextWindow)
 	engine := agentflow.Engine{
 		Kernel:    k,
 		Artifacts: store,
 		Leases:    leaseManager,
 		Tools:     tools.NewRuntime(),
 		Factory: agentflow.StaticBackendFactory{
-			Completer: backend,
-			Skills:    skills.NewRegistry(spec.SkillRoots),
+			Completer:  backend,
+			Skills:     skills.NewRegistry(spec.SkillRoots),
+			Compaction: compaction,
 		},
+		Compaction: compaction,
 	}
 	if trace {
 		engine.Trace = agentflow.NewStdoutTracer()
@@ -277,6 +281,19 @@ func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  aos run --input A --input B --input C --output D [--verify none|required|best_effort] \"assemble files A, B, C into D\"")
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
+}
+
+// compactionPolicy compacts at AOS_COMPACT_RATIO (default 0.8) of a known
+// context window, and keeps the runtime defaults when the window is unknown.
+func compactionPolicy(contextWindow int) runtime.CompactionPolicy {
+	if contextWindow <= 0 {
+		return runtime.CompactionPolicy{}
+	}
+	ratio, err := strconv.ParseFloat(getenv("AOS_COMPACT_RATIO", "0.8"), 64)
+	if err != nil || ratio <= 0 || ratio > 1 {
+		ratio = 0.8
+	}
+	return runtime.ContextCompactionPolicy(contextWindow, ratio)
 }
 
 func getenv(key, fallback string) string {

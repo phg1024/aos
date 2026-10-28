@@ -29,6 +29,8 @@ type PromptBackend struct {
 	Workflow  WorkflowSpec
 	Agent     AgentSpec
 	Skills    []skills.Document
+	// Compaction defaults to the prompt-history limits below when left zero.
+	Compaction runtime.CompactionPolicy
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -167,7 +169,7 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		ToolErrors             int                 `json:"tool_errors"`
 		LastTool               string              `json:"last_tool_observation,omitempty"`
 	}
-	compacted := compactHistory(request.History)
+	compacted := compactHistory(request.History, b.compactionPolicy())
 	toolErrors, lastTool := summarizeToolHistory(request.History)
 	payload := promptContext{
 		Workflow:               b.Workflow.Name,
@@ -201,15 +203,26 @@ type compactedHistory struct {
 	Omitted   int
 }
 
-func compactHistory(history []runtime.Message) compactedHistory {
+func (b PromptBackend) compactionPolicy() runtime.CompactionPolicy {
+	if b.Compaction == (runtime.CompactionPolicy{}) {
+		return runtime.CompactionPolicy{
+			MaxMessages:  maxPromptHistoryMessages,
+			MaxChars:     maxPromptHistoryChars,
+			KeepMessages: maxPromptHistoryMessages,
+		}
+	}
+	return b.Compaction
+}
+
+func compactHistory(history []runtime.Message, policy runtime.CompactionPolicy) compactedHistory {
 	if len(history) == 0 {
 		return compactedHistory{}
 	}
-	if !shouldCompactHistory(history) {
+	if !policy.ShouldCompact(history) {
 		return compactedHistory{Recent: append([]runtime.Message(nil), history...)}
 	}
 
-	start := len(history) - maxPromptHistoryMessages
+	start := len(history) - policy.KeepMessages
 	if start < 0 {
 		start = 0
 	}
@@ -221,20 +234,6 @@ func compactHistory(history []runtime.Message) compactedHistory {
 		Compacted: true,
 		Omitted:   len(older),
 	}
-}
-
-func shouldCompactHistory(history []runtime.Message) bool {
-	if len(history) > maxPromptHistoryMessages {
-		return true
-	}
-	totalChars := 0
-	for _, message := range history {
-		totalChars += len(message.Role) + len(message.Content)
-		if totalChars > maxPromptHistoryChars {
-			return true
-		}
-	}
-	return false
 }
 
 func summarizeHistory(history []runtime.Message) string {

@@ -410,3 +410,46 @@ func containsAll(value string, parts ...string) bool {
 func capabilitySet(tool string) capability.Set {
 	return capability.Set{Tools: []string{tool}}
 }
+
+func TestPromptBackendHonorsContextCompactionPolicy(t *testing.T) {
+	var history []runtime.Message
+	for i := 0; i < 16; i++ {
+		history = append(history,
+			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i)},
+			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:example output " + strconv.Itoa(i) + "]"},
+		)
+	}
+	request := runtime.GenerateRequest{
+		Process: kernel.Process{PID: "pid-1", Metadata: map[string]string{"goal": "finish the task"}},
+		History: history,
+	}
+	agent := agentflow.AgentSpec{ID: "interactive", SystemPrompt: "help the user"}
+	workflow := agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"}
+
+	completer := &capturingCompleter{}
+	backend := agentflow.PromptBackend{
+		Completer:  completer,
+		Workflow:   workflow,
+		Agent:      agent,
+		Compaction: runtime.ContextCompactionPolicy(262144, 0.8),
+	}
+	if _, err := backend.Generate(context.Background(), request); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if strings.Contains(completer.userPrompt, `"history_compacted": true`) {
+		t.Fatalf("expected history to fit a 262k window verbatim:\n%s", completer.userPrompt)
+	}
+	if !strings.Contains(completer.userPrompt, `"content": "user constraint round 0"`) {
+		t.Fatalf("expected earliest history kept verbatim:\n%s", completer.userPrompt)
+	}
+
+	completer = &capturingCompleter{}
+	backend.Completer = completer
+	backend.Compaction = runtime.CompactionPolicy{MaxChars: 200, KeepMessages: 2}
+	if _, err := backend.Generate(context.Background(), request); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if !strings.Contains(completer.userPrompt, `"history_messages_omitted": 30`) {
+		t.Fatalf("expected 30 omitted messages with 2 kept:\n%s", completer.userPrompt)
+	}
+}

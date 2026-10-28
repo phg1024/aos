@@ -2,6 +2,7 @@ package inference
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,6 +21,8 @@ type BackendConfig struct {
 	Model   string
 	APIKey  string
 	Timeout time.Duration
+	// ContextWindow is the model context size in tokens; 0 means unknown.
+	ContextWindow int
 }
 
 type BackendOptions struct {
@@ -52,11 +55,12 @@ func LoadBackendConfig(defaultTimeout time.Duration) BackendConfig {
 	)
 
 	return BackendConfig{
-		Kind:    kind,
-		BaseURL: baseURL,
-		Model:   model,
-		APIKey:  apiKey,
-		Timeout: parseTimeoutEnv(defaultTimeout),
+		Kind:          kind,
+		BaseURL:       baseURL,
+		Model:         model,
+		APIKey:        apiKey,
+		Timeout:       parseTimeoutEnv(defaultTimeout),
+		ContextWindow: parseContextWindowEnv(),
 	}
 }
 
@@ -133,6 +137,14 @@ func parseTimeoutEnv(fallback time.Duration) time.Duration {
 		}
 	}
 	return fallback
+}
+
+func parseContextWindowEnv() int {
+	tokens, err := strconv.Atoi(strings.TrimSpace(os.Getenv("AOS_LLM_CONTEXT_WINDOW")))
+	if err != nil || tokens <= 0 {
+		return 0
+	}
+	return tokens
 }
 
 func firstNonEmpty(values ...string) string {

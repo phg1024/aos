@@ -49,6 +49,7 @@ AOS now uses backend-agnostic env vars for live model selection:
 - `AOS_LLM_MODEL`
 - `AOS_LLM_API_KEY`
 - `AOS_LLM_TIMEOUT_SECONDS`
+- `AOS_LLM_CONTEXT_WINDOW` model context size in tokens; when set, workflow runs compact agent history at `AOS_COMPACT_RATIO` (default `0.8`) of it instead of the small built-in limits
 
 Legacy `AOS_VLLM_*` vars are still supported as fallback for existing scripts.
 

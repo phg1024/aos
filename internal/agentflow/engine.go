@@ -30,8 +30,9 @@ type BackendFactory interface {
 }
 
 type StaticBackendFactory struct {
-	Completer JSONCompleter
-	Skills    skills.Registry
+	Completer  JSONCompleter
+	Skills     skills.Registry
+	Compaction runtime.CompactionPolicy
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -40,10 +41,11 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		return nil, err
 	}
 	return PromptBackend{
-		Completer: f.Completer,
-		Workflow:  workflow,
-		Agent:     agent,
-		Skills:    loadedSkills,
+		Completer:  f.Completer,
+		Workflow:   workflow,
+		Agent:      agent,
+		Skills:     loadedSkills,
+		Compaction: f.Compaction,
 	}, nil
 }
 
@@ -83,6 +85,8 @@ type Engine struct {
 	Tools     *tools.Runtime
 	Factory   BackendFactory
 	Trace     func(TraceEvent)
+	// Compaction is passed to every agent runtime; zero uses runtime defaults.
+	Compaction runtime.CompactionPolicy
 }
 
 type TraceEvent struct {
@@ -257,12 +261,13 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
-		Kernel:    e.Kernel,
-		Artifacts: e.Artifacts,
-		Tools:     e.Tools,
-		Bus:       e.Bus,
-		Leases:    e.Leases,
-		MaxSteps:  maxSteps(agent),
+		Kernel:     e.Kernel,
+		Artifacts:  e.Artifacts,
+		Tools:      e.Tools,
+		Bus:        e.Bus,
+		Leases:     e.Leases,
+		MaxSteps:   maxSteps(agent),
+		Compaction: e.Compaction,
 		DelegateHandler: func(ctx context.Context, parent kernel.Process, call runtime.DelegateCall, session runtime.Session) (runtime.DelegateResult, error) {
 			if !contains(agent.AllowedAgents, call.AgentID) {
 				return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)

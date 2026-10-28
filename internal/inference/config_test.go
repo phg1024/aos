@@ -93,3 +93,16 @@ func TestLoadBackendConfigFallsBackToLegacyVLLMEnv(t *testing.T) {
 		t.Fatalf("unexpected timeout %s", config.Timeout)
 	}
 }
+
+func TestLoadBackendConfigReadsContextWindow(t *testing.T) {
+	t.Setenv("AOS_LLM_CONTEXT_WINDOW", "262144")
+	if got := inference.LoadBackendConfig(time.Minute).ContextWindow; got != 262144 {
+		t.Fatalf("expected context window 262144, got %d", got)
+	}
+	for _, value := range []string{"", "abc", "-5"} {
+		t.Setenv("AOS_LLM_CONTEXT_WINDOW", value)
+		if got := inference.LoadBackendConfig(time.Minute).ContextWindow; got != 0 {
+			t.Fatalf("expected unknown window for %q, got %d", value, got)
+		}
+	}
+}

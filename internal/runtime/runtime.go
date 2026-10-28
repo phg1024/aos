@@ -117,6 +117,62 @@ type AgentRuntime struct {
 	Backend         Backend
 	DelegateHandler DelegateHandler
 	MaxSteps        int
+	// Compaction defaults to DefaultCompactionPolicy when left zero.
+	Compaction CompactionPolicy
+}
+
+// CompactionPolicy decides when older history is compacted. A zero
+// MaxMessages or MaxChars disables that trigger.
+type CompactionPolicy struct {
+	MaxMessages  int
+	MaxChars     int
+	KeepMessages int
+}
+
+// EstimatedCharsPerToken is a conservative chars-per-token ratio for the
+// code- and JSON-heavy prompts agents see.
+const EstimatedCharsPerToken = 3
+
+func DefaultCompactionPolicy() CompactionPolicy {
+	return CompactionPolicy{
+		MaxMessages:  sessionMemoryMaxMessages,
+		MaxChars:     sessionMemoryMaxChars,
+		KeepMessages: sessionMemoryKeepMessages,
+	}
+}
+
+// ContextCompactionPolicy compacts once history reaches ratio of a context
+// window of windowTokens tokens, keeping the most recent messages live.
+func ContextCompactionPolicy(windowTokens int, ratio float64) CompactionPolicy {
+	return CompactionPolicy{
+		MaxChars:     int(float64(windowTokens)*ratio) * EstimatedCharsPerToken,
+		KeepMessages: sessionMemoryKeepMessages,
+	}
+}
+
+// ShouldCompact reports whether messages exceed either policy trigger.
+func (p CompactionPolicy) ShouldCompact(messages []Message) bool {
+	if p.MaxMessages > 0 && len(messages) > p.MaxMessages {
+		return true
+	}
+	if p.MaxChars <= 0 {
+		return false
+	}
+	totalChars := 0
+	for _, message := range messages {
+		totalChars += len(message.Role) + len(message.Content)
+		if totalChars > p.MaxChars {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *AgentRuntime) compactionPolicy() CompactionPolicy {
+	if r.Compaction == (CompactionPolicy{}) {
+		return DefaultCompactionPolicy()
+	}
+	return r.Compaction
 }
 
 const (
@@ -767,10 +823,11 @@ func loopSensitiveTool(name string) bool {
 }
 
 func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session) (Session, error) {
-	if !shouldCompactSessionMessages(session.Messages) {
+	policy := r.compactionPolicy()
+	if !policy.ShouldCompact(session.Messages) {
 		return session, nil
 	}
-	if len(session.Messages) <= sessionMemoryKeepMessages {
+	if len(session.Messages) <= policy.KeepMessages {
 		return session, nil
 	}
 
@@ -779,7 +836,7 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		return session, nil
 	}
 
-	cut := len(session.Messages) - sessionMemoryKeepMessages
+	cut := len(session.Messages) - policy.KeepMessages
 	older := append([]Message(nil), session.Messages[:cut]...)
 	recent := append([]Message(nil), session.Messages[cut:]...)
 	ref, err := persistSessionMemory(root, process.PID, session.MemorySequence+1, older)
@@ -790,20 +847,6 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	session.MemorySequence++
 	session.Messages = recent
 	return session, nil
-}
-
-func shouldCompactSessionMessages(messages []Message) bool {
-	if len(messages) > sessionMemoryMaxMessages {
-		return true
-	}
-	totalChars := 0
-	for _, message := range messages {
-		totalChars += len(message.Role) + len(message.Content)
-		if totalChars > sessionMemoryMaxChars {
-			return true
-		}
-	}
-	return false
 }
 
 func compactibleMemoryRoot(process kernel.Process) (string, bool) {
