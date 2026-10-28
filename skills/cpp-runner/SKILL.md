@@ -20,6 +20,14 @@ g++ -std=c++17 /workspace/main.cpp -O2 -o /workspace/main
 clang++ -std=c++20 /workspace/main.cpp -O2 -o /workspace/main
 ```
 
+If your task specifies an exact build command, use that command verbatim instead of these patterns.
+
+For a project split across files, keep headers in `include/` and sources in `src/`, and build every source together:
+
+```sh
+g++ -std=c++17 -O2 -I /workspace/app/include /workspace/app/src/*.cpp -o /workspace/app/app
+```
+
 ## Run pattern
 
 After a successful compile, run the produced binary:
@@ -32,7 +40,7 @@ After a successful compile, run the produced binary:
 
 When the program is larger:
 
-1. write a `.cpp` file with `write_file`
+1. write the source files with `write_file`, one module per file when the program has several responsibilities
 2. compile it with `run`
 3. inspect stdout, stderr, and exit code
 4. run the produced binary with `run`

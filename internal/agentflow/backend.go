@@ -94,7 +94,7 @@ func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawComplet
 func (b PromptBackend) systemPrompt() string {
 	var builder strings.Builder
 	builder.WriteString("You are an AOS agent. ")
-	builder.WriteString("Return only compact JSON matching this schema: ")
+	builder.WriteString("Return only JSON matching this schema, with no extra whitespace around the action envelope: ")
 	builder.WriteString("{\"action\":{\"type\":\"message|tool|delegate|send|publish|subscribe|wait|exit\",")
 	builder.WriteString("\"message\":\"...\",")
 	builder.WriteString("\"tool_call\":{\"name\":\"...\",\"args\":{\"key\":\"value\"}},")
@@ -104,6 +104,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("\"subscribe\":{\"topic\":\"...\"},")
 	builder.WriteString("\"exit_status\":{\"code\":0,\"reason\":\"...\",\"retryable\":false}}}. ")
 	builder.WriteString("Choose exactly one action per response. ")
+	builder.WriteString("Keeping the envelope compact never applies to string values: file content passed to write_file or edit_file must be formatted exactly as it should appear on disk, with normal line breaks and indentation encoded as \\n in the JSON string. Never squash source code onto fewer lines to shorten the response. ")
 	builder.WriteString("Use 'tool' only for allowed tools. ")
 	builder.WriteString("Use 'delegate' only for allowed agents. ")
 	builder.WriteString("Use 'send', 'publish', or 'subscribe' only when mailbox collaboration is actually needed. ")
@@ -114,7 +115,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("If the user adds, tightens, or corrects a requirement later in the conversation, treat the latest user instruction as authoritative and treat any earlier completion as invalid until the new requirement is satisfied. ")
 	builder.WriteString("When a user says things like 'no', 'instead', 'you must', 'the deliverable is', or otherwise corrects your approach, you must re-evaluate the task against that updated requirement before exiting. ")
 	builder.WriteString("Never repeat the same successful tool call if the latest tool result already accomplished the task. ")
-	builder.WriteString("In particular, after a successful write_file result, your next action must be exit unless the user explicitly asked for another write to a different path. ")
+	builder.WriteString("In particular, after a successful write_file result, do not write the same file again with the same content; continue with any checks your task requires, such as compiling or running what you wrote, and exit once those are done. ")
 	builder.WriteString("If a tool fails, times out, returns no matches, returns empty content, or reports a non-zero exit, treat that as a signal to try a different strategy rather than exiting immediately. ")
 	builder.WriteString("Prefer at least two materially different attempts before giving up when tools are available. ")
 	builder.WriteString("Do not repeat the exact same failing call with unchanged arguments more than once. ")
