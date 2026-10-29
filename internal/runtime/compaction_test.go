@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"aos/internal/artifact"
+	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/tools"
@@ -560,5 +561,77 @@ func TestCompactionIsIdempotentAcrossRecover(t *testing.T) {
 	events := compactionEvents(t, k)
 	if len(events) != 2 || events[0].Data["adopted"] != "false" || events[1].Data["adopted"] != "true" {
 		t.Fatalf("expected the replay recorded as adopted: %+v", events)
+	}
+}
+
+// Turns appended after a checkpoint, such as inbox messages, can be in the
+// archived range and can differ on replay while getting the same numbers.
+// A replay adopts a segment only when its messages are exactly the ones the
+// segment holds; otherwise it cuts its own, and no message is lost.
+func TestAdoptionRequiresIdenticalMessages(t *testing.T) {
+	k, store, process := newMemoryFixture(t)
+	bus, err := ipc.New(t.TempDir(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := func(name string) string { return name + " " + strings.Repeat("b", 3000) }
+	policy := runtime.CompactionPolicy{MaxChars: 5000}
+	first := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			for _, name := range []string{"inbox-one", "inbox-two"} {
+				if _, err := bus.Send("user", process.PID, body(name)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "message", Message: "noted"}}, nil
+		}
+		return runtime.GenerateResult{}, errors.New("connection reset")
+	}}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Bus: bus, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 10, Compaction: policy}
+	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
+	if err == nil {
+		t.Fatal("expected the crash")
+	}
+	crashed := compactionEvents(t, k)
+	if len(crashed) != 1 {
+		t.Fatalf("expected one compaction before the crash, got %+v", crashed)
+	}
+	archivedFirst := readSegment(t, store, crashed[0].Data["segment"]).Messages
+	if last := archivedFirst[len(archivedFirst)-1].Content; !strings.HasPrefix(last, "inbox-one") {
+		t.Fatalf("the crashed compaction should archive the first inbox message, ended with %.30q", last)
+	}
+
+	// The replay gets a different batch: the operator's line, then the
+	// redelivered inbox. It takes the numbers inbox-one had.
+	var live []runtime.Message
+	var refs []runtime.MemoryRef
+	agent.Backend = &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			live, refs = request.History, request.MemoryRefs
+		}
+		return exitResult("done"), nil
+	}}
+	if _, err := agent.Recover(context.Background(), process.PID, failed.ExitStatus.Checkpoint, []runtime.Message{{Role: "user", Content: body("operator-line")}}, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	events := compactionEvents(t, k)
+	if len(events) != 2 || events[1].Data["adopted"] != "false" || !strings.Contains(events[1].Data["not_adopted"], crashed[0].Data["segment"]) {
+		t.Fatalf("a segment holding other messages must not be adopted: %+v", events)
+	}
+	var seen []runtime.Message
+	for _, ref := range refs {
+		seen = append(seen, readSegment(t, store, ref.ArtifactID).Messages...)
+	}
+	seen = append(seen, live...)
+	for _, name := range []string{"goal", "operator-line", "inbox-one", "inbox-two"} {
+		found := false
+		for _, message := range seen {
+			if strings.HasPrefix(message.Content, name) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s is in neither the archive nor the live history", name)
+		}
 	}
 }

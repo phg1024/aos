@@ -475,7 +475,13 @@ against the current system.
   process, or one it was recovered from, already cut a segment from the same
   checkpoint starting at the same message, and no later checkpoint followed
   it. Then the replay adopts that segment and cuts where it did
-  (`memory.compacted` with `adopted=true`). A segment that a checkpoint
+  (`memory.compacted` with `adopted=true`), but only if the replay's
+  messages in that range are exactly the ones the segment holds. The check
+  compares the SHA-256 recorded in the segment's metadata. Turns appended
+  after the checkpoint, such as inbox messages or a Recover's appended
+  line, can be in the archived range and can differ on replay while getting
+  the same numbers. A mismatch cuts fresh and records `not_adopted`
+  (`TestAdoptionRequiresIdenticalMessages`). A segment that a checkpoint
   followed belongs to a run that went on, so a second resume from the same
   checkpoint is a fork and cuts its own segment
   (`TestTwoResumesFromOneCheckpointKeepSeparateSegments` still holds). A

@@ -3,6 +3,8 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1331,7 +1333,7 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	if cut == 0 {
 		return session, nil
 	}
-	prior, priorCut, err := r.priorSegment(process.PID, session.Messages, parents)
+	prior, priorCut, refused, err := r.priorSegment(process.PID, session.Messages, parents)
 	if err != nil {
 		return Session{}, err
 	}
@@ -1354,15 +1356,16 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	record := prior
 	if record.ID == "" {
 		record, err = r.Artifacts.CreateJSON("memory_segment", process.PID, segment, parents, map[string]string{
-			"sequence": strconv.Itoa(segment.Sequence),
-			"from_seq": strconv.Itoa(segment.FromSeq),
-			"to_seq":   strconv.Itoa(segment.ToSeq),
+			"sequence":        strconv.Itoa(segment.Sequence),
+			"from_seq":        strconv.Itoa(segment.FromSeq),
+			"to_seq":          strconv.Itoa(segment.ToSeq),
+			"messages_sha256": messagesDigest(older),
 		})
 		if err != nil {
 			return Session{}, err
 		}
 	}
-	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", map[string]string{
+	data := map[string]string{
 		"segment":       record.ID,
 		"from_seq":      strconv.Itoa(segment.FromSeq),
 		"to_seq":        strconv.Itoa(segment.ToSeq),
@@ -1371,7 +1374,11 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		"live_chars":    strconv.Itoa(historyChars(recent)),
 		"oversized":     strconv.FormatBool(oversized),
 		"adopted":       strconv.FormatBool(prior.ID != ""),
-	}); err != nil {
+	}
+	if refused != "" {
+		data["not_adopted"] = refused
+	}
+	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", data); err != nil {
 		return Session{}, err
 	}
 	session.MemoryRefs = append(session.MemoryRefs, MemoryRef{
@@ -1403,17 +1410,21 @@ func toolResultMessage(result tools.Result) string {
 // already cut from the same checkpoint starting at the same message, that
 // no later checkpoint followed: a run that crashed after compacting but
 // before checkpointing the result. The replay adopts it, and cuts where it
-// did, so no message is stored twice. A segment a checkpoint followed
+// did, so no message is stored twice, but only if its messages in that
+// range are the ones the segment holds: turns appended after the
+// checkpoint, such as inbox messages, can differ on replay and get the
+// same numbers. A segment that differs is not adopted, and refused names
+// it. A segment a checkpoint followed
 // belongs to a run that went on, so a second resume from the same
 // checkpoint is a fork and cuts its own. A compaction with no parent
 // checkpoint (the first step of a fresh run) cannot be replayed.
-func (r *AgentRuntime) priorSegment(pid string, messages []Message, parents []string) (artifact.Artifact, int, error) {
+func (r *AgentRuntime) priorSegment(pid string, messages []Message, parents []string) (prior artifact.Artifact, cut int, refused string, err error) {
 	if len(parents) == 0 || len(messages) == 0 || messages[0].Seq == 0 {
-		return artifact.Artifact{}, 0, nil
+		return artifact.Artifact{}, 0, "", nil
 	}
 	records, err := r.Artifacts.List()
 	if err != nil {
-		return artifact.Artifact{}, 0, err
+		return artifact.Artifact{}, 0, "", err
 	}
 	from := strconv.Itoa(messages[0].Seq)
 	followed := func(segment artifact.Artifact) bool {
@@ -1437,12 +1448,24 @@ func (r *AgentRuntime) priorSegment(pid string, messages []Message, parents []st
 		}
 		for i, message := range messages {
 			// The cut must leave the latest turn live, as compactionCut does.
-			if message.Seq == to && i+1 < len(messages) {
-				return record, i + 1, nil
+			if message.Seq != to || i+1 >= len(messages) {
+				continue
 			}
+			if record.Metadata["messages_sha256"] != messagesDigest(archivedMessages(messages[:i+1])) {
+				refused = record.ID + ": its messages differ from the replay's"
+				break
+			}
+			return record, i + 1, "", nil
 		}
 	}
-	return artifact.Artifact{}, 0, nil
+	return artifact.Artifact{}, 0, refused, nil
+}
+
+// messagesDigest is the SHA-256 of messages as a segment stores them.
+func messagesDigest(messages []Message) string {
+	encoded, _ := json.Marshal(messages)
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }
 
 // compactionCut is how many of the oldest messages to archive: the fewest,
