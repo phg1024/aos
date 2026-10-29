@@ -48,7 +48,9 @@ type Probe struct {
 	Expect string `json:"expect"`
 	Reject string `json:"reject,omitempty"`
 	// WorkingMemory, if set, is given to the agent as its working memory
-	// at the checkpoint, unless Config.NoWorkingMemory. It is written by
+	// at the checkpoint, in place of any it had, unless
+	// Config.NoWorkingMemory. Without it the agent keeps the checkpoint's
+	// own working memory, if any. It is written by
 	// whoever wrote the probe, not by the agent.
 	WorkingMemory []ProbeMemoryEntry `json:"working_memory,omitempty"`
 }
@@ -75,12 +77,16 @@ type Sample struct {
 	MemoryReads int    `json:"memory_reads"`
 	Searches    int    `json:"searches,omitempty"`
 	Updates     int    `json:"memory_updates,omitempty"`
-	// Condition is what the agent was given: working memory or not, and
-	// the rule to check it before deciding or not.
-	Condition  string `json:"condition,omitempty"`
-	BytesRead  int    `json:"bytes_read"`
-	ToolErrors int    `json:"tool_errors"`
-	Error      string `json:"error,omitempty"`
+	// Condition is what the agent was given: the probe's working memory
+	// ("memory"), the checkpoint's own ("own-memory") or none
+	// ("no-memory"), and the rule to check it before deciding or not.
+	Condition string `json:"condition,omitempty"`
+	// WorkingMemory is the working_memory version the agent resumed with,
+	// empty if none.
+	WorkingMemory string `json:"working_memory,omitempty"`
+	BytesRead     int    `json:"bytes_read"`
+	ToolErrors    int    `json:"tool_errors"`
+	Error         string `json:"error,omitempty"`
 }
 
 // Config is where probes run and with what model.
@@ -98,18 +104,23 @@ type Config struct {
 	Samples    int
 	// MaxSteps bounds one answer (default 12).
 	MaxSteps int
-	// NoWorkingMemory leaves out the probes' working memory, and
-	// NoCheckRule the prompt's rule to check it before deciding: the
-	// conditions phase 3 is measured under.
+	// NoWorkingMemory leaves out every working memory, the probes' and
+	// the checkpoint's own, and NoCheckRule the prompt's rule to check it
+	// before deciding: the conditions phase 3 is measured under.
 	NoWorkingMemory bool
 	NoCheckRule     bool
 }
 
-// condition names the conditions a sample ran under.
-func (c Config) condition(probe Probe) string {
-	memory := "memory"
-	if c.NoWorkingMemory || len(probe.WorkingMemory) == 0 {
-		memory = "no-memory"
+// condition names the conditions a sample ran under, given the working
+// memory version it resumes with.
+func (c Config) condition(probe Probe, workingMemory string) string {
+	memory := "no-memory"
+	switch {
+	case workingMemory == "":
+	case len(probe.WorkingMemory) > 0:
+		memory = "memory"
+	default:
+		memory = "own-memory"
 	}
 	if c.NoCheckRule {
 		return memory + ",no-check-rule"
@@ -195,16 +206,24 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 			return nil, err
 		}
 		checkpoint := probe.Checkpoint
-		if len(probe.WorkingMemory) > 0 && !cfg.NoWorkingMemory {
-			if checkpoint, err = giveWorkingMemory(store, owner, probe); err != nil {
-				return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
-			}
+		switch {
+		case cfg.NoWorkingMemory:
+			checkpoint, err = stripWorkingMemory(store, owner, probe)
+		case len(probe.WorkingMemory) > 0:
+			checkpoint, err = giveWorkingMemory(store, owner, probe)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
+		}
+		var session runtime.Session
+		if err := store.ReadJSON(checkpoint, &session); err != nil {
+			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
 		}
 		for n := 1; n <= cfg.Samples; n++ {
 			if ctx.Err() != nil {
 				return samples, ctx.Err()
 			}
-			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe, checkpoint)
+			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe, checkpoint, session.WorkingMemory)
 			sample.Sample = n
 			samples = append(samples, sample)
 		}
@@ -274,6 +293,26 @@ func giveWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe)
 	return checkpoint.ID, nil
 }
 
+// stripWorkingMemory writes a checkpoint like the probe's without its
+// working memory, so neither the header nor search_memory shows it; the
+// history and archive, update_memory calls included, are unchanged. It
+// returns the probe's checkpoint when there is nothing to strip.
+func stripWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe) (string, error) {
+	var session runtime.Session
+	if err := store.ReadJSON(probe.Checkpoint, &session); err != nil {
+		return "", err
+	}
+	if session.WorkingMemory == "" && session.MemorySnapshot == "" {
+		return probe.Checkpoint, nil
+	}
+	session.WorkingMemory, session.MemorySnapshot = "", ""
+	checkpoint, err := store.CreateJSON("checkpoint", owner.PID, session, []string{probe.Checkpoint}, map[string]string{"kind": "intermediate", "memprobe": probe.ID, "working_memory": "stripped"})
+	if err != nil {
+		return "", err
+	}
+	return checkpoint.ID, nil
+}
+
 // countingBackend counts model calls, one per step.
 type countingBackend struct {
 	runtime.Backend
@@ -287,8 +326,8 @@ func (b *countingBackend) Generate(ctx context.Context, request runtime.Generate
 
 // ask runs one sample: a fresh process resumed from the checkpoint as if
 // recovered from its owner, so its own compacted memory is readable.
-func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint string) Sample {
-	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe)}
+func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint, workingMemory string) Sample {
+	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe, workingMemory), WorkingMemory: workingMemory}
 	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": probe.ID}
 	for key, value := range owner.Metadata {
 		if _, set := metadata[key]; !set {

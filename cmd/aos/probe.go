@@ -28,7 +28,7 @@ func probeMemory(args []string) {
 	outPath := fs.String("out", "", "write every sample as a JSON line here")
 	workDir := fs.String("work-dir", "", "directory for the copy probes run in (default: a temporary directory)")
 	rescore := fs.String("rescore", "", "score the samples in this JSON-lines file again with --probes, without model calls")
-	noMemory := fs.Bool("no-working-memory", false, "leave out the working memory probes give the agent")
+	noMemory := fs.Bool("no-working-memory", false, "leave out all working memory: what probes give the agent and what its checkpoint holds")
 	noCheckRule := fs.Bool("no-check-rule", false, "leave out the prompt's rule to check working memory before deciding")
 	positional := parseInterspersed(fs, args)
 	if *rescore != "" && *probesPath != "" {

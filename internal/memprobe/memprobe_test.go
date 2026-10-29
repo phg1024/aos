@@ -247,3 +247,94 @@ func TestProbeWorkingMemoryConditions(t *testing.T) {
 		t.Fatal("giving working memory changed the original state")
 	}
 }
+
+// searchCompleter searches working memory once, then answers, keeping
+// every prompt it was shown.
+type searchCompleter struct{ prompts []string }
+
+func (c *searchCompleter) CompleteJSON(_ context.Context, system, user string, target any) error {
+	c.prompts = append(c.prompts, user)
+	action := map[string]any{"type": "tool", "tool_call": map[string]any{"name": "search_memory", "args": map[string]string{"query": "leaf2"}}}
+	if len(c.prompts) > 1 {
+		action = map[string]any{"type": "message", "message": "leaf2 was rejected: biased"}
+	}
+	encoded, _ := json.Marshal(map[string]any{"action": action})
+	return json.Unmarshal(encoded, target)
+}
+
+// A checkpoint that holds the agent's own working memory keeps it when
+// the probe gives none ("own-memory"); --no-working-memory strips it from
+// the header and from search_memory, and also when the probe gives one.
+func TestProbeOwnWorkingMemoryConditions(t *testing.T) {
+	stateDir, checkpoint, _ := probedRun(t)
+	store, err := artifact.New(filepath.Join(stateDir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := store.Metadata(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, err := store.CreateJSON("working_memory", record.ProducerPID, runtime.WorkingMemory{ProcessID: record.ProducerPID, Version: 2,
+		Sections: []runtime.MemorySection{{Name: "rejected", Entries: []runtime.MemoryEntry{{Key: "leaf2", Content: "own note: leaf2 biased", Evidence: "1"}}}},
+		Update:   runtime.MemoryUpdate{Section: "rejected"}}, nil, map[string]string{"version": "2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var session runtime.Session
+	if err := store.ReadJSON(checkpoint, &session); err != nil {
+		t.Fatal(err)
+	}
+	session.WorkingMemory, session.MemorySnapshot = own.ID, own.ID
+	withMemory, err := store.CreateJSON("checkpoint", record.ProducerPID, session, []string{checkpoint, own.ID}, map[string]string{"kind": "intermediate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(stateDir, "artifacts/index.json"))
+
+	const ownEntry, injected = "own note: leaf2 biased", "injected note: leaf2 dropped half the triangles"
+	plain := memprobe.Probe{ID: "own", Kind: "own-memory", Checkpoint: withMemory.ID, Question: "Run leaf2 again?", Expect: "rejected"}
+	given := plain
+	given.ID, given.WorkingMemory = "given", []memprobe.ProbeMemoryEntry{{Section: "rejected", Key: "leaf2", Content: injected, Evidence: "1"}}
+	for _, c := range []struct {
+		probe     memprobe.Probe
+		config    memprobe.Config
+		condition string
+		shown     string // the entry the header and search show, if any
+	}{
+		{plain, memprobe.Config{}, "own-memory,check-rule", ownEntry},
+		{plain, memprobe.Config{NoCheckRule: true}, "own-memory,no-check-rule", ownEntry},
+		{plain, memprobe.Config{NoWorkingMemory: true}, "no-memory,check-rule", ""},
+		{given, memprobe.Config{}, "memory,check-rule", injected},
+		{given, memprobe.Config{NoWorkingMemory: true}, "no-memory,check-rule", ""},
+	} {
+		completer := &searchCompleter{}
+		c.config.StateDir, c.config.WorkDir, c.config.Workflow, c.config.Completer = stateDir, t.TempDir(), probeWorkflow(), completer
+		samples, err := memprobe.Run(context.Background(), c.config, []memprobe.Probe{c.probe})
+		if err != nil || len(samples) != 1 || len(completer.prompts) != 2 {
+			t.Fatalf("%s %s: %v %+v, %d prompts", c.probe.ID, c.condition, err, samples, len(completer.prompts))
+		}
+		sample := samples[0]
+		if sample.Condition != c.condition || (sample.WorkingMemory == "") != (c.shown == "") {
+			t.Fatalf("%s: condition %q, working memory %q, want %q shown %q", c.probe.ID, sample.Condition, sample.WorkingMemory, c.condition, c.shown)
+		}
+		for i, prompt := range completer.prompts {
+			for _, entry := range []string{ownEntry, injected} {
+				if got := strings.Contains(prompt, entry); got != (entry == c.shown) {
+					t.Fatalf("%s %s prompt %d: %q shown %v", c.probe.ID, c.condition, i+1, entry, got)
+				}
+				// After the search, the entry is in the header and in its hits.
+				if i == 1 && entry == c.shown && strings.Count(prompt, entry) < 2 {
+					t.Fatalf("%s %s: search_memory did not find %q:\n%s", c.probe.ID, c.condition, entry, prompt)
+				}
+			}
+		}
+		if c.probe.ID == "own" && c.shown != "" && sample.WorkingMemory != own.ID {
+			t.Fatalf("own memory should be the checkpoint's version %s, got %s", own.ID, sample.WorkingMemory)
+		}
+	}
+	after, _ := os.ReadFile(filepath.Join(stateDir, "artifacts/index.json"))
+	if !bytes.Equal(before, after) {
+		t.Fatal("stripping working memory changed the original state")
+	}
+}
