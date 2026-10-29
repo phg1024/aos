@@ -1,0 +1,122 @@
+[
+  {
+    "item": 1,
+    "phase": "phase 1",
+    "binary": "phase-1 binary",
+    "source": "reports/memory-probe-phase2/archive-x6/samples-phase1.jsonl",
+    "probe": "tridata-order",
+    "sample": 3,
+    "pid": "pid-000024",
+    "frozen_pattern_score": "correct",
+    "steps": 2,
+    "bytes_read": 65536
+  },
+  {
+    "item": 2,
+    "phase": "phase 1",
+    "binary": "eceb917+phase-1 harness (aos-phase1)",
+    "source": "reports/memory-probe-phase2/archive-x6/samples-phase1.jsonl",
+    "probe": "leaf2-speedup",
+    "sample": 6,
+    "pid": "pid-000033",
+    "frozen_pattern_score": "not correct",
+    "steps": 1,
+    "bytes_read": 0
+  },
+  {
+    "item": 3,
+    "phase": "phase 3",
+    "binary": "74510b7, memory,check-rule, run by aos code",
+    "source": "reports/memory-probe-phase3/samples-memory.jsonl",
+    "probe": "leaf2-speedup",
+    "sample": 6,
+    "pid": "pid-000039",
+    "frozen_pattern_score": "correct",
+    "steps": 1,
+    "bytes_read": 0
+  },
+  {
+    "item": 4,
+    "phase": "phase 3",
+    "binary": "74510b7, memory,check-rule, run by aos code",
+    "source": "reports/memory-probe-phase3/samples-memory.jsonl",
+    "probe": "tg-sweep",
+    "sample": 6,
+    "pid": "pid-000033",
+    "frozen_pattern_score": "correct",
+    "steps": 1,
+    "bytes_read": 0
+  },
+  {
+    "item": 5,
+    "phase": "phase 2",
+    "binary": "ecb29d4 (aos-phase2 first build)",
+    "source": "reports/memory-probe-phase2/archive-x6/samples-phase2.jsonl",
+    "probe": "tridata-order",
+    "sample": 3,
+    "pid": "pid-000024",
+    "frozen_pattern_score": "not correct",
+    "steps": 4,
+    "bytes_read": 6616
+  },
+  {
+    "item": 6,
+    "phase": "phase 2",
+    "binary": "ff46bbc order-only wording (aos-phase2)",
+    "source": "reports/memory-probe-phase2/precedence/samples-rescored.jsonl",
+    "probe": "leaf2-speedup",
+    "sample": 7,
+    "pid": "pid-000037",
+    "frozen_pattern_score": "off-topic",
+    "steps": 9,
+    "bytes_read": 6050
+  },
+  {
+    "item": 7,
+    "phase": "phase 2",
+    "binary": "ecb29d4",
+    "source": "reports/memory-probe-phase2/samples-rescored.jsonl",
+    "probe": "tg-sweep",
+    "sample": 3,
+    "pid": "pid-000027",
+    "frozen_pattern_score": "correct",
+    "steps": 4,
+    "bytes_read": 13464
+  },
+  {
+    "item": 8,
+    "phase": "phase 2",
+    "binary": "ff46bbc order-only wording (aos-phase2)",
+    "source": "reports/memory-probe-phase2/precedence/samples-rescored.jsonl",
+    "probe": "leaf2-speedup",
+    "sample": 4,
+    "pid": "pid-000034",
+    "frozen_pattern_score": "correct",
+    "steps": 2,
+    "bytes_read": 3562
+  },
+  {
+    "item": 9,
+    "phase": "phase 3",
+    "binary": "74510b7, memory,check-rule, run by aos code",
+    "source": "reports/memory-probe-phase3/samples-memory.jsonl",
+    "probe": "tridata-order",
+    "sample": 3,
+    "pid": "pid-000024",
+    "frozen_pattern_score": "correct",
+    "steps": 1,
+    "bytes_read": 0
+  },
+  {
+    "item": 10,
+    "phase": "phase 1",
+    "binary": "phase-1 binary",
+    "source": "reports/memory-probe-baseline/samples-rescored.jsonl",
+    "probe": "tg-sweep",
+    "sample": 1,
+    "pid": "pid-000017",
+    "frozen_pattern_score": "correct",
+    "steps": 1,
+    "bytes_read": 0
+  }
+]
