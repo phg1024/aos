@@ -280,6 +280,77 @@ adopted only if the replay evaluation shows no imitation and no loss.
 | D2 | Where working memory lives | (a) a runtime-owned artifact; (b) a file in the agent's workspace, as writer ledgers are today | **Decided 2026-10-29: (a).** It is auditable, versioned, carried over on recovery, and cannot be overwritten by `run` or `write_file`. Workspace ledgers stay useful for handing off between agents. |
 | D3 | References in place of large tool results in live history | adopt; reject; experiment first | Open. Recommendation: experiment first (phase 4). The nesting fix uses references only in the archive, which does not depend on this decision. |
 
+## Alternatives considered
+
+Measured on the run above at 06:47Z: one writer's archive is 16 segments and
+2.35 MB, and all of the run's artifacts total 184 MB. A naive scan for
+`leaf2` that parses every segment and runs a regexp over every message takes
+13 ms and finds 80 hits.
+
+The 80 hits are the point. The failure in this run was not finding a fact.
+It was telling which of several matching facts is current. Keys, versions
+and precedence solve that. A different search engine does not.
+
+### Vector search
+
+Not adopted.
+
+- **The facts agents look for are exact.** The three `read_memory` calls
+  looked for "33.5 ms", "TriData emission order" and "TG4": numbers, names
+  and paths. Substring and regexp match them exactly. Embeddings rank
+  "leaf1 45.8 ms" and "leaf2 33.5 ms" as near neighbours.
+- **Similarity cannot express supersession.** A superseded decision and the
+  one that replaced it are near-identical in meaning, so similarity may rank
+  the old one first. Precedence has to be structural.
+- **It breaks two non-negotiables.** Embedding every message is an inference
+  call, so the runtime would depend on an inference provider. And a change
+  of embedding model changes the results of the same query, so retrieval
+  would no longer be deterministic, and replays would not reproduce it.
+- **The scale does not call for it.** Each process searches only its own
+  memory, a few MB per writer. Approximate nearest-neighbour indexes pay off
+  at millions of items.
+
+### SQLite
+
+Not adopted now. It is the stronger alternative:
+
+- FTS5 gives ranked full-text search (BM25);
+- a transaction across rows would simplify idempotent `update_memory`;
+- range queries by sequence number are natural.
+
+Against it, today:
+
+- **Dependency.** AOS is stdlib-only unless a dependency is clearly
+  justified, and its early persistence is JSON files for that reason. In Go,
+  SQLite means either cgo (`mattn/go-sqlite3`), which complicates
+  cross-compiling and the Linux sandbox's re-exec helper, or a large
+  pure-Go port (`modernc.org/sqlite`).
+- **It conflicts with the artifact store's guarantees.** Artifacts are
+  read-only files whose SHA-256 is checked on every read (book rule 3). Rows
+  in a database can be updated in place. Either tamper evidence is rebuilt
+  for rows, or the data is stored twice.
+- **Inspectability.** The state directory is plain files that `cat`, `grep`,
+  `aos inspect` and analysis scripts read directly. The sandbox protects it
+  by path. A database file needs its own tooling and its own protection.
+- **It does not remove the design work.** Keys, versions and precedence are
+  needed in SQLite too.
+
+### When to revisit
+
+- **SQLite:** if `index.json`, which is rewritten whole under a file lock,
+  becomes a measured bottleneck with many processes sharing a state
+  directory, or if queries across processes or runs are needed. Then it
+  should replace the artifact index as a whole, with its integrity
+  guarantees carried over, not be added beside it for memory alone.
+- **Vector search:** if replay or live runs show agents failing to find
+  facts they need by meaning, such as "have I tried a similar memory-layout
+  change before", where exact search returned nothing. Then it is an
+  optional second backend behind `search_memory`. Exact matching and
+  precedence stay, and the runtime does not depend on it.
+
+`search_memory`'s interface and precedence rule are what this design fixes.
+Either backend can replace the scan later without changing what agents see.
+
 ## Contracts and tests
 
 | Contract | Test |
