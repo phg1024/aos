@@ -95,6 +95,9 @@ type GenerateRequest struct {
 	Process    kernel.Process `json:"process"`
 	History    []Message      `json:"history"`
 	MemoryRefs []MemoryRef    `json:"memory_refs,omitempty"`
+	// WorkingMemory is the snapshot the header shows: the version current
+	// at the last compaction. Later updates are in History.
+	WorkingMemory *WorkingMemory `json:"working_memory,omitempty"`
 }
 
 type GenerateAction struct {
@@ -129,6 +132,16 @@ type Session struct {
 	MemorySequence      int           `json:"memory_sequence,omitempty"`
 	// NextSeq is the last message sequence number assigned.
 	NextSeq int `json:"next_seq,omitempty"`
+	// WorkingMemory is the current working_memory version, and
+	// MemorySnapshot the version the header shows, as of the last
+	// compaction, so the prompt prefix only changes at compaction.
+	WorkingMemory  string `json:"working_memory,omitempty"`
+	MemorySnapshot string `json:"memory_snapshot,omitempty"`
+	// HandoffSeq is set while a compaction waits on its handoff step: the
+	// last message the notice said would be archived. HandoffUpdates
+	// counts the working-memory updates made since the notice.
+	HandoffSeq     int `json:"handoff_seq,omitempty"`
+	HandoffUpdates int `json:"handoff_updates,omitempty"`
 	// MailboxSeen lists the IDs of the messages already in this session, so
 	// a message delivered again (the bus delivers at least once) is
 	// recorded only once.
@@ -211,6 +224,9 @@ type CompactionPolicy struct {
 	KeepMessages int
 	// TargetChars defaults to MaxChars / 2.
 	TargetChars int
+	// Handoff gives the agent one step, after a notice, to update its
+	// working memory before history is archived.
+	Handoff bool
 }
 
 // EstimatedCharsPerToken is a conservative chars-per-token ratio for the
@@ -233,6 +249,7 @@ func DefaultCompactionPolicy() CompactionPolicy {
 func ContextCompactionPolicy(windowTokens int, ratio float64) CompactionPolicy {
 	return CompactionPolicy{
 		MaxChars: int(float64(windowTokens)*ratio) * EstimatedCharsPerToken,
+		Handoff:  true,
 	}
 }
 
@@ -642,6 +659,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		if err != nil {
 			return RunResult{}, err
 		}
+		var snapshot *WorkingMemory
+		if session.MemorySnapshot != "" {
+			memory, err := r.readWorkingMemory(session.MemorySnapshot)
+			if err != nil {
+				return RunResult{}, err
+			}
+			snapshot = &memory
+		}
 
 		// Check the token budget before the call, and cap the reply to what
 		// is left of it; its prompt may still overshoot, by at most one call.
@@ -655,9 +680,10 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		callCtx := WithCallInfo(ctx, info)
 		result, err := r.Backend.Generate(callCtx, GenerateRequest{
-			Process:    process,
-			History:    append([]Message(nil), session.Messages...),
-			MemoryRefs: append([]MemoryRef(nil), session.MemoryRefs...),
+			Process:       process,
+			History:       append([]Message(nil), session.Messages...),
+			MemoryRefs:    append([]MemoryRef(nil), session.MemoryRefs...),
+			WorkingMemory: snapshot,
 		})
 		account.AddTokens(meter.Total())
 		syncUsage()
@@ -877,6 +903,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				resultMessage.ArchiveAs = readMemoryReference(toolResult.Output["artifact_id"], toolResult.Output["offset"], end, toolResult.Output["total_bytes"])
 			case toolResult.Tool == "search_memory":
 				resultMessage.ArchiveAs = searchReference(toolResult.Output["query"], toolResult.Output["matched"])
+			case toolResult.Tool == "update_memory":
+				session.WorkingMemory = toolResult.Output["artifact_id"]
+				if session.HandoffSeq != 0 {
+					session.HandoffUpdates++
+				}
 			}
 			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
@@ -1346,11 +1377,25 @@ func loopSensitiveTool(name string) bool {
 func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session, parents []string) (Session, error) {
 	session = numberMessages(session)
 	policy := r.compactionPolicy()
-	if !policy.ShouldCompact(session.Messages) {
+	handoff := session.HandoffSeq != 0
+	if !handoff && !policy.ShouldCompact(session.Messages) {
 		return session, nil
 	}
 	cut, oversized := compactionCut(session.Messages, policy)
 	if cut == 0 {
+		session.HandoffSeq, session.HandoffUpdates = 0, 0
+		return session, nil
+	}
+	if policy.Handoff && !handoff {
+		// Compact at the next model call, whatever this step does; an exit
+		// ends the run with its history whole.
+		through := session.Messages[cut-1].Seq
+		session.Messages = append(session.Messages, Message{Role: "notice", Content: fmt.Sprintf(handoffNotice, through)})
+		session = numberMessages(session)
+		session.HandoffSeq, session.HandoffUpdates = through, 0
+		if _, err := r.Kernel.RecordEvent(process.PID, "memory.handoff", map[string]string{"through_seq": strconv.Itoa(through)}); err != nil {
+			return Session{}, err
+		}
 		return session, nil
 	}
 	prior, priorCut, refused, err := r.priorSegment(process.PID, session.Messages, parents)
@@ -1397,6 +1442,10 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	if refused != "" {
 		data["not_adopted"] = refused
 	}
+	if handoff {
+		data["handoff_through"] = strconv.Itoa(session.HandoffSeq)
+		data["handoff_updates"] = strconv.Itoa(session.HandoffUpdates)
+	}
 	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", data); err != nil {
 		return Session{}, err
 	}
@@ -1406,8 +1455,16 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	}, older, record.CreatedAt))
 	session.MemorySequence++
 	session.Messages = recent
+	session.MemorySnapshot = session.WorkingMemory
+	session.HandoffSeq, session.HandoffUpdates = 0, 0
 	return session, nil
 }
+
+// handoffNotice precedes a compaction. It is labelled as the runtime's, so
+// it reads neither as a tool's output nor as the user.
+const handoffNotice = "runtime notice: History through message %d will move to the archive before your next call. " +
+	"Your working memory is what you will still see. Update it now with anything from messages up to that one you will need: " +
+	"results, decisions, and what you rejected and why, with the message numbers they rest on as evidence."
 
 // toolResultMessage records a tool result in the history. Tools cap their
 // own output; this holds every result to tools.MaxToolResultBytes, the
@@ -1746,8 +1803,9 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 // so no action reaches what its tool form would be denied.
 func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action string) error {
 	// read_memory and search_memory only return the process's own compacted
-	// history, which was already in its context, so every agent may use them.
-	if capabilityName == "read_memory" || capabilityName == "search_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+	// history, which was already in its context, and update_memory only
+	// writes the process's own working memory, so every agent may use them.
+	if capabilityName == "read_memory" || capabilityName == "search_memory" || capabilityName == "update_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
 		return nil
 	}
 	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
@@ -1790,7 +1848,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 
 func isRuntimeTool(name string) bool {
 	switch name {
-	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory":
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory", "update_memory":
 		return true
 	default:
 		return false
@@ -1926,6 +1984,8 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		}, nil
 	case "search_memory":
 		return r.searchMemory(process.PID, session, call.Args)
+	case "update_memory":
+		return r.updateMemory(process.PID, session, call.Args)
 	case "read_memory":
 		if strings.TrimSpace(call.Args["from"]) != "" {
 			return r.readMemoryRange(process.PID, session, call.Args)

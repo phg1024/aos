@@ -242,7 +242,11 @@ func (r *AgentRuntime) searchMemory(pid string, session Session, args map[string
 		size += len(hit) + 1
 		hits = append(hits, hit)
 	}
-	text := searchPrecedence + "\n"
+	memoryHits, memoryLine, err := r.searchWorkingMemory(session, matcher)
+	if err != nil {
+		return tools.Result{}, err
+	}
+	text := memoryLine + searchPrecedence + "\n" + memoryHits
 	if matched == 0 {
 		text += fmt.Sprintf("No archived message matches %q.", query)
 	} else {
@@ -262,6 +266,69 @@ func (r *AgentRuntime) searchMemory(pid string, session Session, args map[string
 			"hits":    text,
 		},
 	}, nil
+}
+
+// searchWorkingMemory finds the query in the process's working memory: its
+// current entries, and entries an earlier version held that a later one
+// replaced or deleted, each shown with what replaced it. It also returns
+// the line that opens a result when there is working memory.
+func (r *AgentRuntime) searchWorkingMemory(session Session, matcher func(string) ([][]int, int)) (hits, line string, err error) {
+	if session.WorkingMemory == "" {
+		return "", "", nil
+	}
+	chain, err := r.workingMemoryChain(session.WorkingMemory)
+	if err != nil {
+		return "", "", err
+	}
+	current := chain[len(chain)-1]
+	line = fmt.Sprintf("Working memory v%d (%s) is the record you keep of what is current; matching entries come first. ",
+		current.Version, current.Written.UTC().Format("2006-01-02 15:04"))
+	matches := func(section string, entry MemoryEntry) bool {
+		_, score := matcher(entry.Key + " " + entry.Content)
+		return score > 0
+	}
+	var lines []string
+	for _, section := range current.Sections {
+		for _, entry := range section.Entries {
+			if matches(section.Name, entry) {
+				lines = append(lines, fmt.Sprintf("working memory v%d (current) %s/%s", current.Version, section.Name, strings.TrimPrefix(renderEntry(section.Name, entry), "- ")))
+			}
+		}
+	}
+	// An entry is superseded by the first later version whose entry under
+	// its key differs; list each superseded claim once, newest first.
+	seen := map[string]bool{}
+	for v := len(chain) - 2; v >= 0; v-- {
+		for _, section := range chain[v].Sections {
+			for _, entry := range section.Entries {
+				id := section.Name + "/" + entry.Key + "\x00" + entry.Content
+				if seen[id] || !matches(section.Name, entry) {
+					continue
+				}
+				replacedIn := 0
+				for later := v + 1; later < len(chain); later++ {
+					if newer, ok := chain[later].Entry(section.Name, entry.Key); !ok || newer.Content != entry.Content {
+						replacedIn = chain[later].Version
+						break
+					}
+				}
+				if replacedIn == 0 {
+					continue
+				}
+				seen[id] = true
+				now := "deleted since"
+				if newer, ok := current.Entry(section.Name, entry.Key); ok {
+					now = "now: " + newer.Content
+				}
+				lines = append(lines, fmt.Sprintf("working memory v%d %s/%s: %s (superseded in v%d; %s)",
+					chain[v].Version, section.Name, entry.Key, entry.Content, replacedIn, now))
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return "", line, nil
+	}
+	return strings.Join(lines, "\n") + "\n", line, nil
 }
 
 // searchMatcher compiles a query into a function that returns where a

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"aos/internal/agentflow"
@@ -46,6 +47,18 @@ type Probe struct {
 	Topic  string `json:"topic,omitempty"`
 	Expect string `json:"expect"`
 	Reject string `json:"reject,omitempty"`
+	// WorkingMemory, if set, is given to the agent as its working memory
+	// at the checkpoint, unless Config.NoWorkingMemory. It is written by
+	// whoever wrote the probe, not by the agent.
+	WorkingMemory []ProbeMemoryEntry `json:"working_memory,omitempty"`
+}
+
+// ProbeMemoryEntry is one working-memory entry a probe gives the agent.
+type ProbeMemoryEntry struct {
+	Section  string `json:"section"`
+	Key      string `json:"key"`
+	Content  string `json:"content"`
+	Evidence string `json:"evidence,omitempty"`
 }
 
 // Sample is one probe answered once.
@@ -61,9 +74,13 @@ type Sample struct {
 	Steps       int    `json:"steps"`
 	MemoryReads int    `json:"memory_reads"`
 	Searches    int    `json:"searches,omitempty"`
-	BytesRead   int    `json:"bytes_read"`
-	ToolErrors  int    `json:"tool_errors"`
-	Error       string `json:"error,omitempty"`
+	Updates     int    `json:"memory_updates,omitempty"`
+	// Condition is what the agent was given: working memory or not, and
+	// the rule to check it before deciding or not.
+	Condition  string `json:"condition,omitempty"`
+	BytesRead  int    `json:"bytes_read"`
+	ToolErrors int    `json:"tool_errors"`
+	Error      string `json:"error,omitempty"`
 }
 
 // Config is where probes run and with what model.
@@ -81,6 +98,23 @@ type Config struct {
 	Samples    int
 	// MaxSteps bounds one answer (default 12).
 	MaxSteps int
+	// NoWorkingMemory leaves out the probes' working memory, and
+	// NoCheckRule the prompt's rule to check it before deciding: the
+	// conditions phase 3 is measured under.
+	NoWorkingMemory bool
+	NoCheckRule     bool
+}
+
+// condition names the conditions a sample ran under.
+func (c Config) condition(probe Probe) string {
+	memory := "memory"
+	if c.NoWorkingMemory || len(probe.WorkingMemory) == 0 {
+		memory = "no-memory"
+	}
+	if c.NoCheckRule {
+		return memory + ",no-check-rule"
+	}
+	return memory + ",check-rule"
 }
 
 // questionPrompt frames a probe as an operator's question that should be
@@ -111,6 +145,11 @@ func LoadProbes(path string) ([]Probe, error) {
 		}
 		if _, err := regexp.Compile(probe.Topic); err != nil {
 			return nil, fmt.Errorf("probe %s topic: %w", probe.ID, err)
+		}
+		for _, entry := range probe.WorkingMemory {
+			if !slices.Contains(runtime.MemorySections, entry.Section) || entry.Key == "" || entry.Content == "" {
+				return nil, fmt.Errorf("probe %s: working memory entries need a section of %v, a key and content", probe.ID, runtime.MemorySections)
+			}
 		}
 	}
 	return probes, nil
@@ -155,11 +194,17 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 		if err != nil {
 			return nil, err
 		}
+		checkpoint := probe.Checkpoint
+		if len(probe.WorkingMemory) > 0 && !cfg.NoWorkingMemory {
+			if checkpoint, err = giveWorkingMemory(store, owner, probe); err != nil {
+				return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
+			}
+		}
 		for n := 1; n <= cfg.Samples; n++ {
 			if ctx.Err() != nil {
 				return samples, ctx.Err()
 			}
-			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe)
+			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe, checkpoint)
 			sample.Sample = n
 			samples = append(samples, sample)
 		}
@@ -199,6 +244,36 @@ func probeAgent(k *kernel.Kernel, store *artifact.Store, spec agentflow.Workflow
 	return kernel.Process{}, agentflow.AgentSpec{}, fmt.Errorf("agent %q of %s is not in workflow %s", owner.Metadata["agent_id"], owner.PID, spec.Name)
 }
 
+// giveWorkingMemory writes the probe's working memory as a version the
+// checkpoint's owner holds, and a checkpoint like the probe's that shows
+// it, in the copy probes run in. It returns that checkpoint.
+func giveWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe) (string, error) {
+	memory := runtime.WorkingMemory{ProcessID: owner.PID, Version: 1, Update: runtime.MemoryUpdate{Section: "probe"}}
+	for _, name := range runtime.MemorySections {
+		section := runtime.MemorySection{Name: name}
+		for _, entry := range probe.WorkingMemory {
+			if entry.Section == name {
+				section.Entries = append(section.Entries, runtime.MemoryEntry{Key: entry.Key, Content: entry.Content, Evidence: entry.Evidence})
+			}
+		}
+		memory.Sections = append(memory.Sections, section)
+	}
+	version, err := store.CreateJSON("working_memory", owner.PID, memory, nil, map[string]string{"version": "1", "memprobe": probe.ID})
+	if err != nil {
+		return "", err
+	}
+	var session runtime.Session
+	if err := store.ReadJSON(probe.Checkpoint, &session); err != nil {
+		return "", err
+	}
+	session.WorkingMemory, session.MemorySnapshot = version.ID, version.ID
+	checkpoint, err := store.CreateJSON("checkpoint", owner.PID, session, []string{probe.Checkpoint, version.ID}, map[string]string{"kind": "intermediate", "memprobe": probe.ID})
+	if err != nil {
+		return "", err
+	}
+	return checkpoint.ID, nil
+}
+
 // countingBackend counts model calls, one per step.
 type countingBackend struct {
 	runtime.Backend
@@ -212,8 +287,8 @@ func (b *countingBackend) Generate(ctx context.Context, request runtime.Generate
 
 // ask runs one sample: a fresh process resumed from the checkpoint as if
 // recovered from its owner, so its own compacted memory is readable.
-func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe) Sample {
-	sample := Sample{Probe: probe.ID, Kind: probe.Kind}
+func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint string) Sample {
+	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe)}
 	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": probe.ID}
 	for key, value := range owner.Metadata {
 		if _, set := metadata[key]; !set {
@@ -226,7 +301,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 		return sample
 	}
 	sample.PID = process.PID
-	backend := &countingBackend{Backend: agentflow.PromptBackend{Completer: cfg.Completer, Workflow: cfg.Workflow, Agent: agent, Skills: loaded}}
+	backend := &countingBackend{Backend: agentflow.PromptBackend{Completer: cfg.Completer, Workflow: cfg.Workflow, Agent: agent, Skills: loaded, NoCheckRule: cfg.NoCheckRule}}
 	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: cfg.MaxSteps, Compaction: cfg.Compaction}
 	options := runtime.RunOptions{
 		NewTurn:                true,
@@ -239,6 +314,8 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 				sample.MemoryReads++
 			case "search_memory":
 				sample.Searches++
+			case "update_memory":
+				sample.Updates++
 			}
 		},
 		OnToolResult: func(result tools.Result) {
@@ -252,7 +329,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 		OnToolError: func(runtime.ToolCall, error) { sample.ToolErrors++ },
 	}
 	question := []runtime.Message{{Role: "user", Content: fmt.Sprintf(questionPrompt, probe.Question)}}
-	result, err := agentRuntime.Resume(ctx, process.PID, probe.Checkpoint, question, options)
+	result, err := agentRuntime.Resume(ctx, process.PID, checkpoint, question, options)
 	sample.Steps = backend.calls
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()

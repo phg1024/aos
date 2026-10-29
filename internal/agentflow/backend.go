@@ -37,6 +37,9 @@ type PromptBackend struct {
 	Workflow  WorkflowSpec
 	Agent     AgentSpec
 	Skills    []skills.Document
+	// NoCheckRule drops the instruction to look up working memory before
+	// deciding, for measuring what the instruction does.
+	NoCheckRule bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -76,9 +79,20 @@ func (b PromptBackend) PromptMessages(request runtime.GenerateRequest) []runtime
 		if message.Role == "assistant" {
 			role = "assistant"
 		}
-		messages = append(messages, runtime.Message{Role: role, Content: message.Content})
+		messages = append(messages, runtime.Message{Role: role, Content: promptContent(message)})
 	}
 	return messages
+}
+
+// promptContent is a history message as the prompt shows it. Turns the
+// agent did not write carry their number, so it can cite them as
+// evidence; its own turns stay verbatim, so it never sees a changed form
+// of its output to copy.
+func promptContent(message runtime.Message) string {
+	if message.Role == "assistant" || message.Seq == 0 {
+		return message.Content
+	}
+	return fmt.Sprintf("[#%d] %s", message.Seq, message.Content)
 }
 
 // taskHeader holds the session facts that stay fixed between compactions.
@@ -110,8 +124,20 @@ func (b PromptBackend) taskHeader(request runtime.GenerateRequest) string {
 		"Here is your task context.\n\n%s\n\n%s"+
 			"The messages that follow are your session history: assistant turns are your own earlier notes and actions, "+
 			"user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.",
-		string(bytes), archiveIndex(request.MemoryRefs),
+		string(bytes), workingMemorySnapshot(request.WorkingMemory)+archiveIndex(request.MemoryRefs),
 	)
+}
+
+// workingMemorySnapshot shows the working memory current at the last
+// compaction, and says what it is: the record the agent keeps of what is
+// current, not a guarantee that it is right.
+func workingMemorySnapshot(memory *runtime.WorkingMemory) string {
+	if memory == nil {
+		return ""
+	}
+	return fmt.Sprintf("Working memory v%d (%s, %s), as of your last compaction; later update_memory calls are in the history below. "+
+		"It is the record you keep of what is current; the archive is history.\n%s\n",
+		memory.Version, memory.Written.UTC().Format("2006-01-02 15:04"), memory.ArtifactID, memory.Render())
 }
 
 // archiveIndex tells an agent whose older history was compacted which
@@ -307,6 +333,13 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("When inspecting a codebase, prefer using list_dir or find_files before guessing file paths. ")
 	builder.WriteString("History entries beginning with tool_notice or tool_error mean the previous approach was not enough and you should adapt. ")
 	builder.WriteString("If the task context lists an archive, your older history was compacted into runtime-owned memory segments: search_memory finds text in them and read_memory reads messages by number. Both are always available. ")
+	builder.WriteString("Keep your working memory with update_memory, always available: one keyed entry per subject in decisions, measurements, rejected, open or next, set again to change it or deleted with delete=true. " +
+		"It survives compaction and is shown at the top of your context; it is the record you keep of what is current, while the archive is history. " +
+		"Give evidence for decisions and rejected entries: the message numbers (the [#N] on history entries, e.g. 1180-1214) or artifact ID the claim rests on; entries without it are marked [no evidence]. " +
+		"An entry beginning 'runtime notice:' comes from the runtime: when it says history will move to the archive, update your working memory before your next action. ")
+	if !b.NoCheckRule {
+		builder.WriteString("Before you propose, adopt or reject an approach, look up its entry in your working memory (search_memory if it is not there); if an entry exists and your action contradicts it, say why in your notes, citing the entry's evidence. ")
+	}
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
@@ -343,6 +376,9 @@ func (b PromptBackend) systemPrompt() string {
 	if !slices.Contains(b.Agent.Capabilities.Tools, "read_memory") {
 		builder.WriteString("- " + toolSignature("read_memory") + " (always available: reads your own compacted history by message number, or a segment by artifact_id)\n")
 	}
+	if !slices.Contains(b.Agent.Capabilities.Tools, "update_memory") {
+		builder.WriteString("- " + toolSignature("update_memory") + " (always available: sets or deletes one entry of your working memory)\n")
+	}
 	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
 	return builder.String()
@@ -366,6 +402,7 @@ var toolArgs = map[string]string{
 	"publish_artifact": "type, body",
 	"read_memory":      "from, to? | artifact_id, offset?",
 	"search_memory":    "query, limit?",
+	"update_memory":    "section, key, content?, evidence?, delete?",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
 }
@@ -389,6 +426,7 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		Metadata   map[string]string   `json:"metadata,omitempty"`
 		History    []historyMessage    `json:"history"`
 		MemoryRefs []runtime.MemoryRef `json:"memory_refs,omitempty"`
+		Memory     string              `json:"working_memory,omitempty"`
 		ReadPaths  []string            `json:"read_paths,omitempty"`
 		WritePaths []string            `json:"write_paths,omitempty"`
 		ToolErrors int                 `json:"tool_errors"`
@@ -405,6 +443,7 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		Metadata:   cloneMap(request.Process.Metadata),
 		History:    historyMessages(request.History),
 		MemoryRefs: append([]runtime.MemoryRef(nil), request.MemoryRefs...),
+		Memory:     workingMemorySnapshot(request.WorkingMemory),
 		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
 		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
 		ToolErrors: toolErrors,
@@ -427,7 +466,7 @@ type historyMessage struct {
 func historyMessages(history []runtime.Message) []historyMessage {
 	out := make([]historyMessage, 0, len(history))
 	for _, message := range history {
-		out = append(out, historyMessage{Role: message.Role, Content: message.Content})
+		out = append(out, historyMessage{Role: message.Role, Content: promptContent(message)})
 	}
 	return out
 }

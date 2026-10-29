@@ -57,6 +57,7 @@ var reservedTypes = map[string]bool{
 	"workflow_summary":     true,
 	"verification":         true,
 	"memory_segment":       true,
+	"working_memory":       true,
 	"task_plan":            true,
 	"worker_output":        true,
 }

@@ -54,3 +54,31 @@ func TestTaskHeaderIndexesTheArchive(t *testing.T) {
 		t.Fatal("without compacted history the header should not mention the archive")
 	}
 }
+
+// The header shows the working-memory snapshot with its version and what it
+// is; update_memory is listed for every agent; the rule to check working
+// memory before deciding is in the prompt unless the ablation turns it off.
+func TestPromptShowsWorkingMemoryAndCheckRule(t *testing.T) {
+	backend := PromptBackend{Agent: AgentSpec{ID: "writer", SystemPrompt: "Write.", Capabilities: capability.Set{Tools: []string{"run"}}}}
+	memory := &runtime.WorkingMemory{Version: 3, ArtifactID: "art-000099", Sections: []runtime.MemorySection{
+		{Name: "decisions", Entries: []runtime.MemoryEntry{{Key: "leaf2", Content: "rejected: biased build", Evidence: "236-243"}}},
+	}}
+	header := backend.PromptMessages(runtime.GenerateRequest{WorkingMemory: memory})[1].Content
+	for _, want := range []string{"Working memory v3 (", "art-000099", "the record you keep of what is current", "- leaf2: rejected: biased build [evidence 236-243]"} {
+		if !strings.Contains(header, want) {
+			t.Fatalf("header lacks %q:\n%s", want, header)
+		}
+	}
+	system := backend.systemPrompt()
+	if !strings.Contains(system, "- update_memory(section, key, content?, evidence?, delete?)") || !strings.Contains(system, "runtime notice:") {
+		t.Fatalf("the prompt should list update_memory and explain notices:\n%s", system)
+	}
+	const rule = "Before you propose, adopt or reject an approach, look up its entry in your working memory"
+	if !strings.Contains(system, rule) {
+		t.Fatal("the check-before-deciding rule is missing")
+	}
+	backend.NoCheckRule = true
+	if strings.Contains(backend.systemPrompt(), rule) {
+		t.Fatal("NoCheckRule should drop the rule")
+	}
+}

@@ -217,6 +217,36 @@ knows what matters (decision D1).
 - Resume and Recover carry it over, like the rest of the session.
 - `notes` stays. It is step-to-step scratch; working memory is what survives
   (decision D2).
+- **Evidence pointers** (precondition added after phase 2). `update_memory`
+  takes an optional `evidence`: a message range (`1180-1214`), a message
+  number, or an artifact ID, comma-separated for several. The runtime
+  checks that each one resolves: a range must lie within the caller's own
+  numbered history (archive or live), and an artifact must exist and, if
+  it is a segment, checkpoint or working-memory version, belong to the
+  caller's process chain. Otherwise the update is rejected with the
+  reason. The prompt asks for evidence on `decisions` and `rejected`
+  entries, and the snapshot marks such entries without it `[no
+  evidence]`. The runtime never invents or infers evidence. Why: the
+  round-3 memfix writer, having lost the bug's cause to compaction, wrote
+  a false explanation into its durable ledger ("Explains why leaf2 helped
+  the old 32-byte narrow tree"). Working memory written by the same agent
+  can carry the same thing; a pointer makes the claim checkable.
+- **Numbers in the prompt**, so evidence can be cited. Non-assistant turns
+  (tool results, user and peer messages, runtime notices) are sent as
+  `[#N] content`. The agent's own turns stay verbatim, for the reason
+  archive references are acceptable: the model never authored the
+  numbered turns, so it has no turn of its own whose shape it could copy.
+
+### Check before deciding
+
+The prompt tells the agent: before proposing, adopting or rejecting an
+approach, look up its working-memory entry; if one exists and the new
+action contradicts it, say why, citing the entry's evidence. Why: the
+round-8 memfix coordinator stated a wrong fact about leaf2 with the correct
+one in its live context, after writing "verify which" and never checking.
+Retrieval cannot fix that; an explicit rule is the cheapest attempt. It is
+prompt-level and Proposed until measured: phase 3 reports it as an
+ablation, the same probes with and without the rule.
 
 ### Archive without nesting
 
@@ -284,8 +314,8 @@ about. It is acceptable here for three reasons:
   never reads as a complete list of files.
 - The backend's own history bound (`compactHistory` in
   `internal/agentflow/backend.go`) is removed. The prompt's messages are
-  exactly the session's live history. `TestPromptHistoryIsTheSession`
-  asserts it.
+  exactly the session's live history, with non-assistant turns numbered
+  (see Working memory). `TestPromptHistoryIsTheSession` asserts it.
 
 ### Tool results in live history (experiment)
 
@@ -422,10 +452,14 @@ Either backend can replace the scan later without changing what agents see.
 | A labelled notice precedes compaction; a tool step compacts next call | `TestCompactionGivesOneHandoffStep` |
 | After a handoff step that delegates or waits, compaction happens at the next model call; after an exit, none | `TestHandoffStepThatDelegatesWaitsOrExits` |
 | `update_memory` sets and deletes keyed entries, versions the artifact, and rejects over-cap updates with per-section sizes | `TestWorkingMemoryVersionsAndCaps` |
+| Evidence must resolve to the caller's own history or a readable artifact | `TestUpdateMemoryValidatesEvidence` |
+| The snapshot marks decisions and rejections without evidence | `TestSnapshotMarksEntriesWithoutEvidence` |
+| Non-assistant turns carry their numbers in the prompt; the agent's turns are verbatim | `TestPromptHistoryIsTheSession` |
 | A replayed `update_memory` adopts the version an earlier attempt wrote | `TestUpdateMemoryIsIdempotentAcrossRecover` |
 | Working memory survives Recover | `TestWorkingMemorySurvivesRecover` |
+| A pending handoff compacts even under a larger trigger on resume | `TestHandoffStepThatDelegatesWaitsOrExits` |
+| Probes can give working memory and switch the check rule, per condition | `TestProbeWorkingMemoryConditions` |
 | The header changes only at compaction; between compactions, prompts are append-only | `TestPromptPrefixStableBetweenCompactions` |
-| With a runtime policy, the prompt's history equals the session's live history | `TestPromptHistoryIsTheSession` |
 
 ## Evaluation
 

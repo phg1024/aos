@@ -201,3 +201,49 @@ func TestRescoreAppliesTightenedPatterns(t *testing.T) {
 		t.Fatalf("rescored = %+v", rescored)
 	}
 }
+
+// promptCompleter answers at once and keeps every prompt it was shown.
+type promptCompleter struct{ prompts []string }
+
+func (c *promptCompleter) CompleteJSON(_ context.Context, system, user string, target any) error {
+	c.prompts = append(c.prompts, system+"\n"+user)
+	encoded, _ := json.Marshal(map[string]any{"action": map[string]any{"type": "message", "message": "leaf2 was rejected: biased"}})
+	return json.Unmarshal(encoded, target)
+}
+
+// A probe's working memory is shown to the agent unless the condition
+// leaves it out, the check rule follows its switch, and each sample says
+// which condition it ran under. The original state is not touched.
+func TestProbeWorkingMemoryConditions(t *testing.T) {
+	stateDir, checkpoint, _ := probedRun(t)
+	before, _ := os.ReadFile(filepath.Join(stateDir, "artifacts/index.json"))
+	probe := memprobe.Probe{ID: "leaf2", Kind: "decision", Checkpoint: checkpoint, Question: "Run leaf2 again?", Expect: "rejected",
+		WorkingMemory: []memprobe.ProbeMemoryEntry{{Section: "rejected", Key: "leaf2", Content: "biased: dropped half the triangles", Evidence: "1"}}}
+	const entry = "- leaf2: biased: dropped half the triangles [evidence 1]"
+	const rule = "Before you propose, adopt or reject an approach"
+	for _, c := range []struct {
+		config    memprobe.Config
+		condition string
+		memory    bool
+		rule      bool
+	}{
+		{memprobe.Config{}, "memory,check-rule", true, true},
+		{memprobe.Config{NoCheckRule: true}, "memory,no-check-rule", true, false},
+		{memprobe.Config{NoWorkingMemory: true}, "no-memory,check-rule", false, true},
+	} {
+		completer := &promptCompleter{}
+		c.config.StateDir, c.config.WorkDir, c.config.Workflow, c.config.Completer = stateDir, t.TempDir(), probeWorkflow(), completer
+		samples, err := memprobe.Run(context.Background(), c.config, []memprobe.Probe{probe})
+		if err != nil || len(samples) != 1 {
+			t.Fatalf("%s: %v %+v", c.condition, err, samples)
+		}
+		prompt := completer.prompts[0]
+		if samples[0].Condition != c.condition || strings.Contains(prompt, entry) != c.memory || strings.Contains(prompt, rule) != c.rule {
+			t.Fatalf("%s: condition %q, memory shown %v, rule shown %v", c.condition, samples[0].Condition, strings.Contains(prompt, entry), strings.Contains(prompt, rule))
+		}
+	}
+	after, _ := os.ReadFile(filepath.Join(stateDir, "artifacts/index.json"))
+	if !bytes.Equal(before, after) {
+		t.Fatal("giving working memory changed the original state")
+	}
+}

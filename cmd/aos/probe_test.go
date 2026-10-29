@@ -44,7 +44,7 @@ func TestRunProbesWritesSamplesAndTable(t *testing.T) {
 	outPath := filepath.Join(dir, "samples.jsonl")
 	var table bytes.Buffer
 	err = runProbes(context.Background(), exitCompleter{kernel.ExitStatus{Code: 0, Reason: "forty-two"}}, runtime.CompactionPolicy{},
-		stateDir, writeSoloWorkflow(t, dir), probesPath, filepath.Join(dir, "work"), outPath, 2, 4, &table)
+		stateDir, writeSoloWorkflow(t, dir), probesPath, filepath.Join(dir, "work"), outPath, 2, 4, memprobe.Config{}, &table)
 	if err != nil {
 		t.Fatal(err)
 	}

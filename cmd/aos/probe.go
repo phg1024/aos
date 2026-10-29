@@ -28,6 +28,8 @@ func probeMemory(args []string) {
 	outPath := fs.String("out", "", "write every sample as a JSON line here")
 	workDir := fs.String("work-dir", "", "directory for the copy probes run in (default: a temporary directory)")
 	rescore := fs.String("rescore", "", "score the samples in this JSON-lines file again with --probes, without model calls")
+	noMemory := fs.Bool("no-working-memory", false, "leave out the working memory probes give the agent")
+	noCheckRule := fs.Bool("no-check-rule", false, "leave out the prompt's rule to check working memory before deciding")
 	positional := parseInterspersed(fs, args)
 	if *rescore != "" && *probesPath != "" {
 		if err := rescoreProbes(*rescore, *probesPath, *outPath, os.Stdout); err != nil {
@@ -42,14 +44,15 @@ func probeMemory(args []string) {
 	}
 	llmConfig := inference.LoadBackendConfig(120 * time.Second)
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
-	err := runProbes(context.Background(), backend, llmConfig.CompactionPolicy(), positional[0], *workflowPath, *probesPath, *workDir, *outPath, *samples, *maxSteps, os.Stdout)
+	conditions := memprobe.Config{NoWorkingMemory: *noMemory, NoCheckRule: *noCheckRule}
+	err := runProbes(context.Background(), backend, llmConfig.CompactionPolicy(), positional[0], *workflowPath, *probesPath, *workDir, *outPath, *samples, *maxSteps, conditions, os.Stdout)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func runProbes(ctx context.Context, completer agentflow.JSONCompleter, compaction runtime.CompactionPolicy, stateDir, workflowPath, probesPath, workDir, outPath string, samples, maxSteps int, w io.Writer) error {
+func runProbes(ctx context.Context, completer agentflow.JSONCompleter, compaction runtime.CompactionPolicy, stateDir, workflowPath, probesPath, workDir, outPath string, samples, maxSteps int, conditions memprobe.Config, w io.Writer) error {
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -72,6 +75,9 @@ func runProbes(ctx context.Context, completer agentflow.JSONCompleter, compactio
 		Compaction: compaction,
 		Samples:    samples,
 		MaxSteps:   maxSteps,
+
+		NoWorkingMemory: conditions.NoWorkingMemory,
+		NoCheckRule:     conditions.NoCheckRule,
 	}, probes)
 	if outPath != "" && len(results) > 0 {
 		if err := writeSamples(outPath, results); err != nil {

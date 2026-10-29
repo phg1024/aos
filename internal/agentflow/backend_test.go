@@ -3,6 +3,7 @@ package agentflow_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -377,8 +378,9 @@ func TestPromptHistoryIsTheSession(t *testing.T) {
 	var history []runtime.Message
 	for i := 0; i < 16; i++ {
 		history = append(history,
-			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i), Seq: 2*i + 1},
-			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:" + strings.Repeat("x", 500) + "]", Seq: 2*i + 2, ArchiveAs: "reference"},
+			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i), Seq: 3*i + 1},
+			runtime.Message{Role: "assistant", Content: `{"action":{"type":"tool","tool_call":{"name":"read_file"}}}`, Seq: 3*i + 2},
+			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:" + strings.Repeat("x", 500) + "]", Seq: 3*i + 3, ArchiveAs: "reference"},
 		)
 	}
 	request := runtime.GenerateRequest{
@@ -394,8 +396,13 @@ func TestPromptHistoryIsTheSession(t *testing.T) {
 	if got := messages[2:]; len(got) != len(history) {
 		t.Fatalf("prompt has %d history messages, the session %d", len(got), len(history))
 	}
+	// The agent's own turns are verbatim; the others carry their number.
 	for i, message := range messages[2:] {
-		if message.Content != history[i].Content || message.Seq != 0 || message.ArchiveAs != "" {
+		want := history[i].Content
+		if history[i].Role != "assistant" {
+			want = fmt.Sprintf("[#%d] %s", history[i].Seq, want)
+		}
+		if message.Content != want || message.Seq != 0 || message.ArchiveAs != "" {
 			t.Fatalf("prompt message %d differs from the session: %+v", i, message)
 		}
 	}
@@ -414,8 +421,12 @@ func TestPromptHistoryIsTheSession(t *testing.T) {
 		}
 	}
 	for _, message := range history {
-		if !strings.Contains(completer.userPrompt, strconv.Quote(message.Content)) {
-			t.Fatalf("single prompt is missing %.40q", message.Content)
+		want := message.Content
+		if message.Role != "assistant" {
+			want = fmt.Sprintf("[#%d] %s", message.Seq, want)
+		}
+		if !strings.Contains(completer.userPrompt, strconv.Quote(want)) {
+			t.Fatalf("single prompt is missing %.40q", want)
 		}
 	}
 }
