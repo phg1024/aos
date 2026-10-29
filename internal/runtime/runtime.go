@@ -145,13 +145,25 @@ type Session struct {
 }
 
 // MemoryRef points at a compacted stretch of history: a memory_segment
-// artifact the runtime owns, read back with the read_memory tool. Path is
-// only set on refs from before segments were artifacts.
+// artifact the runtime owns, found with search_memory and read back with
+// read_memory. Path is only set on refs from before segments were
+// artifacts, Summary only on refs from before the index replaced it.
+//
+// The rest is the segment's index entry: its message numbers, when it was
+// archived, the tools its messages called and the paths they passed to
+// read_file, write_file and edit_file. These are recorded facts, not a
+// summary; refs written before the index get them on their next prompt.
 type MemoryRef struct {
-	ArtifactID   string `json:"artifact_id,omitempty"`
-	Path         string `json:"path,omitempty"`
-	Summary      string `json:"summary,omitempty"`
-	MessageCount int    `json:"message_count"`
+	ArtifactID   string      `json:"artifact_id,omitempty"`
+	Path         string      `json:"path,omitempty"`
+	Summary      string      `json:"summary,omitempty"`
+	MessageCount int         `json:"message_count"`
+	FromSeq      int         `json:"from_seq,omitempty"`
+	ToSeq        int         `json:"to_seq,omitempty"`
+	Archived     string      `json:"archived,omitempty"`
+	Tools        []ToolCount `json:"tools,omitempty"`
+	Paths        []string    `json:"paths,omitempty"`
+	MorePaths    int         `json:"more_paths,omitempty"`
 }
 
 type ToolAttempt struct {
@@ -280,7 +292,6 @@ const (
 	sessionMemoryKeepMessages = 12
 	sessionMemoryMaxMessages  = 24
 	sessionMemoryMaxChars     = 8000
-	sessionMemorySummaryLimit = 180
 )
 
 type DelegateResult struct {
@@ -627,6 +638,10 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		if err != nil {
 			return RunResult{}, err
 		}
+		session, err = r.indexMemoryRefs(pid, session)
+		if err != nil {
+			return RunResult{}, err
+		}
 
 		// Check the token budget before the call, and cap the reply to what
 		// is left of it; its prompt may still overshoot, by at most one call.
@@ -851,12 +866,17 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Role:    "tool",
 				Content: toolResultMessage(toolResult),
 			}
-			if toolResult.Tool == "read_memory" {
+			switch {
+			case toolResult.Tool == "read_memory" && toolResult.Output["artifact_id"] == "":
+				resultMessage.ArchiveAs = rangeReadReference(toolResult.Output["from"], toolResult.Output["to"])
+			case toolResult.Tool == "read_memory":
 				end := toolResult.Output["next_offset"]
 				if end == "" {
 					end = toolResult.Output["total_bytes"]
 				}
 				resultMessage.ArchiveAs = readMemoryReference(toolResult.Output["artifact_id"], toolResult.Output["offset"], end, toolResult.Output["total_bytes"])
+			case toolResult.Tool == "search_memory":
+				resultMessage.ArchiveAs = searchReference(toolResult.Output["query"], toolResult.Output["matched"])
 			}
 			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
@@ -1350,7 +1370,6 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		MessageCount: len(older),
 		FromSeq:      older[0].Seq,
 		ToSeq:        older[len(older)-1].Seq,
-		Summary:      summarizeMemoryMessages(older),
 		Messages:     older,
 	}
 	record := prior
@@ -1381,11 +1400,10 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", data); err != nil {
 		return Session{}, err
 	}
-	session.MemoryRefs = append(session.MemoryRefs, MemoryRef{
+	session.MemoryRefs = append(session.MemoryRefs, indexedRef(MemoryRef{
 		ArtifactID:   record.ID,
-		Summary:      segment.Summary,
 		MessageCount: segment.MessageCount,
-	})
+	}, older, record.CreatedAt))
 	session.MemorySequence++
 	session.Messages = recent
 	return session, nil
@@ -1584,7 +1602,8 @@ func numberMessages(session Session) Session {
 
 // memorySegment is the payload of a memory_segment artifact. FromSeq and
 // ToSeq are the sequence numbers of its first and last messages (zero in
-// segments written before numbering).
+// segments written before numbering). Summary is only set in segments
+// written before the index replaced it.
 type memorySegment struct {
 	ProcessID    string    `json:"process_id"`
 	Sequence     int       `json:"sequence"`
@@ -1593,71 +1612,6 @@ type memorySegment struct {
 	ToSeq        int       `json:"to_seq,omitempty"`
 	Summary      string    `json:"summary,omitempty"`
 	Messages     []Message `json:"messages"`
-}
-
-func summarizeMemoryMessages(messages []Message) string {
-	if len(messages) == 0 {
-		return ""
-	}
-	var userItems []string
-	var assistantItems []string
-	var toolItems []string
-	for _, message := range messages {
-		item := summarizeMemoryMessage(message)
-		if item == "" {
-			continue
-		}
-		switch message.Role {
-		case "user":
-			userItems = appendUniqueMemoryItem(userItems, item)
-		case "assistant":
-			assistantItems = appendUniqueMemoryItem(assistantItems, item)
-		default:
-			toolItems = appendUniqueMemoryItem(toolItems, item)
-		}
-	}
-
-	var sections []string
-	if len(userItems) > 0 {
-		sections = append(sections, "Earlier user instructions: "+strings.Join(userItems, " | "))
-	}
-	if len(assistantItems) > 0 {
-		sections = append(sections, "Earlier assistant decisions/messages: "+strings.Join(assistantItems, " | "))
-	}
-	if len(toolItems) > 0 {
-		sections = append(sections, "Earlier tool/delegation outcomes: "+strings.Join(toolItems, " | "))
-	}
-	return strings.Join(sections, "\n")
-}
-
-func summarizeMemoryMessage(message Message) string {
-	content := strings.Join(strings.Fields(strings.TrimSpace(message.Content)), " ")
-	if content == "" {
-		return ""
-	}
-	return truncateMemorySummary(content, sessionMemorySummaryLimit)
-}
-
-func appendUniqueMemoryItem(items []string, item string) []string {
-	for _, existing := range items {
-		if existing == item {
-			return items
-		}
-	}
-	if len(items) >= 6 {
-		return items
-	}
-	return append(items, item)
-}
-
-func truncateMemorySummary(value string, limit int) string {
-	if len(value) <= limit {
-		return value
-	}
-	if limit <= 3 {
-		return value[:limit]
-	}
-	return value[:limit-3] + "..."
 }
 
 // cancelReason says why ctx stopped a tool or delegate: the user, or a
@@ -1791,9 +1745,9 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 // delegate (spawn_agent) and send/publish/subscribe (message_agent) actions,
 // so no action reaches what its tool form would be denied.
 func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action string) error {
-	// read_memory only returns the process's own compacted history, which was
-	// already in its context, so every agent may use it.
-	if capabilityName == "read_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+	// read_memory and search_memory only return the process's own compacted
+	// history, which was already in its context, so every agent may use them.
+	if capabilityName == "read_memory" || capabilityName == "search_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
 		return nil
 	}
 	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
@@ -1836,7 +1790,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 
 func isRuntimeTool(name string) bool {
 	switch name {
-	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory":
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory":
 		return true
 	default:
 		return false
@@ -1970,7 +1924,12 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 				"artifacts": strings.Join(lines, "\n"),
 			},
 		}, nil
+	case "search_memory":
+		return r.searchMemory(process.PID, session, call.Args)
 	case "read_memory":
+		if strings.TrimSpace(call.Args["from"]) != "" {
+			return r.readMemoryRange(process.PID, session, call.Args)
+		}
 		id := strings.TrimSpace(call.Args["artifact_id"])
 		record, err := r.Artifacts.Metadata(id)
 		if err != nil {
@@ -1986,13 +1945,10 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if err := r.Artifacts.ReadJSON(id, &segment); err != nil {
 			return tools.Result{}, err
 		}
-		lines := make([]string, 0, len(segment.Messages))
-		for _, message := range segment.Messages {
-			lines = append(lines, message.Role+": "+message.Content)
-		}
 		// A page at a time: the whole segment would put the compacted history
-		// straight back into the context.
-		text := strings.Join(lines, "\n")
+		// straight back into the context. Read results that older segments
+		// copied read back as references, as in newer segments.
+		text := segmentText(archivedMessages(segment.Messages))
 		offset := 0
 		if raw := strings.TrimSpace(call.Args["offset"]); raw != "" {
 			parsed, err := strconv.Atoi(raw)

@@ -69,3 +69,4 @@ reports/terminal-bench/*.log
 
 # Probe work copies (kernel and artifact index of a probed run)
 reports/memory-probe-*/work/
+reports/memory-probe-*/*/work*/

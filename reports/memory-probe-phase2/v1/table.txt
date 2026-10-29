@@ -1,0 +1,7 @@
+probe                    kind        correct superseded off-topic errors       steps searches  reads      bytes
+tridata-order            archive       2/3            0         0      0   4.0  4-4       1.3    1.3      31431
+tg-sweep                 summary       3/3            0         0      0   4.0  3-5       2.0    1.0      14588
+leaf2-status             superseded    3/3            0         0      0   1.3  1-2       0.3    0.0       1144
+leaf2-speedup            superseded    3/3            0         0      0   2.0  2-2       1.0    0.0       3861
+w4-first-ab              live          3/3            0         0      0   1.0  1-1       0.0    0.0          0
+-----------------------------------------------------------------------------------------------------------------

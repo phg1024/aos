@@ -84,16 +84,15 @@ func (b PromptBackend) PromptMessages(request runtime.GenerateRequest) []runtime
 // taskHeader holds the session facts that stay fixed between compactions.
 func (b PromptBackend) taskHeader(request runtime.GenerateRequest) string {
 	type headerContext struct {
-		Workflow   string              `json:"workflow"`
-		AgentID    string              `json:"agent_id"`
-		ProcessID  string              `json:"process_id"`
-		Goal       string              `json:"goal"`
-		InputPaths []string            `json:"input_paths,omitempty"`
-		OutputPath string              `json:"output_path,omitempty"`
-		Metadata   map[string]string   `json:"metadata,omitempty"`
-		ReadPaths  []string            `json:"read_paths,omitempty"`
-		WritePaths []string            `json:"write_paths,omitempty"`
-		MemoryRefs []runtime.MemoryRef `json:"memory_refs,omitempty"`
+		Workflow   string            `json:"workflow"`
+		AgentID    string            `json:"agent_id"`
+		ProcessID  string            `json:"process_id"`
+		Goal       string            `json:"goal"`
+		InputPaths []string          `json:"input_paths,omitempty"`
+		OutputPath string            `json:"output_path,omitempty"`
+		Metadata   map[string]string `json:"metadata,omitempty"`
+		ReadPaths  []string          `json:"read_paths,omitempty"`
+		WritePaths []string          `json:"write_paths,omitempty"`
 	}
 	payload := headerContext{
 		Workflow:   b.Workflow.Name,
@@ -105,33 +104,103 @@ func (b PromptBackend) taskHeader(request runtime.GenerateRequest) string {
 		Metadata:   cloneMap(request.Process.Metadata),
 		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
 		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
-		MemoryRefs: append([]runtime.MemoryRef(nil), request.MemoryRefs...),
 	}
 	bytes, _ := json.MarshalIndent(payload, "", "  ")
 	return fmt.Sprintf(
 		"Here is your task context.\n\n%s\n\n%s"+
 			"The messages that follow are your session history: assistant turns are your own earlier notes and actions, "+
 			"user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.",
-		string(bytes), compactedHistoryNote(request.MemoryRefs),
+		string(bytes), archiveIndex(request.MemoryRefs),
 	)
 }
 
-// compactedHistoryNote tells an agent whose older history was compacted
-// what it lost and how to get it back, next to the refs themselves.
-func compactedHistoryNote(refs []runtime.MemoryRef) string {
+// archiveIndex tells an agent whose older history was compacted which
+// messages are archived and how to get them back. It lists what the
+// runtime recorded about each segment, never a summary, and says what the
+// list leaves out so it is not read as complete.
+func archiveIndex(refs []runtime.MemoryRef) string {
 	if len(refs) == 0 {
 		return ""
 	}
-	messages := 0
-	ids := make([]string, 0, len(refs))
+	first, last, messages := 0, 0, 0
+	var paths []string
 	for _, ref := range refs {
 		messages += ref.MessageCount
-		ids = append(ids, ref.ArtifactID)
+		if ref.FromSeq > 0 && first == 0 {
+			first = ref.FromSeq
+		}
+		last = max(last, ref.ToSeq)
+		paths = append(paths, ref.Paths...)
 	}
-	return fmt.Sprintf("Your %d earlier messages were compacted into memory segments %s (memory_refs above); their summaries are short. "+
-		"When you need something from them that your notes and the live history do not hold, such as an exact number, an error message, "+
-		"or what you already tried, call read_memory with the segment's artifact_id rather than redoing the work; it returns up to 64 KB "+
-		"per call, and offset pages through the rest.\n\n", messages, strings.Join(ids, ", "))
+	prefix := commonDir(paths)
+	var builder strings.Builder
+	if first > 0 {
+		fmt.Fprintf(&builder, "Archive: your messages %d-%d are in %d segments, out of the live history below. ", first, last, len(refs))
+	} else {
+		fmt.Fprintf(&builder, "Archive: your %d earlier messages are in %d segments, out of the live history below. ", messages, len(refs))
+	}
+	builder.WriteString("When you need something from them, such as an exact number, an error message, or what you already tried, " +
+		"call search_memory with words the message would contain (a message matches when it holds all of them; | separates alternatives; re: for a regexp), then read_memory from=N to=M for the messages around a hit, " +
+		"rather than redoing the work. A later message supersedes an earlier one.\n")
+	builder.WriteString("Index (recorded by the runtime, not a summary: tools called, and paths passed to read_file, write_file and edit_file; files that run commands touched are not listed")
+	if prefix != "" {
+		fmt.Fprintf(&builder, "; paths are under %s", prefix)
+	}
+	builder.WriteString("):\n")
+	for _, ref := range refs {
+		builder.WriteString("- ")
+		if ref.ToSeq > 0 {
+			fmt.Fprintf(&builder, "messages %d-%d", ref.FromSeq, ref.ToSeq)
+		} else {
+			fmt.Fprintf(&builder, "%d messages", ref.MessageCount)
+		}
+		id := ref.ArtifactID
+		if id == "" {
+			id = ref.Path
+		}
+		if ref.Archived != "" {
+			id += ", archived " + strings.TrimSuffix(strings.Replace(ref.Archived, "T", " ", 1), "Z")
+		}
+		fmt.Fprintf(&builder, " (%s)", id)
+		if len(ref.Tools) > 0 {
+			counts := make([]string, 0, len(ref.Tools))
+			for _, tool := range ref.Tools {
+				counts = append(counts, fmt.Sprintf("%s x%d", tool.Name, tool.Count))
+			}
+			builder.WriteString(": " + strings.Join(counts, ", "))
+		}
+		if len(ref.Paths) > 0 {
+			shown := make([]string, 0, len(ref.Paths))
+			for _, path := range ref.Paths {
+				shown = append(shown, strings.TrimPrefix(path, prefix))
+			}
+			builder.WriteString("; paths " + strings.Join(shown, ", "))
+			if ref.MorePaths > 0 {
+				fmt.Fprintf(&builder, " +%d more", ref.MorePaths)
+			}
+		}
+		builder.WriteString("\n")
+	}
+	builder.WriteString("\n")
+	return builder.String()
+}
+
+// commonDir is the directory, with its trailing slash, that every path is
+// under, or "" when they share none worth naming.
+func commonDir(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	prefix := paths[0]
+	for _, path := range paths[1:] {
+		for !strings.HasPrefix(path, prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	if slash := strings.LastIndex(prefix, "/"); slash > 0 {
+		return prefix[:slash+1]
+	}
+	return ""
 }
 
 func (b PromptBackend) generateFromMessages(ctx context.Context, completer MessagesCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
@@ -237,7 +306,7 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Do not repeat the exact same failing call with unchanged arguments more than once. ")
 	builder.WriteString("When inspecting a codebase, prefer using list_dir or find_files before guessing file paths. ")
 	builder.WriteString("History entries beginning with tool_notice or tool_error mean the previous approach was not enough and you should adapt. ")
-	builder.WriteString("If memory_refs are present, older session context has been compacted into runtime-owned memory segments. Call the read_memory tool with a ref's artifact_id when you need deeper prior context beyond the live history and summary; it is always available. ")
+	builder.WriteString("If the task context lists an archive, your older history was compacted into runtime-owned memory segments: search_memory finds text in them and read_memory reads messages by number. Both are always available. ")
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
@@ -266,10 +335,13 @@ func (b PromptBackend) systemPrompt() string {
 		builder.WriteString(toolSignature(tool))
 		builder.WriteString("\n")
 	}
-	// The runtime lets every agent read its own compacted history, so it is
-	// listed for every agent, granted or not.
+	// The runtime lets every agent search and read its own compacted
+	// history, so both are listed for every agent, granted or not.
+	if !slices.Contains(b.Agent.Capabilities.Tools, "search_memory") {
+		builder.WriteString("- " + toolSignature("search_memory") + " (always available: finds text in your own compacted history)\n")
+	}
 	if !slices.Contains(b.Agent.Capabilities.Tools, "read_memory") {
-		builder.WriteString("- " + toolSignature("read_memory") + " (always available: reads back your own compacted history)\n")
+		builder.WriteString("- " + toolSignature("read_memory") + " (always available: reads your own compacted history by message number, or a segment by artifact_id)\n")
 	}
 	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
@@ -292,7 +364,8 @@ var toolArgs = map[string]string{
 	"checkpoint":       "",
 	"list_artifacts":   "type?, producer_pid?, scope?",
 	"publish_artifact": "type, body",
-	"read_memory":      "artifact_id, offset?",
+	"read_memory":      "from, to? | artifact_id, offset?",
+	"search_memory":    "query, limit?",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
 }

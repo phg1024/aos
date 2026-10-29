@@ -5,7 +5,7 @@
     "checkpoint": "art-001084",
     "question": "Earlier in round 3 you tried storing TriData in tree (leaf-emission) order instead of the original triangle order. What did it measure, and what did you decide?",
     "topic": "(?i)(tri ?data|tree.order|emission)",
-    "expect": "(?i)(no win|no gain|wash|inconclusive|not faster|revert|rejected|did not help|didn't help)"
+    "expect": "(?i)\\bwash\\b|no win|no (real |measurable )?(gain|speedup)|(inside|within) (the )?[~±0-9% -]*session(-to-session)? (noise|drift)"
   },
   {
     "id": "tg-sweep",

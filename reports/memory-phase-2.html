@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Phase 2 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Phase 2 Report: Retrieval</h1>
+    <p>Phase 2 of <code>memory-system-design.md</code>. In the phase 1 baseline, an agent asked why leaf2 was dropped got the verdict right and the reason wrong every time. The reason sat past the first 64 KB page of a segment, and both agents that read memory picked a nested copy instead. Phase 2 lets an agent find a fact by searching and read it by message number. It also replaces the per-segment prose summaries in the prompt with an index of recorded facts.</p>
+    <p><b>Result:</b> "why leaf2 was dropped" went from <span class="bad">0/9</span> to <span class="good">8/9</span>, reading about 4 KB on average instead of 32–43 KB. One archive-only question got slightly worse: <span class="bad">8/9 → 6/9</span>. The agent now reads a narrow range and sometimes stops at an intermediate result.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b><code>search_memory query limit?</code></b> (<code>internal/runtime/retrieval.go</code>).
+      <ul>
+        <li>A message matches when it holds every word of the query, in any order. <code>|</code> separates alternatives, and <code>re:</code> takes a regexp. All matching is case-insensitive.</li>
+        <li>Hits that match more alternatives come first, and the newest comes first among equals. Each hit shows its message number, role, segment, archive time, and about 150 characters on each side of the match.</li>
+        <li>The result opens with a precedence line: "a later message (higher #) supersedes an earlier one, and your live history is newer than any hit". It is capped at 8 KB and says how many matches it left out.</li>
+      </ul></li>
+    <li><b><code>read_memory from to?</code></b>
+      <ul>
+        <li>It returns whole numbered messages up to 32 KB, with <code>next_from</code> when the range continues.</li>
+        <li>A single message larger than the cap is cut. The result gives the <code>artifact_id</code> and byte offset where the rest continues.</li>
+        <li>A range outside the archive is an error that says which numbers the archive holds.</li>
+        <li><code>artifact_id</code>/<code>offset</code> paging still works.</li>
+      </ul></li>
+    <li><b>Ownership and nesting.</b> Both tools read only the segments in the session's own refs, each checked with <code>ownedBy</code>, and both are always allowed. Each result is archived as a one-hop reference, never as a copy.</li>
+    <li><b>Old archives.</b>
+      <ul>
+        <li>Segments written before numbering are numbered the way their checkpoint numbers live messages.</li>
+        <li>A <code>read_memory</code> result that an old segment copied whole is read back as the reference it would be archived as today. This applies to search, range reads and <code>artifact_id</code> reads, so the <code>art-001074</code> copy that misled the baseline is no longer a second source.</li>
+      </ul></li>
+    <li><b>Header index instead of summaries.</b>
+      <ul>
+        <li>Each <code>MemoryRef</code> records its message range, archive time, tool counts, and up to six paths passed to <code>read_file</code>, <code>write_file</code> and <code>edit_file</code>, all at compaction.</li>
+        <li>Old refs are indexed once, before their next prompt.</li>
+        <li>The prompt shows one archive line, how to search and read, and one line per segment. It also states the index's limits: it is not a summary, and files that <code>run</code> touched are not listed.</li>
+        <li>Segments no longer store prose summaries, and <code>memory_refs</code> is gone from the header JSON.</li>
+      </ul></li>
+    <li><b>Probe harness</b> also counts <code>search_memory</code> calls and the bytes they return.</li>
+  </ul>
+
+  <h2>What the Probes Changed</h2>
+  <p>Matching and ranking above are not what the design first said. The design said substring search, newest first. Two probe runs showed why that fails.</p>
+  <ul>
+    <li><b>Run 1 (substring).</b> The model wrote <code>tridata order|leaf emission order|tri order</code>, meaning alternatives of loose words. A literal match found nothing in an archive that says "TriData in tree/leaf emission order", and the agent answered that it had no record. Plain queries now match all words, with <code>|</code> separating alternatives.</li>
+    <li><b>Run 2 (all words, newest first).</b> A broad alternative such as "tri order" matched 49 messages. The 10 newest crowded out the older message that held the measurement and matched the whole query. The agent then said "no decisive measurement was ever recorded". Hits are now ranked by how many alternatives they match. Each hit keeps its message number, so ranking does not hide which fact is current.</li>
+  </ul>
+  <p>Both changes have unit tests and mutation checks. The runs are kept as <code>v1/</code> and <code>v2/</code> under <code>reports/memory-probe-phase2/</code>.</p>
+
+  <h2>Probe Results</h2>
+  <p>All runs resume the round-3 writer at checkpoint <code>art-001084</code> of <code>pathtracer-bunny-memfix</code>, with the run's own model and parameters (phg-gpu Strata, temperature 0.6, top-p 0.95, 65,536-token window) and at most 12 steps. Every table is scored with the same final patterns (<code>--rescore</code>).</p>
+  <table>
+    <tr><th>Probe</th><th>Where the answer is</th><th>Phase 1</th><th>Phase 2 (final)</th><th>Phase 1 mean bytes</th><th>Phase 2 mean bytes</th></tr>
+    <tr><td>leaf2-speedup</td><td>archive, superseded: "27% faster" early in <code>art-001056</code>, the bias finding past its first page</td><td class="num bad">0/9</td><td class="num good">8/9</td><td class="num">32–43 KB</td><td class="num">~4 KB</td></tr>
+    <tr><td>tridata-order</td><td>archive only, in <code>art-000969</code>; two A/Bs, the second decisive</td><td class="num">8/9</td><td class="num bad">6/9</td><td class="num">64–89 KB</td><td class="num">27–32 KB</td></tr>
+    <tr><td>tg-sweep</td><td>archive; was also in the old prose summary</td><td class="num">3/3, 1 step</td><td class="num">3/3, 4.3 steps</td><td class="num">0</td><td class="num">~19 KB</td></tr>
+    <tr><td>leaf2-status</td><td>live: the current binary prints nodes=69450</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">0</td><td class="num">~3 KB</td></tr>
+    <tr><td>w4-first-ab</td><td>live (control)</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">0</td><td class="num">0</td></tr>
+  </table>
+  <p>Two of the probes have 9 samples, from a 3-sample run of all probes plus 6 more samples of those two. Their tables are in <code>reports/memory-probe-phase2/archive-x6/</code>. The phase 1 TriData miss was an answer that refused, claiming its tools had been revoked; it was not a retrieval failure.</p>
+
+  <h2>What the Numbers Mean</h2>
+  <ul>
+    <li><b>The target moved.</b> Eight of nine phase 2 leaf2-speedup answers found "leaf2 is biased: RMSE 0.79, a build that dropped half the triangles" with a single search and gave it as the reason. Phase 1 answers gave the right verdict with an invented reason.</li>
+    <li><b>Narrow reads have a cost.</b> TriData's answer spans two A/Bs, at messages 101–112 and 113–115. Phase 1 read a whole 64 KB page and got both by chance. Phase 2 agents read about 10 messages around a hit. One stopped at the first, inconclusive A/B and reported "4.6% slower, rejected". Another never reached the measurement. Search finds where a topic is; it does not tell the agent where the decision is. Phase 3 is meant for this: a keyed working-memory entry written when the decision is made ("TriData tree order: no win, reverted").</li>
+    <li><b>Removing summaries made one answer costlier, not wrong.</b> tg-sweep was answerable from the old 180-character summary in one step. It now takes about four steps and 19 KB of reads. The old summary kept only the first six items of each kind, so whether a fact appeared in it depended on where in the segment it fell.</li>
+    <li><b>Live controls stay cheap.</b> w4-first-ab used no memory tools. leaf2-status averaged one search, about 3 KB, and stayed correct.</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Contract</th><th>Test</th></tr>
+    <tr><td>Search finds a fact in any segment; words match in any order, <code>|</code> separates alternatives, more alternatives rank first, newest first among equals, under the precedence line</td><td><code>TestSearchMemoryFindsOwnArchive</code></td></tr>
+    <tr><td>Search reads only the caller's own archive</td><td><code>TestSearchMemoryFindsOwnArchiveOnly</code></td></tr>
+    <tr><td>A copied read in an old segment is seen as a reference, so a fact is found once</td><td><code>TestSearchSkipsCopiesInOldSegments</code></td></tr>
+    <tr><td>Range reads return whole messages under the cap, continue with <code>next_from</code>, cut one oversized message at an offset that continues exactly, and explain a miss</td><td><code>TestReadMemoryByRange</code></td></tr>
+    <tr><td>Unnumbered segments read by range under the numbers their checkpoint implies; old refs are indexed before their first prompt</td><td><code>TestReadMemoryByRangeReadsUnnumberedSegments</code></td></tr>
+    <tr><td>Search and range results are archived as one-hop references</td><td><code>TestRetrievalResultsArchiveAsReferences</code></td></tr>
+    <tr><td>An index entry records message numbers, tools and file-tool paths, and no summary</td><td><code>TestIndexRecordsToolsAndPaths</code></td></tr>
+    <tr><td>The header indexes the archive and states what the index leaves out; both tools are listed for every agent</td><td><code>TestTaskHeaderIndexesTheArchive</code>, <code>TestPromptListsMemoryToolsAsAllowed</code></td></tr>
+  </table>
+  <p>Each mechanism was mutation-checked against its test: ownership, ranking, the tie order, all-words matching, alternatives, the result limit, whole-message paging, the cut offset, both archived references, old-ref indexing, implicit numbering, copy reduction, and read_file paths. Every mutant failed its test. Two first survived, and their tests were strengthened: a reread of the written file hid the read_file path, and a small sort happened to keep newest-first order. The full suite passes.</p>
+
+  <h2>Not Done Here</h2>
+  <ul>
+    <li>Working memory, the pre-compaction handoff, and superseded-entry marks in search are phase 3.</li>
+    <li>No live rerun of the path-tracer workflow on this binary. The probes measure retrieval on the old run's archive.</li>
+    <li>Phase 3 should add evidence pointers to working-memory entries. The memfix run showed a durable ledger can hold a confabulated reason, written by the agent that forgot the real one.</li>
+  </ul>
+</body>
+</html>

@@ -246,7 +246,9 @@ about. It is acceptable here for three reasons:
 ### Retrieval
 
 - `search_memory query=... limit?` returns up to `limit` (default 10) hits.
-  A hit is a case-insensitive substring or `re:`-prefixed regexp match. It
+  A hit is a message holding every word of the query, or of one of its
+  `|`-separated alternatives, or matching an `re:`-prefixed regexp; all
+  case-insensitive. It
   searches the process's own archive and its own working-memory versions.
   - An archive hit gives the sequence number, role, time, and a window of
     about 300 characters around the match.
@@ -255,7 +257,8 @@ about. It is acceptable here for three reasons:
     both what changed and why.
   - Every result begins with the precedence line: "working memory vN
     (time) is current; archive hits are history."
-  - Hits are newest first, and output is capped at 8 KB.
+  - Hits matching more alternatives come first, newest first among equals,
+    and output is capped at 8 KB.
 - `read_memory from=... to=...` returns messages by sequence number, capped at
   32 KB. If a range is too large, it returns whole messages up to the cap and
   `next_from`. `artifact_id`/`offset` keep working for old checkpoints.
@@ -382,9 +385,15 @@ Either backend can replace the scan later without changing what agents see.
 | Checkpoints and segments from before numbering resume and read as before | `TestUnnumberedCheckpointsStillResume` |
 | Each original message is stored in exactly one segment; read and search results are archived as one-hop references | `TestArchiveStoresEachMessageOnce` |
 | `read_memory` of an archived reference returns the reference, not its target | `TestReadMemoryDoesNotFollowReferences` |
-| `search_memory` finds a fact from any archived segment and only the caller's own | `TestSearchMemoryFindsOwnArchiveOnly` |
+| `search_memory` finds a fact from any archived segment, newest first under the precedence line | `TestSearchMemoryFindsOwnArchive` |
+| `search_memory` reads only the caller's own archive | `TestSearchMemoryFindsOwnArchiveOnly` |
+| A search sees a copied read in an old segment as a reference, so a fact is found once | `TestSearchSkipsCopiesInOldSegments` |
 | Search results state precedence and mark superseded working-memory entries | `TestSearchMarksSupersededEntries` |
 | `read_memory` by range returns whole messages under the cap, with `next_from` | `TestReadMemoryByRange` |
+| Unnumbered segments read by range under the numbers their checkpoint implies, and old refs are indexed before their first prompt | `TestReadMemoryByRangeReadsUnnumberedSegments` |
+| Search and range results are archived as one-hop references | `TestRetrievalResultsArchiveAsReferences` |
+| A segment's index entry records its numbers, tools and file-tool paths, and no summary | `TestIndexRecordsToolsAndPaths` |
+| The header indexes the archive and says what the index leaves out | `TestTaskHeaderIndexesTheArchive` |
 | A labelled notice precedes compaction; a tool step compacts next call | `TestCompactionGivesOneHandoffStep` |
 | After a handoff step that delegates or waits, compaction happens at the next model call; after an exit, none | `TestHandoffStepThatDelegatesWaitsOrExits` |
 | `update_memory` sets and deletes keyed entries, versions the artifact, and rejects over-cap updates with per-section sizes | `TestWorkingMemoryVersionsAndCaps` |
@@ -519,6 +528,73 @@ against the current system.
   This is the number phases 2 and 3 must move. Probes carry a `topic`
   pattern, and `--rescore` re-applies tightened patterns to recorded
   answers.
+
+### Phase 2 as built
+
+- `search_memory query limit?` (`internal/runtime/retrieval.go`). A
+  message matches when it holds every word of the query, in any order, and
+  `|` separates alternatives. `re:` takes a Go regexp. Both are
+  case-insensitive. The design said substring. The first probe run showed
+  why that fails: the model wrote `tridata order|leaf emission order`,
+  meaning alternatives of loose words, and a literal match found nothing
+  in an archive that says "TriData in tree/leaf emission order". Hits
+  that match more alternatives come first, and the newest comes first
+  among equals. The second run showed why ranking is needed. Broad
+  alternatives ("tri order") matched 49 messages, and the 10 newest crowded
+  out the older one that held the measurement and matched the whole query.
+  Each hit keeps its message number, and the precedence line says the
+  higher number supersedes, so ranking does not hide which is current.
+  A hit is one message, with about 150 characters on each
+  side of the first match and a count when a message matches more than
+  once. A hit reads `#412 assistant (art-001056, archived 2026-10-29
+  04:05): …`. Messages carry no time of their own, so the time is when
+  their segment was archived. The result opens with the precedence line
+  "Archive hits are history. Hits matching more of the query come first,
+  newest first among equals; a later message (higher #) supersedes an
+  earlier one, and your live history is newer than any hit." Working
+  memory joins it in phase 3. Output is capped at 8 KB and says how many
+  matching messages it left out.
+- `read_memory from to?` returns `#N role: content` lines. They are whole
+  messages up to 32 KB, with `next_from` when the range goes on. A first
+  message larger than the cap is cut, and the result names the
+  `artifact_id` and byte `offset` where the rest continues. A range outside
+  the archive is an error that says which numbers the archive holds.
+  `artifact_id`/`offset` keeps working.
+- Both read only the segments in the session's own refs, each checked with
+  `ownedBy`, and both are always allowed. Each result is archived as a
+  one-hop reference: `search_memory result (N matching messages): not
+  copied into this segment; search_memory query="…" runs it again`, and
+  `read_memory result (messages a-b): … read_memory from=a to=b reads it
+  again`.
+- Old segments. A segment from before numbering is numbered the way its
+  checkpoint numbers live messages: counting from the start of the
+  process's history. A `read_memory` result that an old segment copied
+  whole is read back as the reference it would be archived as today. This
+  holds for search, range reads and `artifact_id` reads alike, so the
+  `art-001074` copy that misled the baseline is no longer a second source.
+- The header index replaces summaries. A `MemoryRef` carries `from_seq`,
+  `to_seq`, `archived`, tool counts and up to six paths passed to
+  `read_file`, `write_file` and `edit_file`, all recorded at compaction.
+  Refs written before the index get theirs on their next prompt, read once
+  and then saved with the session. The prompt shows one archive line, how
+  to search and read, the index's caveats (not a summary; files that `run`
+  touched are not listed), and one line per segment with paths shortened
+  under their common directory. Segments no longer store a summary, and
+  `memory_refs` is gone from the header JSON.
+- The probe harness also counts `search_memory` calls and the bytes they
+  return.
+- Probes at checkpoint `art-001084`, scored with the same final patterns
+  (report: `reports/memory-phase-2.html`):
+  - **why leaf2 was dropped: 0/9 → 8/9**, with one search and about 4 KB
+    read, against 32–43 KB before;
+  - archive-only TriData: 8/9 → 6/9. Agents read about ten messages
+    around a hit and sometimes stop at the first, inconclusive A/B; the
+    decisive one is three messages later. Search finds where a topic is,
+    not where it was decided. A keyed working-memory entry written at the
+    decision (phase 3) is the intended fix;
+  - the threadgroup question, once answered from the prose summary in one
+    step, now takes about four steps and 19 KB, and stays 3/3;
+  - live controls stay 3/3, and the w4 control makes no memory calls.
 
 ## Book impact
 

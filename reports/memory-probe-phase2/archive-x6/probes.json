@@ -1,0 +1,19 @@
+[
+  {
+    "id": "tridata-order",
+    "kind": "archive",
+    "checkpoint": "art-001084",
+    "question": "Earlier in round 3 you tried storing TriData in tree (leaf-emission) order instead of the original triangle order. What did it measure, and what did you decide?",
+    "topic": "(?i)(tri ?data|tree.order|emission)",
+    "expect": "(?i)\\bwash\\b|no win|no (real |measurable )?(gain|speedup)|(inside|within) (the )?[~±0-9% -]*session(-to-session)? (noise|drift)"
+  },
+  {
+    "id": "leaf2-speedup",
+    "kind": "superseded",
+    "checkpoint": "art-001084",
+    "question": "In round 3, did leaf2 (two triangles per BVH leaf) give a real speedup? Should pathtracer/ use it?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
+    "expect": "(?i)(\\bbiased\\b|non-?convergent|dropp(ed|ing) (about |roughly |~)?(half|triangles|geometry)|missing triangles|missed geometry|0\\.79|0\\.7946|buggy build|real (numerical )?(bug|defect))",
+    "reject": "(?i)(\\byes\\b[,.]? (it|leaf2) (did|was|gave|is)|should (re-?)?adopt (it|leaf2)|re-?adopt leaf2|(adoption|adopted version) was lost)"
+  }
+]

@@ -60,6 +60,7 @@ type Sample struct {
 	OffTopic    bool   `json:"off_topic,omitempty"`
 	Steps       int    `json:"steps"`
 	MemoryReads int    `json:"memory_reads"`
+	Searches    int    `json:"searches,omitempty"`
 	BytesRead   int    `json:"bytes_read"`
 	ToolErrors  int    `json:"tool_errors"`
 	Error       string `json:"error,omitempty"`
@@ -168,7 +169,7 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 
 // probeAgent finds the process that wrote the probe's checkpoint and its
 // agent spec, stripped of every capability: the system prompt then lists
-// only read_memory, which is always allowed.
+// only search_memory and read_memory, which are always allowed.
 func probeAgent(k *kernel.Kernel, store *artifact.Store, spec agentflow.WorkflowSpec, probe Probe) (kernel.Process, agentflow.AgentSpec, error) {
 	record, err := store.Metadata(probe.Checkpoint)
 	if err != nil {
@@ -233,13 +234,19 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 		ContinueOnToolError:    true,
 		OnAssistantMessage:     func(text string) { sample.Answer = text },
 		OnToolCall: func(call runtime.ToolCall) {
-			if call.Name == "read_memory" {
+			switch call.Name {
+			case "read_memory":
 				sample.MemoryReads++
+			case "search_memory":
+				sample.Searches++
 			}
 		},
 		OnToolResult: func(result tools.Result) {
-			if result.Tool == "read_memory" {
+			switch result.Tool {
+			case "read_memory":
 				sample.BytesRead += len(result.Output["messages"])
+			case "search_memory":
+				sample.BytesRead += len(result.Output["hits"])
 			}
 		},
 		OnToolError: func(runtime.ToolCall, error) { sample.ToolErrors++ },
@@ -358,6 +365,7 @@ type Summary struct {
 	MinSteps   int     `json:"min_steps"`
 	MaxSteps   int     `json:"max_steps"`
 	MeanReads  float64 `json:"mean_reads"`
+	MeanSearch float64 `json:"mean_searches"`
 	MeanBytes  float64 `json:"mean_bytes"`
 }
 
@@ -387,6 +395,7 @@ func Summarize(samples []Sample) []Summary {
 		}
 		summary.MeanSteps += float64(sample.Steps)
 		summary.MeanReads += float64(sample.MemoryReads)
+		summary.MeanSearch += float64(sample.Searches)
 		summary.MeanBytes += float64(sample.BytesRead)
 		summary.MinSteps = min(summary.MinSteps, sample.Steps)
 		summary.MaxSteps = max(summary.MaxSteps, sample.Steps)
@@ -397,6 +406,7 @@ func Summarize(samples []Sample) []Summary {
 		n := float64(summary.Samples)
 		summary.MeanSteps /= n
 		summary.MeanReads /= n
+		summary.MeanSearch /= n
 		summary.MeanBytes /= n
 		out = append(out, *summary)
 	}
@@ -405,10 +415,10 @@ func Summarize(samples []Sample) []Summary {
 
 // WriteTable prints summaries as an aligned text table.
 func WriteTable(w io.Writer, summaries []Summary) {
-	fmt.Fprintf(w, "%-24s %-10s %8s %10s %9s %6s %11s %10s %10s\n", "probe", "kind", "correct", "superseded", "off-topic", "errors", "steps", "reads", "bytes")
+	fmt.Fprintf(w, "%-24s %-10s %8s %10s %9s %6s %11s %8s %6s %10s\n", "probe", "kind", "correct", "superseded", "off-topic", "errors", "steps", "searches", "reads", "bytes")
 	for _, s := range summaries {
-		fmt.Fprintf(w, "%-24s %-10s %4d/%-3d %10d %9d %6d %5.1f %2d-%-2d %10.1f %10.0f\n",
-			s.Probe, s.Kind, s.Correct, s.Samples, s.Superseded, s.OffTopic, s.Errors, s.MeanSteps, s.MinSteps, s.MaxSteps, s.MeanReads, s.MeanBytes)
+		fmt.Fprintf(w, "%-24s %-10s %4d/%-3d %10d %9d %6d %5.1f %2d-%-2d %8.1f %6.1f %10.0f\n",
+			s.Probe, s.Kind, s.Correct, s.Samples, s.Superseded, s.OffTopic, s.Errors, s.MeanSteps, s.MinSteps, s.MaxSteps, s.MeanSearch, s.MeanReads, s.MeanBytes)
 	}
-	fmt.Fprintln(w, strings.Repeat("-", 106))
+	fmt.Fprintln(w, strings.Repeat("-", 113))
 }
