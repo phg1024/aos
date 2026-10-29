@@ -461,6 +461,18 @@ against the current system.
   process has no tools but `read_memory`, and answers are scored against
   `expect`/`reject` patterns, several samples per probe. The probes for the
   run above are in `bench/memory/pathtracer-bunny-memfix-probes.json`.
+- Baseline, 3 samples per probe at checkpoint `art-001084` (report:
+  `reports/memory-phase-1.html`):
+  - archive-only TriData: 3/3, with one read each;
+  - live controls: 3/3, with no reads;
+  - **why leaf2 was dropped: 0/3.** Both samples that read memory picked
+    the old nested segment `art-001074` and got a copy. The bias finding
+    is past the first page of `art-001056`. Every answer gave a plausible
+    substitute ("did not reproduce", "not bias").
+
+  This is the number phases 2 and 3 must move. Probes carry a `topic`
+  pattern, and `--rescore` re-applies tightened patterns to recorded
+  answers.
 
 ## Book impact
 

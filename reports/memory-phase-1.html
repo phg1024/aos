@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Phase 1 Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 960px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Phase 1 Report: Compaction Mechanics</h1>
+    <p>Phase 1 of <code>memory-system-design.md</code>. The first live run where agents used <code>read_memory</code> (<code>pathtracer-bunny-memfix</code>) showed four problems. Compaction re-fired almost every step. Segments copied other segments. Reads paged blindly by byte offset. And nothing marked which fact was current. In round 3, the writer took an archived "leaf2 is 27% faster" note as current, re-adopted leaf2, and spent about 20 steps rediscovering that leaf2 was biased. This phase fixes the mechanics without changing the prompt, and adds the replay harness that the later phases are measured with.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b>Message numbering.</b>
+      <ul>
+        <li><code>Message.Seq</code> numbers every message from 1. It is assigned before each compaction and in each checkpoint, and it survives compaction, Resume and Recover. <code>Session.NextSeq</code> holds the last number assigned.</li>
+        <li>Segments record <code>from_seq</code> and <code>to_seq</code>.</li>
+        <li>A checkpoint from before numbering continues after its archived messages, so numbers still count from the start of the process's history.</li>
+      </ul></li>
+    <li><b>Hysteresis.</b>
+      <ul>
+        <li><code>CompactionPolicy.TargetChars</code> defaults to half the trigger. Compaction archives until live history is at or under the target, so the next compaction is at least the gap away.</li>
+        <li><code>KeepMessages</code> is now an upper bound, and windowed policies set none. Before, the 12 newest messages were kept whatever their size, so the kept tail alone could exceed the trigger. That was the thrash in the run: 11- and 4-message segments, and live history peaking at 186,200 characters against a 157,000 trigger.</li>
+      </ul></li>
+    <li><b>Clean cuts.</b>
+      <ul>
+        <li>A cut falls only at the start of a turn. A tool result stays with its action, and an action record stays with the message that follows it.</li>
+        <li>The latest turn is never archived. When that turn alone is over the target, it is kept, and the compaction is marked oversized.</li>
+      </ul></li>
+    <li><b>Observability.</b> Each compaction is a <code>memory.compacted</code> kernel event with its segment, sequence range, live messages and characters, and <code>oversized</code>.</li>
+    <li><b>No nesting.</b>
+      <ul>
+        <li>A <code>read_memory</code> result carries <code>ArchiveAs</code>, a one-hop reference such as <code>read_memory result (art-X, bytes a-b of n): not copied into this segment; read_memory artifact_id=art-X offset=a reads it again</code>. The segment stores that reference instead of the text.</li>
+        <li>Reading a segment back returns the reference, never the text it names.</li>
+        <li>A <code>read_memory</code> result from an older checkpoint is reduced to the segment it named.</li>
+      </ul></li>
+    <li><b>Precondition.</b> <code>CompactionPolicy.Validate(maxOutput)</code> rejects a policy whose hysteresis gap a single tool output can fill. <code>aos run</code> and <code>aos-tui</code> check it at startup.
+      <ul>
+        <li>A 65,536-token window passes: 78,643 characters of headroom against 65,536.</li>
+        <li>A 16,384-token window is refused.</li>
+        <li>The default policy, used when the window is unknown, is exempt.</li>
+      </ul></li>
+    <li><b>One owner of context.</b> The backend's own history trimming, with its summary and omitted-count fields, is removed, and the prompt carries the session's live history verbatim. Windowed runs never filled those fields, because the runtime compacted first, so their prompts are unchanged.</li>
+    <li><b>Replay harness.</b> <code>aos probe-memory</code> (<code>internal/memprobe</code>) runs probes against a run.
+      <ul>
+        <li>It copies the kernel and the artifact index to a work directory. Payloads are write-once, so they are read in place.</li>
+        <li>For each probe it spawns a process with no tools but <code>read_memory</code>, resumed from the chosen checkpoint as if recovered from its owner.</li>
+        <li>It asks the question several times and scores each answer with <code>expect</code> and <code>reject</code> patterns.</li>
+        <li>It reports correct and superseded answers, steps, reads and bytes per probe.</li>
+      </ul></li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Contract</th><th>Test</th></tr>
+    <tr><td>A window too small for the hysteresis is refused, and a 64k window passes</td><td><code>TestCompactionRejectsCapsOverHysteresis</code>, <code>TestRunWorkflowRefusesCompactionThatWouldThrash</code> (no state is created)</td></tr>
+    <tr><td>No prompt exceeds the trigger, each compaction leaves at most the target, and compactions are at least four steps apart</td><td><code>TestCompactionHasHysteresis</code></td></tr>
+    <tr><td>Live history starts at a turn, and a segment ends at the end of one</td><td><code>TestCompactionCutsCleanly</code></td></tr>
+    <tr><td>An oversized latest turn is kept whole and reported</td><td><code>TestOversizedTailIsReported</code></td></tr>
+    <tr><td>Sequence numbers run from 1 with no gaps through every segment and live history, across a Recover</td><td><code>TestMessageSeqSurvivesRecovery</code></td></tr>
+    <tr><td>An unnumbered checkpoint resumes, numbering continues after its archive, its old segments read, and its old read copy is archived as a reference</td><td><code>TestUnnumberedCheckpointsStillResume</code></td></tr>
+    <tr><td>Each message is stored in exactly one segment, and a read is archived as a reference</td><td><code>TestArchiveStoresEachMessageOnce</code></td></tr>
+    <tr><td>Reading a segment that holds a reference returns the reference</td><td><code>TestReadMemoryDoesNotFollowReferences</code></td></tr>
+    <tr><td>The prompt is the session's history: every message, verbatim, without bookkeeping fields</td><td><code>TestPromptHistoryIsTheSession</code> (replaces two tests of the removed backend trimming)</td></tr>
+    <tr><td>Probes run on a copy, offer no working tools, score correct and superseded answers, and leave the original unchanged</td><td><code>TestProbesScoreAnswersFromMemoryOnACopy</code>, <code>TestLoadProbesChecksProbes</code>, <code>TestRunProbesWritesSamplesAndTable</code></td></tr>
+  </table>
+  <p>Each new runtime test was checked by breaking the mechanism it covers: no hysteresis, no clean cuts, reads copied, no legacy numbering base, no legacy reference. Every mutation made its tests fail. The probe test fails when the probe keeps the agent's tools. The full suite passes: <code>go test ./...</code>.</p>
+
+  <h2>Baseline Probe</h2>
+  <p>The baseline used <code>aos probe-memory</code> against <code>reports/pathtracer-bunny-memfix</code> with the probes in <code>bench/memory/pathtracer-bunny-memfix-probes.json</code>. All five probes resume the round-3 writer at checkpoint <code>art-001084</code> (03:58, five segments archived). The model and parameters were the run's own (phg-gpu Strata, temperature 0.6, top-p 0.95, 65,536-token window), with 3 samples per probe and at most 12 steps each. The segments were written by the old binary, so this measures the current retrieval on the history as it was. The samples are in <code>reports/memory-probe-baseline/</code>.</p>
+  <table>
+    <tr><th>Probe</th><th>Where the answer is</th><th>Correct</th><th>Steps (min-max)</th><th>Memory reads</th><th>Bytes read</th></tr>
+    <tr><td><code>tridata-order</code></td><td>archive only (<code>art-000969</code>)</td><td>3/3</td><td>2.0 (2-2)</td><td>1.0</td><td>65,536</td></tr>
+    <tr><td><code>tg-sweep</code></td><td>archive, and also in the header's mechanical summary</td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
+    <tr><td><code>leaf2-status</code></td><td>live: the current binary prints <code>nodes=69450</code></td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
+    <tr><td><code>leaf2-speedup</code></td><td>archive, superseded: "27% faster" early in <code>art-001056</code>, then the finding that leaf2 was biased (RMSE 0.79, a buggy build that dropped triangles) at its end</td><td><b>0/3</b></td><td>1.7 (1-2)</td><td>0.7</td><td>43,691</td></tr>
+    <tr><td><code>w4-first-ab</code></td><td>live (control)</td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
+  </table>
+  <p><b>What it shows.</b></p>
+  <ul>
+    <li>Agents do use <code>read_memory</code> when the answer is only in the archive (TriData: one read each, correct), and they do not read when the answer is live (controls: 0 reads).</li>
+    <li>On the one question that matters, why leaf2 was dropped, all three answers were wrong. None recovered the bias. They gave plausible substitutes instead: the number "did not reproduce", "one noisy session", "I never re-ran leaf2 against the RMSE references" (it had, and got 0.79), and one answer said outright "That is not bias".</li>
+    <li>Both samples that read memory chose <code>art-001074</code>, the old binary's nested segment, and got its first page, which is a copy of <code>art-000969</code>. The finding they needed sits in <code>art-001056</code> past byte 65,536. That is the run's failure reproduced: nesting and blind paging lead to a confident wrong answer. Phase 1 stops new nesting, but the existing segments stay as written.</li>
+  </ul>
+  <p><b>Scoring.</b></p>
+  <ul>
+    <li>The first baseline (<code>v1/</code>) scored a reply about something else as correct because it contained the word "rejected". Probes now carry a <code>topic</code> pattern that an answer must match before it is scored. Rescored, v1 gives TriData 2/3.</li>
+    <li>The first leaf2-speedup pattern accepted the answers above on stray words such as "bary dropped" and "wash". It now requires the actual finding. <code>aos probe-memory --rescore</code> applies the current patterns to recorded answers without model calls, which is how the table above was scored.</li>
+    <li>Regex scoring catches stray matches only when the pattern names the specific finding, so answers should still be read.</li>
+  </ul>
+  <p>This is the number phases 2 and 3 have to move: leaf2-speedup at 0/3, with the controls staying at 0 reads.</p>
+
+  <h2>Not Done Here</h2>
+  <ul>
+    <li>No prompt changes. The header still lists one ref per segment with a mechanical summary, until phase 2's index. There is no precedence line or working memory, until phase 3.</li>
+    <li>References are byte-based (<code>artifact_id</code>, <code>offset</code>) until phase 2 adds range reads by sequence number.</li>
+    <li>A <code>run</code> result can reach about 128 KB (stdout and stderr are capped separately), which is beyond the precondition. Such a turn is reported as oversized rather than refused.</li>
+    <li>The live path-tracer run still runs on <code>eceb917</code> and is unaffected.</li>
+  </ul>
+</body>
+</html>

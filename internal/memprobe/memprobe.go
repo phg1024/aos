@@ -257,6 +257,44 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 	return sample
 }
 
+// Rescore scores recorded samples again against probes, without model
+// calls, so a tightened pattern applies to answers already collected.
+// Samples of probes not in the list keep their scores.
+func Rescore(samples []Sample, probes []Probe) []Sample {
+	byID := map[string]Probe{}
+	for _, probe := range probes {
+		byID[probe.ID] = probe
+	}
+	out := make([]Sample, 0, len(samples))
+	for _, sample := range samples {
+		if probe, ok := byID[sample.Probe]; ok {
+			sample.Correct, sample.Superseded, sample.OffTopic = false, false, false
+			score(&sample, probe)
+		}
+		out = append(out, sample)
+	}
+	return out
+}
+
+// ReadSamples reads samples written one JSON object per line.
+func ReadSamples(path string) ([]Sample, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	var samples []Sample
+	decoder := json.NewDecoder(file)
+	for decoder.More() {
+		var sample Sample
+		if err := decoder.Decode(&sample); err != nil {
+			return nil, err
+		}
+		samples = append(samples, sample)
+	}
+	return samples, nil
+}
+
 func score(sample *Sample, probe Probe) {
 	if sample.Answer == "" {
 		return

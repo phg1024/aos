@@ -174,3 +174,30 @@ func TestLoadProbesChecksProbes(t *testing.T) {
 		t.Fatalf("probes = %+v, %v", probes, err)
 	}
 }
+
+// Rescoring applies tightened patterns to recorded answers: a regex that
+// matched a stray word no longer counts.
+func TestRescoreAppliesTightenedPatterns(t *testing.T) {
+	samples := []memprobe.Sample{
+		{Probe: "leaf2", Answer: "leaf2 did not reproduce; the build has bary dropped", Correct: true},
+		{Probe: "leaf2", Answer: "leaf2 was biased: it dropped half the triangles", Correct: true},
+		{Probe: "other", Answer: "anything", Correct: true},
+	}
+	path := filepath.Join(t.TempDir(), "samples.jsonl")
+	var lines bytes.Buffer
+	encoder := json.NewEncoder(&lines)
+	for _, sample := range samples {
+		_ = encoder.Encode(sample)
+	}
+	if err := os.WriteFile(path, lines.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	read, err := memprobe.ReadSamples(path)
+	if err != nil || len(read) != 3 {
+		t.Fatalf("read %d samples: %v", len(read), err)
+	}
+	rescored := memprobe.Rescore(read, []memprobe.Probe{{ID: "leaf2", Topic: "leaf2", Expect: `(?i)biased|dropped half`}})
+	if rescored[0].Correct || !rescored[1].Correct || !rescored[2].Correct {
+		t.Fatalf("rescored = %+v", rescored)
+	}
+}
