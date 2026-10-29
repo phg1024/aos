@@ -16,7 +16,7 @@
 <body>
   <div class="hero">
     <h1>Memory Phase 1 Report: Compaction Mechanics</h1>
-    <p>Phase 1 of <code>memory-system-design.md</code>. The first live run where agents used <code>read_memory</code> (<code>pathtracer-bunny-memfix</code>) showed four problems. Compaction re-fired almost every step. Segments copied other segments. Reads paged blindly by byte offset. And nothing marked which fact was current. In round 3, the writer took an archived "leaf2 is 27% faster" note as current, re-adopted leaf2, and spent about 20 steps rediscovering that leaf2 was biased. This phase fixes the mechanics without changing the prompt, and adds the replay harness that the later phases are measured with.</p>
+    <p>Commits <code>07e88e5</code>, <code>4317d9b</code>, <code>59fb62a</code>, and the review fixes below. Phase 1 of <code>memory-system-design.md</code>. The first live run where agents used <code>read_memory</code> (<code>pathtracer-bunny-memfix</code>) showed four problems. Compaction re-fired almost every step. Segments copied other segments. Reads paged blindly by byte offset. And nothing marked which fact was current. In round 3, the writer took an archived "leaf2 is 27% faster" note as current, re-adopted leaf2, and spent about 20 steps rediscovering that leaf2 was biased. This phase fixes the mechanics without changing the prompt, and adds the replay harness that the later phases are measured with.</p>
   </div>
 
   <h2>What Was Done</h2>
@@ -83,13 +83,13 @@
     <tr><td><code>tridata-order</code></td><td>archive only (<code>art-000969</code>)</td><td>3/3</td><td>2.0 (2-2)</td><td>1.0</td><td>65,536</td></tr>
     <tr><td><code>tg-sweep</code></td><td>archive, and also in the header's mechanical summary</td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
     <tr><td><code>leaf2-status</code></td><td>live: the current binary prints <code>nodes=69450</code></td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
-    <tr><td><code>leaf2-speedup</code></td><td>archive, superseded: "27% faster" early in <code>art-001056</code>, then the finding that leaf2 was biased (RMSE 0.79, a buggy build that dropped triangles) at its end</td><td><b>0/3</b></td><td>1.7 (1-2)</td><td>0.7</td><td>43,691</td></tr>
+    <tr><td><code>leaf2-speedup</code></td><td>archive, superseded: "27% faster" early in <code>art-001056</code>, then the finding that leaf2 was biased (RMSE 0.79, a buggy build that dropped triangles) at its end</td><td>verdict 3/3, <b>reason 0/3</b></td><td>1.7 (1-2)</td><td>0.7</td><td>43,691</td></tr>
     <tr><td><code>w4-first-ab</code></td><td>live (control)</td><td>3/3</td><td>1.0 (1-1)</td><td>0</td><td>0</td></tr>
   </table>
   <p><b>What it shows.</b></p>
   <ul>
     <li>Agents do use <code>read_memory</code> when the answer is only in the archive (TriData: one read each, correct), and they do not read when the answer is live (controls: 0 reads).</li>
-    <li>On the one question that matters, why leaf2 was dropped, all three answers were wrong. None recovered the bias. They gave plausible substitutes instead: the number "did not reproduce", "one noisy session", "I never re-ran leaf2 against the RMSE references" (it had, and got 0.79), and one answer said outright "That is not bias".</li>
+    <li>On the one question that matters, why leaf2 was dropped, all three answers had the verdict right (leaf2 is not a real speedup) and the reason wrong. None recovered the bias. They gave confident, plausible substitutes instead: the number "did not reproduce", "one noisy session", "I never re-ran leaf2 against the RMSE references" (it had, and got 0.79), and one answer said outright "That is not bias".</li>
     <li>Both samples that read memory chose <code>art-001074</code>, the old binary's nested segment, and got its first page, which is a copy of <code>art-000969</code>. The finding they needed sits in <code>art-001056</code> past byte 65,536. That is the run's failure reproduced: nesting and blind paging lead to a confident wrong answer. Phase 1 stops new nesting, but the existing segments stay as written.</li>
   </ul>
   <p><b>Scoring.</b></p>
@@ -100,11 +100,26 @@
   </ul>
   <p>This is the number phases 2 and 3 have to move: leaf2-speedup at 0/3, with the controls staying at 0 reads.</p>
 
+  <h2>Review Fixes</h2>
+  <p>The book session's verification found two gaps in the contracts as first built. Both are fixed.</p>
+  <ul>
+    <li><b>Validate checked the wrong bound.</b> <code>run</code> capped stdout and stderr separately and echoed the command, so one result could reach about 142 KB, against a gap of 78,643 characters at a 64k window.
+      <ul>
+        <li>The two streams now share the 64 KB cap. Each keeps half, and a quiet stream leaves its share to the other.</li>
+        <li>The echoed command is capped at 2 KB.</li>
+        <li>The runtime truncates any recorded result over <code>tools.MaxToolResultBytes</code> (68 KB), and <code>Validate</code> uses that bound.</li>
+        <li>A turn whose own action is larger than the gap can still compact on the next step. No configuration bounds an action's size. That compaction archives a whole turn and is reported as oversized.</li>
+        <li>Tests: <code>TestRunResultFitsTheResultBound</code>, and <code>TestHysteresisHoldsForTheLargestTurn</code>, which runs worst-case results with real <code>run</code> commands, plus a large-action case.</li>
+      </ul></li>
+    <li><b>A crash could store a range twice.</b> The segment is written before the checkpoint that drops its messages. Segments now record <code>from_seq</code> and <code>to_seq</code>, and a replay from the same checkpoint adopts the existing segment and cuts where it did (<code>adopted=true</code> on the event). It adopts only a segment that no later checkpoint followed. A second deliberate resume from one checkpoint is a fork and still cuts its own segment. Test: <code>TestCompactionIsIdempotentAcrossRecover</code>.</li>
+    <li>Both fixes were mutation-checked: separate stream caps, no backstop, and no adoption each make their tests fail.</li>
+    <li><b>Evidence count.</b> <code>pid-000009</code> has two failures of different kinds, now counted separately: a superseded fact cited as current (leaf2 re-adopted at 04:07), and an archived result forgotten with the experiment repeated (leaf2b in <code>art-001220</code>, a question <code>art-001056</code> had answered).</li>
+  </ul>
+
   <h2>Not Done Here</h2>
   <ul>
     <li>No prompt changes. The header still lists one ref per segment with a mechanical summary, until phase 2's index. There is no precedence line or working memory, until phase 3.</li>
     <li>References are byte-based (<code>artifact_id</code>, <code>offset</code>) until phase 2 adds range reads by sequence number.</li>
-    <li>A <code>run</code> result can reach about 128 KB (stdout and stderr are capped separately), which is beyond the precondition. Such a turn is reported as oversized rather than refused.</li>
     <li>The live path-tracer run still runs on <code>eceb917</code> and is unaffected.</li>
   </ul>
 </body>

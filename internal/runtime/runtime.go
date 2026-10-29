@@ -847,7 +847,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			})
 			resultMessage := Message{
 				Role:    "tool",
-				Content: fmt.Sprintf("%s:%v", toolResult.Tool, toolResult.Output),
+				Content: toolResultMessage(toolResult),
 			}
 			if toolResult.Tool == "read_memory" {
 				end := toolResult.Output["next_offset"]
@@ -1331,6 +1331,14 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	if cut == 0 {
 		return session, nil
 	}
+	prior, priorCut, err := r.priorSegment(process.PID, session.Messages, parents)
+	if err != nil {
+		return Session{}, err
+	}
+	if prior.ID != "" {
+		cut = priorCut
+		oversized = policy.MaxChars > 0 && historyChars(session.Messages[cut:]) > policy.targetChars()
+	}
 
 	older := archivedMessages(session.Messages[:cut])
 	recent := append([]Message(nil), session.Messages[cut:]...)
@@ -1343,11 +1351,16 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		Summary:      summarizeMemoryMessages(older),
 		Messages:     older,
 	}
-	record, err := r.Artifacts.CreateJSON("memory_segment", process.PID, segment, parents, map[string]string{
-		"sequence": strconv.Itoa(segment.Sequence),
-	})
-	if err != nil {
-		return Session{}, err
+	record := prior
+	if record.ID == "" {
+		record, err = r.Artifacts.CreateJSON("memory_segment", process.PID, segment, parents, map[string]string{
+			"sequence": strconv.Itoa(segment.Sequence),
+			"from_seq": strconv.Itoa(segment.FromSeq),
+			"to_seq":   strconv.Itoa(segment.ToSeq),
+		})
+		if err != nil {
+			return Session{}, err
+		}
 	}
 	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", map[string]string{
 		"segment":       record.ID,
@@ -1357,6 +1370,7 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		"live_messages": strconv.Itoa(len(recent)),
 		"live_chars":    strconv.Itoa(historyChars(recent)),
 		"oversized":     strconv.FormatBool(oversized),
+		"adopted":       strconv.FormatBool(prior.ID != ""),
 	}); err != nil {
 		return Session{}, err
 	}
@@ -1368,6 +1382,67 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	session.MemorySequence++
 	session.Messages = recent
 	return session, nil
+}
+
+// toolResultMessage records a tool result in the history. Tools cap their
+// own output; this holds every result to tools.MaxToolResultBytes, the
+// bound compaction is validated against, whatever a tool returns.
+func toolResultMessage(result tools.Result) string {
+	content := fmt.Sprintf("%s:%v", result.Tool, result.Output)
+	if len(content) <= tools.MaxToolResultBytes {
+		return content
+	}
+	cut := tools.MaxToolResultBytes - 200
+	for cut > 0 && !utf8.RuneStart(content[cut]) {
+		cut--
+	}
+	return content[:cut] + fmt.Sprintf("\n[tool result truncated: showing %d of %d bytes]", cut, len(content))
+}
+
+// priorSegment finds a segment this process, or one it was recovered from,
+// already cut from the same checkpoint starting at the same message, that
+// no later checkpoint followed: a run that crashed after compacting but
+// before checkpointing the result. The replay adopts it, and cuts where it
+// did, so no message is stored twice. A segment a checkpoint followed
+// belongs to a run that went on, so a second resume from the same
+// checkpoint is a fork and cuts its own. A compaction with no parent
+// checkpoint (the first step of a fresh run) cannot be replayed.
+func (r *AgentRuntime) priorSegment(pid string, messages []Message, parents []string) (artifact.Artifact, int, error) {
+	if len(parents) == 0 || len(messages) == 0 || messages[0].Seq == 0 {
+		return artifact.Artifact{}, 0, nil
+	}
+	records, err := r.Artifacts.List()
+	if err != nil {
+		return artifact.Artifact{}, 0, err
+	}
+	from := strconv.Itoa(messages[0].Seq)
+	followed := func(segment artifact.Artifact) bool {
+		for _, record := range records {
+			if record.Type == "checkpoint" && slices.Equal(record.ParentIDs, parents) && !record.CreatedAt.Before(segment.CreatedAt) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, record := range records {
+		if record.Type != "memory_segment" || record.Metadata["from_seq"] != from || !slices.Equal(record.ParentIDs, parents) {
+			continue
+		}
+		if r.ownedBy(pid, record) != nil || followed(record) {
+			continue
+		}
+		to, err := strconv.Atoi(record.Metadata["to_seq"])
+		if err != nil {
+			continue
+		}
+		for i, message := range messages {
+			// The cut must leave the latest turn live, as compactionCut does.
+			if message.Seq == to && i+1 < len(messages) {
+				return record, i + 1, nil
+			}
+		}
+	}
+	return artifact.Artifact{}, 0, nil
 }
 
 // compactionCut is how many of the oldest messages to archive: the fewest,

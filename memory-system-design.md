@@ -50,6 +50,16 @@ segments by 06:47Z; the evidence below does not depend on the later ones.
   already established at 03:3x. That earlier finding was in `art-001056`
   the whole time. This is the failure the design is for: a superseded fact
   in the archive, taken as current, and the work redone.
+- **And again.** In `art-001220` (msgs 46–66), the same writer decided that
+  leaf2 "almost certainly" had a bug in its second-triangle slot. It built
+  a new variant, leaf2b, fixed a shader error on the way, measured it 14%
+  slower, and rejected it. `art-001056` (msgs 50–62) had already found and
+  fixed that bug (RMSE 0.475902 against 0.475898) and measured the fixed
+  leaf2 as a loss against wide1. The question was answered at 03:3x and
+  asked again about an hour later. This is a different failure: no
+  superseded fact was cited, an archived one was forgotten and the
+  experiment repeated. The evaluation counts the two kinds separately. In
+  `pid-000009` there is one of each.
 
 Patching each of these on its own would leave the design where it is: one
 compaction pass, one paging tool, and no place for state that must survive.
@@ -405,10 +415,11 @@ Either backend can replace the scan later without changing what agents see.
    - compactions per process and the smallest segment size (no thrash);
    - peak live characters (must stay ≤ H unless a compaction was `oversized`);
    - `search_memory`, `read_memory` and `update_memory` calls;
-   - superseded facts cited as current after a compaction, the failure this
-     run showed;
-   - repeated experiments, found as benchmark commands that recur after a
-     compaction with no code change in between;
+   - superseded facts cited as current after a compaction (one in
+     `pid-000009`: leaf2 re-adopted at 04:07);
+   - archived results forgotten and experiments repeated, counted separately
+     (one in `pid-000009`: leaf2b re-asked the question `art-001056` had
+     answered);
    - the final speedup and verifier verdicts, to confirm nothing regresses.
 
 ## Phases
@@ -440,10 +451,37 @@ against the current system.
   now an upper bound, and a windowed policy sets none. Cuts fall only at the
   start of a turn: a tool result stays with its action, and an action record
   stays with the message that followed it.
-- `CompactionPolicy.Validate(maxOutput)`. `aos run` and `aos-tui` refuse a
-  windowed policy whose gap `H − L` a single 64 KB output can fill. The
-  default policy, for an unknown window, is exempt; it was already bounded
-  mostly by message count.
+- `CompactionPolicy.Validate(maxResult)` runs against
+  `tools.MaxToolResultBytes` (68 KB), the bound on a whole recorded tool
+  result. `run`'s stdout and stderr share the 64 KB output cap; each keeps
+  half, and a quiet stream leaves its share to the other. The echoed command
+  is capped at 2 KB, since the full command is in the action. The runtime
+  truncates any result that would still be over the bound. `aos run` and
+  `aos-tui` refuse a windowed policy whose gap `H − L` one such result can
+  fill. The default policy, for an unknown window, is exempt; it was already
+  bounded mostly by message count.
+- What hysteresis guarantees, exactly. After a compaction, live history is
+  at most the larger of `L` and the latest turn. So compaction on two
+  consecutive steps needs a turn larger than `H − L`. Tool results cannot be
+  that large. An action can be, for example a long `write_file`, because no
+  configuration bounds an action's size: `max_tokens` counts thinking too,
+  and validating against it would refuse every practical window. Such a
+  turn may compact on the next step. That compaction still archives at
+  least one whole turn and is reported as `oversized`.
+  `TestHysteresisHoldsForTheLargestTurn` covers both cases.
+- Compaction is idempotent across a crash. The segment is written before
+  the checkpoint that drops its messages, so a crash in between replays the
+  compaction. A segment records `from_seq` and `to_seq`. Suppose this
+  process, or one it was recovered from, already cut a segment from the same
+  checkpoint starting at the same message, and no later checkpoint followed
+  it. Then the replay adopts that segment and cuts where it did
+  (`memory.compacted` with `adopted=true`). A segment that a checkpoint
+  followed belongs to a run that went on, so a second resume from the same
+  checkpoint is a fork and cuts its own segment
+  (`TestTwoResumesFromOneCheckpointKeepSeparateSegments` still holds). A
+  fresh run's first compaction has no parent checkpoint and cannot be
+  replayed.
+  `TestCompactionIsIdempotentAcrossRecover` covers it.
 - Each compaction is a `memory.compacted` kernel event. It records the
   segment, the sequence range, the live messages and characters, and
   `oversized`.
@@ -465,10 +503,12 @@ against the current system.
   `reports/memory-phase-1.html`):
   - archive-only TriData: 3/3, with one read each;
   - live controls: 3/3, with no reads;
-  - **why leaf2 was dropped: 0/3.** Both samples that read memory picked
-    the old nested segment `art-001074` and got a copy. The bias finding
-    is past the first page of `art-001056`. Every answer gave a plausible
-    substitute ("did not reproduce", "not bias").
+  - **why leaf2 was dropped: verdict 3/3, reason 0/3.** Every answer said
+    leaf2 is not a real speedup, which is right, and none gave the reason.
+    Both samples that read memory picked the old nested segment
+    `art-001074` and got a copy. The bias finding is past the first page of
+    `art-001056`. Every answer gave a confident, plausible substitute ("did
+    not reproduce", "one noisy session", "that is not bias").
 
   This is the number phases 2 and 3 must move. Probes carry a `topic`
   pattern, and `--rescore` re-applies tightened patterns to recorded

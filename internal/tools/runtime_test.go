@@ -1,6 +1,7 @@
 package tools_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -376,5 +377,41 @@ func TestWriteFileRequiresContent(t *testing.T) {
 	}
 	if err := write(map[string]string{"path": target, "content": ""}); err != nil {
 		t.Fatalf("expected an explicit empty write to succeed: %v", err)
+	}
+}
+
+// A command's stdout and stderr share one cap, and its echoed command is
+// capped too, so a whole run result stays within MaxToolResultBytes.
+func TestRunResultFitsTheResultBound(t *testing.T) {
+	root := t.TempDir()
+	runtime := tools.NewRuntime()
+	mounts := []capability.Mount{{Name: "workspace", HostPath: root}}
+	set := capability.Set{ReadPaths: []string{root}, Tools: []string{"run"}}
+	command := "head -c 70000 /dev/zero | tr '\\0' o; head -c 70000 /dev/zero | tr '\\0' e >&2 # " + strings.Repeat("c", 5000)
+	result, err := runtime.Execute(tools.Request{Tool: "run", Args: map[string]string{"command": command}, Mounts: mounts, CapabilitySet: set})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	stdout, stderr := result.Output["stdout"], result.Output["stderr"]
+	if !strings.Contains(stdout, "[truncated: showing") || !strings.Contains(stderr, "[truncated: showing") {
+		t.Fatalf("both streams should be truncated with a notice: %d and %d bytes", len(stdout), len(stderr))
+	}
+	if len(stdout)+len(stderr) > tools.MaxToolOutputBytes+400 {
+		t.Fatalf("stdout and stderr together are %d bytes, over the shared cap", len(stdout)+len(stderr))
+	}
+	if echoed := result.Output["command"]; len(echoed) > 2200 || !strings.Contains(echoed, "the full command is in your action") {
+		t.Fatalf("echoed command is %d bytes", len(echoed))
+	}
+	if formatted := fmt.Sprintf("%s:%v", result.Tool, result.Output); len(formatted) > tools.MaxToolResultBytes {
+		t.Fatalf("formatted result is %d bytes, over %d", len(formatted), tools.MaxToolResultBytes)
+	}
+
+	// A quiet stream leaves its share to the other.
+	result, err = runtime.Execute(tools.Request{Tool: "run", Args: map[string]string{"command": "head -c 50000 /dev/zero | tr '\\0' o; echo short >&2"}, Mounts: mounts, CapabilitySet: set})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(result.Output["stdout"]) != 50000 {
+		t.Fatalf("stdout under the shared cap should be whole, got %d bytes", len(result.Output["stdout"]))
 	}
 }

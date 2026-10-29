@@ -446,3 +446,119 @@ func TestReadMemoryDoesNotFollowReferences(t *testing.T) {
 		t.Fatalf("the second read should show the reference, got %.300q", reads[1])
 	}
 }
+
+// worstRun is a run action whose result is as large as a tool result can
+// be: 70 KB on each stream, and a command padded to pad bytes.
+func worstRun(pad int) runtime.GenerateResult {
+	command := "head -c 70000 /dev/zero | tr '\\0' o; head -c 70000 /dev/zero | tr '\\0' e >&2 # " + strings.Repeat("c", pad)
+	return toolAction("run", map[string]string{"command": command})
+}
+
+// With a 64k window, the largest tool result fits the hysteresis gap, so a
+// run of worst-case results never compacts on consecutive steps. A turn
+// whose own action pushes it past the gap may, and every such compaction is
+// reported as oversized.
+func TestHysteresisHoldsForTheLargestTurn(t *testing.T) {
+	policy := runtime.ContextCompactionPolicy(65536, 0.8)
+	if err := policy.Validate(tools.MaxToolResultBytes); err != nil {
+		t.Fatalf("a 64k window should hold the largest tool result: %v", err)
+	}
+	for _, tc := range []struct {
+		name          string
+		pad           int
+		consecutiveOK bool
+	}{
+		{"largest result", 5000, false},
+		{"large action", 40000, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			k, store, process := newCancelFixture(t)
+			var refs []int
+			backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				refs = append(refs, len(request.MemoryRefs))
+				for _, message := range request.History {
+					if message.Role == "tool" && len(message.Content) > tools.MaxToolResultBytes {
+						t.Errorf("a %d-byte tool result is over the bound", len(message.Content))
+					}
+				}
+				if call == 9 {
+					return exitResult("done"), nil
+				}
+				return worstRun(tc.pad), nil
+			}}
+			agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 12, Compaction: policy}
+			if _, err := agent.Run(context.Background(), process.PID, nil); err != nil {
+				t.Fatal(err)
+			}
+			events := compactionEvents(t, k)
+			if len(events) < 2 {
+				t.Fatalf("expected repeated compaction, got %d", len(events))
+			}
+			for i := 2; i < len(refs); i++ {
+				consecutive := refs[i] > refs[i-1] && refs[i-1] > refs[i-2]
+				if consecutive && !tc.consecutiveOK {
+					t.Fatalf("compacted on consecutive steps %d and %d: %v", i-1, i, refs)
+				}
+			}
+			if tc.consecutiveOK {
+				for _, event := range events[1:] {
+					if event.Data["oversized"] != "true" {
+						t.Fatalf("a turn past the gap should be reported oversized: %+v", event.Data)
+					}
+				}
+			}
+		})
+	}
+}
+
+// A run that compacts and then fails before checkpointing leaves a segment
+// its last checkpoint does not know. Recovering replays the compaction:
+// it adopts that segment and cuts where it did, so no message is stored
+// twice.
+func TestCompactionIsIdempotentAcrossRecover(t *testing.T) {
+	k, store, process := newMemoryFixture(t)
+	policy := runtime.CompactionPolicy{MaxChars: 12000}
+	var firstRefs []runtime.MemoryRef
+	first := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if len(request.MemoryRefs) > 0 {
+			firstRefs = request.MemoryRefs
+			return runtime.GenerateResult{}, errors.New("connection reset")
+		}
+		return markedMessage(call, 1000), nil
+	}}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 40, Compaction: policy}
+	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
+	if err == nil || len(firstRefs) != 1 {
+		t.Fatalf("expected a failure right after the first compaction, refs %+v, err %v", firstRefs, err)
+	}
+	var recoveredRefs []runtime.MemoryRef
+	agent.Backend = &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			recoveredRefs = request.MemoryRefs
+		}
+		return exitResult("done"), nil
+	}}
+	if _, err := agent.Recover(context.Background(), process.PID, failed.ExitStatus.Checkpoint, nil, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(recoveredRefs) != 1 || recoveredRefs[0].ArtifactID != firstRefs[0].ArtifactID {
+		t.Fatalf("recovery should adopt %s, got %+v", firstRefs[0].ArtifactID, recoveredRefs)
+	}
+	records, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	segments := 0
+	for _, record := range records {
+		if record.Type == "memory_segment" {
+			segments++
+		}
+	}
+	if segments != 1 {
+		t.Fatalf("the replayed compaction wrote another segment: %d segments", segments)
+	}
+	events := compactionEvents(t, k)
+	if len(events) != 2 || events[0].Data["adopted"] != "false" || events[1].Data["adopted"] != "true" {
+		t.Fatalf("expected the replay recorded as adopted: %+v", events)
+	}
+}

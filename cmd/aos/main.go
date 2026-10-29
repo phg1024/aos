@@ -193,7 +193,7 @@ func run(args []string) {
 }
 
 func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, budget capability.Budget, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
-	if err := compaction.Validate(tools.MaxToolOutputBytes); err != nil {
+	if err := compaction.Validate(tools.MaxToolResultBytes); err != nil {
 		return err
 	}
 	specBytes, err := os.ReadFile(workflowPath)

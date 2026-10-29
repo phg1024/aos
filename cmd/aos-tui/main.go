@@ -155,7 +155,7 @@ func runTUI() []string {
 	}
 
 	compaction := llmConfig.CompactionPolicy()
-	if err := compaction.Validate(tools.MaxToolOutputBytes); err != nil {
+	if err := compaction.Validate(tools.MaxToolResultBytes); err != nil {
 		fail(err)
 	}
 	agentRuntime := &runtime.AgentRuntime{

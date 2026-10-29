@@ -30,8 +30,18 @@ import (
 var runWaitDelay = 2 * time.Second
 
 // MaxToolOutputBytes caps file contents and command output returned to an
-// agent, so a single large result cannot overflow the model context.
+// agent, so a single large result cannot overflow the model context. A
+// command's stdout and stderr share it.
 const MaxToolOutputBytes = 64 * 1024
+
+// MaxToolResultBytes bounds a whole tool result as the runtime records it:
+// one capped output plus the fields around it, such as the echoed command.
+// Compaction is validated against it.
+const MaxToolResultBytes = MaxToolOutputBytes + 4096
+
+// maxEchoedCommandBytes caps the command run echoes back; the full command
+// is in the agent's own action.
+const maxEchoedCommandBytes = 2048
 
 // Search endpoints are variables so tests can point them at a local server.
 var (
@@ -333,10 +343,11 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 				exitCode = 1
 			}
 		}
+		stdout, stderr := capStreams(stdoutBuf.String(), stderrBuf.String())
 		output := map[string]string{
-			"command":       command,
-			"stdout":        capOutput(stdoutBuf.String()),
-			"stderr":        capOutput(stderrBuf.String()),
+			"command":       echoedCommand(command),
+			"stdout":        stdout,
+			"stderr":        stderr,
 			"exit_code":     fmt.Sprintf("%d", exitCode),
 			"confinement":   confinement,
 			"timeout":       timeout.String(),
@@ -515,18 +526,43 @@ func mountRoot(mounts []capability.Mount) string {
 // capToolOutput truncates s to MaxToolOutputBytes on a UTF-8 boundary and
 // appends a notice with the dropped size and how to see more.
 func capToolOutput(s, hint string) (string, bool) {
-	if len(s) <= MaxToolOutputBytes {
+	return capAt(s, MaxToolOutputBytes, hint)
+}
+
+// capAt truncates s to limit bytes on a UTF-8 boundary, with the notice.
+func capAt(s string, limit int, hint string) (string, bool) {
+	if len(s) <= limit {
 		return s, false
 	}
-	cut := MaxToolOutputBytes
+	cut := limit
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
 	return s[:cut] + fmt.Sprintf("\n[truncated: showing %d of %d bytes; %s]", cut, len(s), hint), true
 }
 
-func capOutput(s string) string {
-	capped, _ := capToolOutput(s, "redirect output to a file and inspect it in smaller pieces")
+// capStreams caps a command's stdout and stderr together at
+// MaxToolOutputBytes: each may keep half, and what one leaves unused the
+// other may take.
+func capStreams(stdout, stderr string) (string, string) {
+	const hint = "redirect output to a file and inspect it in smaller pieces"
+	if len(stdout)+len(stderr) <= MaxToolOutputBytes {
+		return stdout, stderr
+	}
+	outLimit, errLimit := MaxToolOutputBytes/2, MaxToolOutputBytes/2
+	switch {
+	case len(stdout) < outLimit:
+		errLimit = MaxToolOutputBytes - len(stdout)
+	case len(stderr) < errLimit:
+		outLimit = MaxToolOutputBytes - len(stderr)
+	}
+	stdout, _ = capAt(stdout, outLimit, hint)
+	stderr, _ = capAt(stderr, errLimit, hint)
+	return stdout, stderr
+}
+
+func echoedCommand(command string) string {
+	capped, _ := capAt(command, maxEchoedCommandBytes, "the full command is in your action")
 	return capped
 }
 
