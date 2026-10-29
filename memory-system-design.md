@@ -364,6 +364,28 @@ Against it, today:
   directory, or if queries across processes or runs are needed. Then it
   should replace the artifact index as a whole, with its integrity
   guarantees carried over, not be added beside it for memory alone.
+- **SQLite FTS5 for `search_memory` alone (decided 2026-10-29).** Phase 2
+  changed matching twice: substring to all-words with `|` alternatives,
+  then newest-first to ranking by alternatives matched. Both
+  reimplemented parts of FTS. The search-engine part is only about 100
+  lines of `retrieval.go`; numbering, ownership, one-hop references,
+  legacy numbering, the index and range reads are needed with SQLite too.
+  The failures that remain are not search quality: TriData stopped at an
+  inconclusive A/B, and the leaf2 errors were about which claim is
+  current, one with the fact in context. So the scan stays, under a rule:
+  1. If `search_memory` needs a third change to matching, tokenization or
+     ranking, stop hand-tuning and move to SQLite FTS5 (BM25) behind the
+     same `search_memory` interface.
+  2. SQLite is then a derived index only. Memory segments stay artifacts
+     and remain the only record. The index is rebuilt from them and can be
+     deleted and rebuilt at any time: context is derived, applied to the
+     index. This removes the rule-3 tamper-evidence objection above.
+  3. Use a pure-Go driver with FTS5 (`modernc.org/sqlite`): no cgo, so
+     cross-compiling and the Linux sandbox's re-exec helper are
+     unaffected. The index file sits in the state directory under the same
+     path protection.
+  4. The cost that remains is the dependency. Past that threshold,
+     AGENTS.md's "clearly justified" is met.
 - **Vector search:** if replay or live runs show agents failing to find
   facts they need by meaning, such as "have I tried a similar memory-layout
   change before", where exact search returned nothing. Then it is an
