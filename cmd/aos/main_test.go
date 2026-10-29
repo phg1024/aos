@@ -65,6 +65,21 @@ func TestRunWorkflowSucceedsWhenEntrySucceeds(t *testing.T) {
 	}
 }
 
+// A context window too small for compaction's hysteresis is refused before
+// the run creates any state.
+func TestRunWorkflowRefusesCompactionThatWouldThrash(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	err := runWorkflow(context.Background(), exitCompleter{kernel.ExitStatus{Code: 0, Reason: "done"}}, runtime.ContextCompactionPolicy(16384, 0.8), capability.Budget{},
+		writeSoloWorkflow(t, dir), nil, "", "", stateDir, "go", false)
+	if err == nil || !strings.Contains(err.Error(), "larger context window") {
+		t.Fatalf("expected the policy to be refused, got %v", err)
+	}
+	if _, statErr := os.Stat(stateDir); !os.IsNotExist(statErr) {
+		t.Fatalf("a refused run should create no state, stat = %v", statErr)
+	}
+}
+
 // failingCompleter fails every completion, as a backend that is down does.
 type failingCompleter struct{}
 

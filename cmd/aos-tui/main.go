@@ -155,6 +155,9 @@ func runTUI() []string {
 	}
 
 	compaction := llmConfig.CompactionPolicy()
+	if err := compaction.Validate(tools.MaxToolOutputBytes); err != nil {
+		fail(err)
+	}
 	agentRuntime := &runtime.AgentRuntime{
 		Kernel:     k,
 		Artifacts:  store,
@@ -169,11 +172,10 @@ func runTUI() []string {
 		fail(err)
 	}
 	agentRuntime.Backend = agentflow.PromptBackend{
-		Completer:  backend,
-		Workflow:   spec,
-		Agent:      agent,
-		Skills:     loadedSkills,
-		Compaction: compaction,
+		Completer: backend,
+		Workflow:  spec,
+		Agent:     agent,
+		Skills:    loadedSkills,
 	}
 
 	footer := render.NewFooterBar(ui)
@@ -189,9 +191,8 @@ func runTUI() []string {
 			Leases:    leaseManager,
 			Tools:     agentRuntime.Tools,
 			Factory: agentflow.StaticBackendFactory{
-				Completer:  backend,
-				Skills:     skills.NewRegistry(spec.SkillRoots),
-				Compaction: compaction,
+				Completer: backend,
+				Skills:    skills.NewRegistry(spec.SkillRoots),
 			},
 			Compaction: compaction,
 			Trace: agentflow.Tracers(agentflow.TraceToLog(traceLog), func(event agentflow.TraceEvent) {

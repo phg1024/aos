@@ -1,0 +1,32 @@
+[
+  {
+    "id": "tridata-order",
+    "kind": "archive",
+    "checkpoint": "art-001084",
+    "question": "Earlier in round 3 you tried storing TriData in tree (leaf-emission) order instead of the original triangle order. What did it measure, and what did you decide?",
+    "expect": "(?i)(no win|no gain|wash|inconclusive|not faster|revert|rejected|did not help|didn't help)"
+  },
+  {
+    "id": "tg-sweep",
+    "kind": "archive",
+    "checkpoint": "art-001084",
+    "question": "Which threadgroup size did your round-3 threadgroup sweep settle on, and what did the deciding A/B measure?",
+    "expect": "(?i)(\\bTG ?=? ?4\\b|4 ?x ?4|threadgroup size (of )?4\\b)",
+    "reject": "(?i)(settled on|kept|chose|use[sd]?|adopted) (TG ?=? ?2|2 ?x ?2)\\b"
+  },
+  {
+    "id": "leaf2-status",
+    "kind": "superseded",
+    "checkpoint": "art-001084",
+    "question": "Is leaf2 (two triangles per BVH leaf) adopted in pathtracer/ right now? Why or why not?",
+    "expect": "(?i)(not adopted|isn't adopted|is not in|rejected|reverted|biased|bug|invalid|dropped|a loss|lost|slower|wash)",
+    "reject": "(?i)(\\byes\\b[^.]{0,60}\\badopted|leaf2 is (currently )?adopted|leaf2 is (the )?current)"
+  },
+  {
+    "id": "w4-first-ab",
+    "kind": "live",
+    "checkpoint": "art-001084",
+    "question": "What did the first A/B of the 4-wide BVH (w4) against the current build measure, before you shrank BVH_STACK?",
+    "expect": "(?i)(8 ?%|49\\.5|45\\.9|slower)"
+  }
+]

@@ -1,7 +1,7 @@
 # Memory System Design
 
 Status: proposal, 2026-10-29, revised after review by the aos book session.
-Nothing here is implemented yet except where a section says so.
+Phase 1 is implemented (see "Phase 1 as built"); the rest is not.
 
 ## Why
 
@@ -42,6 +42,14 @@ segments by 06:47Z; the evidence below does not depend on the later ones.
     archived and one live, both claimed to be current.
   - **Growing header.** One `MemoryRef` per compaction, each with a
     mechanical summary of 180-character fragments.
+- **What it cost.** The 03:58 read of `art-001074` returned only copies, so
+  the contradiction stayed open. At 04:07 the writer read an old note in the
+  archive ("leaf2 measured 33.5 vs 45.8") as current, concluded that "the
+  leaf2 adoption was lost", and adopted leaf2 again. It then spent about 20
+  steps re-measuring leaf2 and found again that it was biased, which it had
+  already established at 03:3x. That earlier finding was in `art-001056`
+  the whole time. This is the failure the design is for: a superseded fact
+  in the archive, taken as current, and the work redone.
 
 Patching each of these on its own would leave the design where it is: one
 compaction pass, one paging tool, and no place for state that must survive.
@@ -136,9 +144,10 @@ and `search_memory` caps. At a 65,536-token window, `L` ≈ 78,600 characters
 and the current caps pass. At a 16,384-token window, `H` ≈ 39,300 characters,
 so a single 64 KB result exceeds `H` itself and every step would compact. That
 configuration must be refused, or the caps scaled to the window, before the
-run starts. `compaction.oversized` remains as a runtime trace event for the
-one case configuration cannot rule out: a call/result pair whose action is
-itself large, such as a long `write_file`.
+run starts. A `memory.compacted` kernel event marked `oversized` remains for
+the cases configuration cannot rule out: a call/result pair whose action is
+itself large, such as a long `write_file`, or a `run` result, whose stdout
+and stderr are capped at 64 KB each.
 
 With the precondition met and `L = H / 2`, the next compaction is at least
 `H − L` characters of new history away.
@@ -257,10 +266,10 @@ about. It is acceptable here for three reasons:
   
   Files that `run` commands touch do not appear, and the index says so, so it
   never reads as a complete list of files.
-- When a runtime compaction policy is set, the backend's own history bound
-  (`compactHistory` in `internal/agentflow/backend.go`) is disabled. The
-  prompt's messages are then exactly the session's live history.
-  `TestPromptHistoryIsTheSession` asserts it.
+- The backend's own history bound (`compactHistory` in
+  `internal/agentflow/backend.go`) is removed. The prompt's messages are
+  exactly the session's live history. `TestPromptHistoryIsTheSession`
+  asserts it.
 
 ### Tool results in live history (experiment)
 
@@ -358,7 +367,7 @@ Either backend can replace the scan later without changing what agents see.
 | Configuration is refused when an output cap is not well under H − L | `TestCompactionRejectsCapsOverHysteresis` |
 | Live history after compaction is ≤ L; the next compaction needs ≥ H − L new characters | `TestCompactionHasHysteresis` |
 | A cut never separates a tool call from its result | `TestCompactionCutsCleanly` |
-| An oversized call/result pair compacts and records `compaction.oversized` | `TestOversizedTailIsReported` |
+| An oversized call/result pair compacts and records `memory.compacted` with `oversized=true` | `TestOversizedTailIsReported` |
 | Sequence numbers are unique and stable across compaction, Resume and Recover | `TestMessageSeqSurvivesRecovery` |
 | Checkpoints and segments from before numbering resume and read as before | `TestUnnumberedCheckpointsStillResume` |
 | Each original message is stored in exactly one segment; read and search results are archived as one-hop references | `TestArchiveStoresEachMessageOnce` |
@@ -394,7 +403,7 @@ Either backend can replace the scan later without changing what agents see.
    Compare the current memory system with each phase.
 3. **Live rerun** of `pathtracer-bunny-metal` on the new binary. Measure:
    - compactions per process and the smallest segment size (no thrash);
-   - peak live characters (must stay ≤ H unless `compaction.oversized`);
+   - peak live characters (must stay ≤ H unless a compaction was `oversized`);
    - `search_memory`, `read_memory` and `update_memory` calls;
    - superseded facts cited as current after a compaction, the failure this
      run showed;
@@ -420,6 +429,38 @@ Each phase ends with tests, a commit and an HTML report in `reports/`.
 
 The replay harness is built in phase 1, so every later phase is measured
 against the current system.
+
+### Phase 1 as built
+
+- `Message.Seq` and `Session.NextSeq`. Messages are numbered before every
+  compaction and in every checkpoint. A checkpoint from before numbering
+  continues after its archived messages, and its segments still read with
+  `artifact_id`/`offset`.
+- `CompactionPolicy.TargetChars`, default `MaxChars / 2`. `KeepMessages` is
+  now an upper bound, and a windowed policy sets none. Cuts fall only at the
+  start of a turn: a tool result stays with its action, and an action record
+  stays with the message that followed it.
+- `CompactionPolicy.Validate(maxOutput)`. `aos run` and `aos-tui` refuse a
+  windowed policy whose gap `H − L` a single 64 KB output can fill. The
+  default policy, for an unknown window, is exempt; it was already bounded
+  mostly by message count.
+- Each compaction is a `memory.compacted` kernel event. It records the
+  segment, the sequence range, the live messages and characters, and
+  `oversized`.
+- A `read_memory` result is archived as `read_memory result (art-X, bytes
+  a-b of n): not copied into this segment; read_memory artifact_id=art-X
+  offset=a reads it again`. It is byte-based until phase 2 adds range reads.
+  A legacy read, from a checkpoint before this change, is reduced to the
+  segment it named.
+- The backend's history compaction and its summary fields are removed.
+  Windowed runs never had them filled, because the runtime compacted first,
+  so their prompts are unchanged.
+- `aos probe-memory` and `internal/memprobe` form the replay harness. Probes
+  run on a copy of the kernel and artifact index. Payloads are read in place,
+  so run the harness from the directory the run started in. The probe
+  process has no tools but `read_memory`, and answers are scored against
+  `expect`/`reject` patterns, several samples per probe. The probes for the
+  run above are in `bench/memory/pathtracer-bunny-memfix-probes.json`.
 
 ## Book impact
 

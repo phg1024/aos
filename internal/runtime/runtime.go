@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -53,6 +54,15 @@ var ErrNotRecoverable = errors.New("process is not recoverable")
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Seq numbers the message within its process's session, from 1, in
+	// the order messages were appended. It never changes, survives
+	// compaction, Resume and Recover, and addresses archived history.
+	// Zero means not yet numbered (numberMessages assigns it).
+	Seq int `json:"seq,omitempty"`
+	// ArchiveAs, when set, is stored in a memory segment in place of
+	// Content. A read_memory result sets it to a reference to what it
+	// read, so compaction never copies one segment into another.
+	ArchiveAs string `json:"archive_as,omitempty"`
 }
 
 type ToolCall struct {
@@ -115,6 +125,8 @@ type Session struct {
 	ToolAttempts        []ToolAttempt `json:"tool_attempts,omitempty"`
 	MemoryRefs          []MemoryRef   `json:"memory_refs,omitempty"`
 	MemorySequence      int           `json:"memory_sequence,omitempty"`
+	// NextSeq is the last message sequence number assigned.
+	NextSeq int `json:"next_seq,omitempty"`
 	// MailboxSeen lists the IDs of the messages already in this session, so
 	// a message delivered again (the bus delivers at least once) is
 	// recorded only once.
@@ -173,18 +185,27 @@ type AgentRuntime struct {
 	OnCapabilityDenied func(kernel.Event)
 }
 
-// CompactionPolicy decides when older history is compacted. A zero
-// MaxMessages or MaxChars disables that trigger.
+// CompactionPolicy decides when older history is compacted and how much
+// stays live. Compaction starts when history exceeds MaxMessages or
+// MaxChars (zero disables that trigger), then archives the oldest messages
+// until at most KeepMessages (zero: no limit) and TargetChars remain. The
+// gap between MaxChars and TargetChars is the hysteresis: the next
+// compaction is that much new history away.
 type CompactionPolicy struct {
 	MaxMessages  int
 	MaxChars     int
 	KeepMessages int
+	// TargetChars defaults to MaxChars / 2.
+	TargetChars int
 }
 
 // EstimatedCharsPerToken is a conservative chars-per-token ratio for the
 // code- and JSON-heavy prompts agents see.
 const EstimatedCharsPerToken = 3
 
+// DefaultCompactionPolicy is for an unknown context window. It is bounded
+// mostly by message count and is not held to Validate: large tool outputs
+// make it compact often, which an unknown window cannot avoid.
 func DefaultCompactionPolicy() CompactionPolicy {
 	return CompactionPolicy{
 		MaxMessages:  sessionMemoryMaxMessages,
@@ -194,11 +215,10 @@ func DefaultCompactionPolicy() CompactionPolicy {
 }
 
 // ContextCompactionPolicy compacts once history reaches ratio of a context
-// window of windowTokens tokens, keeping the most recent messages live.
+// window of windowTokens tokens, down to half of that, by size alone.
 func ContextCompactionPolicy(windowTokens int, ratio float64) CompactionPolicy {
 	return CompactionPolicy{
-		MaxChars:     int(float64(windowTokens)*ratio) * EstimatedCharsPerToken,
-		KeepMessages: sessionMemoryKeepMessages,
+		MaxChars: int(float64(windowTokens)*ratio) * EstimatedCharsPerToken,
 	}
 }
 
@@ -207,17 +227,44 @@ func (p CompactionPolicy) ShouldCompact(messages []Message) bool {
 	if p.MaxMessages > 0 && len(messages) > p.MaxMessages {
 		return true
 	}
+	return p.MaxChars > 0 && historyChars(messages) > p.MaxChars
+}
+
+func (p CompactionPolicy) targetChars() int {
+	if p.TargetChars > 0 {
+		return p.TargetChars
+	}
+	return p.MaxChars / 2
+}
+
+// Validate refuses a policy whose hysteresis a single message can defeat:
+// if one tool output can be as large as the gap between MaxChars and
+// TargetChars, history can cross MaxChars again a step after compacting.
+// maxOutputChars is the largest output a single tool call returns.
+func (p CompactionPolicy) Validate(maxOutputChars int) error {
 	if p.MaxChars <= 0 {
-		return false
+		return nil
 	}
-	totalChars := 0
+	if target := p.targetChars(); target >= p.MaxChars {
+		return fmt.Errorf("compaction target of %d chars must be below its trigger of %d", target, p.MaxChars)
+	}
+	if gap := p.MaxChars - p.targetChars(); maxOutputChars >= gap {
+		return fmt.Errorf("compaction at %d chars down to %d leaves %d chars of headroom, but one tool output can be %d chars, so every step could compact; use a larger context window",
+			p.MaxChars, p.targetChars(), gap, maxOutputChars)
+	}
+	return nil
+}
+
+func historyChars(messages []Message) int {
+	total := 0
 	for _, message := range messages {
-		totalChars += len(message.Role) + len(message.Content)
-		if totalChars > p.MaxChars {
-			return true
-		}
+		total += messageChars(message)
 	}
-	return false
+	return total
+}
+
+func messageChars(message Message) int {
+	return len(message.Role) + len(message.Content)
 }
 
 func (r *AgentRuntime) compactionPolicy() CompactionPolicy {
@@ -798,10 +845,18 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Signature: signature,
 				Useful:    useful,
 			})
-			session.Messages = append(session.Messages, Message{
+			resultMessage := Message{
 				Role:    "tool",
 				Content: fmt.Sprintf("%s:%v", toolResult.Tool, toolResult.Output),
-			})
+			}
+			if toolResult.Tool == "read_memory" {
+				end := toolResult.Output["next_offset"]
+				if end == "" {
+					end = toolResult.Output["total_bytes"]
+				}
+				resultMessage.ArchiveAs = readMemoryReference(toolResult.Output["artifact_id"], toolResult.Output["offset"], end, toolResult.Output["total_bytes"])
+			}
+			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
 				session.Messages = append(session.Messages, Message{
 					Role:    "tool",
@@ -1261,22 +1316,30 @@ func loopSensitiveTool(name string) bool {
 // the runtime owns, cut from the checkpoint named by parents. It needs no
 // writable path, the agent's file tools cannot reach it, and every
 // compaction gets its own artifact, so resumes never collide.
+//
+// It archives the oldest messages until the policy's targets hold, cutting
+// only at the start of a turn, so a tool call stays with its result, and
+// never past the latest turn. If the latest turn alone is over the target,
+// it is kept anyway and the memory.compacted event says oversized.
 func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session, parents []string) (Session, error) {
+	session = numberMessages(session)
 	policy := r.compactionPolicy()
 	if !policy.ShouldCompact(session.Messages) {
 		return session, nil
 	}
-	if len(session.Messages) <= policy.KeepMessages {
+	cut, oversized := compactionCut(session.Messages, policy)
+	if cut == 0 {
 		return session, nil
 	}
 
-	cut := len(session.Messages) - policy.KeepMessages
-	older := append([]Message(nil), session.Messages[:cut]...)
+	older := archivedMessages(session.Messages[:cut])
 	recent := append([]Message(nil), session.Messages[cut:]...)
 	segment := memorySegment{
 		ProcessID:    process.PID,
 		Sequence:     session.MemorySequence + 1,
 		MessageCount: len(older),
+		FromSeq:      older[0].Seq,
+		ToSeq:        older[len(older)-1].Seq,
 		Summary:      summarizeMemoryMessages(older),
 		Messages:     older,
 	}
@@ -1284,6 +1347,17 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		"sequence": strconv.Itoa(segment.Sequence),
 	})
 	if err != nil {
+		return Session{}, err
+	}
+	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", map[string]string{
+		"segment":       record.ID,
+		"from_seq":      strconv.Itoa(segment.FromSeq),
+		"to_seq":        strconv.Itoa(segment.ToSeq),
+		"archived":      strconv.Itoa(len(older)),
+		"live_messages": strconv.Itoa(len(recent)),
+		"live_chars":    strconv.Itoa(historyChars(recent)),
+		"oversized":     strconv.FormatBool(oversized),
+	}); err != nil {
 		return Session{}, err
 	}
 	session.MemoryRefs = append(session.MemoryRefs, MemoryRef{
@@ -1296,11 +1370,129 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	return session, nil
 }
 
-// memorySegment is the payload of a memory_segment artifact.
+// compactionCut is how many of the oldest messages to archive: the fewest,
+// at a turn boundary, that leave the rest within the policy's targets, or
+// everything before the latest turn when nothing smaller does (oversized
+// reports that the latest turn alone is over the character target).
+func compactionCut(messages []Message, policy CompactionPolicy) (cut int, oversized bool) {
+	target := policy.targetChars()
+	live := historyChars(messages)
+	last := 0
+	for i := range messages {
+		if turnStart(messages, i) {
+			last = i
+		}
+	}
+	for i := range messages {
+		if i > 0 && turnStart(messages, i) {
+			fits := policy.MaxChars <= 0 || live <= target
+			if policy.KeepMessages > 0 && len(messages)-i > policy.KeepMessages {
+				fits = false
+			}
+			if fits || i == last {
+				return i, policy.MaxChars > 0 && live > target
+			}
+		}
+		live -= messageChars(messages[i])
+	}
+	return 0, false
+}
+
+// turnStart reports whether a cut before messages[i] keeps every turn
+// whole: tool results stay with the action that asked for them, and an
+// action record with the message that followed it.
+func turnStart(messages []Message, i int) bool {
+	switch messages[i].Role {
+	case "tool":
+		return false
+	case "assistant":
+		return i == 0 || messages[i-1].Role != "assistant"
+	}
+	return true
+}
+
+// archivedMessages is what a segment stores for messages: their content,
+// or the reference they carry instead (ArchiveAs). A read_memory result
+// from before references existed is reduced to the segment it read.
+func archivedMessages(messages []Message) []Message {
+	out := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		switch {
+		case message.ArchiveAs != "":
+			message.Content = message.ArchiveAs
+			message.ArchiveAs = ""
+		case message.Role == "tool" && strings.HasPrefix(message.Content, "read_memory:"):
+			if id := legacyReadMemoryTarget.FindStringSubmatch(message.Content); id != nil {
+				message.Content = readMemoryReference(id[1], "", "", "")
+			}
+		}
+		out = append(out, message)
+	}
+	return out
+}
+
+var legacyReadMemoryTarget = regexp.MustCompile(`^read_memory:map\[artifact_id:(\S+) `)
+
+// readMemoryReference stands in for a read_memory result in a segment:
+// what was read and how to read it again, without its text. It is one hop:
+// reading it back returns this reference, never the text it names.
+func readMemoryReference(id, offset, end, total string) string {
+	where := id
+	if offset != "" && end != "" && total != "" {
+		where = fmt.Sprintf("%s, bytes %s-%s of %s", id, offset, end, total)
+	}
+	again := "read_memory artifact_id=" + id
+	if offset != "" && offset != "0" {
+		again += " offset=" + offset
+	}
+	return fmt.Sprintf("read_memory result (%s): not copied into this segment; %s reads it again", where, again)
+}
+
+// numberMessages gives every unnumbered message the next sequence number.
+// A session from before numbering starts after its archived messages, so
+// numbers still count from the start of the process's history.
+func numberMessages(session Session) Session {
+	next := session.NextSeq
+	numbered := false
+	for _, message := range session.Messages {
+		if message.Seq > 0 {
+			numbered = true
+			next = max(next, message.Seq)
+		}
+	}
+	if next == 0 && !numbered {
+		for _, ref := range session.MemoryRefs {
+			next += ref.MessageCount
+		}
+	}
+	// Number a copy: the caller's slice may be shared with a saved session.
+	messages := session.Messages
+	copied := false
+	for i := range messages {
+		if messages[i].Seq != 0 {
+			continue
+		}
+		if !copied {
+			messages = append([]Message(nil), messages...)
+			copied = true
+		}
+		next++
+		messages[i].Seq = next
+	}
+	session.Messages = messages
+	session.NextSeq = next
+	return session
+}
+
+// memorySegment is the payload of a memory_segment artifact. FromSeq and
+// ToSeq are the sequence numbers of its first and last messages (zero in
+// segments written before numbering).
 type memorySegment struct {
 	ProcessID    string    `json:"process_id"`
 	Sequence     int       `json:"sequence"`
 	MessageCount int       `json:"message_count"`
+	FromSeq      int       `json:"from_seq,omitempty"`
+	ToSeq        int       `json:"to_seq,omitempty"`
 	Summary      string    `json:"summary,omitempty"`
 	Messages     []Message `json:"messages"`
 }
@@ -1383,6 +1575,7 @@ func cancelReason(ctx context.Context) string {
 // the messages it now records. An acknowledgement that fails only means
 // they are delivered again, and the session drops the repeats.
 func (r *AgentRuntime) saveCheckpoint(pid string, session Session, parents []string, kind string, unacked *[]string) (artifact.Artifact, error) {
+	session = numberMessages(session)
 	record, err := r.Artifacts.CreateJSON("checkpoint", pid, session, parents, map[string]string{"kind": kind})
 	if err != nil {
 		return artifact.Artifact{}, err

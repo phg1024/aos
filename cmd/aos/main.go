@@ -54,6 +54,8 @@ func main() {
 		inspectRun(os.Args[2:])
 	case "reap":
 		reapRun(os.Args[2:])
+	case "probe-memory":
+		probeMemory(os.Args[2:])
 	default:
 		printUsage()
 	}
@@ -191,6 +193,9 @@ func run(args []string) {
 }
 
 func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, budget capability.Budget, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
+	if err := compaction.Validate(tools.MaxToolOutputBytes); err != nil {
+		return err
+	}
 	specBytes, err := os.ReadFile(workflowPath)
 	if err != nil {
 		return err
@@ -243,9 +248,8 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		Bus:       bus,
 		Tools:     toolRuntime(stateDir),
 		Factory: agentflow.StaticBackendFactory{
-			Completer:  backend,
-			Skills:     skills.NewRegistry(spec.SkillRoots),
-			Compaction: compaction,
+			Completer: backend,
+			Skills:    skills.NewRegistry(spec.SkillRoots),
 		},
 		Compaction: compaction,
 		Budget:     budget,
@@ -439,6 +443,7 @@ func printUsage() {
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
 	fmt.Println("  aos inspect [--json] [--tail N] <state-dir>")
 	fmt.Println("  aos reap <state-dir>   exit processes left running by a run that is gone, so they can be recovered")
+	fmt.Println("  aos probe-memory --workflow W --probes P [--samples N] [--out F] <state-dir>   ask agents what they remember, on a copy")
 }
 
 func getenv(key, fallback string) string {

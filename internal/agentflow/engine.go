@@ -32,9 +32,8 @@ type BackendFactory interface {
 }
 
 type StaticBackendFactory struct {
-	Completer  JSONCompleter
-	Skills     skills.Registry
-	Compaction runtime.CompactionPolicy
+	Completer JSONCompleter
+	Skills    skills.Registry
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -43,11 +42,10 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		return nil, err
 	}
 	return PromptBackend{
-		Completer:  f.Completer,
-		Workflow:   workflow,
-		Agent:      agent,
-		Skills:     loadedSkills,
-		Compaction: f.Compaction,
+		Completer: f.Completer,
+		Workflow:  workflow,
+		Agent:     agent,
+		Skills:    loadedSkills,
 	}, nil
 }
 

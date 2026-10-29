@@ -285,48 +285,6 @@ func TestPromptBackendIncludesLoadedSkillsInSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestPromptBackendCompactsLongHistoryInUserPrompt(t *testing.T) {
-	completer := &capturingCompleter{}
-	var history []runtime.Message
-	for i := 0; i < 16; i++ {
-		history = append(history,
-			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i)},
-			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:example output " + strconv.Itoa(i) + "]"},
-		)
-	}
-	backend := agentflow.PromptBackend{
-		Completer: completer,
-		Workflow:  agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
-		Agent: agentflow.AgentSpec{
-			ID:           "interactive",
-			SystemPrompt: "help the user",
-		},
-	}
-
-	_, err := backend.Generate(context.Background(), runtime.GenerateRequest{
-		Process: kernel.Process{
-			PID:      "pid-1",
-			Metadata: map[string]string{"goal": "finish the task"},
-		},
-		History: history,
-	})
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-	if !strings.Contains(completer.userPrompt, `"history_compacted": true`) {
-		t.Fatalf("expected compacted history in user prompt:\n%s", completer.userPrompt)
-	}
-	if !strings.Contains(completer.userPrompt, `"history_summary":`) {
-		t.Fatalf("expected history summary in user prompt:\n%s", completer.userPrompt)
-	}
-	if strings.Contains(completer.userPrompt, `"content": "user constraint round 0"`) {
-		t.Fatalf("expected earliest history to be summarized instead of kept verbatim:\n%s", completer.userPrompt)
-	}
-	if !strings.Contains(completer.userPrompt, "Earlier tool/delegation outcomes") {
-		t.Fatalf("expected summarized tool section in user prompt:\n%s", completer.userPrompt)
-	}
-}
-
 func TestPromptBackendKeepsShortHistoryVerbatim(t *testing.T) {
 	completer := &capturingCompleter{}
 	history := []runtime.Message{
@@ -412,46 +370,53 @@ func capabilitySet(tool string) capability.Set {
 	return capability.Set{Tools: []string{tool}}
 }
 
-func TestPromptBackendHonorsContextCompactionPolicy(t *testing.T) {
+// The runtime alone decides what history the model sees: the backend sends
+// the history it is given, every message, verbatim and in order, and none
+// of the runtime's bookkeeping.
+func TestPromptHistoryIsTheSession(t *testing.T) {
 	var history []runtime.Message
 	for i := 0; i < 16; i++ {
 		history = append(history,
-			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i)},
-			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:example output " + strconv.Itoa(i) + "]"},
+			runtime.Message{Role: "user", Content: "user constraint round " + strconv.Itoa(i), Seq: 2*i + 1},
+			runtime.Message{Role: "tool", Content: "read_file:map[path:/workspace/file-" + strconv.Itoa(i) + ".txt content:" + strings.Repeat("x", 500) + "]", Seq: 2*i + 2, ArchiveAs: "reference"},
 		)
 	}
 	request := runtime.GenerateRequest{
 		Process: kernel.Process{PID: "pid-1", Metadata: map[string]string{"goal": "finish the task"}},
 		History: history,
 	}
-	agent := agentflow.AgentSpec{ID: "interactive", SystemPrompt: "help the user"}
-	workflow := agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"}
+	backend := agentflow.PromptBackend{
+		Workflow: agentflow.WorkflowSpec{Name: "interactive", EntryAgent: "interactive"},
+		Agent:    agentflow.AgentSpec{ID: "interactive", SystemPrompt: "help the user"},
+	}
+
+	messages := backend.PromptMessages(request)
+	if got := messages[2:]; len(got) != len(history) {
+		t.Fatalf("prompt has %d history messages, the session %d", len(got), len(history))
+	}
+	for i, message := range messages[2:] {
+		if message.Content != history[i].Content || message.Seq != 0 || message.ArchiveAs != "" {
+			t.Fatalf("prompt message %d differs from the session: %+v", i, message)
+		}
+	}
+	if strings.Contains(messages[1].Content, "history_summary") || strings.Contains(messages[1].Content, "history_messages_omitted") {
+		t.Fatalf("the header should not summarise history the runtime kept live:\n%s", messages[1].Content)
+	}
 
 	completer := &capturingCompleter{}
-	backend := agentflow.PromptBackend{
-		Completer:  completer,
-		Workflow:   workflow,
-		Agent:      agent,
-		Compaction: runtime.ContextCompactionPolicy(262144, 0.8),
-	}
-	if _, err := backend.Generate(context.Background(), request); err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-	if strings.Contains(completer.userPrompt, `"history_compacted": true`) {
-		t.Fatalf("expected history to fit a 262k window verbatim:\n%s", completer.userPrompt)
-	}
-	if !strings.Contains(completer.userPrompt, `"content": "user constraint round 0"`) {
-		t.Fatalf("expected earliest history kept verbatim:\n%s", completer.userPrompt)
-	}
-
-	completer = &capturingCompleter{}
 	backend.Completer = completer
-	backend.Compaction = runtime.CompactionPolicy{MaxChars: 200, KeepMessages: 2}
 	if _, err := backend.Generate(context.Background(), request); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if !strings.Contains(completer.userPrompt, `"history_messages_omitted": 30`) {
-		t.Fatalf("expected 30 omitted messages with 2 kept:\n%s", completer.userPrompt)
+	for _, unwanted := range []string{"history_compacted", "history_messages_omitted", `"seq"`, "archive_as"} {
+		if strings.Contains(completer.userPrompt, unwanted) {
+			t.Fatalf("single prompt contains %s:\n%.2000s", unwanted, completer.userPrompt)
+		}
+	}
+	for _, message := range history {
+		if !strings.Contains(completer.userPrompt, strconv.Quote(message.Content)) {
+			t.Fatalf("single prompt is missing %.40q", message.Content)
+		}
 	}
 }
 
