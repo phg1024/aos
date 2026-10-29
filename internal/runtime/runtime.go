@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
@@ -1698,14 +1699,38 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		for _, message := range segment.Messages {
 			lines = append(lines, message.Role+": "+message.Content)
 		}
+		// A page at a time: the whole segment would put the compacted history
+		// straight back into the context.
+		text := strings.Join(lines, "\n")
+		offset := 0
+		if raw := strings.TrimSpace(call.Args["offset"]); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 0 {
+				return tools.Result{}, errors.New("read_memory offset must be a non-negative byte offset")
+			}
+			offset = min(parsed, len(text))
+			for offset > 0 && offset < len(text) && !utf8.RuneStart(text[offset]) {
+				offset--
+			}
+		}
+		end := min(offset+tools.MaxToolOutputBytes, len(text))
+		for end > offset && end < len(text) && !utf8.RuneStart(text[end]) {
+			end--
+		}
+		output := map[string]string{
+			"artifact_id":   id,
+			"message_count": strconv.Itoa(segment.MessageCount),
+			"offset":        strconv.Itoa(offset),
+			"total_bytes":   strconv.Itoa(len(text)),
+			"messages":      text[offset:end],
+		}
+		if end < len(text) {
+			output["next_offset"] = strconv.Itoa(end)
+		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "read memory segment",
-			Output: map[string]string{
-				"artifact_id":   id,
-				"message_count": strconv.Itoa(segment.MessageCount),
-				"messages":      strings.Join(lines, "\n"),
-			},
+			Output:  output,
 		}, nil
 	case "publish_artifact":
 		requested := strings.TrimPrefix(strings.TrimSpace(call.Args["type"]), artifact.PublishedPrefix)

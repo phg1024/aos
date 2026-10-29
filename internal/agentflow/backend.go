@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,11 +122,29 @@ func (b PromptBackend) taskHeader(request runtime.GenerateRequest, compacted com
 	}
 	bytes, _ := json.MarshalIndent(payload, "", "  ")
 	return fmt.Sprintf(
-		"Here is your task context.\n\n%s\n\n"+
+		"Here is your task context.\n\n%s\n\n%s"+
 			"The messages that follow are your session history: assistant turns are your own earlier notes and actions, "+
 			"user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.",
-		string(bytes),
+		string(bytes), compactedHistoryNote(request.MemoryRefs),
 	)
+}
+
+// compactedHistoryNote tells an agent whose older history was compacted
+// what it lost and how to get it back, next to the refs themselves.
+func compactedHistoryNote(refs []runtime.MemoryRef) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	messages := 0
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		messages += ref.MessageCount
+		ids = append(ids, ref.ArtifactID)
+	}
+	return fmt.Sprintf("Your %d earlier messages were compacted into memory segments %s (memory_refs above); their summaries are short. "+
+		"When you need something from them that your notes and the live history do not hold, such as an exact number, an error message, "+
+		"or what you already tried, call read_memory with the segment's artifact_id rather than redoing the work; it returns up to 64 KB "+
+		"per call, and offset pages through the rest.\n\n", messages, strings.Join(ids, ", "))
 }
 
 func (b PromptBackend) generateFromMessages(ctx context.Context, completer MessagesCompleter, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
@@ -260,6 +279,11 @@ func (b PromptBackend) systemPrompt() string {
 		builder.WriteString(toolSignature(tool))
 		builder.WriteString("\n")
 	}
+	// The runtime lets every agent read its own compacted history, so it is
+	// listed for every agent, granted or not.
+	if !slices.Contains(b.Agent.Capabilities.Tools, "read_memory") {
+		builder.WriteString("- " + toolSignature("read_memory") + " (always available: reads back your own compacted history)\n")
+	}
 	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
 	return builder.String()
@@ -281,7 +305,7 @@ var toolArgs = map[string]string{
 	"checkpoint":       "",
 	"list_artifacts":   "type?, producer_pid?, scope?",
 	"publish_artifact": "type, body",
-	"read_memory":      "artifact_id",
+	"read_memory":      "artifact_id, offset?",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
 }
