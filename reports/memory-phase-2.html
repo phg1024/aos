@@ -20,7 +20,7 @@
   <div class="hero">
     <h1>Memory Phase 2 Report: Retrieval</h1>
     <p>Phase 2 of <code>memory-system-design.md</code>. In the phase 1 baseline, an agent asked why leaf2 was dropped got the verdict right and the reason wrong every time. The reason sat past the first 64 KB page of a segment, and both agents that read memory picked a nested copy instead. Phase 2 lets an agent find a fact by searching and read it by message number. It also replaces the per-segment prose summaries in the prompt with an index of recorded facts.</p>
-    <p><b>Result:</b> "why leaf2 was dropped" went from <span class="bad">0/9</span> to <span class="good">8/9</span>, reading about 4 KB on average instead of 32–43 KB. One archive-only question got slightly worse: <span class="bad">8/9 → 6/9</span>. The agent now reads a narrow range and sometimes stops at an intermediate result.</p>
+    <p><b>Result:</b> "why leaf2 was dropped" went from <span class="bad">0/9</span> to <span class="good">8/9</span>, reading about 4 KB on average instead of 32–43 KB. That change is real (Fisher exact, p = 0.0004). An archive-only question went from 8/9 to 6/9, which is no detectable change at n=9 (p = 0.58). Its misses do show a mechanism: the agent reads a narrow range and can stop at an intermediate result.</p>
   </div>
 
   <h2>What Was Done</h2>
@@ -29,11 +29,11 @@
       <ul>
         <li>A message matches when it holds every word of the query, in any order. <code>|</code> separates alternatives, and <code>re:</code> takes a regexp. All matching is case-insensitive.</li>
         <li>Hits that match more alternatives come first, and the newest comes first among equals. Each hit shows its message number, role, segment, archive time, and about 150 characters on each side of the match.</li>
-        <li>The result opens with a precedence line: "a later message (higher #) supersedes an earlier one, and your live history is newer than any hit". It is capped at 8 KB and says how many matches it left out.</li>
+        <li>The result opens with a line that states only what the runtime knows, the order: "A higher # is later, not necessarily right: a later message can repeat or explain away a mistake. Check what a claim rests on." It is capped at 8 KB and says how many matches it left out.</li>
       </ul></li>
     <li><b><code>read_memory from to?</code></b>
       <ul>
-        <li>It returns whole numbered messages up to 32 KB, with <code>next_from</code> when the range continues.</li>
+        <li>It returns whole numbered messages up to 32 KB, with <code>next_from</code> when the range continues. The text then ends with a line such as "(stopped at 32 KB; #113-#115 not shown: read_memory from=113 to=115)".</li>
         <li>A single message larger than the cap is cut. The result gives the <code>artifact_id</code> and byte offset where the rest continues.</li>
         <li>A range outside the archive is an error that says which numbers the archive holds.</li>
         <li><code>artifact_id</code>/<code>offset</code> paging still works.</li>
@@ -67,7 +67,7 @@
   <table>
     <tr><th>Probe</th><th>Where the answer is</th><th>Phase 1</th><th>Phase 2 (final)</th><th>Phase 1 mean bytes</th><th>Phase 2 mean bytes</th></tr>
     <tr><td>leaf2-speedup</td><td>archive, superseded: "27% faster" early in <code>art-001056</code>, the bias finding past its first page</td><td class="num bad">0/9</td><td class="num good">8/9</td><td class="num">32–43 KB</td><td class="num">~4 KB</td></tr>
-    <tr><td>tridata-order</td><td>archive only, in <code>art-000969</code>; two A/Bs, the second decisive</td><td class="num">8/9</td><td class="num bad">6/9</td><td class="num">64–89 KB</td><td class="num">27–32 KB</td></tr>
+    <tr><td>tridata-order</td><td>archive only, in <code>art-000969</code>; two A/Bs, the second decisive</td><td class="num">8/9</td><td class="num">6/9 (p = 0.58)</td><td class="num">64–89 KB</td><td class="num">27–32 KB</td></tr>
     <tr><td>tg-sweep</td><td>archive; was also in the old prose summary</td><td class="num">3/3, 1 step</td><td class="num">3/3, 4.3 steps</td><td class="num">0</td><td class="num">~19 KB</td></tr>
     <tr><td>leaf2-status</td><td>live: the current binary prints nodes=69450</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">0</td><td class="num">~3 KB</td></tr>
     <tr><td>w4-first-ab</td><td>live (control)</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">0</td><td class="num">0</td></tr>
@@ -77,10 +77,32 @@
   <h2>What the Numbers Mean</h2>
   <ul>
     <li><b>The target moved.</b> Eight of nine phase 2 leaf2-speedup answers found "leaf2 is biased: RMSE 0.79, a build that dropped half the triangles" with a single search and gave it as the reason. Phase 1 answers gave the right verdict with an invented reason.</li>
-    <li><b>Narrow reads have a cost.</b> TriData's answer spans two A/Bs, at messages 101–112 and 113–115. Phase 1 read a whole 64 KB page and got both by chance. Phase 2 agents read about 10 messages around a hit. One stopped at the first, inconclusive A/B and reported "4.6% slower, rejected". Another never reached the measurement. Search finds where a topic is; it does not tell the agent where the decision is. Phase 3 is meant for this: a keyed working-memory entry written when the decision is made ("TriData tree order: no win, reverted").</li>
-    <li><b>Removing summaries made one answer costlier, not wrong.</b> tg-sweep was answerable from the old 180-character summary in one step. It now takes about four steps and 19 KB of reads. The old summary kept only the first six items of each kind, so whether a fact appeared in it depended on where in the segment it fell.</li>
+    <li><b>Narrow reads can stop short (qualitative; the TriData score itself shows no detectable change).</b> TriData's answer spans two A/Bs, at messages 101–112 and 113–115. Phase 1 read a whole 64 KB page and got both by chance. Phase 2 agents read about 10 messages around a hit. Two of the three misses asked for ranges ending at message 112 and reported the first, inconclusive A/B ("4.6% slower, rejected"). The third read the wrong area. None was cut short by the 32 KB cap. Search finds where a topic is; it does not tell the agent where the decision is. Phase 3 is meant for this: a keyed working-memory entry written when the decision is made ("TriData tree order: no win, reverted").</li>
+    <li><b>A trade-off: removing summaries made one answer costlier, not wrong.</b> tg-sweep was answerable from the old 180-character summary in one step. It now takes about four steps and 19 KB of reads. Removing the summaries follows the imitation lesson and the no-fabrication rule. The old summary also kept only the first six items of each kind, so whether a fact appeared in it depended on where in the segment it fell. Phase 3 should measure whether working memory recovers the cost.</li>
     <li><b>Live controls stay cheap.</b> w4-first-ab used no memory tools. leaf2-status averaged one search, about 3 KB, and stayed correct.</li>
   </ul>
+
+  <h2>Review Fixes</h2>
+  <p>The book session reviewed commit <code>ecb29d4</code>. Its main finding was the first wording of the precedence line: "a later message (higher #) supersedes an earlier one". The runtime knows only order, not truth, and the memfix run has three counterexamples, each a later message contradicting an earlier, correct one:</p>
+  <ul>
+    <li>the round-8 coordinator's claim that the leaf2 rejections were on different node layouts;</li>
+    <li>the round-3 "CONFIRMED HUGE WIN", written after the bias finding;</li>
+    <li>the writer log's invented explanation for why leaf2 had helped.</li>
+  </ul>
+  <p>The line now says a higher # is "later, not necessarily right", and asks the agent to check what a claim rests on. Phase 3's working-memory precedence is a different claim, about which record the agent maintains, so it stays.</p>
+  <table>
+    <tr><th>Probe, 9 samples each</th><th>"supersedes" wording</th><th>order-only wording</th></tr>
+    <tr><td>leaf2-speedup</td><td class="num">8/9</td><td class="num">7/9 (p = 1.0)</td></tr>
+    <tr><td>leaf2-status</td><td class="num">3/3</td><td class="num">9/9</td></tr>
+  </table>
+  <p>No detectable change. Of the two misses, one is unrelated to memory: the agent tried to run tools and reported them blocked. The other answered from an earlier wide-tree measurement without searching. Samples are in <code>reports/memory-probe-phase2/precedence/</code>.</p>
+  <p>Other fixes from the review:</p>
+  <ul>
+    <li>The TriData result is stated as no detectable change (p = 0.58), with the narrow-read mechanism kept as qualitative evidence.</li>
+    <li>The cost of removing summaries is recorded as a trade-off for phase 3 to measure.</li>
+    <li>A cut range read now ends its text with where it stopped and how to read the rest. No TriData miss had been cut short, so this did not cause any of them.</li>
+  </ul>
+  <p>The re-run also turned up a scoring false negative. An answer said the bug "silently dropped" the second triangle, leaving the BVH "missing roughly half the bunny", and the leaf2-speedup pattern did not accept those phrasings. The pattern now does. Every run was rescored with it: phase 1 stays 0/9, and no earlier phase 2 count changed.</p>
 
   <h2>Tests</h2>
   <table>

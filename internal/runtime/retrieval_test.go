@@ -92,6 +92,14 @@ func hitsNewest(t *testing.T, result string) int {
 	return n
 }
 
+// next is the next_from a range read reports.
+func next(read string) string {
+	if m := regexp.MustCompile(`next_from:(\d+)`).FindStringSubmatch(read); m != nil {
+		return m[1]
+	}
+	return "?"
+}
+
 func search(args map[string]string) func([]runtime.MemoryRef, []string) runtime.GenerateResult {
 	return func([]runtime.MemoryRef, []string) runtime.GenerateResult { return toolAction("search_memory", args) }
 }
@@ -116,7 +124,7 @@ func TestSearchMemoryFindsOwnArchive(t *testing.T) {
 	if !strings.Contains(found, fmt.Sprintf("#%d assistant (%s", seq, refs[0].ArtifactID)) || !strings.Contains(found, "TG2 measured 47.0 ms") {
 		t.Fatalf("search should name message %d in %s and show the fact:\n%.600s", seq, refs[0].ArtifactID, found)
 	}
-	if !strings.Contains(found, "Archive hits are history.") || !strings.Contains(found, "supersedes an earlier one") {
+	if !strings.Contains(found, "Archive hits are history") || !strings.Contains(found, "not necessarily right") || strings.Contains(found, "supersedes") {
 		t.Fatalf("a search result must open with precedence:\n%.300s", found)
 	}
 
@@ -273,6 +281,9 @@ func TestReadMemoryByRange(t *testing.T) {
 		if message.Seq == first+1 && !strings.Contains(reads[0], message.Content) {
 			t.Fatal("range reads must return whole messages")
 		}
+	}
+	if !strings.Contains(reads[0], fmt.Sprintf("not shown: read_memory from=%s to=%d)", next(reads[0]), first+30)) {
+		t.Fatalf("a cut range should say in its text where it continues:\n…%s", reads[0][max(0, len(reads[0])-300):])
 	}
 	rest := numbered.FindAllStringSubmatch(reads[1], -1)
 	if len(rest) == 0 || rest[0][1] == page[len(page)-1][1] {

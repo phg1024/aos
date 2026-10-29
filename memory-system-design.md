@@ -256,7 +256,10 @@ about. It is acceptable here for three reasons:
     with the current entry under that key, if any. The agent can then see
     both what changed and why.
   - Every result begins with the precedence line: "working memory vN
-    (time) is current; archive hits are history."
+    (time) is current; archive hits are history." Working memory is
+    current because it is the record the agent maintains, not because it
+    is true. Among archive hits the runtime knows only order, so it says
+    only that: a higher number is later, not necessarily right.
   - Hits matching more alternatives come first, newest first among equals,
     and output is capped at 8 KB.
 - `read_memory from=... to=...` returns messages by sequence number, capped at
@@ -564,20 +567,29 @@ against the current system.
   among equals. The second run showed why ranking is needed. Broad
   alternatives ("tri order") matched 49 messages, and the 10 newest crowded
   out the older one that held the measurement and matched the whole query.
-  Each hit keeps its message number, and the precedence line says the
-  higher number supersedes, so ranking does not hide which is current.
+  Each hit keeps its message number, so ranking does not hide which is
+  later.
   A hit is one message, with about 150 characters on each
   side of the first match and a count when a message matches more than
   once. A hit reads `#412 assistant (art-001056, archived 2026-10-29
   04:05): …`. Messages carry no time of their own, so the time is when
-  their segment was archived. The result opens with the precedence line
-  "Archive hits are history. Hits matching more of the query come first,
-  newest first among equals; a later message (higher #) supersedes an
-  earlier one, and your live history is newer than any hit." Working
-  memory joins it in phase 3. Output is capped at 8 KB and says how many
+  their segment was archived. The result opens with a line that states
+  only what the runtime knows: "Archive hits are history, ordered by how
+  much of the query they match, then newest first. A higher # is later,
+  not necessarily right: a later message can repeat or explain away a
+  mistake. Check what a claim rests on; your live history is newer than
+  any hit." The first wording said a later message supersedes an earlier
+  one. Review found three counterexamples in the memfix run: the
+  round-8 coordinator's wrong claim about leaf2's node layout, the
+  round-3 "CONFIRMED HUGE WIN" written after the bias finding, and the
+  writer log's invented explanation. All three are later than the facts
+  they contradict. Working memory joins the line in phase 3. Output is capped at 8 KB and says how many
   matching messages it left out.
 - `read_memory from to?` returns `#N role: content` lines. They are whole
-  messages up to 32 KB, with `next_from` when the range goes on. A first
+  messages up to 32 KB, with `next_from` when the range goes on. The
+  messages text then ends with `(stopped at 32 KB; #113-#115 not shown:
+  read_memory from=113 to=115)`, since `next_from` itself prints after
+  32 KB of text. A first
   message larger than the cap is cut, and the result names the
   `artifact_id` and byte `offset` where the rest continues. A range outside
   the archive is an error that says which numbers the archive holds.
@@ -609,14 +621,22 @@ against the current system.
   (report: `reports/memory-phase-2.html`):
   - **why leaf2 was dropped: 0/9 → 8/9**, with one search and about 4 KB
     read, against 32–43 KB before;
-  - archive-only TriData: 8/9 → 6/9. Agents read about ten messages
-    around a hit and sometimes stop at the first, inconclusive A/B; the
-    decisive one is three messages later. Search finds where a topic is,
-    not where it was decided. A keyed working-memory entry written at the
-    decision (phase 3) is the intended fix;
-  - the threadgroup question, once answered from the prose summary in one
-    step, now takes about four steps and 19 KB, and stays 3/3;
-  - live controls stay 3/3, and the w4 control makes no memory calls.
+  - archive-only TriData: 8/9 → 6/9, no detectable change at n=9
+    (Fisher exact p = 0.58; the leaf2 change has p = 0.0004). The misses
+    show a mechanism, though: agents read about ten messages around a hit
+    and two asked for ranges ending at message 112, just before the
+    decisive A/B at 113–115; none was cut short by the size cap. Search
+    finds where a topic is, not where it was decided. A keyed
+    working-memory entry written at the decision (phase 3) is the
+    intended fix;
+  - a trade-off: the threadgroup question, once answered from the prose
+    summary in one step, now takes about four steps and 19 KB, and stays
+    3/3. Removing summaries follows the imitation lesson and the
+    no-fabrication rule; phase 3 should measure whether working memory
+    recovers the cost;
+  - live controls stay 3/3, and the w4 control makes no memory calls;
+  - after review, the order-only precedence wording: leaf2-speedup 7/9
+    and leaf2-status 9/9, no detectable change from 8/9 and 3/3.
 
 ## Book impact
 

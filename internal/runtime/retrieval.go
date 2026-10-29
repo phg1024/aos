@@ -29,10 +29,12 @@ const (
 	maxIndexPaths = 6
 )
 
-// searchPrecedence opens every search result. Phase 3 adds working memory
-// to it; until then, message numbers are the only precedence there is.
-const searchPrecedence = "Archive hits are history. Hits matching more of the query come first, newest first among equals; " +
-	"a later message (higher #) supersedes an earlier one, and your live history is newer than any hit."
+// searchPrecedence opens every search result. It states only what the
+// runtime knows, the order of messages: a later message is not more likely
+// to be right, since it can repeat or explain away an earlier mistake.
+const searchPrecedence = "Archive hits are history, ordered by how much of the query they match, then newest first. " +
+	"A higher # is later, not necessarily right: a later message can repeat or explain away a mistake. " +
+	"Check what a claim rests on; your live history is newer than any hit."
 
 // ToolCount is how many times a segment's messages called one tool.
 type ToolCount struct {
@@ -393,6 +395,12 @@ func (r *AgentRuntime) readMemoryRange(pid string, session Session, args map[str
 	}
 	if len(lines) == 0 {
 		return tools.Result{}, fmt.Errorf("read_memory: messages %d-%d are not in your archive; %s", from, to, archiveSpan(session.MemoryRefs, segments))
+	}
+	if nextFrom != 0 {
+		// next_from is also in the output, but printed after the messages,
+		// where it is easy to miss; say it where the text stops.
+		lines = append(lines, fmt.Sprintf("(stopped at %d KB; #%d-#%d not shown: read_memory from=%d to=%d)",
+			maxRangeReadBytes/1024, nextFrom, to, nextFrom, to))
 	}
 	output := map[string]string{
 		"from":     strconv.Itoa(from),
