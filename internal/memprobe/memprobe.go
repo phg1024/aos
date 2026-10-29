@@ -33,14 +33,17 @@ import (
 type Probe struct {
 	ID string `json:"id"`
 	// Kind says where the answer lives: "archive" (only in compacted
-	// memory), "live" (in the live history, so no memory read is needed)
-	// or "superseded" (the archive holds an older answer that was later
-	// overturned).
+	// memory), "summary" (also in the header's segment summaries), "live"
+	// (in the live history, so no memory read is needed) or "superseded"
+	// (the archive holds an older answer that was later overturned).
 	Kind       string `json:"kind"`
 	Checkpoint string `json:"checkpoint"`
 	Question   string `json:"question"`
-	// Expect matches a correct answer; Reject, if set, matches an answer
-	// that states the superseded fact as current. Both are Go regexps.
+	// Topic, if set, must match any answer that counts: it keeps a reply
+	// about something else from scoring on a stray word. Expect matches a
+	// correct answer; Reject, if set, matches an answer that states the
+	// superseded fact as current. All three are Go regexps.
+	Topic  string `json:"topic,omitempty"`
 	Expect string `json:"expect"`
 	Reject string `json:"reject,omitempty"`
 }
@@ -54,6 +57,7 @@ type Sample struct {
 	Answer      string `json:"answer"`
 	Correct     bool   `json:"correct"`
 	Superseded  bool   `json:"superseded"`
+	OffTopic    bool   `json:"off_topic,omitempty"`
 	Steps       int    `json:"steps"`
 	MemoryReads int    `json:"memory_reads"`
 	BytesRead   int    `json:"bytes_read"`
@@ -103,6 +107,9 @@ func LoadProbes(path string) ([]Probe, error) {
 		}
 		if _, err := regexp.Compile(probe.Reject); err != nil {
 			return nil, fmt.Errorf("probe %s reject: %w", probe.ID, err)
+		}
+		if _, err := regexp.Compile(probe.Topic); err != nil {
+			return nil, fmt.Errorf("probe %s topic: %w", probe.ID, err)
 		}
 	}
 	return probes, nil
@@ -254,6 +261,10 @@ func score(sample *Sample, probe Probe) {
 	if sample.Answer == "" {
 		return
 	}
+	if probe.Topic != "" && !regexp.MustCompile(probe.Topic).MatchString(sample.Answer) {
+		sample.OffTopic = true
+		return
+	}
 	expect := regexp.MustCompile(probe.Expect).MatchString(sample.Answer)
 	rejected := probe.Reject != "" && regexp.MustCompile(probe.Reject).MatchString(sample.Answer)
 	sample.Correct = expect && !rejected
@@ -303,6 +314,7 @@ type Summary struct {
 	Samples    int     `json:"samples"`
 	Correct    int     `json:"correct"`
 	Superseded int     `json:"superseded"`
+	OffTopic   int     `json:"off_topic"`
 	Errors     int     `json:"errors"`
 	MeanSteps  float64 `json:"mean_steps"`
 	MinSteps   int     `json:"min_steps"`
@@ -329,6 +341,9 @@ func Summarize(samples []Sample) []Summary {
 		if sample.Superseded {
 			summary.Superseded++
 		}
+		if sample.OffTopic {
+			summary.OffTopic++
+		}
 		if sample.Error != "" {
 			summary.Errors++
 		}
@@ -352,10 +367,10 @@ func Summarize(samples []Sample) []Summary {
 
 // WriteTable prints summaries as an aligned text table.
 func WriteTable(w io.Writer, summaries []Summary) {
-	fmt.Fprintf(w, "%-24s %-10s %8s %10s %6s %11s %10s %10s\n", "probe", "kind", "correct", "superseded", "errors", "steps", "reads", "bytes")
+	fmt.Fprintf(w, "%-24s %-10s %8s %10s %9s %6s %11s %10s %10s\n", "probe", "kind", "correct", "superseded", "off-topic", "errors", "steps", "reads", "bytes")
 	for _, s := range summaries {
-		fmt.Fprintf(w, "%-24s %-10s %4d/%-3d %10d %6d %5.1f %2d-%-2d %10.1f %10.0f\n",
-			s.Probe, s.Kind, s.Correct, s.Samples, s.Superseded, s.Errors, s.MeanSteps, s.MinSteps, s.MaxSteps, s.MeanReads, s.MeanBytes)
+		fmt.Fprintf(w, "%-24s %-10s %4d/%-3d %10d %9d %6d %5.1f %2d-%-2d %10.1f %10.0f\n",
+			s.Probe, s.Kind, s.Correct, s.Samples, s.Superseded, s.OffTopic, s.Errors, s.MeanSteps, s.MinSteps, s.MaxSteps, s.MeanReads, s.MeanBytes)
 	}
-	fmt.Fprintln(w, strings.Repeat("-", 96))
+	fmt.Fprintln(w, strings.Repeat("-", 106))
 }

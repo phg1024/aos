@@ -4,14 +4,16 @@
     "kind": "archive",
     "checkpoint": "art-001084",
     "question": "Earlier in round 3 you tried storing TriData in tree (leaf-emission) order instead of the original triangle order. What did it measure, and what did you decide?",
+    "topic": "(?i)(tri ?data|tree.order|emission)",
     "expect": "(?i)(no win|no gain|wash|inconclusive|not faster|revert|rejected|did not help|didn't help)"
   },
   {
     "id": "tg-sweep",
-    "kind": "archive",
+    "kind": "summary",
     "checkpoint": "art-001084",
     "question": "Which threadgroup size did your round-3 threadgroup sweep settle on, and what did the deciding A/B measure?",
-    "expect": "(?i)(\\bTG ?=? ?4\\b|4 ?x ?4|threadgroup size (of )?4\\b)",
+    "topic": "(?i)(threadgroup|\\bTG)",
+    "expect": "(?i)(\\bTG ?=? ?4\\b|4 ?x ?4|threadgroup size (of )?4\\b|PT_TG=4)",
     "reject": "(?i)(settled on|kept|chose|use[sd]?|adopted) (TG ?=? ?2|2 ?x ?2)\\b"
   },
   {
@@ -19,14 +21,25 @@
     "kind": "superseded",
     "checkpoint": "art-001084",
     "question": "Is leaf2 (two triangles per BVH leaf) adopted in pathtracer/ right now? Why or why not?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
     "expect": "(?i)(not adopted|isn't adopted|is not in|rejected|reverted|biased|bug|invalid|dropped|a loss|lost|slower|wash)",
     "reject": "(?i)(\\byes\\b[^.]{0,60}\\badopted|leaf2 is (currently )?adopted|leaf2 is (the )?current)"
+  },
+  {
+    "id": "leaf2-speedup",
+    "kind": "superseded",
+    "checkpoint": "art-001084",
+    "question": "In round 3, did leaf2 (two triangles per BVH leaf) give a real speedup? Should pathtracer/ use it?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
+    "expect": "(?i)(biased|bug|invalid|dropp|missed geometry|missing triangles|not (a )?real|fake|wash|a loss|slower|not faster)",
+    "reject": "(?i)(\\byes\\b[,.]? (it|leaf2) (did|was|gave|is)|should (re-?)?adopt (it|leaf2)|re-?adopt leaf2|(adoption|adopted version) was lost)"
   },
   {
     "id": "w4-first-ab",
     "kind": "live",
     "checkpoint": "art-001084",
     "question": "What did the first A/B of the 4-wide BVH (w4) against the current build measure, before you shrank BVH_STACK?",
+    "topic": "(?i)(w4|4-wide|four-wide)",
     "expect": "(?i)(8 ?%|49\\.5|45\\.9|slower)"
   }
 ]

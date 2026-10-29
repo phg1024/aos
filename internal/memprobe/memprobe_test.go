@@ -89,14 +89,18 @@ func TestProbesScoreAnswersFromMemoryOnACopy(t *testing.T) {
 		before[rel], _ = os.ReadFile(filepath.Join(stateDir, rel))
 	}
 	completer := &memoryCompleter{segment: segment, answer: func(user string) string {
-		if strings.Contains(user, "leaf2") && strings.Contains(user, "Is leaf2 adopted") {
+		switch {
+		case strings.Contains(user, "Is leaf2 adopted"):
 			return "Yes, leaf2 is adopted."
+		case strings.Contains(user, "Was TriData reordered"):
+			return "My tools were rejected, so I will retry the benchmark next turn."
 		}
 		return "TG4, from my compacted memory."
 	}}
 	probes := []memprobe.Probe{
 		{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `(?i)\bTG ?4\b`},
 		{ID: "leaf2", Kind: "superseded", Checkpoint: checkpoint, Question: "Is leaf2 adopted?", Expect: `(?i)reject|biased|not adopted`, Reject: `(?i)\bis adopted\b`},
+		{ID: "tridata", Kind: "archive", Checkpoint: checkpoint, Question: "Was TriData reordered?", Topic: `(?i)tri ?data`, Expect: `(?i)reject|no win`},
 	}
 	samples, err := memprobe.Run(context.Background(), memprobe.Config{
 		StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer, Samples: 2,
@@ -104,8 +108,8 @@ func TestProbesScoreAnswersFromMemoryOnACopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(samples) != 4 {
-		t.Fatalf("expected 2 samples of 2 probes, got %+v", samples)
+	if len(samples) != 6 {
+		t.Fatalf("expected 2 samples of 3 probes, got %+v", samples)
 	}
 	for _, sample := range samples {
 		if sample.Error != "" || sample.Steps != 2 || sample.MemoryReads != 1 || sample.BytesRead == 0 {
@@ -119,6 +123,10 @@ func TestProbesScoreAnswersFromMemoryOnACopy(t *testing.T) {
 		case "leaf2":
 			if sample.Correct || !sample.Superseded {
 				t.Fatalf("leaf2 answer states the superseded fact: %+v", sample)
+			}
+		case "tridata":
+			if sample.Correct || !sample.OffTopic {
+				t.Fatalf("a reply about something else must not score on a stray %q: %+v", "rejected", sample)
 			}
 		}
 	}
@@ -135,7 +143,7 @@ func TestProbesScoreAnswersFromMemoryOnACopy(t *testing.T) {
 	}
 
 	summaries := memprobe.Summarize(samples)
-	if len(summaries) != 2 || summaries[0].Correct != 2 || summaries[1].Superseded != 2 || summaries[0].MeanReads != 1 {
+	if len(summaries) != 3 || summaries[0].Correct != 2 || summaries[1].Superseded != 2 || summaries[2].OffTopic != 2 || summaries[0].MeanReads != 1 {
 		t.Fatalf("summaries = %+v", summaries)
 	}
 	var table bytes.Buffer
