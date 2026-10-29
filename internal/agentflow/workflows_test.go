@@ -20,6 +20,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 		"rasterizer-optimized-tail.json": "verifier",
 		"rasterizer-bunny.json":          "verifier",
 		"rasterizer-bunny-metal.json":    "verifier",
+		"pathtracer-bunny-metal.json":    "verifier",
 		"live-reviewed-merge.json":       "review_partner",
 	}
 	paths, err := filepath.Glob(filepath.Join("..", "..", "workflows", "*.json"))
@@ -51,7 +52,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 // other agent can write where it writes, and it can write nothing where
 // the others work. With run confined, this holds for run as well.
 func TestRasterizerVerifiersAreIsolated(t *testing.T) {
-	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json"} {
+	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json", "pathtracer-bunny-metal.json"} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
 		if err != nil {
 			t.Fatal(err)
