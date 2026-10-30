@@ -1,0 +1,311 @@
+[
+  {
+    "pid": "pid-000001",
+    "agent": "?",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 0,
+    "peak_live_at": null,
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000002",
+    "agent": "coordinator",
+    "state": "exited",
+    "compactions": 1,
+    "smallest_segment": [
+      40,
+      126371,
+      "art-002169"
+    ],
+    "peak_live_chars": 158469,
+    "peak_live_at": "art-002168",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000003",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 2,
+    "smallest_segment": [
+      87,
+      137520,
+      "art-000212"
+    ],
+    "peak_live_chars": 165766,
+    "peak_live_at": "art-000124",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000004",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 37234,
+    "peak_live_at": "art-000295",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000005",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 75690,
+    "peak_live_at": "art-000345",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000006",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 3,
+    "smallest_segment": [
+      60,
+      133197,
+      "art-000425"
+    ],
+    "peak_live_chars": 163005,
+    "peak_live_at": "art-000658",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000007",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 55451,
+    "peak_live_at": "art-000734",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000008",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 71664,
+    "peak_live_at": "art-000774",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000009",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 7,
+    "smallest_segment": [
+      4,
+      126788,
+      "art-001074"
+    ],
+    "peak_live_chars": 186200,
+    "peak_live_at": "art-001055",
+    "search_memory": 0,
+    "read_memory": 3,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000010",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 47508,
+    "peak_live_at": "art-001263",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000011",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 65393,
+    "peak_live_at": "art-001309",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000012",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 5,
+    "smallest_segment": [
+      109,
+      146427,
+      "art-001433"
+    ],
+    "peak_live_chars": 158700,
+    "peak_live_at": "art-001916",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000013",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 7,
+    "smallest_segment": [
+      2,
+      1236,
+      "art-002114"
+    ],
+    "peak_live_chars": 207589,
+    "peak_live_at": "art-002122",
+    "search_memory": 0,
+    "read_memory": 4,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000014",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 56269,
+    "peak_live_at": "art-002165",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000015",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 64533,
+    "peak_live_at": "art-002208",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000016",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 5,
+    "smallest_segment": [
+      8,
+      18429,
+      "art-002369"
+    ],
+    "peak_live_chars": 162146,
+    "peak_live_at": "art-002359",
+    "search_memory": 0,
+    "read_memory": 2,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000017",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 68374,
+    "peak_live_at": "art-002580",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000018",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 89368,
+    "peak_live_at": "art-002626",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000019",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 1,
+    "smallest_segment": [
+      37,
+      137989,
+      "art-002680"
+    ],
+    "peak_live_chars": 167678,
+    "peak_live_at": "art-002679",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000020",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 2,
+    "smallest_segment": [
+      72,
+      143171,
+      "art-002842"
+    ],
+    "peak_live_chars": 158164,
+    "peak_live_at": "art-002968",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  },
+  {
+    "pid": "pid-000021",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 50437,
+    "peak_live_at": "art-003174",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {}
+  }
+]

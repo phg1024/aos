@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Phase 3 Evaluation: Live Run</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Phase 3 Evaluation: Live Run</h1>
+    <p>An independent analysis by the evaluation session of the phase-3 live run <code>reports/pathtracer-bunny-phase3</code> (binary <code>74510b7</code>), compared with the memfix run <code>reports/pathtracer-bunny-memfix</code> (binary <code>eceb917</code>). The E3 count is this session's own reading. It does not use aos code's tallies (aos code made none for this run).</p>
+    <p><b>Result, mechanics:</b> compaction works as designed.
+      <ul>
+        <li>21 compactions, 0 oversized. The smallest segment is 17 messages / 86,917 characters (memfix: 2 messages / 1,236).</li>
+        <li>Live history goes over the threshold H = 157,284 characters only during the one-step handoff before a compaction, by at most 18,709 characters. After every compaction it is at or below L.</li>
+        <li>Agents wrote working memory: <code>update_memory</code> 57 times in 13 processes, 40 of the 42 final entries with evidence.</li>
+      </ul></p>
+    <p><b>Result, behaviour:</b> agents almost never looked anything up. In the whole run there was <span class="bad">1 search_memory call and 0 read_memory calls</span> (memfix: 0 and 9). E3, counted separately:
+      <ul>
+        <li><b>Superseded or wrong fact cited as current:</b> <span class="bad">8</span> instances, plus 4 possible.</li>
+        <li><b>Experiment repeated:</b> <span class="bad">2</span>, plus 3 possible.</li>
+        <li><b>Invented rationale recorded:</b> <span class="bad">7</span>, plus 4 possible.</li>
+      </ul>
+      memfix was counted at 2 and 2, but by a narrower reading. These numbers are not the same measurement (see <a href="#compare">Against memfix</a>). What can be said: the failure phase 3 was built for still happens. In 4 cases (A6–A8 and B2, all in the round-7 writer) the right answer had been archived by compaction and the agent never searched for it. In 2 more (A3, A4, the round-3 writer) the agent overwrote its own working-memory entry and lost what the archive still held.</p>
+    <p><b>Outcome:</b> 8 rounds, stop rule met, every verification passed (one verifier was killed by a backend outage and re-run). Final 30.813 ms, 3.5588x over this run's own round-1 baseline. Three environment-fault windows are excluded from E3: an Xcode license prompt and two model-backend outages. The outages cost 4 h 15 m. Failed backend calls count as steps: one verifier ran out of steps that way.</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Run:</b> <code>reports/pathtracer-bunny-phase3</code>, started by aos code at 2026-10-29T18:14:56Z and ended 2026-10-30T10:31:19Z with exit 0 (<code>run.log</code>). <code>run.log</code> records <code>binary 74510b7 (phase 3) window 65536</code>.</li>
+    <li><b>Workflow:</b> <code>.cache/workflows/pathtracer-bunny-phase3.json</code>. Field by field it equals <code>pathtracer-bunny-memfix.json</code>, apart from the run directory in paths and the name. The system prompts match after renaming <code>memfix</code> to <code>phase3</code>, and the step limits are the same (800 / 400 / 160 / 160).</li>
+    <li><b>Model and parameters:</b> all 1,865 calls in <code>calls.jsonl</code> go to the same backend (<code>phg-gpu.local:8080</code>) with the same model (<code>qwen3.8-flash-next-nvfp4-nvfp4</code>) and the same parameters: temperature 0.6, top-p 0.95, max_tokens 32,768, reasoning budget 16,384. All 1,633 memfix calls use the same backend, model and parameters. The client timeout is 3,600 s (the timed-out calls show 3,600,001 ms). A compact ratio of 0.8 is not logged directly. It agrees with every compaction landing at or below L = H/2 = 78,642 characters (the largest is 78,607).</li>
+    <li><b>Usage:</b> 1,399 successful requests: 47.8M prompt tokens (44.6M cached) and 1.73M completion tokens. Another 466 calls failed (see <a href="#env">Environment faults</a>). memfix: 1,633 requests, 57.7M prompt (55.1M cached), 1.94M completion.</li>
+    <li><b>Overlap:</b> phg-gpu was shared with this session's probe evaluation (2026-10-29T19:06:50Z to 2026-10-30T00:00:24Z) and with aos code's probe loop (until 20:34:00Z). Overlap changes latency, not answers.</li>
+    <li><b>Method:</b> memory mechanics come from the run's state with <code>reports/memory-probe-phase3-eval/analyze_live.py</code> (output in <code>memory-live-phase3-eval/live-phase3.json</code> and <code>live-memfix.json</code>). For E3, every process's full history (all checkpoints and segments merged by message seq) and every working-memory version was dumped (<code>tools/dump_hist.py</code>). Four reviewers, one per pair of rounds, each read every process in their rounds under one written brief (<code>reviews/E3-BRIEF.md</code>). Their worksheets are in <code>reviews/</code>. This session then checked every counted instance against the source messages. Instances it could not confirm, or whose earlier answer was not available to the process, were moved down or dropped. The changes are listed under each table.</li>
+  </ul>
+
+  <h2>Outcome and Verdicts</h2>
+  <table>
+    <tr><th>Round</th><th>Writer</th><th>Verified render_ms_best</th><th>vs round 1</th><th>Verifier</th></tr>
+    <tr><td>1</td><td>pid-000003</td><td class="num">109.656</td><td class="num">1 (frozen baseline)</td><td>pid-000005 PASS</td></tr>
+    <tr><td>2</td><td>pid-000006</td><td class="num">59.025</td><td class="num">1.858x</td><td>pid-000008 PASS</td></tr>
+    <tr><td>3</td><td>pid-000009</td><td class="num">49.020</td><td class="num">2.237x</td><td>pid-000011 PASS</td></tr>
+    <tr><td>4</td><td>pid-000012</td><td class="num">45.220</td><td class="num">2.4249x</td><td>pid-000014 PASS</td></tr>
+    <tr><td>5</td><td>pid-000015</td><td class="num">~44.0 (est.; 62.0 measured under load)</td><td class="num">~2.49x</td><td>pid-000017 PASS</td></tr>
+    <tr><td>6</td><td>pid-000018</td><td class="num">36.283</td><td class="num">3.022x</td><td>pid-000020 <span class="bad">exit 1, step limit</span> (outage); pid-000021 PASS</td></tr>
+    <tr><td>7</td><td>pid-000022</td><td class="num">30.984</td><td class="num">3.539x</td><td>pid-000024 PASS</td></tr>
+    <tr><td>8</td><td>pid-000025</td><td class="num">30.813</td><td class="num">3.5588x</td><td>pid-000027 PASS (final; art-003292, checkpoint art-003279)</td></tr>
+  </table>
+  <ul>
+    <li>The final verifier measured 2.97x wall / 3.00x GPU on its own paired run against the frozen baseline. Its baseline rebuild ran faster (92.094 ms) than the 109.656 ms recorded in round 1.</li>
+    <li>Stop rule: rounds 7 (+0.93%) and 8 (+0.33%) were both under 5%.</li>
+    <li><b>Against memfix:</b> memfix ended at 24.364 ms, 2.699x over its own round-1 baseline of 65.761 ms. Each run's writer builds its own round-1 baseline, so the ratios are not comparable. In absolute time the phase-3 result is 26% slower than memfix's. It started from a baseline 67% slower. Nothing here suggests the memory runtime made the code worse or better; the two runs took different paths from round 1.</li>
+  </ul>
+
+  <h2>Memory Mechanics, per Process</h2>
+  <p>Compactions are memory_segment artifacts. "Smallest" is the smallest segment in messages / characters. "Peak live" is the largest live history over all checkpoints, counted the way <code>runtime.historyChars</code> counts it. "Ignored" means a handoff notice followed by no update_memory call before the compaction. WM is the latest working-memory version.</p>
+  <table>
+    <tr><th>pid</th><th>agent</th><th>compactions</th><th>smallest</th><th>peak live</th><th>search / read / update</th><th>handoffs (ignored)</th><th>latest WM: with / without evidence</th></tr>
+    <tr><td>pid-000002</td><td>coordinator</td><td class="num">1</td><td class="num">316 / 123,431</td><td class="num">159,907</td><td class="num">0 / 0 / 4</td><td class="num">1 (0)</td><td>art-003287 v4: 2 / 2 (next)</td></tr>
+    <tr><td>pid-000003</td><td>writer r1</td><td class="num">1</td><td class="num">52 / 92,137</td><td class="num">163,037</td><td class="num">0 / 0 / 2</td><td class="num">1 (<span class="bad">1</span>)</td><td>art-000180 v2: 2 / 0</td></tr>
+    <tr><td>pid-000006</td><td>writer r2</td><td class="num">4</td><td class="num">48 / 82,580</td><td class="num">160,760</td><td class="num">0 / 0 / 8</td><td class="num">4 (0)</td><td>art-000643 v8: 8 / 0</td></tr>
+    <tr><td>pid-000007</td><td>benchmarker r2</td><td class="num">0</td><td>–</td><td class="num">35,656</td><td class="num">0 / 0 / 2</td><td class="num">0</td><td>art-000686 v2: 2 / 0</td></tr>
+    <tr><td>pid-000009</td><td>writer r3</td><td class="num">4</td><td class="num">30 / 94,808</td><td class="num">171,175</td><td class="num">0 / 0 / 8</td><td class="num">4 (<span class="bad">1</span>)</td><td>art-001132 v8: 3 / 0</td></tr>
+    <tr><td>pid-000012</td><td>writer r4</td><td class="num">2</td><td class="num">49 / 110,534</td><td class="num">175,993</td><td class="num">0 / 0 / 8</td><td class="num">2 (0)</td><td>art-001434 v8: 2 / 0</td></tr>
+    <tr><td>pid-000015</td><td>writer r5</td><td class="num">3</td><td class="num">29 / 89,415</td><td class="num">167,852</td><td class="num">0 / 0 / 7</td><td class="num">3 (<span class="bad">1</span>)</td><td>art-001819 v7: 6 / 0</td></tr>
+    <tr><td>pid-000016</td><td>benchmarker r5</td><td class="num">0</td><td>–</td><td class="num">103,184</td><td class="num">0 / 0 / 1</td><td class="num">0</td><td>art-001868 v1: 1 / 0</td></tr>
+    <tr><td>pid-000018</td><td>writer r6</td><td class="num">1</td><td class="num">76 / 84,193</td><td class="num">160,757</td><td class="num">0 / 0 / 2</td><td class="num">1 (0)</td><td>art-002096 v2: 2 / 0</td></tr>
+    <tr><td>pid-000022</td><td>writer r7</td><td class="num">3</td><td class="num">38 / 95,968</td><td class="num">160,987</td><td class="num">0 / 0 / 6</td><td class="num">3 (0)</td><td>art-002906 v6: 3 / 0</td></tr>
+    <tr><td>pid-000023</td><td>benchmarker r7</td><td class="num">0</td><td>–</td><td class="num">59,730</td><td class="num">0 / 0 / 2</td><td class="num">0</td><td>art-002950 v2: 2 / 0</td></tr>
+    <tr><td>pid-000025</td><td>writer r8</td><td class="num">2</td><td class="num"><b>17 / 86,917</b></td><td class="num">161,190</td><td class="num">0 / 0 / 5</td><td class="num">2 (<span class="bad">1</span>)</td><td>art-003188 v5: 5 / 0</td></tr>
+    <tr><td>pid-000026</td><td>benchmarker r8</td><td class="num">0</td><td>–</td><td class="num">66,776</td><td class="num"><b>1</b> / 0 / 2</td><td class="num">0</td><td>art-003236 v2: 2 / 0</td></tr>
+    <tr><td colspan="8" class="note">The other 12 processes (benchmarkers pid-000004/10/13/19, verifiers pid-000005/8/11/14/17/20/21/24/27) never compacted and wrote no working memory. Their peak live ranges from 23,241 to 143,932 characters (pid-000005).</td></tr>
+    <tr><th colspan="2">Run total</th><td class="num">21</td><td class="num">17 / 86,917</td><td class="num">175,993</td><td class="num">1 / 0 / 57</td><td class="num">21 (4)</td><td>40 / 2</td></tr>
+    <tr><th colspan="2">memfix total</th><td class="num">33</td><td class="num"><span class="bad">2 / 1,236</span> (pid-000013)</td><td class="num">207,589</td><td class="num">0 / 9 / 0</td><td>no handoff</td><td>no working memory</td></tr>
+  </table>
+  <ul>
+    <li><b>Peak live and oversized:</b> no compaction was oversized (0 of 21 <code>memory.compacted</code> events). Live history crossed H = 65,536 × 0.8 × 3 = 157,284 characters 22 times. Each time it stayed over H for at most two checkpoints: the step that crossed H and the handoff step after it. Compaction followed every time, except pid-000009's last crossing, where the process exited 34 characters over. The largest overshoot, 18,709 characters (pid-000012 art-001332 to art-001335), comes from one large tool result that jumped over H in one step. The design rule "peak ≤ H unless oversized" holds except for that one-step handoff delay, which the design itself adds. After compaction, live history was at most 78,607 characters, under L = 78,642. The smallest gap between compactions in one process is a 17-message segment, so there was no thrash.</li>
+    <li><b>Ignored handoffs (4 of 21):</b> pid-000003 (art-000132), pid-000009 (art-000813), pid-000015 (art-001608), pid-000025 (art-003062). Each was the writer's first compaction, and the writer had no working memory yet. Its first update_memory came after the compaction, so until the next compaction the header carried no working memory. pid-000003 never compacted again, so its header never showed one.</li>
+    <li><b>Evidence syntax:</b> 12 of the 69 update_memory attempts failed. 11 failed on evidence syntax and 1 on a bad section name (pid-000007). The rejected evidence strings were <code>#12</code>, <code>#43</code>, <code>#45</code>, <code>#75 #76 #86</code>, <code>task goal #1</code> (twice), <code>goal #1</code>, <code>history #17 (6 trials)</code>, <code>[#21] build OK</code>, <code>[#5] writer log …</code> and <code>pathtracer_benchmark.json read in msg #7</code>. Every process retried with a plain range and succeeded. 11 of the 13 processes that wrote working memory hit this at least once. A single <code>#N</code> is the form the history itself uses. Accepting it is a small runtime fix for aos code.</li>
+    <li><b>Stale entries:</b> no process ever deleted an entry (0 <code>delete</code> calls), and an entry written under a new key never replaces the old one.
+      <ul>
+        <li>The coordinator's final WM v4 (art-003287) still has <code>next/round6-verify-pending</code> ("Verifier run FAILED … NEXT ACTION: re-delegate verifier") and <code>next/round7-plan</code>. This is after its #328 note "Replace the stale round6-verify-pending entry" and its #352 note "so no stale 'next' entry remains".</li>
+        <li>pid-000018's <code>next/round6-plan</code> was never updated after the plan changed at #18.</li>
+      </ul>
+      Neither stale entry led to a wrong action. It is a working-memory hygiene finding, not an E3 instance.</li>
+    <li><b>Entries rewritten in place lose content.</b> An update to an existing key replaces the whole entry. Two E3 instances below come from this:
+      <ul>
+        <li>pid-000009 overwrote <code>round3-state</code> at #306, after the compaction notice at #305, with a version holding only the latest results (A3, A4).</li>
+        <li>pid-000022's v3 to v4 rewrite of <code>decisions/r7-findings</code> kept "REJECTED leaf2 (#64)" but dropped "(tie-break order changes)" (A6).</li>
+      </ul></li>
+    <li><b>"adopted=false" in update_memory results</b> (aos book's question). It is the normal case. <code>adopted</code> is true only when <code>adoptMemoryVersion</code> finds a version this process already wrote for the same update to the same parent, which is what a step replayed after a crash produces (<code>internal/runtime/workingmemory.go:285</code>). False means a new version artifact was written. The same field on <code>memory.compacted</code> means the same for segments (<code>priorSegment</code>, <code>runtime.go:1440</code>). All 21 compactions and all 57 updates were fresh.</li>
+    <li><b>Did working memory reach the next turn?</b> By design, between compactions the update_memory call and its result sit in live history. The header snapshot is refreshed only at compaction (<code>runtime.go:1458</code>, <code>MemorySnapshot = WorkingMemory</code>). In the checkpoint right after each compaction, <code>memory_snapshot</code> equals the last version written before it in 17 of 21 compactions. The other 4 are the ignored handoffs above, where no version existed yet. The header text itself is not logged (<code>calls.jsonl</code> keeps message deltas and a request hash), so this rests on the checkpoint fields and the code, not on observed prompt bytes.</li>
+  </ul>
+
+  <h2 id="env">Environment Faults (Excluded from E3)</h2>
+  <table>
+    <tr><th>Window</th><th>Process</th><th>What happened</th><th>Effect</th></tr>
+    <tr><td>2026-10-30T00:06:18Z to 00:25:33Z (the time the license was accepted was not logged; 00:25:33Z is when this session confirmed builds worked)</td><td>benchmarker pid-000010 (art-001143), verifier pid-000011 (art-001181), writer pid-000012 (art-001233)</td><td>Xcode was updated at 17:02 PDT and its license was not accepted, so <code>clang++</code> failed.</td><td>Each process worked around it by itself with <code>DEVELOPER_DIR=/Library/Developer/CommandLineTools</code> (pid-000010 from art-001147). Every later build uses the Command Line Tools SDK, with the same clang 21.0.0. The workaround reached working memory (writer art-001241, art-001286; coordinator <code>rounds1-6-results</code>). It is stale but harmless.</td></tr>
+    <tr><td>02:58:17Z (calls seq 989, last good) to 06:34:46Z (seq 1047, first good)</td><td>writer pid-000018</td><td>57 failed calls, seq 990–1046 (backend_error art-001996 to art-002052): one 503 after 132 s; three 3,600 s client timeouts; one EOF after 1,577 s (the vLLM restart); 44 DNS "no such host"; 8 connection refused, about 4–5 s apart.</td><td>3 h 36 m lost. Each failure went into the writer's history as <code>tool_error name=backend … try_different_strategy=true</code> (#20–#76, about 4,000 tokens). The process kept running. See <a href="#r6">the round-6 check</a>.</td></tr>
+    <tr><td>06:54:03Z (seq 1113, last good) to 07:32:55Z (seq 1523, first good)</td><td>verifier pid-000020, then coordinator pid-000002</td><td>Verifier: 146 failed calls, seq 1114–1259 (one read timeout, 145 DNS). Coordinator: 263 failed calls, seq 1260–1522 (220 DNS, 43 refused).</td><td><span class="bad">The verifier died of it.</span> Its 14 real steps plus 146 failed calls reached its 160-step limit, and it exited with code 1, "step limit exceeded". The coordinator noted "Backend recovered after long outage" (#317) and re-ran the verifier (pid-000021, PASS). Its ledger records only "first verifier attempt hit a step limit", and its re-delegation asks the verifier "to work efficiently to stay within its step budget". It did not attribute the step loss to the outage, which it could not see from the exit status. 265 backend-error messages (41,628 characters) make up the coordinator's one archived segment (art-002643), and they are what pushed it to compact.</td></tr>
+  </table>
+  <p><b>No circuit breaker, confirmed in code</b> (<code>internal/runtime/runtime.go:694–711</code> at <code>74510b7</code>). With <code>ContinueOnToolError</code>, a failed <code>Generate</code> records a backend_error artifact, appends a tool message ending <code>try_different_strategy=true</code>, and loops straight into the next call.
+    <ul>
+      <li>There is no delay, no backoff and no limit on consecutive backend errors.</li>
+      <li>Each failed call counts as a step.</li>
+      <li>A dead backend costs a full 3,600 s per timeout. The workflow has no wall-clock budget.</li>
+      <li>An outage reaches the agent as an instruction to change strategy for a fault that is not in its code.</li>
+    </ul>
+    466 failed calls in all: 4 h 15 m of the run's 16 h 16 m. This is a runtime issue for aos code, not a memory one.</p>
+
+  <h2 id="r6">Did the Backend Errors Change the Round-6 Writer?</h2>
+  <p>No change reached its decisions or its durable records.</p>
+  <ul>
+    <li><b>No blame:</b> its first note after recovery (#77) starts "Backend recovered", and #79 says "Backend recovered after a long outage; nothing lost". No note blames the code, the build or the harness. It did not rebuild or re-check <code>_r6b</code>, and correctly trusted the BUILD_OK from before the outage.</li>
+    <li><b>Same plan:</b> what it built after #77, sample-parallel dispatch with an ordered combine kernel (kept, 20/20 paired wins, +24.6%), is item (3) of its plan at #18, before the outage.</li>
+    <li><b>Not recorded:</b> its working memory (v2 art-002096) and its writer-log entry never mention the outage. The log's "load average 7 -> 96" is local machine contention it measured at #84 (96.01). The direction is reversed: load went from about 96 down to 7.</li>
+    <li><b>Two changes that coincide with the outage, with nothing in the errors to explain them:</b>
+      <ul>
+        <li>At #77 it briefly listed two new micro-candidates (an early-out slab test and hoisted child loads) and never pursued them.</li>
+        <li>It hardened the wavefront call from "deprioritize" (#14) to "rejected", adding a float-order argument that #14 had said was solvable. That argument reached the log and is counted as C5 below.</li>
+      </ul></li>
+    <li><b>Stale entry:</b> working memory's <code>next/round6-plan</code> (normals interleave, 12-byte node, plane filter + leaf 2) had been set aside at #18, before the outage, and was never updated.</li>
+  </ul>
+
+  <h2>E3: Superseded or Wrong Fact Cited as Current</h2>
+  <p>A fact stated and used as current (a note it acted on, a decision, a working-memory entry, a log line, a delegation or an exit report) that information already available to the process contradicted. "Where" is where the contradicting information was. Message numbers are the process's own <code>#seq</code>.</p>
+  <table>
+    <tr><th>#</th><th>Process</th><th>Messages</th><th>What was stated</th><th>Already available</th><th>Where</th></tr>
+    <tr><td>A1</td><td>pid-000006 writer r2</td><td>#268; WM #286, #328; log line 61; exit #338</td><td>"MATH_UNCHANGED confirms the normalize removal is bit-identical"</td><td>The reference <code>d1.pfm</code> was rendered at #256, after the removal was built at #252, so the comparison could not test it. (pid-000008 later measured default RMSE 0.848202 against round 1's 0.847970: not bit-identical to round 1.)</td><td>live</td></tr>
+    <tr><td>A2</td><td>pid-000006</td><td>#328 (WM)</td><td>"bvh_nodes 138901 at cap 16"</td><td>Measured 131,071 at #316. Low impact: the log has the right number.</td><td>live</td></tr>
+    <tr><td>A3</td><td>pid-000009 writer r3</td><td>#393 (log line 77); WM v8 #397; exit #399</td><td>Quantized-space slab test and 16-byte nodes "already landed late in round 2 work". The round's two largest wins are missing from its kept list.</td><td>Live WM <code>open/round3-blocker</code> ("QUANTIZED-SPACE SLAB TEST KEPT (#180-#193)") and <code>next/round3-next</code> ("IN PROGRESS: 16-byte quantized BVH nodes"). Archived #56–#193. The round-2 log it read at #7 lists the idea as "Next to try". The error carried on: the coordinator ledger (line 39) called compact nodes a "round-2 idea not yet done", and the round-4 delegation made them candidate 1. pid-000012 found at #8 that they were already done.</td><td>WM, archive, log</td></tr>
+    <tr><td>A4</td><td>pid-000009</td><td>#383, #393 (log line 76), #399</td><td>The round-2 median-split tree (131,071 nodes) is called "bins16", so the bins-32 change gets credit for 131,071 → 81,521 nodes.</td><td>Live WM: the bins-16 SAH tree was 80,411 nodes. Archived #17 (median-split build) and #25 (round 3 wrote the SAH build). Same cause as A3: the <code>round3-state</code> overwrite at #306.</td><td>WM, archive</td></tr>
+    <tr><td>A5</td><td>pid-000015 writer r5</td><td>#302 (log line 160), #316, exit #318</td><td>"Quiet-machine floor … 43.226ms (vs 45.220 verified) => ~4.4% faster"</td><td>Its own WM <code>decisions/round5-glass-and-stack</code> records the round-4 tree at 43.315 ms min in the same quiet window (#81), so the floor-to-floor gap is about 0.2%. The paired ratio it also reported (96.5%) is honest. The benchmarker repeated the 4.4% with attribution.</td><td>WM</td></tr>
+    <tr><td>A6</td><td>pid-000022 writer r7</td><td>#219, #223, #225; experiment #227–#230</td><td>"A different BVH is bit-safe: the closest hit is the same min-t triangle regardless of tree". It then built MAX_DEPTH 20 and rediscovered at #231, as a "CRITICAL FINDING", that tree changes break bit-identity.</td><td>Its own #64/#69 ("leaf2 rejected … BVH shape changes tie-breaking order for exact-t ties") and #58 (bins 16/64 differ), archived in art-002825 at the #122 compaction. WM v3 (art-002743) had "REJECTED (tie-break order changes)". The v4 rewrite (art-002822, the header at #219) kept "leaf2 (#64)" but dropped the reason. No search_memory. <b>This is the memfix pattern:</b> an archived finding, a memory entry that lost it, and the work redone.</td><td>archive (WM lost it)</td></tr>
+    <tr><td>A7</td><td>pid-000022</td><td>#255 (log line 251)</td><td>"leaf_size 2 (+0.9%, 0/16) and bins 16/64 (neutral) … both byte-identical but slower"</td><td>#44: leaf2 0.9856, faster in 11/16. #58/#64: both differ byte-wise, and bins 16/64 were never timed. All archived. Later rounds read this line.</td><td>archive</td></tr>
+    <tr><td>A8</td><td>pid-000022</td><td>#255 (log line 245)</td><td>The f32 node is "two float4 (32 bytes, same size)"</td><td>The round-6 node was 16 bytes: its own #69 probe padded "BVH nodes 16B->32B", and #80. Archived. This misled round 8: pid-000025 tried a 16-byte node as "never tried" (#39–#53).</td><td>archive</td></tr>
+  </table>
+  <p class="note"><b>Possible, not counted (medium confidence):</b>
+    <ul class="note">
+      <li>pid-000003 #147: claimed the light rectangle is hit from behind, though its own code (#47/#49) was already one-sided. The edit was rejected and it retracted at #151.</li>
+      <li>pid-000003 #173: the log says the TIR test uses (n_i/n_t)², the reverse of the code it wrote at #116.</li>
+      <li>pid-000006 #303: depth cap 15 where WM says 16 (harmless).</li>
+      <li>pid-000025 #116: recorded a threadgroup stack as 192 B/thread where its PT_BVH_STACK_SIZE 20 gives 240 B.</li>
+    </ul></p>
+
+  <h2>E3: Experiment Repeated</h2>
+  <p>An experiment whose answer was already available to the process, rerun without a reason that makes it new (a changed baseline the agent names, a noisy result it says needs more pairs, a labelled confirmation).</p>
+  <table>
+    <tr><th>#</th><th>Process</th><th>Messages</th><th>Experiment</th><th>Already available</th><th>Where</th></tr>
+    <tr><td>B1</td><td>pid-000006 writer r2</td><td>#301–#305</td><td>Shrinking the traversal stack 20 → 16 "to cut register pressure and raise occupancy". It regressed again (76.4 ms vs 62.9).</td><td>WM <code>measurements/round2-progress</code> (written #189): "(b) stack 16/depth cap 15 regressed to 119.9". The original #124–#130 is archived. The kernel had changed since, which would have justified a re-test, but the agent neither named that nor cited the earlier result.</td><td>WM, archive</td></tr>
+    <tr><td>B2</td><td>pid-000022 writer r7</td><td>#105–#106</td><td>Threadgroup 32x8 against 32x4 on the unchanged round-6 binary (+0.1%, neutral).</td><td>The round-6 log section, inside the 4,000-byte tail it read at #26 (archived at #38), rejects 32x8 for exactly this kernel: "32x4 min 34.12 &lt; 32x8 34.61", and lists it under shapes "for the new kernel".</td><td>log (archived)</td></tr>
+  </table>
+  <p class="note"><b>Possible, not counted (medium):</b> all three are in pid-000025 (round 8).
+    <ul class="note">
+      <li>#39–#53: tried a 16-byte node as "never tried". It was misled by A8.</li>
+      <li>#55–#92: called the packed stack "new", though the round-7 log it read at #9 lists a uint4-packed stack as rejected. Its 12-byte variant differs and shipped as a win.</li>
+      <li>#110–#112: its threadgroup sweep re-measured 32x8, 64x2 and 16x8 next to the new 32x2, which shipped.</li>
+    </ul>
+    <b>Dropped after checking:</b> two round-7 re-tests the reviewer counted, stack 20 → 16 (#181) and uint4 stack packing (#86). The earlier results (rounds 2 and 5) were neither in the log tail pid-000022 read nor in its delegation, so they were not available to it. <b>Justified re-tests</b> (named noise or a changed kernel), 13 in all, are listed in the worksheets.</p>
+
+  <h2>E3: Invented Rationale Recorded</h2>
+  <p>A cause, mechanism or reason stated as fact and recorded durably (working memory, a shared log, a ledger, a delegation, a benchmark file or an exit report) that nothing in the history supports, or that the history contradicts. Hypotheses labelled as such are not counted.</p>
+  <table>
+    <tr><th>#</th><th>Process</th><th>Where recorded</th><th>Rationale</th><th>Contradicted or unsupported by</th></tr>
+    <tr><td>C1</td><td>pid-000006 writer r2</td><td>WM #328, log line 68, exit #338</td><td>The 478 ms shadow-walk regression is a "register pathology"</td><td>#292 called it "likely register pressure". It was never measured, then recorded as fact. Round 3's log repeats it.</td></tr>
+    <tr><td>C2</td><td>pid-000009 writer r3</td><td>log line 81, WM v8, report #399</td><td>The shadow walk's pop path "skips the slab test" because the shadow limit never tightens</td><td>Its own code at #331 re-tests every popped node (<code>node_tested = false</code>). pid-000012 found at #38 that the optimisation was inert, and implemented it in its Experiment B (#48–#62).</td></tr>
+    <tr><td>C3</td><td>pid-000015 writer r5</td><td>WM #108 (art-001617)</td><td>"with ior 1.5 the Fresnel TIR guard never fires … the compiler already CSE'd the dot"</td><td>The code it read (#14: <code>eta = ior_t / ior_i</code>, so 1.5 going into glass), and its own #63 ("air→glass fresnel-sat"). The CSE part was "Likely" at #79.</td></tr>
+    <tr><td>C4</td><td>pid-000015</td><td>WM #252, log line 164</td><td>The plane pre-filter lost because "leaf size 1 means one triangle per leaf"</td><td>The log it read at #5: 81,521 nodes for 69,451 triangles, about 1.7 per leaf. Its own #274 raised the depth-cap doubt. Round 7 measured "mean leaf ~1.7".</td></tr>
+    <tr><td>C5</td><td>pid-000018 writer r6</td><td>log lines 225–227, exit #144, coordinator ledger</td><td>Wavefront rejected "decisively" because a per-pixel sum by 64 threads has non-deterministic float order</td><td>Its own live #14, "bit-identity possible", and its own kept change, which fixes the same ordering with an ordered combine kernel (#111).</td></tr>
+    <tr><td>C6</td><td>pid-000022 writer r7</td><td>WM v5/v6 <code>next/r7-start</code></td><td>"the walk is bandwidth/allocation-bound"</td><td>Its own #80/#86: "Bandwidth is NOT the bottleneck … Walk is ALU/latency bound" (2x node bytes cost only +2.8%).</td></tr>
+    <tr><td>C7</td><td>pid-000023 benchmarker r7</td><td>benchmark json (#34)</td><td>"f32 nodes shrink the BVH ~4x per level"; "wins are all memory-traffic reductions"</td><td>Nothing supports it, and the node size doubled (16 → 32 bytes). pid-000026 repeated the "bandwidth-bound" wording after reading it there.</td></tr>
+  </table>
+  <p class="note"><b>Possible, not counted (medium):</b> each is a cause stated without a measurement, beside a real A/B.
+    <ul class="note">
+      <li>pid-000009: two samples per thread rejected for "register pressure".</li>
+      <li>pid-000012: "4 extra live registers cost more than the saved load".</li>
+      <li>pid-000015 log line 165: "two 32-bit thread-memory accesses beat one 64-bit access on this GPU", from an A/B of 103.2% ± 3.8%.</li>
+      <li>pid-000018 log lines 183–187: "~64 sequential waves of threadgroups", which only holds for a one-core GPU.</li>
+    </ul></p>
+
+  <h2>Per Round</h2>
+  <table>
+    <tr><th>Round</th><th>Processes</th><th>A</th><th>B</th><th>C</th><th>possible (A/B/C)</th></tr>
+    <tr><td>1–2</td><td>pid-000003 to pid-000008</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td class="num">3 / 0 / 0</td></tr>
+    <tr><td>3–4</td><td>pid-000009 to pid-000014</td><td class="num">2</td><td class="num">0</td><td class="num">1</td><td class="num">0 / 0 / 2</td></tr>
+    <tr><td>5–6</td><td>pid-000015 to pid-000021</td><td class="num">1</td><td class="num">0</td><td class="num">3</td><td class="num">0 / 0 / 2</td></tr>
+    <tr><td>7–8</td><td>pid-000022 to pid-000027</td><td class="num">3</td><td class="num">1</td><td class="num">2</td><td class="num">1 / 3 / 0</td></tr>
+    <tr><td>coordinator</td><td>pid-000002</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0 / 0 / 0</td></tr>
+    <tr><th colspan="2">Total</th><th class="num">8</th><th class="num">2</th><th class="num">7</th><th class="num">4 / 3 / 4</th></tr>
+  </table>
+  <p>All counted instances are in writers, plus one in a benchmarker (C7). Verifiers are clean. The coordinator was read by this session directly. It stated nothing contradicted by what it had: its ledger and delegations match the workers' reports. Its stale WM entries are covered above.</p>
+
+  <h2 id="compare">Against memfix's 2 and 2</h2>
+  <ul>
+    <li><b>memfix's four:</b>
+      <ul>
+        <li>A: pid-000009 re-adopted leaf2 from an archived note (art-001127, #318 on).</li>
+        <li>A: the round-8 coordinator stated a wrong leaf2 fact in its delegation to pid-000020 (trace seq 2727).</li>
+        <li>B: pid-000009 built and measured leaf2b, a question <code>art-001056</code> had answered (art-001220, #388–#408).</li>
+        <li>B: pid-000020 re-tested 2-triangle leaves (E84).</li>
+      </ul>
+      Those were found by reading the leaf2 thread and the motivating failures, not by reading every process. The phase-3 count is a full read of all 26 processes under a written definition, which also counts mistakes that have nothing to do with memory (A1, A2, A5).</li>
+    <li><b>So 8 + 2 against 2 + 2 is not a measured change.</b> A rate comparison needs the same full read of memfix under the same brief. That has not been done.</li>
+    <li><b>What the phase-3 count does show, by where the right answer was:</b>
+      <ul>
+        <li><b>Archived and never looked up</b> (the memfix failure): A6, A7, A8, B2, all in the round-7 writer, which made no search_memory or read_memory call. In A6, working memory had held the reason and lost it in a rewrite.</li>
+        <li><b>In working memory but lost or not used:</b> A3 and A4 (the round-3 writer overwrote its entry after a compaction notice), B1 (the result was in WM and the stack test was rerun anyway), A5 (the number was in WM and the comparison ignored it).</li>
+        <li><b>Live, a reasoning or recording slip:</b> A1, A2.</li>
+      </ul>
+      Phase 3 made the archive smaller and gave the agent a place to keep facts. It did not make agents look things up: 1 search in 1,399 requests. And a keyed entry rewritten in place is a new way to lose a fact.</li>
+    <li><b>Invented rationale</b> was not counted for memfix, so it has no comparison. The pattern is the same in 5 of the 7: a hypothesis labelled "likely" in a note is recorded as fact once it is written to the log or working memory (C1, C3, C4, C5, C6).</li>
+  </ul>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li>The reviewers' first counts, medium confidence included, were 12 A, 7 B and 11 C. After this session checked them: 8 A, 2 B and 7 C counted, with 4 / 3 / 4 listed as possible and 2 B dropped. Medium-confidence items were moved to "possible", and two B instances were dropped because the earlier result was not available to the process. The worksheets keep the reviewers' original wording and confidence. Where this table differs from them, this table is the evaluation's verdict.</li>
+    <li>"Available" means present in the process's own history (live or archived), its working memory, its delegation, or a file it read in that process. A finding in another process's history that never reached a shared file or delegation was not counted.</li>
+    <li>The model's reasoning is not logged. Where a change of mind has no stated cause (round 6 after the outage, for example), it is reported as coinciding, not caused.</li>
+    <li>The coordinator was read by this session alone, without a second reader.</li>
+  </ul>
+
+  <h2>Not Done Here</h2>
+  <ul>
+    <li>The same full E3 read of memfix. It is needed before the two runs' counts can be compared.</li>
+    <li>The own-working-memory probe evaluation (<code>reports/memory-probe-own-memory/PLAN.md</code>). It uses checkpoints from this run and is next in the queue.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/memory-live-phase3-eval/live-phase3.json</code>, <code>live-memfix.json</code>: per-process memory metrics from <code>reports/memory-probe-phase3-eval/analyze_live.py</code>.</li>
+    <li><code>reports/memory-live-phase3-eval/reviews/</code>: the E3 brief and the four reviewers' worksheets, with every quote and message number, including the near-misses and justified re-tests.</li>
+    <li><code>reports/memory-live-phase3-eval/tools/</code>: <code>dump_hist.py</code> (full history and WM versions per process), <code>notes.py</code> (per-message notes and calls), <code>msg.py</code> (print or grep messages by seq).</li>
+    <li>The run itself, <code>reports/pathtracer-bunny-phase3</code>, is aos code's and is not committed by this session.</li>
+  </ul>
+</body>
+</html>
