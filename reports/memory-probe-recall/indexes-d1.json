@@ -1,0 +1,92 @@
+{
+ "art-000414": [],
+ "art-000507": [
+  {
+   "from": 58,
+   "to": 59,
+   "text": "rewrote include/pt_gpu_types.hpp (32B PtBvhNode, PtTri, PtTriNormals, PtParams, stack 20/cap 16); 61: added PT_BVH_LEAF_BIT 0x80000000"
+  },
+  {
+   "from": 63,
+   "to": 63,
+   "text": "rewrote include/pt_bvh.hpp (Bvh{nodes,triangles,normals}, build_bvh, transform_mesh)"
+  },
+  {
+   "from": 65,
+   "to": 67,
+   "text": "first binned-SAH pt_bvh.cpp (16 bins, suffix sweep) - later replaced"
+  },
+  {
+   "from": 69,
+   "to": 69,
+   "text": "rewrote include/pt_metal_host.hpp (GpuMeshData = nodes/triangles/normals pointers)"
+  },
+  {
+   "from": 71,
+   "to": 71,
+   "text": "rewrote src/pt_metal_host.mm (buffers 0..5, constant params, 2D dispatch, counter memset per frame)"
+  },
+  {
+   "from": 73,
+   "to": 73,
+   "text": "rewrote shaders/pt_trace.metal (pt_ray_aabb, pt_ray_triangle on origin/edges, pt_intersect_mesh, pt_shadow_hit, pt_intersect_scene, pt_occluded)"
+  },
+  {
+   "from": 75,
+   "to": 75,
+   "text": "rewrote shaders/pt_integrator.metal (PCG32 pt_seed_pixel, fresnel/refract, NEE floor, glass BSDF, RR depth>=4, per-thread atomic fetch_add of spp)"
+  },
+  {
+   "from": 77,
+   "to": 77,
+   "text": "edited src/pt_main.cpp mesh_data for the new Bvh fields"
+  },
+  {
+   "from": 79,
+   "to": 79,
+   "text": "build error PtVertex undeclared -> 81 re-added PtVertex to pt_gpu_types.hpp"
+  },
+  {
+   "from": 83,
+   "to": 83,
+   "text": "link error transform_mesh missing -> 87 restored it in pt_bvh.cpp"
+  },
+  {
+   "from": 89,
+   "to": 89,
+   "text": "build clean"
+  },
+  {
+   "from": 91,
+   "to": 91,
+   "text": "smoke spp8 OK samples=2097152 but bvh_nodes=7107 (bad tree)"
+  },
+  {
+   "from": 93,
+   "to": 93,
+   "text": "benchmark regression render_ms_best=4416.3 gpu_ms_best=4413.7"
+  },
+  {
+   "from": 95,
+   "to": 95,
+   "text": "wrote scratch out/bvh_stats.cpp (leaf histogram + max depth; compile with src/pt_mesh.cpp src/pt_bvh.cpp)"
+  },
+  {
+   "from": 98,
+   "to": 100,
+   "text": "working-memory entries for the regression and the shadow t_limit bug"
+  },
+  {
+   "from": 102,
+   "to": 102,
+   "text": "bvh_stats on binned SAH: nodes=4565 max_leaf=5398 mean_leaf=30.4 max_depth=16 (cap binding)"
+  }
+ ],
+ "art-000557": [],
+ "art-000646": [],
+ "art-001608": [],
+ "art-001661": [],
+ "art-001766": [],
+ "art-003062": [],
+ "art-003133": []
+}

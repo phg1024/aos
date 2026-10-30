@@ -1,0 +1,536 @@
+{
+ "handoffs": [
+  {
+   "checkpoint": "art-000410",
+   "draw": 1,
+   "pid": "pid-000028",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_through": 57,
+   "archived": "1-61",
+   "tokens": 215818,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 2061 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000410",
+   "draw": 2,
+   "pid": "pid-000029",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 57,
+   "archived": "1-59",
+   "tokens": 108259,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 1625 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000410",
+   "draw": 3,
+   "pid": "pid-000030",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 57,
+   "archived": "1-59",
+   "tokens": 107993,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 2260 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 1,
+   "pid": "pid-000031",
+   "outcome": "indexed",
+   "lines": 16,
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_through": 102,
+   "archived": "58-109",
+   "tokens": 168819,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 2,
+   "pid": "pid-000032",
+   "outcome": "indexed",
+   "lines": 15,
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_through": 102,
+   "archived": "58-109",
+   "tokens": 226108,
+   "tools": [
+    "update_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 3,
+   "pid": "pid-000033",
+   "outcome": "indexed",
+   "lines": 19,
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_through": 102,
+   "archived": "58-109",
+   "tokens": 169136,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 1,
+   "pid": "pid-000034",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 192,
+   "archived": "106-198",
+   "tokens": 114274,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 2684 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 2,
+   "pid": "pid-000035",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 3,
+   "handoff_steps": 3,
+   "handoff_through": 192,
+   "archived": "106-198",
+   "tokens": 170988,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 1817 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 3,
+   "pid": "pid-000036",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 192,
+   "archived": "106-198",
+   "tokens": 114004,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"174-196: stackless BVH encoding designed and implemented: node.b = LEAF_BIT | (count<<20) | escape, PT_BVH_ESCAPE_BITS/MASK, PT_BVH_NO_NODE=0x000FFFFF, link_escapes/assign_escapes second pass in pt_bvh.cpp\" cites messages outside the ones being archived, 106-192"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 1,
+   "pid": "pid-000037",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 245,
+   "archived": "195-253",
+   "tokens": 116826,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 1636 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 2,
+   "pid": "pid-000038",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 245,
+   "archived": "195-253",
+   "tokens": 175080,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"247: merged tone map benchmark 93.464 best / 97.914 avg / gpu 93.202 -> kept.\" cites messages outside the ones being archived, 195-245"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 3,
+   "pid": "pid-000039",
+   "outcome": "indexed",
+   "lines": 9,
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_through": 245,
+   "archived": "195-253",
+   "tokens": 177410,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 1,
+   "pid": "pid-000040",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_through": 29,
+   "archived": "1-29",
+   "tokens": 165125,
+   "tools": [
+    "update_memory",
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 2,
+   "pid": "pid-000041",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 1,
+   "handoff_steps": 1,
+   "handoff_through": 29,
+   "archived": "1-29",
+   "tokens": 111011,
+   "tools": [],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 3,
+   "pid": "pid-000042",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 3,
+   "handoff_steps": 3,
+   "handoff_through": 29,
+   "archived": "1-29",
+   "tokens": 166295,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 1566 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 1,
+   "pid": "pid-000043",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 118,
+   "archived": "30-120",
+   "tokens": 112530,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"112-124: reading node encoding (pt_decode_box, quantized 16B PtBvhNodeQ, pre-order left=index+1), host upload, and full pt_trace.metal text\" cites messages outside the ones being archived, 30-118"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 2,
+   "pid": "pid-000044",
+   "outcome": "refused: over the byte cap",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 118,
+   "archived": "30-120",
+   "tokens": 169697,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory: the index is 1573 bytes, over its 1536-byte cap; keep the lines you will need to find things again, then retry"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 3,
+   "pid": "pid-000045",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 118,
+   "archived": "30-120",
+   "tokens": 112740,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"112-122: layout review \u2014 16B quantized PtBvhNodeQ (lo/hi interleaved ushort pairs + payload, leaf bit31, start bits 8..30, count-1 bits 0..7), pre-order left=index+1; host upload in pt_metal_host.mm upload_mesh; threadgroup 32x4 with PT_TG override\" cites messages outside the ones being archived, 30-118"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 1,
+   "pid": "pid-000046",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 3,
+   "handoff_steps": 3,
+   "handoff_through": 163,
+   "archived": "121-171",
+   "tokens": 175938,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"157-165: clean build; all three scenes byte-identical with child-pair (samples 16777216)\" cites messages outside the ones being archived, 121-163"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 2,
+   "pid": "pid-000047",
+   "outcome": "indexed",
+   "lines": 13,
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_through": 163,
+   "archived": "121-173",
+   "tokens": 236231,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 3,
+   "pid": "pid-000048",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 1,
+   "handoff_through": 163,
+   "archived": "121-167",
+   "tokens": 117581,
+   "tools": [
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 1,
+   "pid": "pid-000049",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_through": 15,
+   "archived": "1-17",
+   "tokens": 226324,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 2,
+   "pid": "pid-000050",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_through": 15,
+   "archived": "1-17",
+   "tokens": 226812,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 3,
+   "pid": "pid-000051",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 15,
+   "archived": "1-17",
+   "tokens": 113534,
+   "tools": [
+    "update_memory",
+    "update_memory"
+   ],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 1,
+   "pid": "pid-000052",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 3,
+   "handoff_steps": 3,
+   "handoff_through": 72,
+   "archived": "18-76",
+   "tokens": 181819,
+   "tools": [
+    "update_memory",
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"71-76: PT_STACK_PACK patch failed on a stale text match; exact stack declarations are at pt_trace.metal lines 279-284 (comment sits between the arrays)\" cites messages outside the ones being archived, 18-72"
+   ],
+   "index_call_last": true
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 2,
+   "pid": "pid-000053",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "model_calls": 1,
+   "handoff_steps": 1,
+   "handoff_through": 72,
+   "archived": "18-72",
+   "tokens": 60124,
+   "tools": [],
+   "refusals": [],
+   "index_call_last": false
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 3,
+   "pid": "pid-000054",
+   "outcome": "refused: a line past the notice's range",
+   "lines": 0,
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_through": 72,
+   "archived": "18-74",
+   "tokens": 120012,
+   "tools": [
+    "update_memory",
+    "index_memory"
+   ],
+   "refusals": [
+    "index_memory line \"58-80: _r8e experiment tree with PT_DEFINE host hook (later extended to NAME=VALUE) and variants PT_MORTON_T, PT_SHADOW_NOSORT, PT_STACK_PACK (exact patch texts)\" cites messages outside the ones being archived, 18-72"
+   ],
+   "index_call_last": true
+  }
+ ],
+ "outcomes": {
+  "refused: over the byte cap": 8,
+  "indexed": 5,
+  "refused: a line past the notice's range": 7,
+  "never called index_memory": 7
+ },
+ "refused_with_retry": 0,
+ "refused_ended_under_4_steps": 14,
+ "tokens_total": 4160488,
+ "tokens_mean": 154092.14814814815,
+ "model_calls_mean": 2.5925925925925926
+}

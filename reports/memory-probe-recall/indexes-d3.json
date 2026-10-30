@@ -1,0 +1,153 @@
+{
+ "art-000414": [],
+ "art-000507": [
+  {
+   "from": 58,
+   "to": 61,
+   "text": "wrote new shared header pt_gpu_types.hpp (32B PtBvhNode, PtTri, PtTriNormals, PtParams) + PT_BVH_LEAF_BIT macro"
+  },
+  {
+   "from": 63,
+   "to": 63,
+   "text": "rewrote include/pt_bvh.hpp (Bvh = nodes + triangles + normals, build_bvh, transform_mesh)"
+  },
+  {
+   "from": 65,
+   "to": 67,
+   "text": "first rewrite of src/pt_bvh.cpp with binned SAH (16 bins) - later found broken"
+  },
+  {
+   "from": 69,
+   "to": 69,
+   "text": "rewrote include/pt_metal_host.hpp (GpuMeshData = nodes/triangles/normals)"
+  },
+  {
+   "from": 71,
+   "to": 71,
+   "text": "rewrote src/pt_metal_host.mm (new buffers, constant params, 16x16 groups, counter buffer)"
+  },
+  {
+   "from": 73,
+   "to": 73,
+   "text": "rewrote shaders/pt_trace.metal (pre-order traversal, packed triangles, pt_shadow_hit, pt_intersect_scene)"
+  },
+  {
+   "from": 75,
+   "to": 75,
+   "text": "rewrote shaders/pt_integrator.metal (path loop, NEE, Fresnel, per-thread atomic sample counter)"
+  },
+  {
+   "from": 77,
+   "to": 77,
+   "text": "pt_main.cpp updated to new GpuMeshData fields"
+  },
+  {
+   "from": 79,
+   "to": 79,
+   "text": "build error - PtVertex undeclared (dropped from header)"
+  },
+  {
+   "from": 81,
+   "to": 81,
+   "text": "re-added PtVertex to pt_gpu_types.hpp"
+  },
+  {
+   "from": 83,
+   "to": 83,
+   "text": "link error - transform_mesh missing"
+  },
+  {
+   "from": 85,
+   "to": 85,
+   "text": "grep showed transform_mesh absent from pt_bvh.cpp"
+  },
+  {
+   "from": 87,
+   "to": 87,
+   "text": "restored transform_mesh in pt_bvh.cpp"
+  },
+  {
+   "from": 89,
+   "to": 89,
+   "text": "build OK"
+  },
+  {
+   "from": 91,
+   "to": 91,
+   "text": "smoke test spp 8 OK, samples=2097152, but bvh_nodes=7107 (suspicious)"
+  },
+  {
+   "from": 93,
+   "to": 93,
+   "text": "benchmark REGRESSION render_ms_best=4416.317 gpu_ms_best=4413.659"
+  },
+  {
+   "from": 95,
+   "to": 95,
+   "text": "wrote scratch tool out/bvh_stats.cpp (leaf histogram + max depth)"
+  },
+  {
+   "from": 98,
+   "to": 100,
+   "text": "working-memory entries for the regression and the two open bugs"
+  },
+  {
+   "from": 102,
+   "to": 102,
+   "text": "bvh_stats run: nodes=4565 max_leaf=5398 mean_leaf=30.42 max_depth=16 -> SAH unbalanced, depth cap binding"
+  }
+ ],
+ "art-000557": [],
+ "art-000646": [
+  {
+   "from": 196,
+   "to": 201,
+   "text": "made link_escapes public; wrote stackless Wald pt_trace.metal (escape links, leaf count bits 25..20)"
+  },
+  {
+   "from": 202,
+   "to": 210,
+   "text": "stackless build FAILED silently ('link_escapes is private'), stale ./pathtracer + new shaders -> GPU infinite loop, 60s tool timeouts; lesson rm -f pathtracer and grep error before benching"
+  },
+  {
+   "from": 212,
+   "to": 216,
+   "text": "stackless measured 102.08 best / 114.59 avg vs stack-based snapshot 93.37/96.61 (gpu 92.9) -> stackless regression"
+  },
+  {
+   "from": 218,
+   "to": 218,
+   "text": "reverted live dir to out/pt_snapshot_pre_stackless; stackless kept at pathtracer_backup_stackless"
+  },
+  {
+   "from": 220,
+   "to": 220,
+   "text": "full read of pt_integrator.metal (pt_fresnel, pt_refract, pt_sample_light, pt_sample_cosine, pt_trace_path, trace_kernel)"
+  },
+  {
+   "from": 222,
+   "to": 222,
+   "text": "full read of pt_metal_host.mm (two encoders: trace then tone_map; PT_TG env knob; buffers 0..5)"
+  },
+  {
+   "from": 224,
+   "to": 224,
+   "text": "read pt_tonemap.metal (Reinhard + pow 1/2.2, NaN guard)"
+  },
+  {
+   "from": 226,
+   "to": 243,
+   "text": "merged tone mapping into trace_kernel (pt_tone_map inline helper, concat order pt_trace,pt_tonemap,pt_integrator, image buffer index 6, tone pipeline/encoder/threadgroup_size helper deleted)"
+  },
+  {
+   "from": 245,
+   "to": 245,
+   "text": "merged build smoke OK samples=1048576 at spp 4"
+  }
+ ],
+ "art-001608": [],
+ "art-001661": [],
+ "art-001766": [],
+ "art-003062": [],
+ "art-003133": []
+}

@@ -1,0 +1,153 @@
+{
+ "art-000414": [],
+ "art-000507": [
+  {
+   "from": 58,
+   "to": 62,
+   "text": "wrote new shared header pt_gpu_types.hpp (32B node, PtTri, PtTriNormals, PtParams) and added PT_BVH_LEAF_BIT"
+  },
+  {
+   "from": 63,
+   "to": 63,
+   "text": "rewrote include/pt_bvh.hpp: Bvh holds nodes/triangles/normals in leaf order"
+  },
+  {
+   "from": 64,
+   "to": 67,
+   "text": "first binned-SAH pt_bvh.cpp; fixed right-bounds sweep bug"
+  },
+  {
+   "from": 69,
+   "to": 69,
+   "text": "rewrote include/pt_metal_host.hpp: GpuMeshData{nodes,triangles,normals}"
+  },
+  {
+   "from": 70,
+   "to": 71,
+   "text": "rewrote src/pt_metal_host.mm: new buffers, constant params, 16x16 groups"
+  },
+  {
+   "from": 72,
+   "to": 75,
+   "text": "rewrote shaders/pt_trace.metal (32B pre-order traversal, packed soup, any-hit shadow) and pt_integrator.metal (per-thread atomic counter)"
+  },
+  {
+   "from": 76,
+   "to": 77,
+   "text": "pt_main.cpp updated for new GpuMeshData"
+  },
+  {
+   "from": 79,
+   "to": 81,
+   "text": "build error PtVertex missing -> re-added PtVertex to pt_gpu_types.hpp"
+  },
+  {
+   "from": 83,
+   "to": 87,
+   "text": "link error transform_mesh missing -> restored it in pt_bvh.cpp"
+  },
+  {
+   "from": 89,
+   "to": 89,
+   "text": "build OK"
+  },
+  {
+   "from": 91,
+   "to": 91,
+   "text": "smoke spp8 OK samples=2097152 but bvh_nodes=7107 (bad)"
+  },
+  {
+   "from": 93,
+   "to": 93,
+   "text": "benchmark regression render_ms_best=4416.3 gpu=4413.7"
+  },
+  {
+   "from": 95,
+   "to": 95,
+   "text": "wrote scratch out/bvh_stats.cpp (leaf histogram, max depth)"
+  },
+  {
+   "from": 98,
+   "to": 100,
+   "text": "working-memory entries for the regression and the two bugs (shadow t_limit, degenerate SAH)"
+  },
+  {
+   "from": 102,
+   "to": 102,
+   "text": "bvh_stats result: nodes=4565 max_leaf=5398 mean_leaf=30.4 max_depth=16 => SAH unbalanced, depth cap binding"
+  }
+ ],
+ "art-000557": [],
+ "art-000646": [],
+ "art-001608": [],
+ "art-001661": [],
+ "art-001766": [
+  {
+   "from": 122,
+   "to": 122,
+   "text": "pt_metal_host.mm head \u2014 buffer list, bind indices 0..6, PT_TG env knob, threadgroup 32x4 default"
+  },
+  {
+   "from": 124,
+   "to": 124,
+   "text": "full pt_trace.metal round-4 text (both BVH walks, box tests, M\u00f6ller-Trumbore, scene intersect)"
+  },
+  {
+   "from": 126,
+   "to": 126,
+   "text": "pt_main.cpp quantize_bvh call site + GpuMeshData node_count use"
+  },
+  {
+   "from": 128,
+   "to": 134,
+   "text": "header edit adding PtBvhChild (16B child record) and deleting PtBvhNodeQ via python line splice"
+  },
+  {
+   "from": 136,
+   "to": 138,
+   "text": "quantize_bvh rewritten to emit 32B child-pair blocks with pre-order block indices"
+  },
+  {
+   "from": 140,
+   "to": 142,
+   "text": "kInvalidNode was undefined; added next to kInfinity in pt_bvh.cpp"
+  },
+  {
+   "from": 144,
+   "to": 144,
+   "text": "API switched to PtBvhChild in pt_bvh.hpp, pt_main.cpp, pt_metal_host.mm sizeof"
+  },
+  {
+   "from": 146,
+   "to": 146,
+   "text": "both GPU walks rewritten for child pairs; stack holds (payload, entered); root box test dropped"
+  },
+  {
+   "from": 153,
+   "to": 155,
+   "text": "build error \u2014 GpuMeshData::nodes still PtBvhNodeQ* in pt_metal_host.hpp; fixed to PtBvhChild*"
+  },
+  {
+   "from": 157,
+   "to": 157,
+   "text": "clean build (only fastMathEnabled deprecation warning)"
+  },
+  {
+   "from": 159,
+   "to": 159,
+   "text": "scene path mistake \u2014 scenes live at top level as scene-default.json, not scenes/"
+  },
+  {
+   "from": 161,
+   "to": 161,
+   "text": "directory listing of the workspace (snapshots _b _e _prof ab_r4 out, scene-*.json, _ab.sh)"
+  },
+  {
+   "from": 163,
+   "to": 163,
+   "text": "child-pair build byte-identical on default scene, samples=16777216"
+  }
+ ],
+ "art-003062": [],
+ "art-003133": []
+}
