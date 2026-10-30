@@ -15,10 +15,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"aos/internal/agentflow"
@@ -92,9 +94,15 @@ type Sample struct {
 	// AgentIndexSegments and AgentIndexBytes are how many agent-written
 	// segment indexes, and how many bytes of them, the first prompt's
 	// header showed; zero unless a1 is on.
-	AgentIndexSegments int    `json:"agent_index_segments,omitempty"`
-	AgentIndexBytes    int    `json:"agent_index_bytes,omitempty"`
-	Error              string `json:"error,omitempty"`
+	AgentIndexSegments int `json:"agent_index_segments,omitempty"`
+	AgentIndexBytes    int `json:"agent_index_bytes,omitempty"`
+	// Tokens is what the answer's model calls used, as the backend
+	// reported it; zero if it reports none.
+	Tokens int `json:"tokens,omitempty"`
+	// Reads lists each memory read and search with its arguments, in
+	// order, as "read_memory artifact_id=art-1 page=2".
+	Reads []string `json:"reads,omitempty"`
+	Error string   `json:"error,omitempty"`
 }
 
 // Config is where probes run and with what model.
@@ -126,6 +134,13 @@ type Config struct {
 	// BackendRetry, if set, retries a failed model call within its step;
 	// nil turns retrying off, so a failure takes a step as before.
 	BackendRetry *runtime.BackendRetryPolicy
+	// AgentIndexes, by memory_segment ID, are agent-written indexes shown
+	// with those segments wherever a probe's checkpoint holds them, as if
+	// the agent had written them at the segment's handoff. The header
+	// shows them only with a1 on. They are set on the checkpoint's
+	// segment references; the segments themselves are unchanged, so
+	// read_memory does not repeat them.
+	AgentIndexes map[string][]runtime.IndexLine
 }
 
 // RecallAids are the names Config.Recall takes, in the order a condition
@@ -267,6 +282,11 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 		if err != nil {
 			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
 		}
+		if len(cfg.AgentIndexes) > 0 {
+			if checkpoint, err = giveAgentIndexes(store, owner, probe, checkpoint, cfg.AgentIndexes); err != nil {
+				return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
+			}
+		}
 		var session runtime.Session
 		if err := store.ReadJSON(checkpoint, &session); err != nil {
 			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
@@ -370,6 +390,42 @@ func giveWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe)
 	return checkpoint.ID, nil
 }
 
+// giveAgentIndexes writes a checkpoint like the given one whose segment
+// references carry the indexes for their segments, in the copy probes run
+// in. Each line must lie in its segment and each index must fit the
+// runtime's cap. It returns the given checkpoint when no index applies.
+func giveAgentIndexes(store *artifact.Store, owner kernel.Process, probe Probe, checkpoint string, indexes map[string][]runtime.IndexLine) (string, error) {
+	var session runtime.Session
+	if err := store.ReadJSON(checkpoint, &session); err != nil {
+		return "", err
+	}
+	given := 0
+	for i, ref := range session.MemoryRefs {
+		lines, ok := indexes[ref.ArtifactID]
+		if !ok {
+			continue
+		}
+		for _, line := range lines {
+			if line.From < ref.FromSeq || line.To > ref.ToSeq || line.From > line.To {
+				return "", fmt.Errorf("index line %q lies outside segment %s (%d-%d)", line, ref.ArtifactID, ref.FromSeq, ref.ToSeq)
+			}
+		}
+		if size := len(runtime.RenderIndex(lines)); size > runtime.MaxSegmentIndexBytes {
+			return "", fmt.Errorf("index of %s is %d bytes, over the runtime's %d", ref.ArtifactID, size, runtime.MaxSegmentIndexBytes)
+		}
+		session.MemoryRefs[i].Index = lines
+		given++
+	}
+	if given == 0 {
+		return checkpoint, nil
+	}
+	record, err := store.CreateJSON("checkpoint", owner.PID, session, []string{checkpoint}, map[string]string{"kind": "intermediate", "memprobe": probe.ID, "agent_indexes": strconv.Itoa(given)})
+	if err != nil {
+		return "", err
+	}
+	return record.ID, nil
+}
+
 // stripWorkingMemory writes a checkpoint like the probe's without its
 // working memory, so neither the header nor search_memory shows it; the
 // history and archive, update_memory calls included, are unchanged. It
@@ -468,6 +524,9 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 			case "update_memory":
 				sample.Updates++
 			}
+			if call.Name == "read_memory" || call.Name == "search_memory" {
+				sample.Reads = append(sample.Reads, describeCall(call))
+			}
 		},
 		OnToolResult: func(result tools.Result) {
 			switch result.Tool {
@@ -479,9 +538,16 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 		},
 		OnToolError: func(runtime.ToolCall, error) { sample.ToolErrors++ },
 	}
+	var start runtime.Session
+	if err := store.ReadJSON(checkpoint, &start); err != nil {
+		sample.Error = err.Error()
+		return sample
+	}
 	question := []runtime.Message{{Role: "user", Content: fmt.Sprintf(questionPrompt, probe.Question)}}
 	result, err := agentRuntime.Resume(ctx, process.PID, checkpoint, question, options)
 	sample.Steps, sample.BackendErrors = backend.calls, backend.errors
+	// Usage carries over from the checkpoint; a failed run returns none.
+	sample.Tokens = max(0, result.Session.Usage.Tokens-start.Usage.Tokens)
 	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()
@@ -512,6 +578,7 @@ type Handoff struct {
 	// WorkingMemory is the working_memory version the handoff left.
 	WorkingMemory string   `json:"working_memory,omitempty"`
 	Steps         int      `json:"steps"`
+	Tokens        int      `json:"tokens,omitempty"`
 	BackendErrors int      `json:"backend_errors,omitempty"`
 	Tools         []string `json:"tools,omitempty"`
 	ToolErrors    int      `json:"tool_errors"`
@@ -578,7 +645,10 @@ func handOff(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.
 	}
 	handoff.PID = process.PID
 	backend, agentRuntime := probeRuntime(cfg, k, store, agent, loaded)
+	// A fresh step allowance: the checkpoint's own steps would otherwise
+	// count against MaxSteps.
 	options := runtime.RunOptions{
+		NewTurn:             true,
 		HandoffOnly:         true,
 		ContinueOnToolError: true,
 		OnToolCall:          func(call runtime.ToolCall) { handoff.Tools = append(handoff.Tools, call.Name) },
@@ -586,6 +656,7 @@ func handOff(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.
 	}
 	result, err := agentRuntime.Resume(ctx, process.PID, checkpoint, nil, options)
 	handoff.Steps, handoff.BackendErrors = backend.calls, backend.errors
+	handoff.Tokens = max(0, result.Session.Usage.Tokens-before.Usage.Tokens)
 	if err != nil {
 		handoff.Error = err.Error()
 		return handoff
@@ -602,6 +673,17 @@ func handOff(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.
 		handoff.Error = err.Error()
 	}
 	return handoff
+}
+
+// describeCall is a tool call as one line: its name and its arguments in
+// key order.
+func describeCall(call runtime.ToolCall) string {
+	keys := slices.Sorted(maps.Keys(call.Args))
+	parts := []string{call.Name}
+	for _, key := range keys {
+		parts = append(parts, key+"="+call.Args[key])
+	}
+	return strings.Join(parts, " ")
 }
 
 // Rescore scores recorded samples again against probes, without model

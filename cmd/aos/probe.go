@@ -33,6 +33,7 @@ func probeMemory(args []string) {
 	noCheckRule := fs.Bool("no-check-rule", false, "leave out the prompt's rule to check working memory before deciding")
 	recall := fs.String("recall", "", "comma-separated recall aids to turn on (w1, w2, w4, a1); every other aid is off")
 	retry := fs.Int("backend-retry", -1, "attempts per failed model call within a step; -1 turns retrying off, 0 takes the runtime's defaults")
+	agentIndexes := fs.String("agent-indexes", "", "JSON object of agent-written indexes by memory_segment ID, shown with those segments (with --recall a1)")
 	handoff := fs.String("handoff", "", "comma-separated checkpoints to run a handoff on, instead of asking probes; results go to --out")
 	positional := parseInterspersed(fs, args)
 	if *rescore != "" && *probesPath != "" {
@@ -55,6 +56,16 @@ func probeMemory(args []string) {
 	conditions := memprobe.Config{NoWorkingMemory: *noMemory, NoCheckRule: *noCheckRule, Recall: splitList(*recall)}
 	if *retry != -1 {
 		conditions.BackendRetry = &runtime.BackendRetryPolicy{Attempts: *retry}
+	}
+	if *agentIndexes != "" {
+		data, err := os.ReadFile(*agentIndexes)
+		if err == nil {
+			err = json.Unmarshal(data, &conditions.AgentIndexes)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 	var err error
 	if *handoff != "" {
@@ -93,6 +104,7 @@ func probeConfig(completer agentflow.JSONCompleter, compaction runtime.Compactio
 		NoCheckRule:     conditions.NoCheckRule,
 		Recall:          conditions.Recall,
 		BackendRetry:    conditions.BackendRetry,
+		AgentIndexes:    conditions.AgentIndexes,
 	}, nil
 }
 

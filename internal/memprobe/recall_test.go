@@ -38,6 +38,25 @@ func (c *scriptedCompleter) CompleteJSON(_ context.Context, system, user string,
 	return json.Unmarshal(encoded, target)
 }
 
+// CompleteMessages makes the completer take the chat-messages path, as the
+// vLLM backend does: the system message and the rest are recorded apart.
+func (c *scriptedCompleter) CompleteMessages(ctx context.Context, messages []runtime.Message) (string, error) {
+	var system, user []string
+	for _, message := range messages {
+		if message.Role == "system" {
+			system = append(system, message.Content)
+		} else {
+			user = append(user, message.Content)
+		}
+	}
+	var out map[string]any
+	if err := c.CompleteJSON(ctx, strings.Join(system, "\n"), strings.Join(user, "\n"), &out); err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(out)
+	return string(encoded), err
+}
+
 func memoryTool(name string, args map[string]string) map[string]any {
 	return map[string]any{"type": "tool", "tool_call": map[string]any{"name": name, "args": args}}
 }
@@ -87,7 +106,7 @@ func TestProbesRunWithEveryAidOffUnlessNamed(t *testing.T) {
 }
 
 // handoffRun is a state directory left by a writer whose live history is
-// long enough to compact.
+// long enough to compact, after more steps than one answer may take.
 func handoffRun(t *testing.T) (stateDir, checkpoint string) {
 	t.Helper()
 	stateDir = t.TempDir()
@@ -111,7 +130,7 @@ func handoffRun(t *testing.T) (stateDir, checkpoint string) {
 		}
 		messages = append(messages, runtime.Message{Role: role, Content: strings.Repeat("sweep result ", 80), Seq: seq})
 	}
-	cp, err := store.CreateJSON("checkpoint", writer.PID, runtime.Session{Messages: messages, NextSeq: 13}, nil, map[string]string{"kind": "intermediate"})
+	cp, err := store.CreateJSON("checkpoint", writer.PID, runtime.Session{Messages: messages, NextSeq: 13, Usage: runtime.Usage{Steps: 50}}, nil, map[string]string{"kind": "intermediate"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,5 +223,65 @@ func TestProbesRetryModelCallsOnlyWhenAsked(t *testing.T) {
 	sample, events = run(&runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond})
 	if sample.Error != "" || !sample.Correct || sample.BackendErrors != 1 || !strings.Contains(events, "backend.retry") {
 		t.Fatalf("with retry the failed call should be retried: %+v", sample)
+	}
+}
+
+// indexedRun is probedRun with its segment's message range on the
+// checkpoint's reference, as the runtime writes it.
+func indexedRun(t *testing.T) (stateDir, checkpoint, segment string) {
+	t.Helper()
+	stateDir, checkpoint, segment = probedRun(t)
+	store, err := artifact.New(filepath.Join(stateDir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var session runtime.Session
+	if err := store.ReadJSON(checkpoint, &session); err != nil {
+		t.Fatal(err)
+	}
+	session.MemoryRefs[0].FromSeq, session.MemoryRefs[0].ToSeq = 1, 1
+	record, err := store.Metadata(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, err := store.CreateJSON("checkpoint", record.ProducerPID, session, []string{segment}, map[string]string{"kind": "intermediate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stateDir, cp.ID, segment
+}
+
+// Agent indexes given by segment are shown with their segments when a1 is
+// on, and refused when a line lies outside its segment. Each answer
+// records its memory reads with their arguments.
+func TestProbesShowGivenAgentIndexes(t *testing.T) {
+	stateDir, checkpoint, segment := indexedRun(t)
+	probes := []memprobe.Probe{{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `TG4`}}
+	indexes := map[string][]runtime.IndexLine{segment: {{From: 1, To: 1, Text: "threadgroup sweep: TG4 kept over TG2"}}}
+	run := func(recall []string, indexes map[string][]runtime.IndexLine) (*scriptedCompleter, memprobe.Sample, error) {
+		t.Helper()
+		completer := &scriptedCompleter{actions: []map[string]any{memoryTool("read_memory", map[string]string{"artifact_id": segment})}}
+		samples, err := memprobe.Run(context.Background(), memprobe.Config{
+			StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer, Recall: recall, AgentIndexes: indexes,
+		}, probes)
+		if err != nil {
+			return completer, memprobe.Sample{}, err
+		}
+		return completer, samples[0], nil
+	}
+
+	on, sample, err := run([]string{"a1"}, indexes)
+	if err != nil || !strings.Contains(on.users[0], "threadgroup sweep: TG4 kept over TG2") || sample.AgentIndexSegments != 1 || sample.AgentIndexBytes == 0 {
+		t.Fatalf("with a1 the header should show the given index: %+v %v\n%s", sample, err, on.users[0])
+	}
+	if !slices.Equal(sample.Reads, []string{"read_memory artifact_id=" + segment}) {
+		t.Fatalf("the read should be recorded with its arguments: %v", sample.Reads)
+	}
+	off, _, err := run(nil, indexes)
+	if err != nil || strings.Contains(off.users[0], "threadgroup sweep") {
+		t.Fatalf("without a1 the index should not be shown: %v\n%s", err, off.users[0])
+	}
+	if _, _, err := run([]string{"a1"}, map[string][]runtime.IndexLine{segment: {{From: 1, To: 5, Text: "past the segment"}}}); err == nil {
+		t.Fatal("a line outside its segment should be refused")
 	}
 }
