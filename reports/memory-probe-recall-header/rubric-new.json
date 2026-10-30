@@ -1,0 +1,46 @@
+{
+  "h-414-1": {
+    "main": "No: the copied binary failed at Metal init because it could not read the shared shader header, so no reference image was written.",
+    "exact": "No: running the copied binary from out/ failed with 'metal init error: cannot read shared shader header', so no r1_default.pfm was written."
+  },
+  "h-414-2": {
+    "main": "The caustic was about 16 times as bright as the floor.",
+    "exact": "Caustic pixels (1185 of them, >= 3x the floor median) had mean luminance 9.05 against a floor median of 0.56, about 16x the floor."
+  },
+  "h-507-1": {
+    "main": "No: the link failed with an undefined symbol.",
+    "exact": "No: the linker failed with an undefined symbol for pt::transform_mesh, which the BVH rewrite had dropped from pt_bvh.cpp."
+  },
+  "h-507-2": {
+    "main": "No: it failed because the mesh vertex type was undeclared.",
+    "exact": "No: compile errors 'use of undeclared identifier PtVertex' / 'unknown type name PtVertex' in pt_mesh.hpp, pt_bvh.cpp and pt_mesh.cpp, because PtVertex had been removed from the shared header."
+  },
+  "h-646-1": {
+    "main": "The build failed because the escape-link function was private in the BVH builder class.",
+    "exact": "Error: 'link_escapes' is a private member of BvhBuilder (pt_bvh.cpp:216), so the host build failed and the old binary stayed in place."
+  },
+  "h-1608-1": {
+    "main": "The mesh file could not be opened: the bunny OBJ path was wrong.",
+    "exact": "'mesh error: cannot open mesh' for /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj, a wrong path missing aos/reports/."
+  },
+  "h-1608-2": {
+    "main": "Round 4 recorded about 45.6 ms render_ms_best.",
+    "exact": "Round 4 recorded render_ms_best=45.635 ms (gpu 45.349), 1.074x over round 3's verified 49.020 ms, 8/8 interleaved pairs vs round 3's 47.828."
+  },
+  "h-1661-1": {
+    "main": "The profiling build's shader failed to compile at runtime.",
+    "exact": "Shader compile failed: 'use of undeclared identifier params' in the PT_PROF guard inside pt_intersect_scene (it needed scene.params->pad)."
+  },
+  "h-1766-1": {
+    "main": "No: the host side still used the old node type, so the build failed with type errors.",
+    "exact": "No: GpuMeshData in pt_metal_host.hpp still declared nodes as PtBvhNodeQ (unknown type name) and pt_main.cpp could not pass PtBvhChild* where a node pointer was expected."
+  },
+  "h-1766-2": {
+    "main": "A wrong scene-config path: nothing was rendered, so the comparison failed; it was not a real image difference.",
+    "exact": "The command used scenes/scene-default.json, which does not exist ('cannot open scene config'), so no cp_default.pfm was written and cmp reported a difference; with the right path the image was byte-identical."
+  },
+  "h-3062-1": {
+    "main": "The image changed (not byte-identical), so the tree shape is part of the frozen estimator and tree changes are ruled out.",
+    "exact": "Depth 16->20 changed the scene-alt-view PFM (at byte 1022129) because equal-t ties resolve by tree test order; so tree topology (depth, leaf size, bins, split order) is part of the frozen estimator and tree-quality ideas are ruled out."
+  }
+}
