@@ -1,0 +1,210 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"aos/internal/artifact"
+	"aos/internal/ipc"
+	"aos/internal/kernel"
+	"aos/internal/runtime"
+	"aos/internal/tools"
+)
+
+type rootFixture struct {
+	kernel *kernel.Kernel
+	store  *artifact.Store
+	bus    *ipc.Bus
+	spawn  func() (kernel.Process, error)
+}
+
+func newRootFixture(t *testing.T) rootFixture {
+	t.Helper()
+	dir := t.TempDir()
+	k, err := kernel.New(filepath.Join(dir, "kernel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := artifact.New(filepath.Join(dir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus, err := ipc.New(filepath.Join(dir, "bus"), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spawn := func() (kernel.Process, error) {
+		return k.Spawn(kernel.ProcessSpec{Role: "agent:interactive", Metadata: map[string]string{"agent_id": "interactive"}})
+	}
+	return rootFixture{kernel: k, store: store, bus: bus, spawn: spawn}
+}
+
+func (f rootFixture) runtime(backend runtime.Backend) *runtime.AgentRuntime {
+	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6}
+}
+
+// say runs one TUI turn for line, as the loop does.
+func (f rootFixture) say(t *testing.T, r *runtime.AgentRuntime, root *tuiRoot, line string) (string, runtime.RunResult, error) {
+	t.Helper()
+	note, err := continueEnded(f.kernel, f.store, f.bus, root, f.spawn)
+	if err != nil {
+		t.Fatalf("continueEnded: %v", err)
+	}
+	appended, err := deliver(f.bus, root, line)
+	if err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	result, err := runTurn(context.Background(), r, root, appended, runtime.RunOptions{StopOnAssistantMessage: true, NewTurn: true})
+	root.record(f.store, result)
+	return note, result, err
+}
+
+func message(text string) runtime.GenerateResult {
+	return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "message", Message: text}}
+}
+
+func exitDone() runtime.GenerateResult {
+	return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done", Retryable: false}}}
+}
+
+// After the agent exits with code 0, the next line continues the
+// conversation in a new agent, which sees what was said and the new line.
+// Recover and Resume still refuse the exited agent.
+func TestExitedRootContinuesInANewAgent(t *testing.T) {
+	f := newRootFixture(t)
+	backend := &runtime.FakeBackend{Steps: []runtime.GenerateResult{message("Uptime Kuma runs on 10.0.0.5"), exitDone(), message("port 3001")}}
+	r := f.runtime(backend)
+	first, err := f.spawn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := tuiRoot{process: first}
+
+	if _, _, err := f.say(t, r, &root, "find the host running Uptime Kuma"); err != nil {
+		t.Fatalf("turn 1: %v", err)
+	}
+	_, exited, err := f.say(t, r, &root, "thanks")
+	if err != nil || exited.ExitStatus.Reason != "done" {
+		t.Fatalf("turn 2 should exit: %+v %v", exited.ExitStatus, err)
+	}
+	ended := root.checkpointID
+
+	note, result, err := f.say(t, r, &root, "and its port?")
+	if err != nil {
+		t.Fatalf("turn 3: %v", err)
+	}
+	if root.process.PID == first.PID || !strings.Contains(note, "new agent "+root.process.PID) || !strings.Contains(note, first.PID+" exited (done)") {
+		t.Fatalf("turn 3 should run in a new agent: pid %s, note %q", root.process.PID, note)
+	}
+	if root.checkpointID == "" || root.checkpointID == ended || root.seed != nil {
+		t.Fatalf("the new agent's checkpoint should replace the ended one: %q (ended %q), seed %d", root.checkpointID, ended, len(root.seed))
+	}
+	last := backend.Requests[len(backend.Requests)-1]
+	var said []string
+	for _, m := range last.History {
+		if m.Role == "user" || m.Role == "assistant" {
+			said = append(said, m.Content)
+		}
+	}
+	got := strings.Join(said, " | ")
+	for _, want := range []string{"find the host running Uptime Kuma", "Uptime Kuma runs on 10.0.0.5", "thanks", "and its port?"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the new agent should see %q; it saw %s", want, got)
+		}
+	}
+	if result.Session.Messages[len(result.Session.Messages)-1].Content != "port 3001" {
+		t.Fatalf("the new agent should answer: %+v", result.Session.Messages)
+	}
+
+	// The final exit stays final outside the TUI.
+	if _, err := r.Recover(context.Background(), first.PID, ended, nil, runtime.RunOptions{}); !errors.Is(err, runtime.ErrNotRecoverable) {
+		t.Fatalf("Recover of a final exit = %v", err)
+	}
+	if _, err := r.Resume(context.Background(), first.PID, ended, nil, runtime.RunOptions{}); !errors.Is(err, runtime.ErrNotRecoverable) {
+		t.Fatalf("Resume of a final exit = %v", err)
+	}
+}
+
+// A turn that fails with a zero result keeps the last good checkpoint,
+// session and process, and a line its recovery was to carry is reported as
+// not delivered.
+func TestFailedTurnKeepsTheLastGoodState(t *testing.T) {
+	f := newRootFixture(t)
+	r := f.runtime(&runtime.FakeBackend{Steps: []runtime.GenerateResult{message("hi")}})
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	if _, _, err := f.say(t, r, &root, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 0, Reason: "done"})
+	good := root
+
+	// Without continueEnded (the old loop), the line goes with a recovery
+	// that Recover refuses.
+	appended, err := deliver(f.bus, &root, "are you there?")
+	if err != nil || len(appended) != 1 {
+		t.Fatalf("deliver to an exited agent: %v %v", appended, err)
+	}
+	result, err := runTurn(context.Background(), r, &root, appended, runtime.RunOptions{})
+	if !errors.Is(err, runtime.ErrNotRecoverable) || result.CheckpointID != "" {
+		t.Fatalf("resume of a final exit: %+v %v", result, err)
+	}
+	root.record(f.store, result)
+	if root.checkpointID != good.checkpointID || root.process.PID != good.process.PID || len(root.session.Messages) != len(good.session.Messages) || len(root.session.Messages) == 0 {
+		t.Fatalf("a failed turn changed the root: %+v, was %+v", root, good)
+	}
+	if !lostLine(appended, good.checkpointID, result) {
+		t.Fatal("the line should be reported as not delivered")
+	}
+	if lostLine(nil, good.checkpointID, result) {
+		t.Fatal("a line in the mailbox is not lost")
+	}
+	// A recovery that failed after spawning reports the old checkpoint.
+	if !lostLine(appended, good.checkpointID, runtime.RunResult{PID: "pid-9", CheckpointID: good.checkpointID}) {
+		t.Fatal("a line that reached no new checkpoint should be reported as not delivered")
+	}
+	if lostLine(appended, good.checkpointID, runtime.RunResult{CheckpointID: "art-new"}) {
+		t.Fatal("a line that reached a new checkpoint is delivered")
+	}
+
+	// A new root keeps its seed until its first checkpoint.
+	seeded := tuiRoot{process: first, seed: []runtime.Message{{Role: "user", Content: "hello"}}}
+	seeded.record(f.store, runtime.RunResult{})
+	if len(seeded.seed) != 1 || seeded.checkpointID != "" {
+		t.Fatalf("a failed first turn lost the seed: %+v", seeded)
+	}
+}
+
+// continueEnded leaves live and recoverable roots alone, and moves mail an
+// ended root never read to the new one.
+func TestContinueEndedOnlyReplacesFinalExits(t *testing.T) {
+	f := newRootFixture(t)
+	live, _ := f.spawn()
+	root := tuiRoot{process: live, checkpointID: "art-x"}
+	if note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); note != "" || err != nil || root.process.PID != live.PID {
+		t.Fatalf("live root replaced: %q %v", note, err)
+	}
+	f.kernel.Exit(live.PID, kernel.ExitStatus{Code: 1, Reason: "backend down", Retryable: true})
+	if note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); note != "" || err != nil || root.process.PID != live.PID {
+		t.Fatalf("recoverable root replaced: %q %v", note, err)
+	}
+
+	// No checkpoint yet: even a retryable exit cannot be recovered.
+	unread, _ := f.spawn()
+	if _, err := f.bus.Send("user", unread.PID, "first line"); err != nil {
+		t.Fatal(err)
+	}
+	f.kernel.Exit(unread.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
+	root = tuiRoot{process: unread, seed: []runtime.Message{{Role: "user", Content: "earlier"}}}
+	note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn)
+	if err != nil || note == "" || root.process.PID == unread.PID || len(root.seed) != 1 {
+		t.Fatalf("ended root without a checkpoint: %q %v %+v", note, err, root)
+	}
+	pending, _ := f.bus.Pending()
+	if len(pending[unread.PID]) != 0 || len(pending[root.process.PID]) != 1 || pending[root.process.PID][0].Body != "first line" {
+		t.Fatalf("unread mail should move to the new root: %+v", pending)
+	}
+}
