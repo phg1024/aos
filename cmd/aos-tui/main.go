@@ -248,7 +248,7 @@ func runTUI() []string {
 			if turn.user {
 				fmt.Println(ui.Prompt("you> ") + turn.text)
 			} else {
-				fmt.Println(ui.AgentBlock("agent> ", turn.text))
+				fmt.Println(ui.AgentReply("agent> ", turn.text))
 			}
 		}
 	}
@@ -691,13 +691,13 @@ func printResult(ui render.Palette, footer *render.FooterBar, result runtime.Run
 	if result.Yielded && len(result.Session.Messages) > 0 {
 		last := result.Session.Messages[len(result.Session.Messages)-1]
 		if last.Role == "assistant" {
-			footer.Println(ui.AgentBlock("agent> ", last.Content))
+			footer.Println(ui.AgentReply("agent> ", last.Content))
 			return
 		}
 	}
 	if result.Blocked {
 		if text := runtime.WaitText(result.Session.Messages); text != "" {
-			footer.Println(ui.AgentBlock("agent> ", text))
+			footer.Println(ui.AgentReply("agent> ", text))
 		}
 		footer.Println(ui.Subtle("(the agent is waiting for your reply)"))
 		return
