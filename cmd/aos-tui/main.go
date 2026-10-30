@@ -243,12 +243,8 @@ func runTUI() []string {
 		if resumeNote != "" {
 			fmt.Println(ui.Subtle(resumeNote))
 		}
-		turns := conversation(root.session)
-		if len(turns) > 6 {
-			fmt.Println(ui.Subtle(fmt.Sprintf("… %d earlier messages", len(turns)-6)))
-			turns = turns[len(turns)-6:]
-		}
-		for _, turn := range turns {
+		// The whole conversation, including what compaction archived.
+		for _, turn := range conversation(withArchive(store, root.session)) {
 			if turn.user {
 				fmt.Println(ui.Prompt("you> ") + turn.text)
 			} else {

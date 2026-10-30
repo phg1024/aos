@@ -113,3 +113,53 @@ func TestResumePoint(t *testing.T) {
 
 // testPalette renders without colour, as for a file that is not a terminal.
 func testPalette() render.Palette { return render.Palette{} }
+
+// A resumed session shows its whole conversation: what compaction moved
+// to the archive comes back in front of the live history, and the session
+// listing counts it too.
+func TestResumeShowsArchivedConversation(t *testing.T) {
+	dir := t.TempDir()
+	session := filepath.Join(dir, "20261029-120000-strata")
+	k, err := kernel.New(filepath.Join(session, "kernel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := artifact.New(filepath.Join(session, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, _ := k.Spawn(kernel.ProcessSpec{Role: "agent:interactive", Metadata: map[string]string{"agent_id": "interactive"}})
+	archived := []runtime.Message{
+		{Role: "user", Content: "find the host running Uptime Kuma", Seq: 1},
+		{Role: "assistant", Content: `{"action":{"type":"tool","tool_call":{"name":"run"}}}`, Seq: 2},
+		{Role: "tool", Content: "run:...", Seq: 3},
+		{Role: "assistant", Content: "Uptime Kuma runs on 10.0.0.5", Seq: 4},
+	}
+	segment, err := store.CreateJSON("memory_segment", process.PID, map[string]any{"process_id": process.PID, "messages": archived}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := runtime.Session{
+		MemoryRefs: []runtime.MemoryRef{{MessageCount: 2}, {ArtifactID: segment.ID, MessageCount: 4, FromSeq: 1, ToSeq: 4}},
+		Messages:   []runtime.Message{{Role: "user", Content: "and its port?", Seq: 5}, {Role: "assistant", Content: "port 3001", Seq: 6}},
+	}
+	if _, err := store.CreateJSON("checkpoint", process.PID, live, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	var said []string
+	for _, turn := range conversation(withArchive(store, live)) {
+		said = append(said, turn.text)
+	}
+	want := []string{"find the host running Uptime Kuma", "Uptime Kuma runs on 10.0.0.5", "and its port?", "port 3001"}
+	if !reflect.DeepEqual(said, want) {
+		t.Fatalf("conversation = %q", said)
+	}
+	if len(live.Messages) != 2 {
+		t.Fatal("withArchive changed the session it was given")
+	}
+	sessions, err := listSessions(dir)
+	if err != nil || len(sessions) != 1 || sessions[0].Turns != 2 || sessions[0].Preview != "find the host running Uptime Kuma" {
+		t.Fatalf("listing should count archived turns: %+v %v", sessions, err)
+	}
+}
