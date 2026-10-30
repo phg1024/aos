@@ -57,7 +57,7 @@ func newLifecycleFixture(t *testing.T) lifecycleFixture {
 }
 
 func (f lifecycleFixture) runtime(backend runtime.Backend) *runtime.AgentRuntime {
-	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Leases: f.leases, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6}
+	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Leases: f.leases, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 }
 
 func messageResult(text string) runtime.GenerateResult {

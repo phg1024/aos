@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/agentflow"
 	"aos/internal/capability"
@@ -117,17 +118,27 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 // A backend that fails every call is a failed workflow, not a Go error:
-// the agent runs out of steps and its last checkpoint holds the errors.
+// the agent retries its model call, then exits retryable once the retries
+// run out. With retries off, as before, it runs out of steps and its last
+// checkpoint holds the errors.
 func TestRunWorkflowReportsBackendFailure(t *testing.T) {
-	dir := t.TempDir()
-	var err error
-	captureStdout(t, func() {
-		err = runWorkflow(context.Background(), failingCompleter{}, runtime.CompactionPolicy{}, capability.Budget{},
-			writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
-	})
-	var failed workflowFailed
-	if !errors.As(err, &failed) || !strings.Contains(failed.Error(), "step limit exceeded") {
-		t.Fatalf("expected a step-limit workflow failure, got %v", err)
+	saved := backendRetry
+	defer func() { backendRetry = saved }()
+	for retry, want := range map[runtime.BackendRetryPolicy]string{
+		{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond}: "model endpoint failed 3 times in a row: backend unreachable",
+		{Attempts: -1}: "step limit exceeded",
+	} {
+		backendRetry = retry
+		dir := t.TempDir()
+		var err error
+		captureStdout(t, func() {
+			err = runWorkflow(context.Background(), failingCompleter{}, runtime.CompactionPolicy{}, capability.Budget{},
+				writeSoloWorkflow(t, dir), nil, "", "", filepath.Join(dir, "state"), "go", false)
+		})
+		var failed workflowFailed
+		if !errors.As(err, &failed) || !strings.Contains(failed.Error(), want) {
+			t.Fatalf("retry %+v: expected a workflow failure with %q, got %v", retry, want, err)
+		}
 	}
 }
 

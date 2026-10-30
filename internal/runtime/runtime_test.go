@@ -858,6 +858,8 @@ func TestAgentRuntimeCanContinueAfterBackendErrorWhenAllowed(t *testing.T) {
 		Kernel:    k,
 		Artifacts: artifactStore,
 		Tools:     tools.NewRuntime(),
+		// The behaviour from before retries: every failure takes a step.
+		BackendRetry: runtime.BackendRetryPolicy{Attempts: -1},
 		Backend: &scriptedBackend{
 			steps: []backendStep{
 				{err: errors.New("unable to repair malformed action JSON")},

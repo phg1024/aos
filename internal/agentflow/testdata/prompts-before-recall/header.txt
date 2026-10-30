@@ -1,0 +1,18 @@
+Here is your task context.
+
+{
+  "workflow": "golden",
+  "agent_id": "writer",
+  "process_id": "",
+  "goal": ""
+}
+
+Working memory v3 (0001-01-01 00:00, art-000099), as of your last compaction; later update_memory calls are in the history below. It is the record you keep of what is current; the archive is history.
+decisions:
+- leaf2: rejected: biased build [evidence 236-243]
+
+Archive: your messages 1-120 are in 1 segments, out of the live history below. When you need something from them, such as an exact number, an error message, or what you already tried, call search_memory with words the message would contain (a message matches when it holds all of them; | separates alternatives; re: for a regexp), then read_memory from=N to=M for the messages around a hit, rather than redoing the work. A later message supersedes an earlier one.
+Index (recorded by the runtime, not a summary: tools called, and paths passed to read_file, write_file and edit_file; files that run commands touched are not listed; paths are under /work/pt/src/):
+- messages 1-120 (art-000042, archived 2026-10-29 04:05:00): run x40; paths bvh.cpp
+
+The messages that follow are your session history: assistant turns are your own earlier notes and actions, user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.

@@ -244,7 +244,7 @@ func TestMessageSeqSurvivesRecovery(t *testing.T) {
 		}
 		return markedMessage(call, 1000), nil
 	}}
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 40, Compaction: policy}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 40, Compaction: policy, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 	if err == nil || !failed.ExitStatus.Retryable {
 		t.Fatalf("expected a retryable failure, got %+v %v", failed.ExitStatus, err)
@@ -487,7 +487,9 @@ func TestHysteresisHoldsForTheLargestTurn(t *testing.T) {
 				}
 				return worstRun(tc.pad), nil
 			}}
-			agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 12, Compaction: policy}
+			// Recall aids off: a re-noticed handoff compacts mid-step, which
+			// TestHandoffOverrunIsBounded covers.
+			agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 12, Compaction: policy, Recall: runtime.RecallOff()}
 			if _, err := agent.Run(context.Background(), process.PID, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -527,7 +529,7 @@ func TestCompactionIsIdempotentAcrossRecover(t *testing.T) {
 		}
 		return markedMessage(call, 1000), nil
 	}}
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 40, Compaction: policy}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 40, Compaction: policy, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 	if err == nil || len(firstRefs) != 1 {
 		t.Fatalf("expected a failure right after the first compaction, refs %+v, err %v", firstRefs, err)
@@ -587,7 +589,7 @@ func TestAdoptionRequiresIdenticalMessages(t *testing.T) {
 		}
 		return runtime.GenerateResult{}, errors.New("connection reset")
 	}}
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Bus: bus, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 10, Compaction: policy}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Bus: bus, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 10, Compaction: policy, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 	if err == nil {
 		t.Fatal("expected the crash")

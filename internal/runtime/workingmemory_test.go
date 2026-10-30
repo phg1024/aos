@@ -139,7 +139,7 @@ func TestUpdateMemoryValidatesEvidence(t *testing.T) {
 	if len(results) != 2 || len(errs) != 5 {
 		t.Fatalf("expected 2 accepted and 5 refused, got %d and %v", len(results), errs)
 	}
-	for i, want := range []string{"not in your history", "not in your history", "not in your history", "another process's memory_segment", "neither a message range"} {
+	for i, want := range []string{"not in your history", "not in your history", "not in your history", "another process's memory_segment", "neither message numbers"} {
 		if !strings.Contains(errs[i].Error(), want) {
 			t.Fatalf("refusal %d should say %q: %v", i, want, errs[i])
 		}
@@ -171,7 +171,7 @@ func TestSnapshotMarksEntriesWithoutEvidence(t *testing.T) {
 func TestUpdateMemoryIsIdempotentAcrossRecover(t *testing.T) {
 	k, store, process := newMemoryFixture(t)
 	update := setMemory("decisions", "leaf2", "rejected: biased", "")
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), MaxSteps: 20}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), MaxSteps: 20, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 	var adopted []string
 	options := runtime.RunOptions{OnToolResult: func(result tools.Result) {
 		if result.Tool == "update_memory" {
@@ -227,7 +227,7 @@ func TestUpdateMemoryIsIdempotentAcrossRecover(t *testing.T) {
 // Working memory is part of the session: a recovered process still has it.
 func TestWorkingMemorySurvivesRecover(t *testing.T) {
 	k, store, process := newMemoryFixture(t)
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), MaxSteps: 20}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), MaxSteps: 20, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 	agent.Backend = &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		if call == 1 {
 			return setMemory("decisions", "leaf2", "rejected: biased build", ""), nil
@@ -283,7 +283,7 @@ func TestCompactionGivesOneHandoffStep(t *testing.T) {
 	backend, requests := handoffAgent(t, setMemory("decisions", "plan", "keep TG4", ""),
 		func(int, runtime.GenerateRequest) runtime.GenerateResult { return exitResult("done") })
 	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40,
-		Compaction: runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}}
+		Compaction: runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}, Recall: runtime.RecallOff()}
 	if _, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestHandoffStepThatDelegatesWaitsOrExits(t *testing.T) {
 	t.Run("exit", func(t *testing.T) {
 		k, store, process := newMemoryFixture(t)
 		backend, _ := handoffAgent(t, exitResult("done"), nil)
-		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy}
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy, Recall: runtime.RecallOff()}
 		result, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 		if err != nil {
 			t.Fatal(err)
@@ -346,7 +346,7 @@ func TestHandoffStepThatDelegatesWaitsOrExits(t *testing.T) {
 		k, store, process := newMemoryFixture(t)
 		backend, requests := handoffAgent(t, runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: "need input"}},
 			func(int, runtime.GenerateRequest) runtime.GenerateResult { return exitResult("done") })
-		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy}
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy, Recall: runtime.RecallOff()}
 		blocked, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 		if !errors.Is(err, runtime.ErrAgentBlocked) || segments(store) != 0 {
 			t.Fatalf("waiting should not compact yet: %v, %d segments", err, segments(store))
@@ -369,7 +369,7 @@ func TestHandoffStepThatDelegatesWaitsOrExits(t *testing.T) {
 		k, store, process := newMemoryFixture(t)
 		backend, requests := handoffAgent(t, runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: "need input"}},
 			func(int, runtime.GenerateRequest) runtime.GenerateResult { return exitResult("done") })
-		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy}
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy, Recall: runtime.RecallOff()}
 		blocked, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 		if !errors.Is(err, runtime.ErrAgentBlocked) {
 			t.Fatal(err)
@@ -392,7 +392,7 @@ func TestHandoffStepThatDelegatesWaitsOrExits(t *testing.T) {
 		}
 		backend, requests := handoffAgent(t, runtime.GenerateResult{Action: runtime.GenerateAction{Type: "delegate", Delegate: &runtime.DelegateCall{AgentID: "writer", Goal: "draft"}}},
 			func(int, runtime.GenerateRequest) runtime.GenerateResult { return exitResult("done") })
-		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy,
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy, Recall: runtime.RecallOff(),
 			DelegateHandler: func(context.Context, kernel.Process, runtime.DelegateCall, runtime.Session) (runtime.DelegateResult, error) {
 				return runtime.DelegateResult{AgentID: "writer", Summary: "drafted"}, nil
 			}}

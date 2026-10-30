@@ -192,6 +192,9 @@ func run(args []string) {
 	fmt.Println(string(bytes))
 }
 
+// backendRetry is how agents retry failed model calls; tests shorten it.
+var backendRetry runtime.BackendRetryPolicy
+
 func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compaction runtime.CompactionPolicy, budget capability.Budget, workflowPath string, inputs []string, outputPath, reportPath, stateDir, goal string, trace bool) error {
 	if err := compaction.Validate(tools.MaxToolResultBytes); err != nil {
 		return err
@@ -251,8 +254,9 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 			Completer: backend,
 			Skills:    skills.NewRegistry(spec.SkillRoots),
 		},
-		Compaction: compaction,
-		Budget:     budget,
+		Compaction:   compaction,
+		BackendRetry: backendRetry,
+		Budget:       budget,
 	}
 	// The trace and the model-call ledger go to disk as the run happens, so
 	// a killed run can still be inspected (aos inspect).

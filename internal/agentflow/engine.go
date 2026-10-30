@@ -46,6 +46,7 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		Workflow:  workflow,
 		Agent:     agent,
 		Skills:    loadedSkills,
+		Recall:    workflow.Recall,
 	}, nil
 }
 
@@ -111,6 +112,8 @@ type Engine struct {
 	Trace     func(TraceEvent)
 	// Compaction is passed to every agent runtime; zero uses runtime defaults.
 	Compaction runtime.CompactionPolicy
+	// BackendRetry is passed to every agent runtime; zero uses its defaults.
+	BackendRetry runtime.BackendRetryPolicy
 	// Budget is the whole run's: every agent's consumption counts against
 	// it, and the entry agent's budget is bounded by it. A time budget is
 	// advisory unless StrictTime.
@@ -404,13 +407,15 @@ func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequ
 func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, parentPID string, start func(*runtime.AgentRuntime, runtime.RunOptions) (runtime.RunResult, error)) (AgentRun, error) {
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
-		Kernel:     e.Kernel,
-		Artifacts:  e.Artifacts,
-		Tools:      e.Tools,
-		Bus:        e.Bus,
-		Leases:     e.Leases,
-		MaxSteps:   maxSteps(agent),
-		Compaction: e.Compaction,
+		Kernel:       e.Kernel,
+		Artifacts:    e.Artifacts,
+		Tools:        e.Tools,
+		Bus:          e.Bus,
+		Leases:       e.Leases,
+		MaxSteps:     maxSteps(agent),
+		Compaction:   e.Compaction,
+		Recall:       spec.Recall,
+		BackendRetry: e.BackendRetry,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -122,6 +123,13 @@ type Backend interface {
 	Generate(ctx context.Context, request GenerateRequest) (GenerateResult, error)
 }
 
+// HeaderSizer is a backend that can say how large the parts of its prompt
+// header that change at compaction are, in bytes by name. The runtime logs
+// them as a memory.header event whenever they change.
+type HeaderSizer interface {
+	HeaderSizes(request GenerateRequest) map[string]int
+}
+
 type Session struct {
 	Messages            []Message     `json:"messages"`
 	ToolArtifactIDs     []string      `json:"tool_artifact_ids,omitempty"`
@@ -142,6 +150,14 @@ type Session struct {
 	// counts the working-memory updates made since the notice.
 	HandoffSeq     int `json:"handoff_seq,omitempty"`
 	HandoffUpdates int `json:"handoff_updates,omitempty"`
+	// HandoffSteps counts the steps taken since the notice, HandoffWrote
+	// says the last of them wrote memory, HandoffRenoticed that the notice
+	// was repeated, and HandoffIndex is the agent's index of the messages
+	// the handoff archives, stored with the segment once it is written.
+	HandoffSteps     int         `json:"handoff_steps,omitempty"`
+	HandoffWrote     bool        `json:"handoff_wrote,omitempty"`
+	HandoffRenoticed bool        `json:"handoff_renoticed,omitempty"`
+	HandoffIndex     []IndexLine `json:"handoff_index,omitempty"`
 	// MailboxSeen lists the IDs of the messages already in this session, so
 	// a message delivered again (the bus delivers at least once) is
 	// recorded only once.
@@ -177,6 +193,9 @@ type MemoryRef struct {
 	Tools        []ToolCount `json:"tools,omitempty"`
 	Paths        []string    `json:"paths,omitempty"`
 	MorePaths    int         `json:"more_paths,omitempty"`
+	// Index is what the agent wrote, at handoff, about where things are in
+	// the segment; the runtime checked only its message numbers.
+	Index []IndexLine `json:"agent_index,omitempty"`
 }
 
 type ToolAttempt struct {
@@ -209,6 +228,10 @@ type AgentRuntime struct {
 	MaxSteps        int
 	// Compaction defaults to DefaultCompactionPolicy when left zero.
 	Compaction CompactionPolicy
+	// Recall switches the recall aids; the zero value turns them all on.
+	Recall RecallPolicy
+	// BackendRetry retries failed model calls within a step.
+	BackendRetry BackendRetryPolicy
 	// OnCapabilityDenied, when set, receives each capability.denied kernel
 	// event this runtime records.
 	OnCapabilityDenied func(kernel.Event)
@@ -355,7 +378,15 @@ type RunOptions struct {
 	// process: it is parked ready, as after a message, so the user's next
 	// message continues the same conversation with its archive and working
 	// memory. The interactive root of a terminal session runs this way.
-	ExitEndsTurn        bool
+	ExitEndsTurn bool
+	// HandoffOnly runs only a handoff: the first step gives the handoff
+	// notice for the history the compaction policy would archive (whether
+	// or not it is due), and the run parks ready as soon as that history
+	// is compacted, before any other action runs. It is for asking an
+	// agent to write its working memory and index for a checkpoint it
+	// resumes from; give it a process without tool grants, so only the
+	// memory tools can run.
+	HandoffOnly         bool
 	ContinueOnToolError bool
 	OnToolCall          func(ToolCall)
 	OnToolResult        func(tools.Result)
@@ -593,8 +624,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		maxSteps = 32
 	}
 	maxSteps += session.Extended.Steps
-	// budgetExit ends the process when a budget runs out: retryable, since
-	// an operator may grant more, with a checkpoint that keeps the usage.
+	// budgetExit ends the process when a budget runs out, or the model
+	// endpoint stays down: retryable, since an operator may grant more or
+	// the endpoint come back, with a checkpoint that keeps the usage.
 	budgetExit := func(reason string) (RunResult, error) {
 		record, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
 		if err != nil {
@@ -615,6 +647,18 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		return r.cancelRun(ctx, pid, synced(), latest(), &unacked)
 	}
+	// handoffDone parks a HandoffOnly run once its handoff compacted.
+	handoffDone := func() (RunResult, error) {
+		record, err := r.saveCheckpoint(pid, synced(), latest(), "handoff", &unacked)
+		if err != nil {
+			return RunResult{}, err
+		}
+		checkpointID = record.ID
+		if _, err := r.Kernel.Transition(pid, kernel.StateReady); err != nil {
+			return RunResult{}, err
+		}
+		return RunResult{PID: pid, CheckpointID: checkpointID, Session: session, Yielded: true}, nil
+	}
 	handleMalformed := func() (bool, error) {
 		if options.ContinueOnToolError {
 			artifactRecord, recordErr := r.Artifacts.CreateJSON("backend_error", pid, map[string]string{
@@ -634,6 +678,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		return false, nil
 	}
+	var headerLogged map[string]string
 	// Steps count across resumes and recoveries (Usage.Steps is saved), from
 	// the start of the current turn.
 	for step := 0; session.Usage.Steps-session.StepBase < maxSteps; step++ {
@@ -658,9 +703,17 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}
 			unacked = append(unacked, received...)
 		}
-		session, err = r.compactSessionMemory(process, session, latest())
+		archived := len(session.MemoryRefs)
+		if options.HandoffOnly && step == 0 && session.HandoffSeq == 0 {
+			session, err = r.beginHandoff(process, numberMessages(session))
+		} else {
+			session, err = r.compactSessionMemory(process, session, latest(), false)
+		}
 		if err != nil {
 			return RunResult{}, err
+		}
+		if options.HandoffOnly && len(session.MemoryRefs) > archived {
+			return handoffDone()
 		}
 		session, err = r.indexMemoryRefs(pid, session)
 		if err != nil {
@@ -677,26 +730,70 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 
 		// Check the token budget before the call, and cap the reply to what
 		// is left of it; its prompt may still overshoot, by at most one call.
-		meter := &TokenMeter{}
-		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"], Meter: meter}
+		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"]}
 		if tokens := account.tokensLeft(); tokens.ok {
 			if tokens.Left <= 0 {
 				return budgetExit(fmt.Sprintf("token budget exceeded: %d of %d tokens used (budget of %s)", tokens.Limit-int(tokens.Left), tokens.Limit, tokens.Owner))
 			}
 			info.MaxTokens = int(tokens.Left)
 		}
-		callCtx := WithCallInfo(ctx, info)
-		result, err := r.Backend.Generate(callCtx, GenerateRequest{
+		request := GenerateRequest{
 			Process:       process,
 			History:       append([]Message(nil), session.Messages...),
 			MemoryRefs:    append([]MemoryRef(nil), session.MemoryRefs...),
 			WorkingMemory: snapshot,
-		})
-		account.AddTokens(meter.Total())
-		syncUsage()
-		if ctx.Err() != nil {
-			// Drop whatever the interrupted call produced, action or error.
-			return stop()
+		}
+		if sizer, ok := r.Backend.(HeaderSizer); ok && !r.Recall.NoAgentIndex {
+			// The header only changes at compaction, so it is logged when
+			// it does, and at a run's first call.
+			data := map[string]string{}
+			for name, size := range sizer.HeaderSizes(request) {
+				data[name] = strconv.Itoa(size)
+			}
+			if !maps.Equal(data, headerLogged) {
+				if _, err := r.Kernel.RecordEvent(pid, "memory.header", data); err != nil {
+					return RunResult{}, err
+				}
+				headerLogged = data
+			}
+		}
+		// A failed call is retried within the step, after a growing wait:
+		// an endpoint outage is not the agent's doing and must not spend
+		// its steps.
+		retry := r.BackendRetry.withDefaults()
+		var result GenerateResult
+		attempts := 0
+		for {
+			attempts++
+			meter := &TokenMeter{}
+			info.Meter = meter
+			result, err = r.Backend.Generate(WithCallInfo(ctx, info), request)
+			account.AddTokens(meter.Total())
+			syncUsage()
+			if ctx.Err() != nil {
+				// Drop whatever the interrupted call produced, action or error.
+				return stop()
+			}
+			if err == nil || retry.Attempts < 0 || attempts >= retry.Attempts {
+				break
+			}
+			delay := retry.delay(attempts)
+			if _, recordErr := r.Kernel.RecordEvent(pid, "backend.retry", map[string]string{
+				"attempt": strconv.Itoa(attempts),
+				"error":   err.Error(),
+				"delay":   delay.String(),
+			}); recordErr != nil {
+				return RunResult{}, recordErr
+			}
+			sleepContext(ctx, delay)
+			if ctx.Err() != nil {
+				return stop()
+			}
+		}
+		if err != nil && retry.Attempts >= 0 {
+			// Retries ran out: the endpoint is down, which another step
+			// cannot fix. Exit retryable with a checkpoint, as a budget does.
+			return budgetExit(fmt.Sprintf("model endpoint failed %d times in a row: %v", attempts, err))
 		}
 		if err != nil {
 			if options.ContinueOnToolError {
@@ -723,6 +820,17 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, err
 		}
 
+		if session.HandoffSteps > 0 && result.Action.Type != "exit" && !writesMemory(result.Action) {
+			// A later handoff step that does something else is compacted
+			// before its action runs, so its output lands on the
+			// compacted history rather than overrunning the trigger.
+			if session, err = r.compactSessionMemory(process, session, latest(), true); err != nil {
+				return RunResult{}, err
+			}
+			if options.HandoffOnly {
+				return handoffDone()
+			}
+		}
 		// Record what the agent decided before acting, so later steps see their
 		// own notes and actions, not only tool results.
 		if record := actionRecord(result.Action); record != "" {
@@ -914,7 +1022,15 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				session.WorkingMemory = toolResult.Output["artifact_id"]
 				if session.HandoffSeq != 0 {
 					session.HandoffUpdates++
+					session.HandoffWrote = true
 				}
+			case toolResult.Tool == "index_memory":
+				lines, err := parseIndex(toolResult.Output["index"], 1, session.HandoffSeq)
+				if err != nil {
+					return RunResult{}, err
+				}
+				session.HandoffIndex = lines
+				session.HandoffWrote = true
 			}
 			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
@@ -1394,8 +1510,9 @@ func loopSensitiveTool(name string) bool {
 // It archives the oldest messages until the policy's targets hold, cutting
 // only at the start of a turn, so a tool call stays with its result, and
 // never past the latest turn. If the latest turn alone is over the target,
-// it is kept anyway and the memory.compacted event says oversized.
-func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session, parents []string) (Session, error) {
+// it is kept anyway and the memory.compacted event says oversized. now
+// compacts a pending handoff at once, without giving it another step.
+func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Session, parents []string, now bool) (Session, error) {
 	session = numberMessages(session)
 	policy := r.compactionPolicy()
 	handoff := session.HandoffSeq != 0
@@ -1404,20 +1521,26 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	}
 	cut, oversized := compactionCut(session.Messages, policy)
 	if cut == 0 {
-		session.HandoffSeq, session.HandoffUpdates = 0, 0
+		session = endHandoff(session)
 		return session, nil
 	}
 	if policy.Handoff && !handoff {
 		// Compact at the next model call, whatever this step does; an exit
 		// ends the run with its history whole.
-		through := session.Messages[cut-1].Seq
-		session.Messages = append(session.Messages, Message{Role: "notice", Content: fmt.Sprintf(handoffNotice, through)})
-		session = numberMessages(session)
-		session.HandoffSeq, session.HandoffUpdates = through, 0
-		if _, err := r.Kernel.RecordEvent(process.PID, "memory.handoff", map[string]string{"through_seq": strconv.Itoa(through)}); err != nil {
-			return Session{}, err
+		return r.beginHandoff(process, session)
+	}
+	if handoff && !now {
+		wait, renotice := r.handoffContinues(&session)
+		if renotice {
+			session.Messages = append(session.Messages, Message{Role: "notice", Content: r.renotice(session)})
+			session = numberMessages(session)
+			if err := r.noteRecall(process.PID, NoticeRenotice, map[string]string{"through_seq": strconv.Itoa(session.HandoffSeq)}); err != nil {
+				return Session{}, err
+			}
 		}
-		return session, nil
+		if wait {
+			return session, nil
+		}
 	}
 	prior, priorCut, refused, err := r.priorSegment(process.PID, session.Messages, parents)
 	if err != nil {
@@ -1437,8 +1560,17 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		FromSeq:      older[0].Seq,
 		ToSeq:        older[len(older)-1].Seq,
 		Messages:     older,
+		Index:        indexWithin(session.HandoffIndex, older[0].Seq, older[len(older)-1].Seq),
 	}
 	record := prior
+	if prior.ID != "" {
+		// An adopted segment keeps the index it was written with.
+		var adopted memorySegment
+		if err := r.Artifacts.ReadJSON(prior.ID, &adopted); err != nil {
+			return Session{}, err
+		}
+		segment.Index = adopted.Index
+	}
 	if record.ID == "" {
 		record, err = r.Artifacts.CreateJSON("memory_segment", process.PID, segment, parents, map[string]string{
 			"sequence":        strconv.Itoa(segment.Sequence),
@@ -1466,19 +1598,130 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	if handoff {
 		data["handoff_through"] = strconv.Itoa(session.HandoffSeq)
 		data["handoff_updates"] = strconv.Itoa(session.HandoffUpdates)
+		if !r.Recall.NoAgentIndex || !r.Recall.NoHandoffRenotice {
+			data["handoff_steps"] = strconv.Itoa(session.HandoffSteps)
+			data["handoff_renoticed"] = strconv.FormatBool(session.HandoffRenoticed)
+		}
+		if !r.Recall.NoAgentIndex {
+			data["agent_index_lines"] = strconv.Itoa(len(segment.Index))
+		}
 	}
 	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", data); err != nil {
 		return Session{}, err
 	}
-	session.MemoryRefs = append(session.MemoryRefs, indexedRef(MemoryRef{
+	ref := indexedRef(MemoryRef{
 		ArtifactID:   record.ID,
 		MessageCount: segment.MessageCount,
-	}, older, record.CreatedAt))
+	}, older, record.CreatedAt)
+	ref.Index = segment.Index
+	session.MemoryRefs = append(session.MemoryRefs, ref)
 	session.MemorySequence++
 	session.Messages = recent
 	session.MemorySnapshot = session.WorkingMemory
-	session.HandoffSeq, session.HandoffUpdates = 0, 0
+	session = endHandoff(session)
 	return session, nil
+}
+
+// ErrNothingToArchive is a HandoffOnly run's refusal of a history too
+// short to compact.
+var ErrNothingToArchive = errors.New("nothing to archive: the history has no earlier turn to compact")
+
+// beginHandoff gives the handoff notice for what compaction would archive
+// now: from the first live message through the last one before the cut.
+func (r *AgentRuntime) beginHandoff(process kernel.Process, session Session) (Session, error) {
+	cut, _ := compactionCut(session.Messages, r.compactionPolicy())
+	if cut == 0 {
+		return Session{}, ErrNothingToArchive
+	}
+	through := session.Messages[cut-1].Seq
+	notice := fmt.Sprintf(handoffNotice, through)
+	if !r.Recall.NoAgentIndex {
+		notice += fmt.Sprintf(handoffIndexNotice, session.Messages[0].Seq, through)
+	}
+	session.Messages = append(session.Messages, Message{Role: "notice", Content: notice})
+	session = numberMessages(session)
+	session = endHandoff(session)
+	session.HandoffSeq = through
+	if _, err := r.Kernel.RecordEvent(process.PID, "memory.handoff", map[string]string{"through_seq": strconv.Itoa(through)}); err != nil {
+		return Session{}, err
+	}
+	if !r.Recall.NoAgentIndex {
+		if err := r.noteRecall(process.PID, NoticeIndex, map[string]string{"through_seq": strconv.Itoa(through)}); err != nil {
+			return Session{}, err
+		}
+	}
+	return session, nil
+}
+
+// maxHandoffSteps bounds the steps between a handoff notice and its
+// compaction, whatever the agent does.
+const maxHandoffSteps = 4
+
+// maxHandoffExtraChars bounds the live history a handoff step after the
+// first may be shown: only while it is within this much of the trigger.
+// Without the bound, the first handoff step's output, which compaction
+// used to archive before any model saw it, would reach the model. A later
+// step that would not write memory is compacted before its action runs,
+// so only a memory write's record and result can add to it.
+const maxHandoffExtraChars = 16 * 1024
+
+// handoffContinues decides, at the step after a handoff step, whether to
+// compact now or give the agent another step: while it keeps writing
+// memory (update_memory, index_memory) when it is asked for an index, or
+// once more, with the notice repeated, when it ignored the notice and has
+// no working memory or no index. Every path compacts within
+// maxHandoffSteps.
+func (r *AgentRuntime) handoffContinues(session *Session) (wait, renotice bool) {
+	wrote := session.HandoffWrote
+	session.HandoffWrote = false
+	session.HandoffSteps++
+	policy := r.compactionPolicy()
+	if session.HandoffSteps >= maxHandoffSteps || (policy.MaxChars > 0 && historyChars(session.Messages) > policy.MaxChars+maxHandoffExtraChars) {
+		return false, false
+	}
+	if wrote && !r.Recall.NoAgentIndex {
+		return true, false
+	}
+	missing := session.WorkingMemory == "" || (!r.Recall.NoAgentIndex && len(session.HandoffIndex) == 0)
+	if !wrote && missing && !session.HandoffRenoticed && !r.Recall.NoHandoffRenotice {
+		session.HandoffRenoticed = true
+		return true, true
+	}
+	return false, false
+}
+
+// renotice repeats a handoff notice the agent did not act on.
+func (r *AgentRuntime) renotice(session Session) string {
+	if r.Recall.NoAgentIndex {
+		return fmt.Sprintf(handoffRenotice, session.HandoffSeq)
+	}
+	return fmt.Sprintf(handoffRenotice, session.HandoffSeq) + fmt.Sprintf(handoffIndexNotice, session.Messages[0].Seq, session.HandoffSeq)
+}
+
+// endHandoff clears a session's handoff state.
+func endHandoff(session Session) Session {
+	session.HandoffSeq, session.HandoffUpdates = 0, 0
+	session.HandoffSteps, session.HandoffWrote, session.HandoffRenoticed = 0, false, false
+	session.HandoffIndex = nil
+	return session
+}
+
+// writesMemory reports whether action writes working memory or the
+// archive's index: what a handoff step after the first may do before
+// compaction.
+func writesMemory(action GenerateAction) bool {
+	return action.Type == "tool" && action.ToolCall != nil && (action.ToolCall.Name == "update_memory" || action.ToolCall.Name == "index_memory")
+}
+
+// indexWithin keeps the index lines that lie within from-to.
+func indexWithin(lines []IndexLine, from, to int) []IndexLine {
+	var kept []IndexLine
+	for _, line := range lines {
+		if line.From >= from && line.To <= to {
+			kept = append(kept, line)
+		}
+	}
+	return kept
 }
 
 // exitEndsTurnNotice tells an agent whose exit ended only its turn that the
@@ -1490,6 +1733,17 @@ const exitEndsTurnNotice = "runtime notice: You exited (%s). In this interactive
 const handoffNotice = "runtime notice: History through message %d will move to the archive before your next call. " +
 	"Your working memory is what you will still see. Update it now with anything from messages up to that one you will need: " +
 	"results, decisions, and what you rejected and why, with the message numbers they rest on as evidence."
+
+// handoffIndexNotice follows handoffNotice when the agent indexes what it
+// archives.
+const handoffIndexNotice = " Then index messages %d-%d with index_memory: one line per thing you might need to find again " +
+	"(measurements with their numbers, decisions and why, rejected approaches, errors and their fixes), as \"N: what is there\" or \"N-M: what is there\". " +
+	"The index stays in your context as a map of the archive, so you know what to read back."
+
+// handoffRenotice repeats a handoff notice the agent's last step ignored;
+// compaction follows the next step whatever it does.
+const handoffRenotice = "runtime notice: Reminder: history through message %d moves to the archive after your next action, and you have not saved what you need from it. " +
+	"Update your working memory now with anything from those messages you will need, with the message numbers as evidence."
 
 // toolResultMessage records a tool result in the history. Tools cap their
 // own output; this holds every result to tools.MaxToolResultBytes, the
@@ -1694,6 +1948,8 @@ type memorySegment struct {
 	ToSeq        int       `json:"to_seq,omitempty"`
 	Summary      string    `json:"summary,omitempty"`
 	Messages     []Message `json:"messages"`
+	// Index is the agent's index of these messages, written at handoff.
+	Index []IndexLine `json:"agent_index,omitempty"`
 }
 
 // cancelReason says why ctx stopped a tool or delegate: the user, or a
@@ -1829,8 +2085,9 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action string) error {
 	// read_memory and search_memory only return the process's own compacted
 	// history, which was already in its context, and update_memory only
-	// writes the process's own working memory, so every agent may use them.
-	if capabilityName == "read_memory" || capabilityName == "search_memory" || capabilityName == "update_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+	// writes the process's own working memory, and index_memory its own
+	// archive's index, so every agent may use them.
+	if capabilityName == "read_memory" || capabilityName == "search_memory" || capabilityName == "update_memory" || capabilityName == "index_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
 		return nil
 	}
 	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
@@ -1873,7 +2130,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 
 func isRuntimeTool(name string) bool {
 	switch name {
-	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory", "update_memory":
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory", "update_memory", "index_memory":
 		return true
 	default:
 		return false
@@ -2011,6 +2268,8 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		return r.searchMemory(process.PID, session, call.Args)
 	case "update_memory":
 		return r.updateMemory(process.PID, session, call.Args)
+	case "index_memory":
+		return r.indexMemory(session, call.Args)
 	case "read_memory":
 		if strings.TrimSpace(call.Args["from"]) != "" {
 			return r.readMemoryRange(process.PID, session, call.Args)
@@ -2058,6 +2317,9 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		}
 		if end < len(text) {
 			output["next_offset"] = strconv.Itoa(end)
+		}
+		if len(segment.Index) > 0 {
+			output["agent_index"] = RenderIndex(segment.Index)
 		}
 		return tools.Result{
 			Tool:    call.Name,

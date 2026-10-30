@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -192,11 +191,10 @@ func (r *AgentRuntime) workingMemoryChain(id string) ([]WorkingMemory, error) {
 	return chain, nil
 }
 
-var evidenceRange = regexp.MustCompile(`^(\d+)(?:-(\d+))?$`)
-
 // checkEvidence refuses evidence that does not resolve: a message range
 // outside the caller's numbered history, or an artifact that does not exist
-// or is another process's memory or checkpoint.
+// or is another process's memory or checkpoint. Message numbers may be
+// written as the history shows them (#12) and are stored canonically.
 func (r *AgentRuntime) checkEvidence(pid string, session Session, evidence string) (string, error) {
 	var parts []string
 	for _, part := range strings.Split(evidence, ",") {
@@ -204,22 +202,18 @@ func (r *AgentRuntime) checkEvidence(pid string, session Session, evidence strin
 		if part == "" {
 			continue
 		}
-		parts = append(parts, part)
-		if m := evidenceRange.FindStringSubmatch(part); m != nil {
-			from, _ := strconv.Atoi(m[1])
-			to := from
-			if m[2] != "" {
-				to, _ = strconv.Atoi(m[2])
-			}
+		if from, to, canonical, ok := messageRange(part); ok {
 			last := numberMessages(session).NextSeq
 			if from < 1 || to < from || to > last {
 				return "", fmt.Errorf("evidence %q is not in your history: its messages are numbered 1-%d", part, last)
 			}
+			parts = append(parts, canonical)
 			continue
 		}
+		parts = append(parts, part)
 		record, err := r.Artifacts.Metadata(part)
 		if err != nil {
-			return "", fmt.Errorf("evidence %q is neither a message range such as 1180-1214 nor an artifact: %w", part, err)
+			return "", fmt.Errorf("evidence %q is neither message numbers (%s) nor an artifact: %w", part, evidenceForms, err)
 		}
 		switch record.Type {
 		case "memory_segment", "checkpoint", "working_memory":
@@ -300,17 +294,29 @@ func (r *AgentRuntime) updateMemory(pid string, session Session, args map[string
 	if update.Delete {
 		op = "deleted"
 	}
-	return tools.Result{
-		Tool:    "update_memory",
-		Summary: "updated working memory",
-		Output: map[string]string{
-			"artifact_id": record.ID,
-			"version":     strconv.Itoa(next.Version),
-			"entry":       op + " " + section + "/" + key,
-			"bytes":       fmt.Sprintf("%d of %d", len(next.Render()), MaxWorkingMemoryBytes),
-			"adopted":     strconv.FormatBool(adopted),
-		},
-	}, nil
+	output := map[string]string{
+		"artifact_id": record.ID,
+		"version":     strconv.Itoa(next.Version),
+		"entry":       op + " " + section + "/" + key,
+		"bytes":       fmt.Sprintf("%d of %d", len(next.Render()), MaxWorkingMemoryBytes),
+		"adopted":     strconv.FormatBool(adopted),
+	}
+	if !r.Recall.NoOverwriteWarning && !update.Delete {
+		// What a write leaves behind: the content a replacement dropped, or
+		// the other keys a new entry joins, since a new key replaces none.
+		if old, ok := current.Entry(section, key); ok && (old.Content != update.Content || old.Evidence != update.Evidence) {
+			warning, dropped := overwriteWarning(old, update)
+			output["notice"] = warning
+			if err := r.noteRecall(pid, NoticeOverwrite, map[string]string{"entry": section + "/" + key, "dropped": strings.Join(dropped, " ")}); err != nil {
+				return tools.Result{}, err
+			}
+		} else if !ok {
+			if keys := sectionKeys(next, section, key); len(keys) > 0 {
+				output["section_keys"] = strings.Join(keys, ", ") + " (a new key replaces none of these: set one again to change it, or delete=true when it no longer holds)"
+			}
+		}
+	}
+	return tools.Result{Tool: "update_memory", Summary: "updated working memory", Output: output}, nil
 }
 
 // updateKey identifies one update to one version: a replay of the same

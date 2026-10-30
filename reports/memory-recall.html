@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Recall Aids Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Recall Aids: Agent-Written Archive Index, Write Feedback, Handoff Re-notice</h1>
+    <p>In the phase-3 live run, the archive was effectively write-only: 1 <code>search_memory</code> call and 0 <code>read_memory</code> calls in the whole run. In the own-memory probes, facts that were in neither the live context nor working memory scored 0/18 in both arms. The header listed each archived segment only as tool counts and paths ("run x45"), so the agent could not know what was there to look for. This phase gives the agent a way to write its own map of each segment at handoff (A1). It also adds three aids for how working memory is written (W1–W3) and one for an ignored handoff (W4), and fixes model-call failures that used up steps.</p>
+    <p><b>Result:</b> <span class="good">33 new tests pass</span>, and <code>go test -buildvcs=false ./...</code> passes. Every aid can be turned off on its own, and all of them are on by default. With every aid off, the prompts are byte for byte what they were at <code>ccb6e8b</code>, checked against golden files. <span class="warn">The effect of A1 and W2 is unmeasured</span> until the eval session runs its probes. Unit tests show the mechanisms work. They cannot show that agents use them well.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <table>
+    <tr><th>Item</th><th>What it does</th><th>Switch (zero value = on)</th></tr>
+    <tr><td><b>A1</b> agent index</td>
+      <td>
+        <ul>
+          <li>The handoff notice also asks the agent to call the new tool <code>index_memory</code>. It takes one line per thing the agent may need to find again in the messages being archived, written <code>"N: what"</code> or <code>"N-M: what"</code>.</li>
+          <li>Each cited number must lie in the archived range. A line that fails is refused with the valid range.</li>
+          <li>The index is held with the pending handoff and stored in the <code>memory_segment</code> artifact as <code>agent_index</code>. The segment is never rewritten.</li>
+          <li>The header shows the index indented under the segment's runtime line. It is labelled as the agent's own, written at archive time, and checked only for its message numbers.</li>
+          <li><code>read_memory artifact_id=…</code> returns it as <code>agent_index</code>.</li>
+        </ul>
+      </td>
+      <td><code>RecallPolicy.NoAgentIndex</code> / <code>"no_agent_index"</code></td></tr>
+    <tr><td><b>W1</b> write feedback</td>
+      <td>
+        <ul>
+          <li>When <code>update_memory</code> replaces an entry, the result carries a <code>runtime notice:</code>. It gives the old content, the old evidence the new entry no longer cites, and the identifier-like tokens it dropped.</li>
+          <li>A new key's result lists the keys already in its section (<code>section_keys</code>), because a new key replaces none of them. This targets eval finding 3: stale <code>next/round6-verify-pending</code> survived two "cleared" claims.</li>
+        </ul>
+      </td>
+      <td><code>NoOverwriteWarning</code> / <code>"no_overwrite_warning"</code></td></tr>
+    <tr><td><b>W2</b> entries are pointers</td>
+      <td>
+        <ul>
+          <li>The snapshot header says each entry records a conclusion and points at its evidence. When a question needs more than an entry says, the agent should read the evidence instead of filling it in.</li>
+          <li>The <code>update_memory</code> guidance asks for the mechanism or condition behind a conclusion, with a worked example. It also says that a new key replaces no other entry, so entries that no longer hold should be deleted.</li>
+        </ul>
+      </td>
+      <td><code>NoPointerPrompt</code> / <code>"no_pointer_prompt"</code></td></tr>
+    <tr><td><b>W3</b> evidence syntax</td>
+      <td>
+        <ul>
+          <li>Evidence may be written <code>#12</code>, <code>#12-#15</code>, <code>#12-15</code>, <code>msg 12</code> or <code>messages 12-15</code>. It is stored canonically as <code>12</code> or <code>12-15</code>.</li>
+          <li>A refusal lists the accepted forms. In the live run, this format caused 11 of the 12 <code>update_memory</code> errors.</li>
+        </ul>
+      </td>
+      <td>none. It only accepts inputs that were refused before, and stores what was already accepted unchanged.</td></tr>
+    <tr><td><b>W4</b> re-notice</td>
+      <td>
+        <ul>
+          <li>When the first step after a handoff notice writes no memory, and the agent has no working memory (or, with A1, no index), the notice is repeated once as <code>runtime notice: Reminder: …</code>. Compaction then follows.</li>
+          <li>W4 relates to the existing <code>CompactionPolicy.Handoff</code> flag as follows. <code>Handoff</code> decides whether there is a handoff step at all. W4 can add one step to a handoff that <code>Handoff</code> turned on, and does nothing when <code>Handoff</code> is off.</li>
+        </ul>
+      </td>
+      <td><code>NoHandoffRenotice</code> / <code>"no_handoff_renotice"</code></td></tr>
+    <tr><td>Backend retry</td>
+      <td>
+        <ul>
+          <li>A failed model call is retried within its step: 12 attempts, waiting 1s and doubling up to 2 minutes, about 12 minutes in all. Each retry is a <code>backend.retry</code> kernel event, and retries take no steps.</li>
+          <li>When the retries run out, the process exits retryable with a checkpoint, as a budget exhaustion does, to be recovered once the endpoint is back.</li>
+          <li>This replaces the old behaviour: each failure took a step, with <code>try_different_strategy=true</code>. That behaviour cost verifier pid-000020 146 of its 160 steps.</li>
+        </ul>
+      </td>
+      <td><code>AgentRuntime.BackendRetry</code>, <code>Engine.BackendRetry</code>. <code>Attempts: -1</code> restores the old behaviour.</td></tr>
+  </table>
+
+  <h3>Configuration</h3>
+  <ul>
+    <li><b>One options struct.</b> <code>runtime.RecallPolicy</code> holds four negatively named fields, so the zero value turns everything on. <code>runtime.RecallOff()</code> returns the all-off policy.
+      <ul>
+        <li>The runtime reads it from <code>AgentRuntime.Recall</code>.</li>
+        <li>The prompt reads it from <code>PromptBackend.Recall</code>. Set both to the same policy.</li>
+      </ul>
+    </li>
+    <li><b>Per workflow.</b> The workflow JSON can set it as <code>"recall": {"no_agent_index": true}</code>. <code>Engine</code> and <code>StaticBackendFactory</code> pass it to every agent's runtime and prompt.</li>
+    <li><b>Default policy unchanged.</b> <code>CompactionPolicy</code> is unchanged, so the whole-struct comparison in <code>compactionPolicy()</code> is unaffected.</li>
+    <li><b>Notices in the trace.</b> Each notice an aid emits is recorded as a <code>memory.notice</code> kernel event with <code>item</code> set to <code>w1</code>, <code>w4</code> or <code>a1</code> (a1: a handoff that asked for an index). <code>memory.compacted</code> also records <code>handoff_steps</code>, <code>handoff_renoticed</code> and <code>agent_index_lines</code>.</li>
+    <li><b>Header size.</b> A backend that implements <code>runtime.HeaderSizer</code> (<code>PromptBackend</code> does) gets a <code>memory.header</code> event with the byte sizes of the working-memory snapshot, the archive index and the agent index, and the number of segments that show theirs. The event is written at a run's first call and whenever the sizes change. The header is fixed between compactions, so this covers every call without logging each one. It is gated by A1.</li>
+    <li><b><code>memprobe</code> flags.</b> These are wired by the eval session, at its request: the harness should not be written by the implementer of the change it measures. Nothing in <code>internal/memprobe</code> changed. <span class="warn">Note:</span> <code>memprobe</code> builds <code>PromptBackend</code> and <code>AgentRuntime</code> with zero <code>Recall</code>, so on this commit its probes run with every aid on. Frozen arms must set <code>runtime.RecallOff()</code> on both to stay comparable.</li>
+  </ul>
+
+  <h3>Handoff on an existing checkpoint</h3>
+  <p><code>RunOptions.HandoffOnly</code> runs only a handoff:</p>
+  <ul>
+    <li>The first step gives the notice for what the compaction policy would archive.</li>
+    <li>The agent takes its handoff steps.</li>
+    <li>The run parks ready as soon as the history is compacted, before any other action runs.</li>
+    <li>A history with nothing to archive is refused with <code>ErrNothingToArchive</code>.</li>
+  </ul>
+  <p>Use it the way <code>memprobe</code> asks a probe question:</p>
+  <ul>
+    <li>Work in a copy of the state.</li>
+    <li>Spawn a process with <code>resumed_from</code> set to the checkpoint's owner and no tool grants, so only the memory tools can run.</li>
+    <li>Resume it from the checkpoint.</li>
+  </ul>
+  <p>The input checkpoint is only read; a test checks that it is unchanged. The checkpoints a phase-3 compaction was cut from are the <code>ParentIDs</code> of each <code>memory_segment</code>. Read the result with <code>runtime.SegmentIndex(store, segmentID)</code>, which returns <code>[]IndexLine{From, To, Text}</code>, or from the <code>agent_index</code> field of the segment's JSON. The runtime does not know the model, endpoint or sampling settings. The caller, which builds the completer, records them.</p>
+
+  <h2>Bounds</h2>
+  <ul>
+    <li>Per segment, the rendered index may be at most 1,536 bytes (<code>MaxSegmentIndexBytes</code>). A larger index is refused, never truncated.</li>
+    <li>In the header, the agent indexes together may be at most 6 KB (<code>MaxAgentIndexBytes</code>). The newest segments come first. An older segment over the cap shows only <code>read_memory artifact_id=… shows it</code>.</li>
+    <li>A handoff may take at most 4 steps before compaction. After the first step, the agent gets another step only while it is writing memory (with A1) or is due its single reminder (W4), and only while the live history is within 16 KB of the trigger.</li>
+    <li>A later handoff step whose action is not a memory write is compacted <i>before</i> its action runs, so its output lands on the compacted history. Without these limits, the output of the first handoff step would be shown to the model. Compaction used to archive that output before any model call saw it.</li>
+  </ul>
+  <p><code>TestHandoffOverrunIsBounded</code> measures the largest history shown to the model, with the 64k-token window policy (trigger H = 157,284 characters):</p>
+  <table>
+    <tr><th>Scenario</th><th>Aids off</th><th>Aids on</th><th>What happened</th></tr>
+    <tr><td>Worst-case 68 KB tool results; the agent ignores the notice, then writes 3.8 KB entries</td><td>224,220</td><td>224,874</td><td>The first step put the history 67 KB over H, so no extra step was given. +654 characters is the longer notice text.</td></tr>
+    <tr><td>6 KB messages; the same agent</td><td>160,954</td><td>172,077 (H + 14,793)</td><td>A reminder, then 3 handoff steps. The extra steps stopped at the 16 KB bound.</td></tr>
+  </table>
+
+  <h2>Verification</h2>
+  <ul>
+    <li><b>Old behaviour.</b> With every aid off, the system prompt, the task header and the single-prompt user prompt equal golden files written by the same test at <code>ccb6e8b</code> (<code>TestRecallOffKeepsThePromptsAsBefore</code>). The existing handoff and hysteresis tests now run with <code>RecallOff()</code> and pass unchanged. So do the crash-recovery tests, with retries off.</li>
+    <li><b>New tests:</b> backend retries; evidence forms; overwrite feedback (on and off); reminder once, never twice, and not when off or when working memory exists; index storage, immutability across a second handoff, refs and <code>read_memory</code>; index refusals (no handoff, over cap, malformed, aid off); the overrun bound; <code>HandoffOnly</code>; independent switches; prompt wording on and off; header rendering with the cap fallback; and a workflow spec's policy reaching both prompt and runtime.</li>
+    <li><b>Mutation check.</b> 16 mutants of the new mechanisms. 15 are killed. The first sweep had two survivors; a test added for the reminder guard kills one. The survivor: dropping the line that makes a crash-replayed compaction keep its adopted segment's index. That is equivalent in every tested path, because the replay rebuilds the same pending index from the checkpoint.</li>
+  </ul>
+
+  <h2>Changed From the Contract</h2>
+  <ul>
+    <li>R1 (repeat detection) and R2 (archive hits on writes) were dropped, as the book session asked. V1's offline replay was dropped with them: A1 needs a model, so eval measures it with <code>HandoffOnly</code>.</li>
+    <li>W4 also repeats the notice when, with A1 on, the agent wrote no index. With A1 on, a handoff may last up to 4 steps while the agent keeps writing memory. Both stay within the bounds above.</li>
+    <li>The header size is logged when it changes, not on every call. It changes only at compaction.</li>
+    <li>The backend fix, and W1's <code>section_keys</code> and W2's delete guidance, come from the eval findings the user approved in this session.</li>
+  </ul>
+
+  <h2>Not Yet Known</h2>
+  <ul>
+    <li>Whether agents write useful indexes. The own-memory evaluation's key metric is facts that were not recorded, which scored 0/18 in both arms. Whether A1 moves it is unmeasured.</li>
+    <li>Whether the reminder and the pointer wording change behaviour on the live model.</li>
+  </ul>
+</body>
+</html>
