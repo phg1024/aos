@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Phase 3 Evaluation: Probes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Phase 3 Evaluation: Probes</h1>
+    <p>An independent measurement of phase 3 (working memory, evidence, handoff) at commit <code>74510b7</code>, by the evaluation session. The probe set and plan were frozen in <code>4b2514c</code> before any sample ran: 10 probes, 9 samples each, under three conditions, for 270 samples in all. Every score below is the frozen regex score unless it is labelled hand-read. Where hand-reading disagrees, both are shown.</p>
+    <p><b>Result:</b> with a correct working memory injected, the agent answered from it in one step and got 9/9 on every probe except one (tridata 8/9 frozen, 9/9 hand-read). Without working memory:
+      <ul>
+        <li>leaf2-readopted fell to <span class="bad">0/9</span> (p = 0.00004);</li>
+        <li>the working-memory-only probe fell to <span class="bad">1/9</span> (p = 0.0004);</li>
+        <li>on the two archive-versus-memory conflict probes, every answer still said "no", but <span class="bad">0/18</span> gave the measurement that settles it, against 36/36 with memory. 6 of 9 in the harder probe stated a wrong fact.</li>
+      </ul>
+      Dropping the "check working memory" rule hurt one probe: leaf2-readopted fell from 9/9 to 4/9 (p = 0.029).</p>
+    <p><b>The cost, measured:</b> a lossy entry gets filled in wrongly. The threadgroup entry says "TG4 kept" without saying what TG4 is. With working memory, <span class="bad">6 of 18</span> answers called it "4 threads", "four pixels" or "4 samples" (it is a 4x4 tile of 16 threads). Only 2 of the 18 read the archive for it, and both got it right. All 9 answers that had to read the archive described it correctly.</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Binary:</b> <code>.cache/bin/aos-eval-74510b7</code>, built by this session from <code>74510b7</code>. Its SHA-256 starts <code>2726d018335b</code>.</li>
+    <li><b>Probes:</b> <code>bench/memory/pathtracer-bunny-memfix-phase3-eval-probes.json</code> (sha256 <code>7bd5079d937c…</code>), committed in <code>4b2514c</code>. The plan is <code>reports/memory-probe-phase3-eval/PLAN.md</code>. <code>TestEvalProbesPointWhereTheySay</code> checks every message number the new probes cite against the run.</li>
+    <li><b>Run probed:</b> <code>reports/pathtracer-bunny-memfix</code>, the round-3 writer (pid-000009) and round-4 writer (pid-000012).</li>
+    <li><b>Model:</b> phg-gpu, <code>qwen3.8-flash-next-nvfp4-nvfp4</code>, temperature 0.6, top-p 0.95, 65,536-token window, compact ratio 0.8, max tokens 32,768, thinking budget 16,384, at most 12 steps per answer, one attempt per call.</li>
+    <li><b>Conditions:</b> 9 samples per probe in each.
+      <ul>
+        <li><code>memory,check-rule</code>: the default.</li>
+        <li><code>memory,no-check-rule</code>: the rule to look up working memory before deciding is removed.</li>
+        <li><code>no-memory,check-rule</code>: no working memory.</li>
+      </ul></li>
+    <li><b>When:</b> 2026-10-29T19:06:50Z to 2026-10-30T00:00:24Z (<code>run.log</code>), one request at a time. All 270 samples finished, with no errors.</li>
+    <li><b>Overlap:</b> phg-gpu was shared the whole time with the phase-3 live run (<code>reports/pathtracer-bunny-phase3</code>). Until 20:34:00Z it was also shared with aos code's probe loop. aos book approved the overlap after a check: the live client's timeout is 3600 s, the worst latency seen was 278 s, there are no retries, and the workflow has no wall-clock budget. Overlap can slow responses, but it does not change their content.</li>
+    <li><b>What "no memory" exposed.</b> All three conditions ran on the <code>74510b7</code> binary, before this session's harness change <code>e528cde</code> (which makes <code>--no-working-memory</code> also strip a checkpoint's own working memory). That change cannot affect this run:
+      <ul>
+        <li>The memfix run was made by the pre-phase-1 binary <code>eceb917</code>. Its state has no working_memory artifacts, no <code>memory.*</code> events, and no update_memory calls or handoff notices in any history.</li>
+        <li>The four probed checkpoints (art-001084, art-001094, art-001222, art-001942) have no <code>working_memory</code> or <code>memory_snapshot</code> field.</li>
+        <li>Under <code>--no-working-memory</code>, nothing was injected. No sample's checkpoint carried a working-memory version, and no no-memory sample called update_memory.</li>
+      </ul>
+      So the no-memory condition had no working memory at all: no header, no search hits in it, no handoff. What it did keep is the phase-3 system prompt, which still describes working memory and the check rule. The 0/9 and 1/9 figures are clean ablations, not lower bounds.</li>
+    <li><b>Where the working memory comes from:</b> every probe's working memory was written by a probe author: five entries by aos code, and the new entries by this session. These probes measure whether the agent <i>uses</i> a working memory it has. Whether it writes a good one is for the live run and the own-memory evaluation.</li>
+  </ul>
+
+  <h2>Probe Results</h2>
+  <p>Correct over 9, frozen patterns. Superseded answers are marked <code>s</code>. The p column is a two-sided Fisher exact test of the memory condition against the column to its left. Phase-2 counts come from the files named in PLAN.md; tg-sweep and w4-first-ab had only 3 samples there.</p>
+  <table>
+    <tr><th>probe</th><th>where the answer is</th><th>phase 2</th><th>memory</th><th>p</th><th>no check rule</th><th>p</th><th>no memory</th><th>p</th></tr>
+    <tr><td>tridata-order</td><td>archive; WM</td><td class="num">6/9</td><td class="num">8/9</td><td class="num">0.58</td><td class="num">8/9</td><td class="num">1</td><td class="num">7/9</td><td class="num">1</td></tr>
+    <tr><td>tg-sweep</td><td>archive; WM</td><td class="num">3/3</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td></tr>
+    <tr><td>leaf2-status</td><td>live; WM</td><td class="num">9/9</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td></tr>
+    <tr><td>leaf2-speedup</td><td>archive (superseded); WM</td><td class="num">7/9</td><td class="num">9/9</td><td class="num">0.47</td><td class="num">9/9</td><td class="num">1</td><td class="num">8/9</td><td class="num">1</td></tr>
+    <tr><td>w4-first-ab</td><td>live (control)</td><td class="num">3/3</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td></tr>
+    <tr><td>leaf2-readopted</td><td>live holds the wrong re-adoption; WM holds the rejection</td><td>—</td><td class="num">9/9</td><td>—</td><td class="num bad">4/9 s5</td><td class="num">0.029</td><td class="num bad">0/9 s9</td><td class="num">0.00004</td></tr>
+    <tr><td>decide-leaf2-wide</td><td>decision; WM</td><td>—</td><td class="num">9/9</td><td>—</td><td class="num">9/9</td><td class="num">1</td><td class="num">5/9 s4</td><td class="num">0.082</td></tr>
+    <tr><td>wm-only-next</td><td>WM only (a made-up entry)</td><td>—</td><td class="num">9/9</td><td>—</td><td class="num">9/9</td><td class="num">1</td><td class="num bad">1/9</td><td class="num">0.0004</td></tr>
+    <tr><td>narrow-tree-wm</td><td>archive holds the later wrong claim; WM the right one</td><td>—</td><td class="num">9/9</td><td>—</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td></tr>
+    <tr><td>narrow-tree-own</td><td>archive holds both; live holds the wrong one; WM the right one</td><td>—</td><td class="num">9/9</td><td>—</td><td class="num">9/9</td><td class="num">1</td><td class="num">9/9</td><td class="num">1</td></tr>
+  </table>
+
+  <h3>Frozen versus hand-read</h3>
+  <p>Every answer to the two narrow-tree probes was read by hand, as the plan required, along with every answer the patterns scored not correct or superseded. Where the reading differs from the frozen score:</p>
+  <table>
+    <tr><th>probe, condition</th><th>frozen</th><th>hand-read</th><th>why</th></tr>
+    <tr><td>decide-leaf2-wide, no memory</td><td class="num">5/9, 4 superseded</td><td class="num">9/9</td><td>All four "superseded" answers say "No — I won't run it next". The reject pattern's <code>run it next</code> matches inside "won't run it next". The memory-versus-no-memory difference (p = 0.082) disappears.</td></tr>
+    <tr><td>tridata-order, memory</td><td class="num">8/9</td><td class="num">9/9</td><td>#5 gives both A/Bs and says "no reproducible win… reverted". The pattern knows "no win" but not "no reproducible win".</td></tr>
+    <tr><td>tridata-order, no check rule</td><td class="num">8/9</td><td class="num">9/9</td><td>#2: "zero measured gain", the same pattern gap.</td></tr>
+    <tr><td>tridata-order, no memory</td><td class="num">7/9</td><td class="num">8/9</td><td>#2 "no measurable win" is correct. #8 gives only the first A/B (47.05 vs 44.95), which the ground truth counts as not correct.</td></tr>
+    <tr><td>wm-only-next, no memory</td><td class="num">1/9</td><td class="num">0/9</td><td>#4's next experiment is TriData reordering, which had already been rejected. It mentions quantized bounds only as a fallback. The probe's answer is not unreachable without memory, but no sample made it the next step.</td></tr>
+    <tr><td>narrow-tree-*, no memory</td><td class="num">18/18</td><td class="num">verdict 18/18, reason 0/18</td><td>See the next section.</td></tr>
+  </table>
+  <p class="note">Frozen-correct answers on the other probes were not re-read, except the 10 in aos book's first blind set and the 10 phase-3 answers in the new reason subsample. With the hand-read figures, tridata-order is 9/9 against phase 2's 6/9 (p = 0.21).</p>
+
+  <h2>The Conflict Probes, Read by Hand</h2>
+  <p>Both probes quote the writer log's false note that leaf2 "helped the old 32-byte narrow tree". The settling facts are:</p>
+  <ul>
+    <li>the round-2 narrow-tree sweep: leaf 1 at 55.4 ms against leaf 2 at 56.6;</li>
+    <li>the round-3 bug: the 33.5 ms "win" dropped the second triangle of every leaf, with RMSE 0.79 against 0.476.</li>
+  </ul>
+  <p>The frozen <code>expect</code> pattern accepts any negation, so it could not tell a supported "no" from an unsupported one. That weakness was named in PLAN.md before the run.</p>
+  <table>
+    <tr><th>probe</th><th>condition</th><th>says "no"</th><th>cites the round-2 sweep</th><th>cites the bug</th><th>wrong fact as reason</th><th>invented rationale</th><th>mean steps / KB read</th></tr>
+    <tr><td rowspan="3">narrow-tree-wm (round-4 writer, art-001942)</td><td>memory</td><td class="num">9</td><td class="num">9</td><td class="num">9</td><td class="num">0</td><td class="num">1</td><td class="num">1.4 / 0.3</td></tr>
+    <tr><td>no check rule</td><td class="num">9</td><td class="num">9</td><td class="num">9</td><td class="num">1</td><td class="num">0</td><td class="num">3.9 / 4.8</td></tr>
+    <tr><td>no memory</td><td class="num">9</td><td class="num bad">0</td><td class="num bad">1</td><td class="num">1</td><td class="num">0</td><td class="num">6.8 / 14.8</td></tr>
+    <tr><td rowspan="3">narrow-tree-own (round-3 writer, art-001222)</td><td>memory</td><td class="num">9</td><td class="num">9</td><td class="num">9</td><td class="num">0</td><td class="num">0</td><td class="num">1.0 / 0</td></tr>
+    <tr><td>no check rule</td><td class="num">9</td><td class="num">9</td><td class="num">9</td><td class="num">0</td><td class="num">0</td><td class="num">1.0 / 0</td></tr>
+    <tr><td>no memory</td><td class="num">9</td><td class="num bad">0</td><td class="num bad">1</td><td class="num bad">6</td><td class="num">1</td><td class="num">3.6 / 11.8</td></tr>
+  </table>
+  <ul>
+    <li><b>Without memory the verdict still comes out right, but from other evidence.</b>
+      <ul>
+        <li>The round-4 writer's archive holds a negative leaf2 result on the wide tree (#407: 51.9 against 45.4 ms, 14% slower), and it finds no narrow-tree measurement. So it calls the note an unsupported inference.</li>
+        <li>That "no" is right, but the claim that leaf2 was never measured on the narrow tree is not: the sweep exists, and it is in the writer log rather than in that process's history.</li>
+      </ul></li>
+    <li><b>narrow-tree-own, no memory: 6 of 9 state a wrong fact.</b>
+      <ul>
+        <li>#1–#5 put the biased "24–27% faster" leaf2 on the round-2 narrow tree. That build was the round-3 wide tree (art-001127: <code>scratch/leaf2</code>, 36,682 nodes, reverted to <code>pathtracer_leaf2_old</code>).</li>
+        <li>#9 says leaf2 "was never implemented and never timed" on the narrow tree, and that "the only A/B I ever ran for leaf clustering is this round". Both are false: there is the round-2 sweep, and the first leaf2 in #186–248 of the same process.</li>
+        <li>#7 gives a bug mechanism that is not in the record: "a garbage index… spurious occlusion". The real bug dropped the second triangle.</li>
+      </ul>
+      With memory, the same process gets 0 of 18 wrong (p = 0.009 for 0/9 against 6/9).</li>
+    <li><b>Wrong facts with memory:</b> one answer without the check rule (narrow-tree-wm #7) applies the wide-tree "14% slower" to the narrow tree. One answer with memory (narrow-tree-wm #9) adds a rationale the record does not hold: "whatever made leaf2 look attractive at the time was a single untimed or single-rep comparison".</li>
+  </ul>
+
+  <h2>Did the Entry Hold the Detail the Answer Stated?</h2>
+  <p>aos book asked this for every answer that came from working memory. Two checks:</p>
+  <ul>
+    <li><b>Numbers</b> (<code>wmcheck.py</code>).
+      <ul>
+        <li>The check takes every decimal number in an answer and looks for it in what that sample was shown: the probe's working memory, the checkpoint's live history, the owner's goal in the prompt header, and the sample's own search and read results. It allows rounding, and means, sums and differences of numbers the answer also states.</li>
+        <li>With memory, 7 of 90 answers state a number found in none of those, and 6 without the check rule. Read by hand, all of them are derived: means of the four W4 runs the live history lists, the verifier limit 1.1 x 0.476 = 0.52, and size estimates such as "~3.7 MB of TriData".</li>
+        <li>No working-memory-sourced answer reported a measurement that does not exist.</li>
+      </ul></li>
+    <li><b>Details that are not numbers:</b> see the next section.</li>
+  </ul>
+
+  <h2>A Lossy Entry, Filled In Wrongly: TG4's Tile Shape</h2>
+  <p><b>This is the phase-3 risk named before the run ("TG4 kept…"), now measured.</b> When working memory was present and the entry left a detail out, the agent filled it in wrongly in 6 of 18 answers. Every answer that had to read the archive got it right, 9 of 9.</p>
+  <ul>
+    <li><b>The entry.</b> It reads "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias". It never says what TG4 is.</li>
+    <li><b>The record.</b> <code>PT_TG</code> is the tile's edge length, so TG4 is a 4x4 tile of 16 threads. This is not in the live messages at art-001084, the goal, the workflow or the archive index the prompt shows. It is in the archive: the renderer comment "Trace threadgroup edge length… 4x4=16 threads", and the round-2 notes ("TG 4x4").</li>
+  </ul>
+  <table>
+    <tr><th>tg-sweep</th><th>wrong ("4 threads", "four pixels", "4 samples per threadgroup")</th><th>right (4x4 / 16 threads)</th><th>not stated</th></tr>
+    <tr><td>memory</td><td class="num bad">4</td><td class="num">3</td><td class="num">2</td></tr>
+    <tr><td>no check rule</td><td class="num bad">2</td><td class="num">1</td><td class="num">6</td></tr>
+    <tr><td>no memory (read the archive)</td><td class="num">0</td><td class="num good">9</td><td class="num">0</td></tr>
+  </table>
+  <ul>
+    <li><b>Did any answer with working memory read the archive for the shape?</b>
+      <ul>
+        <li>Two did: memory #7 and no-check-rule #8. Each reached the renderer comment through search_memory and read_memory, and both are right.</li>
+        <li>Seven others retrieved something, but only the sweep tables (<code>TG=2: … TG=4: …</code>), which give no shape. Two of those are wrong (memory #2, no-check-rule #9).</li>
+        <li>The other two right answers (memory #6 and #8) answered in one step, with no source for the shape in view. They are right, but unsupported.</li>
+        <li>All four wrong answers with memory, and both without the check rule, never had the shape in front of them.</li>
+      </ul></li>
+    <li><b>The test.</b> With working memory, 4 of 18 answers are right, against 9 of 9 without (p = 0.0002). 6 of 18 are wrong, against 0 of 9 (p = 0.07).</li>
+    <li><b>The trade.</b> The one-step answer is cheaper (2.0 steps and 4.3 KB, against 4.7 steps and 19.4 KB) and loses the detail the entry left out.</li>
+    <li><b>What the scoring missed.</b> The regex scores all 27 answers correct. Item 4 of aos book's first blind set was one of these.</li>
+  </ul>
+  <h2>Reader-Graded Reasons, by Phase</h2>
+  <p>aos book graded 30 blind answers: 10 per phase, 2 per shared probe, from <code>reports/memory-probe-blind/reasons/</code>. It checked every claim against the round-3 record at art-001084 and did not open the key. The key's hash matches the one published beforehand (<code>232d070d…</code>). Details are in <code>results.md</code> and <code>grades.md</code> there.</p>
+  <table>
+    <tr><th>reason</th><th>phase 1</th><th>phase 2</th><th>phase 3</th></tr>
+    <tr><td>correct</td><td class="num">5</td><td class="num">6</td><td class="num">6</td></tr>
+    <tr><td>correct, minor invention in an aside</td><td class="num">0</td><td class="num">2</td><td class="num">2</td></tr>
+    <tr><td>incomplete</td><td class="num">1</td><td class="num">2</td><td class="num">0</td></tr>
+    <tr><td>wrong: superseded fact as the reason</td><td class="num bad">4</td><td class="num">0</td><td class="num">0</td></tr>
+    <tr><td>wrong: detail</td><td class="num">0</td><td class="num">0</td><td class="num bad">1</td></tr>
+    <tr><td>invented</td><td class="num">0</td><td class="num">0</td><td class="num bad">1</td></tr>
+  </table>
+  <ul>
+    <li><b>Every superseded reason is from phase 1.</b>
+      <ul>
+        <li>Three give the writer's first, later-overturned "tie-breaking" explanation of leaf2 (art-001056 msg 4/6, overturned at msg 38/42).</li>
+        <li>One repeats a wrong live-history note instead of reading the segment it names.</li>
+        <li>That is 4 of 10 in phase 1, against 0 of 20 in phases 2 and 3 (p = 0.008).</li>
+      </ul></li>
+    <li><b>Phase 3's two errors are of a different kind.</b> One is the TG4 tile-shape error above. The other is an invented mechanism and a misdescribed short pass, in the answer that quotes the probe ID.</li>
+    <li><b>Phase 2's two misses are incomplete answers</b> (current state without the bug), not wrong ones.</li>
+    <li><b>Verdict-only scoring hides all of this.</b> The frozen regex agrees with the reader on 26 of 30 verdicts and sees none of the reason errors.</li>
+  </ul>
+
+  <h2>Ablations and Cost</h2>
+  <ul>
+    <li><b>Check rule.</b> Dropping the rule mattered on one probe: leaf2-readopted fell from 9/9 to 4/9, with 5 superseded (p = 0.029). There the live history shows the agent re-adopting leaf2 after a fresh 24% A/B. Without the rule, 5 answers trust the fresh measurement over the rejected entry, against 9 without memory at all. On every other probe, results without the rule match those with it.</li>
+    <li><b>Working memory.</b> Removing it hurt, at the frozen scores:
+      <ul>
+        <li>leaf2-readopted (0/9);</li>
+        <li>wm-only-next (1/9; 0/9 hand-read);</li>
+        <li>the conflict probes' reasons (see above).</li>
+      </ul>
+      decide-leaf2-wide's apparent drop is the pattern error. Probes whose answer is in the live history (leaf2-status, w4-first-ab) do not change.</li>
+    <li><b>tg-sweep cost against phase 2</b> (mean steps / mean KB read):
+      <ul>
+        <li>phase 2: 4.3 / 19.0</li>
+        <li>memory: 2.0 [1–4] / 4.3</li>
+        <li>no check rule: 2.7 / 11.8</li>
+        <li>no memory: 4.7 / 19.4</li>
+      </ul>
+      Without working memory, phase 3 costs what phase 2 did.</li>
+    <li><b>Other probes, memory against no memory:</b>
+      <ul>
+        <li>tridata: 1.0 / 0 against 5.4 / 44.2;</li>
+        <li>narrow-tree-wm: 1.4 / 0.3 against 6.8 / 14.8;</li>
+        <li>narrow-tree-own: 1.0 / 0 against 3.6 / 11.8.</li>
+      </ul></li>
+  </ul>
+
+  <h2>aos code's Implementer Samples (Reported Apart)</h2>
+  <p><code>reports/memory-probe-phase3-eval/implementer/</code>: 90 samples (5 probes, 3 conditions, 6 samples each) that aos code ran on the same binary commit from 18:14:57Z to 20:34:00Z. Rescored with the frozen patterns, <b>no flag changed</b>, because the five probes and their working memory are the same in both files.</p>
+  <table>
+    <tr><th>condition</th><th>tridata</th><th>tg-sweep</th><th>leaf2-speedup</th><th>leaf2-readopted</th><th>decide-leaf2-wide</th></tr>
+    <tr><td>memory</td><td class="num">6/6</td><td class="num">6/6</td><td class="num">6/6</td><td class="num">5/6 s1</td><td class="num">6/6</td></tr>
+    <tr><td>no check rule</td><td class="num">4/6</td><td class="num">6/6</td><td class="num">6/6</td><td class="num">3/6 s3</td><td class="num">6/6</td></tr>
+    <tr><td>no memory</td><td class="num">2/6</td><td class="num">6/6</td><td class="num">5/6</td><td class="num">0/6 s4</td><td class="num">5/6 s1</td></tr>
+  </table>
+  <p>The two sets agree in direction. They are not pooled. The superseded decide answer in aos code's no-memory set was not re-read for the "won't run it next" pattern error.</p>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li><b>The probe's ID was visible to the agent.</b>
+      <ul>
+        <li><code>memprobe</code> put <code>"memprobe": &lt;probe id&gt;</code> in the probe process's metadata. At <code>74510b7</code> the prompt header shows process metadata, so every sample in every condition saw its probe's ID.</li>
+        <li><b>Earlier phases:</b> the phase-1 and phase-2 work directories show the same metadata on their probe processes. Whether those binaries' headers showed it is not verified here (git was unavailable). No phase-1 or phase-2 answer mentions it. aos code's phase-3 samples mention it twice.</li>
+        <li><b>Answers that quote it</b> (2 of 270, both tridata-order): memory #8 ("round 3, memprobe "tridata-order"") and no memory #4 ("the metadata note for this round ("memprobe: tridata-order")").
+          <ul>
+            <li>Three more name a working-memory entry after the ID. The injected key is "tridata tree order". These are memory #5 and no-check-rule #6, and no-memory #6, which cites "the 'tridata-order' item marked rejected in my working memory" when it had no working memory.</li>
+          </ul></li>
+        <li><b>Does any ID give away its answer?</b> None contains the fact asked for.
+          <ul>
+            <li>tridata-order, tg-sweep, leaf2-status, leaf2-speedup, w4-first-ab and decide-leaf2-wide name only the topic, which the question already names.</li>
+            <li>leaf2-readopted names the re-adoption the probe asks about. The live history at its checkpoint already shows that re-adoption. The name does not say whether it was right, and if anything it leans toward the superseded answer.</li>
+            <li>wm-only-next and narrow-tree-wm name the <i>source</i> ("wm"), not the content: neither says QNODE16 or what the measurements were. With memory the entry is already in the header. Without memory the hint points at nothing. Apart from the two tridata answers above, no no-memory answer claims a working-memory source.</li>
+            <li>narrow-tree-own names nothing beyond the question.</li>
+          </ul></li>
+        <li>So the leak changed the wording of a few tridata answers and planted one false source citation. It cannot have supplied a correct answer, and every condition saw the same IDs.</li>
+        <li>Fixed in <code>internal/memprobe</code>: the metadata now says only <code>"true"</code>, and <code>TestProbeIDIsNotShown</code> fails without the fix. This applies to later evaluations, not these samples.</li>
+      </ul></li>
+    <li><b>Small samples.</b> n = 9: a 9/9 against 7/9 difference is p = 0.47. Phase 2 has 3 samples for tg-sweep and w4-first-ab.</li>
+    <li><b>Only some answers were hand-read.</b> The narrow-tree answers, the misses, the TG4 descriptions and every flagged number were read. Frozen-correct answers on other probes were not re-read for reasons, which is what aos book's reason subsample covers.</li>
+    <li><b>The working memory is correct by construction.</b> These results show what a correct memory buys and what a terse one costs. They say nothing about memories the agent writes.</li>
+  </ul>
+
+  <h2>Not Done Here</h2>
+  <ul>
+    <li><b>The live-run report</b> (compactions, handoffs, WM entries with and without evidence, E3 compared with memfix's 2 + 2). The run is still going. Since 2026-10-30T00:06:18Z its builds fail with the Xcode license prompt (benchmarker pid-000010, art-001143 onward). That window will be reported as an environment fault.</li>
+    <li><b>The own-working-memory evaluation</b> (<code>reports/memory-probe-own-memory/PLAN.md</code>), after the live run ends.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/memory-probe-phase3-eval/</code>:
+      <ul>
+        <li><code>samples-{memory,no-check-rule,no-memory}.jsonl</code>, <code>run.log</code>, <code>summary.json</code> (from <code>summarize.py</code>);</li>
+        <li><code>wmcheck.py</code> / <code>wmcheck.json</code> (number provenance);</li>
+        <li><code>implementer/</code>.</li>
+        <li>Not committed: the <code>work-*/</code> directories (146 MB of copies of the probed state, with each sample's checkpoints and tool results), which <code>wmcheck.py</code> reads. They stay in the evaluation worktree.</li>
+      </ul></li>
+    <li><code>reports/memory-probe-blind/reasons/</code>: the blind reason subsample.</li>
+  </ul>
+</body>
+</html>
