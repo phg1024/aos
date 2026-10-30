@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Evaluation: Own Working Memory</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Evaluation: The Agent's Own Working Memory</h1>
+    <p>The phase-3 probes injected a hand-written, correct working memory, so they only showed that the agent reads a good memory. This evaluation probes the working memory the agents wrote themselves during the live run <code>reports/pathtracer-bunny-phase3</code>. It follows the plan frozen before any sample ran (<code>reports/memory-probe-own-memory/PLAN.md</code>, commits <code>34fa829</code>, <code>dd56082</code>). Arm A resumes a checkpoint with its own working memory; arm B resumes the same checkpoint without it. There are 11 probes, 9 samples each per arm, so 198 answers. All ran, with 0 harness errors. Every answer was read by hand.</p>
+    <p><b>Result, facts the agent recorded (6 probes):</b> with its own memory the agent answered from the entry in one step every time (54/54) and gave the core fact <span class="good">54/54</span>, against <span class="bad">43/54</span> without it, after 4.2 steps on average. With the key detail and no contradicted claim: 43/54 against 34/54. Per probe, A was better on 4, equal on 2, and worse on none. The cost of a recorded fact without memory is search: 0 bytes read against 11,580 on average.</p>
+    <p><b>Result, entries the archive contradicts (2 probes):</b> <span class="good">no answer in either arm restated a wrong entry as current</span> (0/18 and 0/18).
+      <ul>
+        <li>One stale entry, a shadow bug still marked open, was overridden by live history: A said it was fixed and named the bug 9/9; B only 4/9 (p = 0.029). Five B answers said there had never been a bug.</li>
+        <li>The other, "the Fresnel TIR guard never fires", was not repeated, but it was not corrected either. Both arms answered from textbook physics. Only 1 of 18 answers (in A, after reading the archived code) gave the branch's actual behaviour.</li>
+      </ul></p>
+    <p><b>Result, facts the agent did not record (3 probes):</b> own memory neither helped nor hurt. <span class="bad">Neither arm recovered any unrecorded fact from the archive</span> when the live context lacked it: 0/18 on the verification directory and 0/18 on the occupancy figure. All 36 of those answers state something the archive contradicts. For example, every answer says no occupancy figure was obtained in round 5, but the agent printed it (1024) at message #33.</p>
+    <p><b>Result, a new cost:</b> where an entry compressed a finding, the agent filled the gap with an invented mechanism. All 9 A answers on the round-5 empty-base probe gave the cause the entry held (a <code>cp -R</code> nesting bug), and then explained it with a wrong mechanism the entry did not hold. B searched, and 5/9 found the real one (B better on the exact detail, p = 0.029).</p>
+    <p><b>Frozen scores:</b> the frozen regex score and the hand-read exact score differ on <b>44 of the 198</b> answers (A 21, B 23). Both are shown below. The frozen patterns were too loose on two probes and matched the wrong clause on two others (<a href="#disagree">details</a>).</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Binary:</b> <code>.cache/bin/aos-eval-956d59b</code> (sha <code>b686ccc9bfed</code>), built by this session from <code>956d59b</code>. The runtime is <code>74510b7</code>'s: no change under <code>internal/runtime</code>, <code>internal/agentflow</code> or <code>internal/tools</code>.</li>
+    <li><b>Probes:</b> <code>bench/memory/pathtracer-bunny-phase3-own-memory-probes.json</code> (sha prefix <code>e5e11d8560f5</code>). <code>check_probes.py</code> reported 0 failures before freezing.</li>
+    <li><b>Checkpoints:</b> the three writer checkpoints right after a compaction that meet the plan's rule.
+      <ul>
+        <li>Round 2, pid-000006: art-000648, snapshot art-000643; archive #1–#249.</li>
+        <li>Round 5, pid-000015: art-001768, snapshot art-001763; archive #1–#167.</li>
+        <li>Round 8, pid-000025: art-003135, snapshot art-003130; archive #1–#72.</li>
+      </ul></li>
+    <li><b>Arms:</b>
+      <ul>
+        <li>A, <code>own-memory,check-rule</code>: every sample records the checkpoint's own snapshot.</li>
+        <li>B, <code>no-memory,check-rule</code> (<code>--no-working-memory</code>): every sample records none. B keeps the archive and the archived <code>update_memory</code> calls, which it can reach only by <code>search_memory</code>.</li>
+      </ul></li>
+    <li><b>Run settings:</b> max 12 steps per sample. phg-gpu ran nothing else. A ran 10:59:27Z–11:49:59Z, then B ran until 12:58:13Z on 2026-10-30.</li>
+  </ul>
+
+  <h2>How Answers Were Scored</h2>
+  <ul>
+    <li><b>Frozen:</b> the probe's committed expect/reject patterns. Correct means expect matches and reject does not.</li>
+    <li><b>Main (hand-read):</b> the answer gives the core fact the question asks for.</li>
+    <li><b>Exact (hand-read):</b> main, plus the key archived detail, and no claim the archive contradicts.</li>
+    <li><b>Contradicted (hand-read):</b> the answer states as fact something the archive contradicts. Fewer is better.</li>
+  </ul>
+  <p class="note">The rubric for each probe and the grade and note for each answer are in <code>handread.py</code>. Fisher tests are two-sided exact on 9 against 9.</p>
+
+  <h2>Per Probe</h2>
+  <table>
+    <tr><th>probe</th><th>kind</th><th>frozen A / B</th><th>main A / B</th><th>exact A / B</th><th>p (exact)</th><th>contradicted A / B</th><th>steps A / B</th><th>bytes read A / B</th></tr>
+    <tr><td>r2-first-sah</td><td>recorded</td><td class="num">9 / 9</td><td class="num">9 / 9</td><td class="num">9 / 7</td><td class="num">0.47</td><td class="num">0 / 2</td><td class="num">1.0 / 4.0</td><td class="num">0 / 14,732</td></tr>
+    <tr><td>r2-root-exit</td><td>recorded</td><td class="num">9 / 6</td><td class="num">9 / 4</td><td class="num">9 / 3</td><td class="num good">0.009</td><td class="num">0 / 4</td><td class="num">1.0 / 3.3</td><td class="num">0 / 5,378</td></tr>
+    <tr><td>r5-empty-base</td><td>recorded</td><td class="num">9 / 6</td><td class="num">9 / 5</td><td class="num">0 / 5</td><td class="num bad">0.029</td><td class="num">9 / 4</td><td class="num">1.0 / 4.2</td><td class="num">0 / 16,465</td></tr>
+    <tr><td>r5-entered-stack</td><td>recorded</td><td class="num">9 / 8</td><td class="num">9 / 8</td><td class="num">7 / 7</td><td class="num">1.00</td><td class="num">2 / 2</td><td class="num">1.0 / 6.1</td><td class="num">0 / 23,855</td></tr>
+    <tr><td>r8-trace-share</td><td>recorded</td><td class="num">9 / 9</td><td class="num">9 / 9</td><td class="num">9 / 8</td><td class="num">1.00</td><td class="num">0 / 1</td><td class="num">1.0 / 2.9</td><td class="num">0 / 2,931</td></tr>
+    <tr><td>r8-small-node</td><td>recorded</td><td class="num">9 / 9</td><td class="num">9 / 8</td><td class="num">9 / 4</td><td class="num good">0.029</td><td class="num">0 / 1</td><td class="num">1.0 / 4.4</td><td class="num">0 / 6,118</td></tr>
+    <tr><td>r2-shadow-limit</td><td>recorded-wrong</td><td class="num">7 / 4</td><td class="num">9 / 9</td><td class="num">9 / 4</td><td class="num good">0.029</td><td class="num">1 / 5</td><td class="num">1.0 / 2.4</td><td class="num">0 / 2,381</td></tr>
+    <tr><td>r5-tir-guard</td><td>recorded-wrong</td><td class="num">0 / 0</td><td class="num">9 / 9</td><td class="num">1 / 0</td><td class="num">1.00</td><td class="num">8 / 9</td><td class="num">1.7 / 1.0</td><td class="num">1,681 / 0</td></tr>
+    <tr><td>r2-verify-dir</td><td>unrecorded</td><td class="num">1 / 0</td><td class="num">0 / 0</td><td class="num">0 / 0</td><td class="num">1.00</td><td class="num">9 / 9</td><td class="num">1.0 / 1.0</td><td class="num">0 / 0</td></tr>
+    <tr><td>r5-register-counts</td><td>unrecorded</td><td class="num">6 / 8</td><td class="num">0 / 0</td><td class="num">0 / 0</td><td class="num">1.00</td><td class="num">9 / 9</td><td class="num">1.0 / 1.0</td><td class="num">0 / 0</td></tr>
+    <tr><td>r8-sibling-pairs</td><td>unrecorded</td><td class="num">5 / 4</td><td class="num">9 / 9</td><td class="num">5 / 2</td><td class="num">0.34</td><td class="num">0 / 0</td><td class="num">2.4 / 1.4</td><td class="num">3,047 / 993</td></tr>
+  </table>
+  <ul class="note">
+    <li><b>Main p-values:</b> r2-root-exit 0.029, r5-empty-base 0.082; all other probes 1.0.</li>
+    <li><b>Frozen p-values:</b> r2-root-exit and r5-empty-base 0.21; all others 0.34 or more.</li>
+    <li><b>Steps and bytes:</b> means over the 9 samples. "Bytes read" is from <code>read_memory</code>/<code>search_memory</code> results.</li>
+    <li><b>Tool errors:</b> A had 3 (r5-tir-guard), B had 5 (1 in root-exit, 1 in trace-share, 3 in small-node).</li>
+  </ul>
+
+  <h2>Per Kind</h2>
+  <table>
+    <tr><th>kind</th><th>answers per arm</th><th>score</th><th>A</th><th>B</th><th>Fisher p (pooled)</th><th>probes A better / equal / worse</th><th>sign p</th></tr>
+    <tr><td rowspan="4">recorded (6)</td><td rowspan="4" class="num">54</td><td>frozen</td><td class="num">54</td><td class="num">47</td><td class="num">0.013</td><td class="num">3 / 3 / 0</td><td class="num">0.25</td></tr>
+    <tr><td>main</td><td class="num">54</td><td class="num">43</td><td class="num">0.0006</td><td class="num">4 / 2 / 0</td><td class="num">0.125</td></tr>
+    <tr><td>exact</td><td class="num">43</td><td class="num">34</td><td class="num">0.088</td><td class="num">4 / 1 / 1</td><td class="num">0.375</td></tr>
+    <tr><td>contradicted (fewer is better)</td><td class="num">11</td><td class="num">14</td><td class="num">0.65</td><td class="num">4 / 1 / 1</td><td class="num">0.375</td></tr>
+    <tr><td rowspan="3">recorded-wrong (2)</td><td rowspan="3" class="num">18</td><td>frozen</td><td class="num">7</td><td class="num">4</td><td class="num">0.47</td><td class="num">1 / 1 / 0</td><td class="num">1.0</td></tr>
+    <tr><td>exact</td><td class="num">10</td><td class="num">4</td><td class="num">0.086</td><td class="num">2 / 0 / 0</td><td class="num">0.5</td></tr>
+    <tr><td>restates the wrong entry</td><td class="num">0</td><td class="num">0</td><td class="num">1.0</td><td class="num">0 / 2 / 0</td><td class="num">1.0</td></tr>
+    <tr><td rowspan="3">unrecorded (3)</td><td rowspan="3" class="num">27</td><td>frozen</td><td class="num">12</td><td class="num">12</td><td class="num">1.0</td><td class="num">2 / 0 / 1</td><td class="num">1.0</td></tr>
+    <tr><td>main</td><td class="num">9</td><td class="num">9</td><td class="num">1.0</td><td class="num">0 / 3 / 0</td><td class="num">1.0</td></tr>
+    <tr><td>exact</td><td class="num">5</td><td class="num">2</td><td class="num">0.42</td><td class="num">1 / 2 / 0</td><td class="num">1.0</td></tr>
+  </table>
+  <ul class="note">
+    <li><b>Which test to read:</b> the pooled Fisher test treats 54 answers as independent. They are not: 9 samples share a checkpoint and a question. The sign test over probes is the honest one, and with 6 probes it cannot reach 0.05. The direction is consistent, though: A was never worse on the core fact.</li>
+    <li><b>Mean steps:</b> recorded 1.00 (A) against 4.17 (B); recorded-wrong 1.33 against 1.72; unrecorded 1.48 against 1.15.</li>
+    <li><b>Answered in one step:</b> 89 of 99 A answers and 42 of 99 B answers.</li>
+  </ul>
+
+  <h2>Entries the Archive Contradicts</h2>
+  <h3>r2-shadow-limit: an open-bug entry that was never closed</h3>
+  <ul>
+    <li><b>What the entry said:</b> <code>open/round2-open-bugs</code> in art-000643 says <code>pt_shadow_hit</code> "never compares triangle t against t_limit … must add t &lt; t_limit".</li>
+    <li><b>What the archive shows:</b> the fix was made at #112. The live history holds the fixed shader, read at #279.</li>
+    <li><b>Arm A:</b> all 9 said the bug was fixed, named it, and cited the live read at #279. Several quoted the entry as where they had flagged it. None said it was still open.</li>
+    <li><b>Arm B:</b> all 9 said nothing is open. Four found the bug and its fix by search (#94/#99, #112). The other five said no such bug ever existed.</li>
+    <li><b>Reading:</b> the stale entry did no harm here, because the live code showed the fix. The entry was the only thing that let the agent say what the bug had been without a search.</li>
+  </ul>
+  <h3>r5-tir-guard: an entry that recorded an invented rationale</h3>
+  <ul>
+    <li><b>What the entry said:</b> <code>decisions/round5-glass-and-stack</code> says "with ior 1.5 the Fresnel TIR guard never fires".</li>
+    <li><b>What the code does:</b> <code>pt_fresnel</code> uses <code>eta = ior_t / ior_i</code> (pt_integrator.metal:26; read at #14). The call site passes <code>ior_i = 1</code> and <code>ior_t = 1.5</code> for a ray entering the glass (pt_integrator.metal:144–147). So the branch returns 1 for entering rays beyond about 41.8°. For exiting rays it never fires; <code>pt_refract</code> handles real TIR there.</li>
+    <li><b>Arm A:</b> no answer restated "never fires".
+      <ul>
+        <li>8 of 9 said "yes, for rays inside the glass, never on entry". That is textbook physics and the opposite of this code. Several explained their own entry away: "the shortcut I added was dead, not the TIR branch".</li>
+        <li>1 of 9 (sample 2) read archived #14 back. It gave the code's real behaviour and corrected its own entry.</li>
+      </ul></li>
+    <li><b>Arm B:</b> all 9 gave the textbook answer.</li>
+    <li><b>Frozen score:</b> it marked all 18 as "superseded", because the reject pattern matched "can never fire" in the clause about entering rays. Hand-read, none repeated the entry. This was the live report's C-category instance for pid-000015, and it reached the probe unchanged.</li>
+  </ul>
+
+  <h2>Facts the Agent Did Not Record</h2>
+  <ul>
+    <li><b>r2-verify-dir.</b> The verification directory was not readable: #37 "Operation not permitted", #38 "Verification dir not readable (sandbox)".
+      <ul>
+        <li>No answer in either arm said so, and no answer tried to list the directory.</li>
+        <li>4 A and 5 B answers said it was readable, or that they had read it earlier. The rest said they "did not need to open it".</li>
+        <li>The one frozen "correct" (A sample 6) matched the word "sandbox" in "readable from my sandbox".</li>
+      </ul></li>
+    <li><b>r5-register-counts.</b> At #33 the round-5 writer printed <code>max_threads_per_group trace=1024</code> with the existing <code>PT_DEBUG=1</code> hook, and at #35 noted "No offline metal compiler (confirmed). Occupancy proxy max=1024." That message was archived in art-001661 (#30–#120).
+      <ul>
+        <li>Late in the live segment (#246–#258) the same writer added a new diagnostic to measure the same figure. It failed to build, and it was not fixed by the checkpoint.</li>
+        <li>All 18 answers describe that failed attempt and say no occupancy figure was obtained this round.</li>
+        <li>The frozen pattern accepted any "couldn't / unable", so it scored 6 A and 8 B correct.</li>
+        <li>No answer searched the archive.</li>
+      </ul></li>
+    <li><b>r8-sibling-pairs.</b> All 18 answers knew the idea had been rejected, because the round-8 brief lists "32-byte node pairs" as already rejected. The result itself (a wash, n=41, +0.104 ms, writer log line 163) was given by 5 A answers and 2 B answers, all of which grepped the log.
+      <ul>
+        <li>This probe was not a clean "unrecorded" control: the brief carried the conclusion into live history.</li>
+      </ul></li>
+  </ul>
+  <p><b>Reading:</b> the own-memory arm did not hide anything that the no-memory arm found, and the no-memory arm did not search its way to the archived facts either. When the live context lacked a fact and the working memory lacked it too, the agent answered from what it could see and stated the gap as fact.</p>
+
+  <h2>Did the Cited Entries Hold the Detail?</h2>
+  <ul>
+    <li><b>The numbers came from the entries.</b> All 54 A answers to recorded probes answered from the snapshot without a memory call. The figures they gave were in the entries: 4416.3 / 7107 nodes; 107.0 / 126.0 and the revert; 44.493 / 44.425 / 46.042 / 45.607 and 6/8; 30.30 / 0.42; 0/16 and +0.90%.</li>
+    <li><b>Where the entry was thin, A filled it in.</b> <code>decisions/round5-refs</code> holds "cp -R nesting bug produced nested include/include and a silent shader-compile failure of the base". It does not say why the compile failed.
+      <ul>
+        <li>All 9 A answers supplied a reason: the shaders were not found, often "shaders/shaders" as well as include/include.</li>
+        <li>The archive (#73–#76) shows the shaders were present. The base had used the round-3 header (a 36-byte <code>PtTri</code>), so the round-4 shaders failed on <code>pt_v3_16</code>.</li>
+        <li>B, which had to search, found that in 5 of 9 samples.</li>
+      </ul></li>
+    <li><b>Slips computing from an entry.</b> 2 A answers on r5-entered-stack derived "−0.4 ms on the minimum" from an entry whose minima differ by 0.068 ms.</li>
+    <li><b>Without memory, B invented history.</b> Its no-memory answers that did not find the archive filled the gap the same way:
+      <ul>
+        <li>"hundreds of ms";</li>
+        <li>invented node counts;</li>
+        <li>"the clamp is still in the code";</li>
+        <li>"no shadow bug was ever found";</li>
+        <li>"halving the node was a real win".</li>
+      </ul>
+      In recorded probes that is 14 contradicted claims, against A's 11. Nine of A's 11 are the one empty-base entry.</li>
+  </ul>
+
+  <h2 id="disagree">Where Frozen and Hand-Read Scores Disagree</h2>
+  <p>The frozen score is compared with the hand-read exact score. They differ on 44 answers. By probe:</p>
+  <ul>
+    <li><b>r5-register-counts (A 6, B 8):</b> the expect pattern accepted any "couldn't / unable / no offline". So answers that denied the archived 1024 figure scored correct. The pattern was too loose; this is a design error by this session.</li>
+    <li><b>r5-empty-base (A 9, B 1):</b> the pattern accepted "nesting / include/include", which the entry held, so it could not see the wrong mechanism. B sample 9 matched "shader compilation failed" while blaming a bare executable.</li>
+    <li><b>r8-small-node (B 5):</b> "No" answers that do not know about this round's E5 matched "slower / didn't". B sample 4 matched although it says "yes, a real win".</li>
+    <li><b>r2-root-exit (B 3):</b> sample 3 matched "rejected"; sample 8 matched although it says the clamp was kept; sample 4 has the right numbers but the wrong round.</li>
+    <li><b>r2-shadow-limit (A 2):</b> A sample 3 says "it is dealt with" (not in the expect list). A sample 9 hit the reject pattern in a clause about the old state.</li>
+    <li><b>r5-entered-stack (A 2, B 1):</b> right headline numbers, but a wrong minimum delta.</li>
+    <li><b>r8-sibling-pairs (B 2):</b> "did not win / no speedup" matched, but these answers gave no recorded result.</li>
+    <li><b>The rest (5):</b> r2-first-sah (B 2: a wrong magnitude, and invented numbers), r2-verify-dir (A 1, the "sandbox" match), r5-tir-guard (A 1, sample 2: right, but scored superseded), and r8-trace-share (B 1, ~0.3 ms).</li>
+  </ul>
+  <p>The plan's comparisons were run on both scores. Conclusions in this report rest on the hand-read scores where the two differ.</p>
+
+  <h2>A Missed E3 Instance in the Live Run</h2>
+  <p>Hand-reading r5-register-counts turned up an experiment repeat that the live report's E3 tables do not list.</p>
+  <ul>
+    <li><b>The earlier measurement:</b> the round-5 writer pid-000015 measured the occupancy proxy at #33 (1024).</li>
+    <li><b>The repeat:</b> at #246–#264 it built a new diagnostic to measure the same figure, "for future experiments". It got 1024 again at #264, after the probe checkpoint. The writer log, line 166, records it as "measured instead of guessed".</li>
+    <li><b>Why it was missed:</b> #33 had been archived (art-001661) and was never searched. No working-memory entry held it.</li>
+  </ul>
+  <p>This is a category-B instance ("experiment repeated") of the kind the live report counts: the answer was archived and never searched. The live report (<code>464f57c</code>) still says B = 2. It is <b>not</b> changed here. It is reported to aos book as a proposed B3 for pid-000015, to be added with a note if accepted.</p>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li><b>Too few probes for a strong test.</b> There are 11 probes on 3 checkpoints from one run, with 9 samples each. Samples on one probe are not independent, so per-kind pooled p-values overstate the evidence. Sign tests over probes cannot reach 0.05 with 6 or fewer probes.</li>
+    <li><b>One reader.</b> All hand-reading was by this session, with no second reader. Grades and notes per answer are in <code>handread.py</code> so they can be re-checked.</li>
+    <li><b>Probe quality.</b> Two probes turned out weaker than designed.
+      <ul>
+        <li>r8-sibling-pairs was answerable from the round-8 brief.</li>
+        <li>The frozen patterns for r5-register-counts and r5-empty-base were too loose to score the question asked.</li>
+      </ul>
+      The probes were not changed after freezing.</li>
+    <li><b>Final state on disk.</b> The run's files are in their final state, so later writer-log sections were readable in both arms. Only the r8-sibling-pairs answers used them.</li>
+    <li><b>Scope.</b> Only writer checkpoints qualified under the plan's rule, so the coordinator's working memory was not probed.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/memory-probe-own-memory/PLAN.md</code>: the frozen plan.</li>
+    <li><code>run.sh</code>: runs both arms. <code>run.log</code>: the run's log with the harness's per-probe table.</li>
+    <li><code>samples-own-memory.jsonl</code> and <code>samples-no-memory.jsonl</code>: all 198 answers with their frozen scores.</li>
+    <li><code>check_probes.py</code>: the pre-freeze probe check (0 failures).</li>
+    <li><code>handread.py</code>: the rubric, and every hand grade with notes.</li>
+    <li><code>summarize.py</code>, <code>summary.json</code>: the tables above.</li>
+    <li><code>work-*/</code>: per-sample state copies. They are not committed (ignored by .gitignore).</li>
+  </ul>
+</body>
+</html>
