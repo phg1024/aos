@@ -152,3 +152,19 @@ range rule, and how much of each segment the lines cover.
 `samples-C.jsonl`, `samples-A1-d1..3.jsonl`, `run.log`, then the
 grading and summary scripts and the HTML report
 `reports/memory-probe-recall.html`.
+
+## Stop rule (added during the handoff phase, before the probe phase)
+
+Added at 2026-10-30, at aos book's request, after the first 2 of 27
+handoffs had finished, both with no index (the agent spent 3 of its 4
+handoff steps on working memory, and its one index call was refused for
+size). No later handoff was looked at before this rule was committed.
+
+After the handoff phase, `gate.py` decides whether the probe phase runs.
+It runs only if at least 14 of the 27 draws kept an index line, and each
+primary truth segment (art-000414, art-001661) kept one in at least 2 of
+its 3 draws. Otherwise the run stops after the handoff phase; the index
+rate is reported, and a follow-up is frozen on aos code's fix of the
+handoff notice. `gate_watch.sh` applies the rule to the running
+`run.sh`: when the handoff phase's indexes are written it runs `gate.py`,
+and on FAIL stops `run.sh` and any probe process it started.
