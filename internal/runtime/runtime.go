@@ -194,6 +194,8 @@ type RunResult struct {
 	Yielded      bool              `json:"yielded,omitempty"`
 	Blocked      bool              `json:"blocked,omitempty"`
 	Cancelled    bool              `json:"cancelled,omitempty"`
+	// TurnExit is the exit an ExitEndsTurn run took as the end of a turn.
+	TurnExit *kernel.ExitStatus `json:"turn_exit,omitempty"`
 }
 
 type AgentRuntime struct {
@@ -349,11 +351,16 @@ type RunOptions struct {
 	// recovering a process that ran out. It is recorded in the session.
 	Extend                 Extension
 	StopOnAssistantMessage bool
-	ContinueOnToolError    bool
-	OnToolCall             func(ToolCall)
-	OnToolResult           func(tools.Result)
-	OnToolError            func(ToolCall, error)
-	OnAssistantMessage     func(string)
+	// ExitEndsTurn makes an agent's exit end its turn instead of the
+	// process: it is parked ready, as after a message, so the user's next
+	// message continues the same conversation with its archive and working
+	// memory. The interactive root of a terminal session runs this way.
+	ExitEndsTurn        bool
+	ContinueOnToolError bool
+	OnToolCall          func(ToolCall)
+	OnToolResult        func(tools.Result)
+	OnToolError         func(ToolCall, error)
+	OnAssistantMessage  func(string)
 }
 
 func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
@@ -1122,6 +1129,20 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				return r.failMalformed(pid, lastCheckpoint())
 			}
+			if options.ExitEndsTurn {
+				ended := *result.Action.ExitStatus
+				ended.Origin = kernel.ExitOriginAgent
+				session.Messages = append(session.Messages, Message{Role: "notice", Content: fmt.Sprintf(exitEndsTurnNotice, ended.Reason)})
+				artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "yield", &unacked)
+				if err != nil {
+					return RunResult{}, err
+				}
+				checkpointID = artifactRecord.ID
+				if _, err := r.Kernel.Transition(pid, kernel.StateReady); err != nil {
+					return RunResult{}, err
+				}
+				return RunResult{PID: pid, CheckpointID: checkpointID, Session: session, Yielded: true, TurnExit: &ended}, nil
+			}
 			artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
 			if err != nil {
 				return RunResult{}, err
@@ -1459,6 +1480,10 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	session.HandoffSeq, session.HandoffUpdates = 0, 0
 	return session, nil
 }
+
+// exitEndsTurnNotice tells an agent whose exit ended only its turn that the
+// conversation goes on.
+const exitEndsTurnNotice = "runtime notice: You exited (%s). In this interactive session that ends your turn, not the session: the user's next message continues this conversation."
 
 // handoffNotice precedes a compaction. It is labelled as the runtime's, so
 // it reads neither as a tool's output nor as the user.

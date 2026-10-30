@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/tools"
+	"aos/internal/tui/render"
 )
 
 type rootFixture struct {
@@ -207,4 +210,70 @@ func TestContinueEndedOnlyReplacesFinalExits(t *testing.T) {
 	if len(pending[unread.PID]) != 0 || len(pending[root.process.PID]) != 1 || pending[root.process.PID][0].Body != "first line" {
 		t.Fatalf("unread mail should move to the new root: %+v", pending)
 	}
+}
+
+// The TUI runs its root with ExitEndsTurn: an exit ends the turn, and the
+// next line goes to the same agent, with no new one taking over.
+func TestExitEndsTheTurnInTheSameAgent(t *testing.T) {
+	ui := testPalette()
+	options := interactiveRunOptions(ui, render.NewStreamRenderer(ui), render.NewFooterBar(ui), func(string, string) {})
+	if !options.ExitEndsTurn || !options.StopOnAssistantMessage {
+		t.Fatalf("interactive options: ExitEndsTurn=%t StopOnAssistantMessage=%t", options.ExitEndsTurn, options.StopOnAssistantMessage)
+	}
+	f := newRootFixture(t)
+	backend := &runtime.FakeBackend{Steps: []runtime.GenerateResult{message("Uptime Kuma runs on 10.0.0.5"), exitDone(), message("port 3001")}}
+	r := f.runtime(backend)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	turn := func(line string) (string, runtime.RunResult) {
+		t.Helper()
+		note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		appended, err := deliver(f.bus, &root, line)
+		if err != nil || appended != nil {
+			t.Fatalf("deliver %q: %v %v", line, appended, err)
+		}
+		result, err := runTurn(context.Background(), r, &root, appended, runtime.RunOptions{StopOnAssistantMessage: true, NewTurn: true, ExitEndsTurn: options.ExitEndsTurn})
+		if err != nil {
+			t.Fatalf("turn %q: %v", line, err)
+		}
+		root.record(f.store, result)
+		return note, result
+	}
+	turn("find the host running Uptime Kuma")
+	if _, ended := turn("thanks"); ended.TurnExit == nil || ended.TurnExit.Reason != "done" {
+		t.Fatalf("exit should end the turn: %+v", ended)
+	}
+	note, result := turn("and its port?")
+	if note != "" || root.process.PID != first.PID || result.PID != first.PID {
+		t.Fatalf("the same agent should continue: note %q, pid %s", note, root.process.PID)
+	}
+	if last := result.Session.Messages[len(result.Session.Messages)-1]; last.Content != "port 3001" {
+		t.Fatalf("answer: %+v", last)
+	}
+	text := captureFooter(t, func(footer *render.FooterBar) {
+		printResult(ui, footer, runtime.RunResult{Yielded: true, TurnExit: &kernel.ExitStatus{Reason: "done"}})
+	})
+	if !strings.Contains(text, "agent ended its turn: done") || strings.Contains(text, "agent exited") {
+		t.Fatalf("turn end printed as %q", text)
+	}
+}
+
+// captureFooter returns what fn printed through a footer bar, which writes
+// to standard output.
+func captureFooter(t *testing.T, fn func(*render.FooterBar)) string {
+	t.Helper()
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = write
+	fn(render.NewFooterBar(testPalette()))
+	os.Stdout = stdout
+	write.Close()
+	out, _ := io.ReadAll(read)
+	return string(out)
 }

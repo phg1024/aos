@@ -55,7 +55,7 @@ func runTUI() []string {
 
 	flag.StringVar(&workflowPath, "workflow", "", "optional workflow JSON path")
 	flag.StringVar(&agentID, "agent", "", "agent ID when using a workflow")
-	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and when a task is done, send one final user-facing message that summarizes the outcome: that ends your turn, and the user's next message continues the conversation. Exit only when the user says the session is over.", "system prompt for direct interactive mode")
+	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and when a task is done, send one final user-facing message that summarizes the outcome: that ends your turn, and the user's next message continues the conversation.", "system prompt for direct interactive mode")
 	flag.StringVar(&stateDir, "state-dir", "", "optional persistent state directory")
 	flag.StringVar(&sessionsDir, "sessions-dir", os.Getenv("AOS_TUI_SESSIONS_DIR"), "directory of saved sessions for /resume (default: the state directory's parent)")
 	flag.StringVar(&workdir, "workdir", ".", "workspace directory for read/write tools")
@@ -688,6 +688,10 @@ func maxSteps(agent agentflow.AgentSpec) int {
 }
 
 func printResult(ui render.Palette, footer *render.FooterBar, result runtime.RunResult) {
+	if result.TurnExit != nil {
+		footer.Println(ui.Subtle(fmt.Sprintf("agent ended its turn: %s (code=%d); your next message continues the conversation", result.TurnExit.Reason, result.TurnExit.Code)))
+		return
+	}
 	if result.Yielded && len(result.Session.Messages) > 0 {
 		last := result.Session.Messages[len(result.Session.Messages)-1]
 		if last.Role == "assistant" {
@@ -729,8 +733,11 @@ func detectRepoRoot(workdir string) string {
 // mirrors it into the workflow progress row.
 func interactiveRunOptions(ui render.Palette, stream *render.StreamRenderer, footer *render.FooterBar, observe func(kind, detail string)) runtime.RunOptions {
 	stream.SetFooter(footer)
+	// An exit ends the turn, not the session: the next message continues
+	// the same agent, with its archive and working memory.
 	return runtime.RunOptions{
 		StopOnAssistantMessage: true,
+		ExitEndsTurn:           true,
 		ContinueOnToolError:    true,
 		OnAssistantMessage: func(message string) {
 			stream.Clear()
