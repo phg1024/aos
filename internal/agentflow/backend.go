@@ -40,6 +40,12 @@ type PromptBackend struct {
 	// NoCheckRule drops the instruction to look up working memory before
 	// deciding, for measuring what the instruction does.
 	NoCheckRule bool
+	// Recall switches the recall aids' wording: NoPointerPrompt restores
+	// the working-memory guidance from before entries were pointers, and
+	// NoAgentIndex drops index_memory and the agent's index from the
+	// prompt. The runtime that runs this backend should get the same
+	// policy.
+	Recall runtime.RecallPolicy
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -124,27 +130,84 @@ func (b PromptBackend) taskHeader(request runtime.GenerateRequest) string {
 		"Here is your task context.\n\n%s\n\n%s"+
 			"The messages that follow are your session history: assistant turns are your own earlier notes and actions, "+
 			"user turns are instructions, messages, and tool results. Reply to the latest turn with the next action JSON only.",
-		string(bytes), workingMemorySnapshot(request.WorkingMemory)+archiveIndex(request.MemoryRefs),
+		string(bytes), b.workingMemorySnapshot(request.WorkingMemory)+b.archiveIndex(request.MemoryRefs),
 	)
+}
+
+// HeaderSizes reports how large the parts of the task header that change at
+// compaction are, in bytes, for the runtime's log.
+func (b PromptBackend) HeaderSizes(request runtime.GenerateRequest) map[string]int {
+	sizes := map[string]int{
+		"working_memory_bytes": len(b.workingMemorySnapshot(request.WorkingMemory)),
+		"archive_index_bytes":  len(b.archiveIndex(request.MemoryRefs)),
+	}
+	if !b.Recall.NoAgentIndex {
+		shown, segments := b.shownAgentIndexes(request.MemoryRefs)
+		bytes := 0
+		for _, text := range shown {
+			bytes += len(text)
+		}
+		sizes["agent_index_bytes"], sizes["agent_index_segments"] = bytes, segments
+	}
+	return sizes
 }
 
 // workingMemorySnapshot shows the working memory current at the last
 // compaction, and says what it is: the record the agent keeps of what is
 // current, not a guarantee that it is right.
-func workingMemorySnapshot(memory *runtime.WorkingMemory) string {
+func (b PromptBackend) workingMemorySnapshot(memory *runtime.WorkingMemory) string {
 	if memory == nil {
 		return ""
 	}
+	pointer := ""
+	if !b.Recall.NoPointerPrompt {
+		pointer = " Each entry records a conclusion and points at its evidence: when a question needs more than an entry says, " +
+			"such as a mechanism, a number or a condition, read its evidence with read_memory instead of filling it in."
+	}
 	return fmt.Sprintf("Working memory v%d (%s, %s), as of your last compaction; later update_memory calls are in the history below. "+
-		"It is the record you keep of what is current; the archive is history.\n%s\n",
-		memory.Version, memory.Written.UTC().Format("2006-01-02 15:04"), memory.ArtifactID, memory.Render())
+		"It is the record you keep of what is current; the archive is history.%s\n%s\n",
+		memory.Version, memory.Written.UTC().Format("2006-01-02 15:04"), memory.ArtifactID, pointer, memory.Render())
+}
+
+// MaxAgentIndexBytes caps the agent-written indexes the header shows in
+// all. Over it, the oldest segments show only how to read theirs.
+const MaxAgentIndexBytes = 6 * 1024
+
+// shownAgentIndexes is the agent index text the header shows under each ref
+// (by position; "" for none), newest first within MaxAgentIndexBytes, and
+// how many segments show theirs.
+func (b PromptBackend) shownAgentIndexes(refs []runtime.MemoryRef) (shown []string, segments int) {
+	shown = make([]string, len(refs))
+	if b.Recall.NoAgentIndex {
+		return shown, 0
+	}
+	left := MaxAgentIndexBytes
+	for i := len(refs) - 1; i >= 0; i-- {
+		if len(refs[i].Index) == 0 {
+			continue
+		}
+		var builder strings.Builder
+		for _, line := range refs[i].Index {
+			builder.WriteString("  " + line.String() + "\n")
+		}
+		if text := builder.String(); len(text) <= left {
+			shown[i] = text
+			left -= len(text)
+			segments++
+			continue
+		}
+		left = 0
+		shown[i] = fmt.Sprintf("  (your index of this segment is over the header's cap: read_memory artifact_id=%s shows it)\n", refs[i].ArtifactID)
+	}
+	return shown, segments
 }
 
 // archiveIndex tells an agent whose older history was compacted which
 // messages are archived and how to get them back. It lists what the
 // runtime recorded about each segment, never a summary, and says what the
-// list leaves out so it is not read as complete.
-func archiveIndex(refs []runtime.MemoryRef) string {
+// list leaves out so it is not read as complete. Under a segment it shows
+// the index the agent wrote when it was archived, labelled as such.
+func (b PromptBackend) archiveIndex(refs []runtime.MemoryRef) string {
 	if len(refs) == 0 {
 		return ""
 	}
@@ -173,7 +236,12 @@ func archiveIndex(refs []runtime.MemoryRef) string {
 		fmt.Fprintf(&builder, "; paths are under %s", prefix)
 	}
 	builder.WriteString("):\n")
-	for _, ref := range refs {
+	shown, _ := b.shownAgentIndexes(refs)
+	if strings.Join(shown, "") != "" {
+		builder.WriteString("Indented lines under a segment are your own index of it, written when it was archived. The runtime checked only that their message numbers are in the segment; " +
+			"they are a map, not the record: read the messages they cite before relying on details.\n")
+	}
+	for i, ref := range refs {
 		builder.WriteString("- ")
 		if ref.ToSeq > 0 {
 			fmt.Fprintf(&builder, "messages %d-%d", ref.FromSeq, ref.ToSeq)
@@ -206,6 +274,7 @@ func archiveIndex(refs []runtime.MemoryRef) string {
 			}
 		}
 		builder.WriteString("\n")
+		builder.WriteString(shown[i])
 	}
 	builder.WriteString("\n")
 	return builder.String()
@@ -337,6 +406,16 @@ func (b PromptBackend) systemPrompt() string {
 		"It survives compaction and is shown at the top of your context; it is the record you keep of what is current, while the archive is history. " +
 		"Give evidence for decisions and rejected entries: the message numbers (the [#N] on history entries, e.g. 1180-1214) or artifact ID the claim rests on; entries without it are marked [no evidence]. " +
 		"An entry beginning 'runtime notice:' comes from the runtime: when it says history will move to the archive, update your working memory before your next action. ")
+	if !b.Recall.NoPointerPrompt {
+		builder.WriteString("Write into an entry the mechanism or condition its conclusion rests on, not only the conclusion: \"leaf2 rejected: its tie-breaks change traversal order, so images are no longer bit-identical\", not \"leaf2 rejected\". " +
+			"An entry is a pointer, not the whole record: when you need more than it says, read its evidence with read_memory rather than filling in. " +
+			"A new key replaces no other entry: when an entry no longer holds, delete it. ")
+	}
+	if !b.Recall.NoAgentIndex {
+		builder.WriteString("When a handoff notice asks for an index, call index_memory with one line per thing in the messages being archived that you might need to find again: " +
+			"measurements with their numbers, decisions and why, rejected approaches, errors and their fixes, each as \"N: what is there\" or \"N-M: what is there\". " +
+			"The index stays in your context as your map of the archive; it points at messages, so read them with read_memory before relying on details. ")
+	}
 	if !b.NoCheckRule {
 		builder.WriteString("Before you propose, adopt or reject an approach, look up its entry in your working memory (search_memory if it is not there); if an entry exists and your action contradicts it, say why in your notes, citing the entry's evidence. ")
 	}
@@ -379,6 +458,9 @@ func (b PromptBackend) systemPrompt() string {
 	if !slices.Contains(b.Agent.Capabilities.Tools, "update_memory") {
 		builder.WriteString("- " + toolSignature("update_memory") + " (always available: sets or deletes one entry of your working memory)\n")
 	}
+	if !b.Recall.NoAgentIndex && !slices.Contains(b.Agent.Capabilities.Tools, "index_memory") {
+		builder.WriteString("- " + toolSignature("index_memory") + " (available after a handoff notice: indexes the messages it archives)\n")
+	}
 	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
 	return builder.String()
@@ -403,6 +485,7 @@ var toolArgs = map[string]string{
 	"read_memory":      "from, to? | artifact_id, offset?",
 	"search_memory":    "query, limit?",
 	"update_memory":    "section, key, content?, evidence?, delete?",
+	"index_memory":     "index",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
 }
@@ -443,7 +526,7 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		Metadata:   cloneMap(request.Process.Metadata),
 		History:    historyMessages(request.History),
 		MemoryRefs: append([]runtime.MemoryRef(nil), request.MemoryRefs...),
-		Memory:     workingMemorySnapshot(request.WorkingMemory),
+		Memory:     b.workingMemorySnapshot(request.WorkingMemory),
 		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
 		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
 		ToolErrors: toolErrors,

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS TUI Markdown Rendering Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+    .label { font-size: 13px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+    pre.term { background: #1c1f26; color: #d4d4d4; padding: 14px 16px; border-radius: 10px; overflow-x: auto; margin: 0;
+      font-family: Menlo, "SF Mono", Consolas, "Noto Sans Mono CJK SC", monospace; font-size: 12.5px; line-height: 1.35; }
+    .esc { background: #b91c1c; color: #fff; border-radius: 3px; padding: 0 3px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>aos-tui: Markdown Rendering for Agent Replies</h1>
+    <p>Models reply in Markdown, and <code>aos-tui</code> printed it raw. Users saw <code>**bold**</code>, <code>#</code> headings, fence markers and pipe tables as literal syntax. Agent replies now render in the terminal: headings, emphasis, inline and fenced code, nested lists, quotes, rules, links and GFM tables. Text wraps to the terminal width.</p>
+    <p><b>Result:</b> <span class="good">30 new tests pass</span>, including a fuzz target, and <code>go test -buildvcs=false ./...</code> passes. Fuzzing found five bugs, all fixed (see Verification). No new dependency: the renderer uses only the stdlib and <code>charmbracelet/x/ansi</code>, which was already in <code>go.mod</code>. When stdout is not a TTY, the output is the raw text, byte for byte.</p>
+  </div>
+
+  <h2>What Was Done</h2>
+  <ul>
+    <li><b><code>internal/tui/render/markdown.go</code></b>: a line-based block parser and an inline renderer.
+      <ul>
+        <li>Blocks: ATX headings, fenced code (<code>```</code> and <code>~~~</code>), bullet and ordered lists with nesting, block quotes (nested, holding any block), thematic breaks, GFM pipe tables and paragraphs.</li>
+        <li>Inline: bold, italic, bold-italic, strikethrough, code spans, backslash escapes, <code>[text](url)</code>, images and <code>&lt;scheme:…&gt;</code> autolinks.</li>
+        <li><code>Palette.AgentReply(prefix, body)</code> is the entry point for final replies. <code>Palette.Markdown(src, width)</code> renders at a given width.</li>
+      </ul>
+    </li>
+    <li><b><code>cmd/aos-tui/main.go</code></b>: three one-word changes, from <code>AgentBlock</code> to <code>AgentReply</code>. These are the two <code>printResult</code> branches (yielded reply and <code>WaitText</code>) and the resume replay. <code>AgentBlock</code> stays as it was for the workflow progress feed, which prints one clipped line per event.</li>
+    <li><b><code>internal/tui/render/markdown_test.go</code></b>: unit tests for each construct, plus a fuzz target and a regression seed under <code>testdata/fuzz</code>.</li>
+  </ul>
+
+  <h2>Design Decisions</h2>
+  <table>
+    <tr><th>Question</th><th>Decision</th><th>Why</th></tr>
+    <tr><td>Streaming</td><td>Render the finished message once, at the three places that print it.</td><td><code>StreamRenderer</code> never prints reply text. Content tokens only feed the thinking spinner, and the JSON action that holds the message is parsed after the step ends. The complete text exists only once the step returns, so there is no partial block to re-render and nothing to buffer.</td></tr>
+    <tr><td>Dependencies</td><td>None added; no glamour, goldmark or chroma.</td><td>AGENTS.md prefers stdlib. The subset models write fits in about 1,350 lines. <code>x/ansi</code> already provides grapheme-aware width and wrapping that keeps escape codes intact.</td></tr>
+    <tr><td>Parser strictness</td><td>Lenient and line-based, not CommonMark.</td><td>Anything unrecognised stays literal, so malformed input falls back to raw Markdown instead of dropping words. List items accept off-by-one indents, and a nested item under <code>1.</code> needs only two spaces.</td></tr>
+    <tr><td>Line breaks in a paragraph</td><td>Kept.</td><td>Replies use single newlines for layout, such as <code>Name: x</code> / <code>State: y</code>. Joining them as CommonMark does would merge those lines. GitHub comments keep them too.</td></tr>
+    <tr><td>The <code>agent&gt;</code> prefix</td><td>A leading paragraph shares its line and wraps around it. Any other leading block starts on the next line.</td><td>This keeps one-line replies compact (<code>agent&gt; Done.</code>), and tables, code boxes and lists stay aligned.</td></tr>
+    <tr><td>Links</td><td>Styled text, then the destination dimmed in parentheses. If the text repeats the URL, it is shown once.</td><td>OSC 8 hyperlinks are not supported everywhere (macOS Terminal ignores them). Their escape codes would also have to survive wrapping and table cells.</td></tr>
+    <tr><td>Line breaking</td><td>A line breaker of its own, built on <code>ansi.DecodeSequence</code>. It breaks at spaces and between CJK characters. Closing punctuation (<code>，。）</code>) never starts a line, and opening punctuation (<code>（「</code>) never ends one. Latin words and URLs stay whole unless one is wider than the line. Code blocks still hard-wrap.</td><td><code>ansi.Wrap</code> breaks only at spaces and hyphens, so a run of Chinese counts as one word. A live session showed the effect: the run either jumped to the next line and left the line above half empty, or was cut at an arbitrary point.</td></tr>
+    <tr><td>Styles across wrapped lines</td><td>Each line closes its open styles and the next line reopens them.</td><td>Indents, quote bars and table borders are added in front of each line, so a style left open must not colour them. A test checks that no rendered line leaves a style open.</td></tr>
+    <tr><td>Control characters</td><td>In TTY mode, C0, DEL and C1 controls show as glyphs (ESC as <code>␛</code>). Invalid UTF-8 shows as U+FFFD.</td><td>Replies can quote web pages and tool output. A raw <code>ESC ]52</code> can write the clipboard, and <code>ESC [2J</code> clears the screen. This also keeps width measurements exact. Non-TTY output is unchanged.</td></tr>
+    <tr><td>Cost</td><td>Linear time on unbalanced input.</td><td>Backtick runs and bracket pairs are indexed once per inline text. Missing emphasis closers are remembered, and inline nesting is capped at 16 levels. 200 KB of unmatched <code>[</code>, <code>&lt;</code>, <code>*</code> and backticks renders in about 0.1 s.</td></tr>
+  </table>
+
+  <h2>Before and After</h2>
+  <p>"After" is the renderer's real output at 64 columns, with its ANSI colours converted to HTML. "Before" is the same reply as aos-tui printed it until now. Browsers draw CJK glyphs at their own width, not exactly two cells, so table borders beside CJK cells may drift slightly on this page. In a terminal they line up, which <code>TestMarkdownTableWideCharacters</code> checks.</p>
+  <h3>A typical reply</h3>
+  <p>Mixed reply: inline styles, a heading, a nested list with a fence inside an item, quotes, a rule and a table with CJK cells and a ragged row.</p>
+  <div class="pair">
+    <div><div class="label">Before (raw text)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>I found the bug in `parseConfig`. Here is a **summary** of what changed, with _emphasis_, ~~old~~ text and a snake_case_name.
+
+## Changes
+
+1. Fixed the *nil* check in [config.go](https://example.com/config.go)
+2. Added tests:
+   - `TestParse` covers **empty** input
+   - `TestWide` covers 中文 and emoji
+     - third level
+3. Run them:
+   ```bash
+   go test ./...
+   ```
+
+&gt; Note: this is a quote with **bold**.
+&gt; &gt; nested quote
+
+---
+
+| Name | Status | 说明 |
+|:-----|:------:|-----:|
+| parser | ok | 解析器 |
+| renderer | **fixed** | 渲染 |
+| ragged |
+</pre></div>
+    <div><div class="label">After (64 columns)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>I found the bug in <span style="color:#d7af87">parseConfig</span>. Here is a <span style="font-weight:700">summary</span> of what
+changed, with <span style="font-style:italic">emphasis</span>, <span style="text-decoration:line-through">old</span> text and a snake_case_name.
+
+<span style="font-weight:700;color:#00d7ff">Changes</span>
+
+<span style="color:#00d7ff">1.</span> Fixed the <span style="font-style:italic">nil</span> check in <span style="text-decoration:underline;color:#5fafff">config.go</span>
+   <span style="opacity:.7;color:#87afd7">(https://example.com/config.go)</span>
+<span style="color:#00d7ff">2.</span> Added tests:
+   <span style="color:#00d7ff">◦</span> <span style="color:#d7af87">TestParse</span> covers <span style="font-weight:700">empty</span> input
+   <span style="color:#00d7ff">◦</span> <span style="color:#d7af87">TestWide</span> covers 中文 and emoji
+     <span style="color:#00d7ff">▪</span> third level
+<span style="color:#00d7ff">3.</span> Run them:
+   <span style="color:#808080">╭─ bash</span>
+   <span style="color:#808080">│</span> go test ./...
+   <span style="color:#808080">╰─</span>
+
+<span style="color:#808080">│</span> Note: this is a quote with <span style="font-weight:700">bold</span>.
+<span style="color:#808080">│</span> <span style="color:#808080">│</span> nested quote
+
+<span style="color:#808080">────────────────────────────────────────────────────────────────</span>
+
+<span style="color:#808080">┌──────────┬────────┬────────┐</span>
+<span style="color:#808080">│</span> <span style="font-weight:700">Name</span>     <span style="color:#808080">│</span> <span style="font-weight:700">Status</span> <span style="color:#808080">│</span>   <span style="font-weight:700">说明</span> <span style="color:#808080">│</span>
+<span style="color:#808080">├──────────┼────────┼────────┤</span>
+<span style="color:#808080">│</span> parser   <span style="color:#808080">│</span>   ok   <span style="color:#808080">│</span> 解析器 <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> renderer <span style="color:#808080">│</span> <span style="font-weight:700">fixed</span>  <span style="color:#808080">│</span>   渲染 <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> ragged   <span style="color:#808080">│</span>        <span style="color:#808080">│</span>        <span style="color:#808080">│</span>
+<span style="color:#808080">└──────────┴────────┴────────┘</span></pre></div>
+  </div>
+  <h3>A wide table</h3>
+  <p>A table wider than a 64-column terminal: the widest columns shrink and their cells wrap, so the table fits and keeps every word. Alignment comes from the delimiter row.</p>
+  <div class="pair">
+    <div><div class="label">Before (raw text)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>### Benchmark results
+
+| Backend | p50 latency | Tokens/s | 备注 |
+|---|---:|---:|:---:|
+| vllm (local) | 412 ms | 1,830 | 默认 |
+| openai-compatible proxy | 1.9 s | 640 | retries enabled on `429` and `503` responses |
+| mock | 0 ms | — | tests only |
+
+Run `aos inspect --calls` for the raw numbers.
+</pre></div>
+    <div><div class="label">After (64 columns)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>
+<span style="font-weight:700">Benchmark results</span>
+
+<span style="color:#808080">┌──────────────────┬─────────────┬──────────┬──────────────────┐</span>
+<span style="color:#808080">│</span> <span style="font-weight:700">Backend</span>          <span style="color:#808080">│</span> <span style="font-weight:700">p50 latency</span> <span style="color:#808080">│</span> <span style="font-weight:700">Tokens/s</span> <span style="color:#808080">│</span>       <span style="font-weight:700">备注</span>       <span style="color:#808080">│</span>
+<span style="color:#808080">├──────────────────┼─────────────┼──────────┼──────────────────┤</span>
+<span style="color:#808080">│</span> vllm (local)     <span style="color:#808080">│</span>      412 ms <span style="color:#808080">│</span>    1,830 <span style="color:#808080">│</span>       默认       <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> openai-compatibl <span style="color:#808080">│</span>       1.9 s <span style="color:#808080">│</span>      640 <span style="color:#808080">│</span> retries enabled  <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> e proxy          <span style="color:#808080">│</span>             <span style="color:#808080">│</span>          <span style="color:#808080">│</span>  on <span style="color:#d7af87">429</span> and <span style="color:#d7af87">503</span>  <span style="color:#808080">│</span>
+<span style="color:#808080">│</span>                  <span style="color:#808080">│</span>             <span style="color:#808080">│</span>          <span style="color:#808080">│</span>    responses     <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> mock             <span style="color:#808080">│</span>        0 ms <span style="color:#808080">│</span>        — <span style="color:#808080">│</span>    tests only    <span style="color:#808080">│</span>
+<span style="color:#808080">└──────────────────┴─────────────┴──────────┴──────────────────┘</span>
+
+Run <span style="color:#d7af87">aos inspect --calls</span> for the raw numbers.</pre></div>
+  </div>
+  <h3>Chinese prose</h3>
+  <p>A reply from a live session. Lines break between CJK characters, so each line is filled. Closing punctuation such as ， and ） never starts a line, and Latin words such as markdown stay whole.</p>
+  <div class="pair">
+    <div><div class="label">Before (raw text)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>没有，我没有用代码围栏（三个反引号 ```）把头尾包起来，是直接发原始 markdown 表格文本。
+
+- 不加 ```：界面支持 markdown 时会渲染成真表格 ✅
+- 加了 ```：会变成代码块，表格原样显示成文本，不渲染 ❌
+
+如果你看到的是带 | 的原始文本，说明这个界面不渲染 markdown，我可以改用纯文本对齐版（用空格/破折号排版），到哪都能看清。要纯文本版吗？</pre></div>
+    <div><div class="label">After (64 columns)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>没有，我没有用代码围栏（三个反引号 ```）把头尾包起来，是
+直接发原始 markdown 表格文本。
+
+<span style="color:#00d7ff">•</span> 不加 ```：界面支持 markdown 时会渲染成真表格 ✅
+<span style="color:#00d7ff">•</span> 加了 ```：会变成代码块，表格原样显示成文本，不渲染 ❌
+
+如果你看到的是带 | 的原始文本，说明这个界面不渲染 markdown，我可
+以改用纯文本对齐版（用空格/破折号排版），到哪都能看清。要纯文本
+版吗？</pre></div>
+  </div>
+  <h3>Malformed and hostile input</h3>
+  <p>Malformed and hostile input: escape sequences from tool output, a ragged table, and a fence that never closes. Before, the terminal would retitle the window and clear the screen; after, the controls show as glyphs, the table pads missing cells, and the unclosed fence keeps its text.</p>
+  <div class="pair">
+    <div><div class="label">Before (raw text)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>Tool output said: <span class="esc">ESC</span>]0;pwned<span class="esc">BEL</span> and <span class="esc">ESC</span>[2J **cleared** - shown, not executed.
+
+A row went missing below:
+
+| a | b |
+|---|---|
+| only one |
+| 1 | 2 | 3 |
+
+Here is the patch, but I ran out of room:
+
+```diff
+- old := parse(cfg)
++ cfg, err := parse(cfg)
+</pre></div>
+    <div><div class="label">After (64 columns)</div><pre class="term"><span style="font-weight:700;color:#eeeeee">agent&gt; </span>Tool output said: ␛]0;pwned␇ and ␛[2J <span style="font-weight:700">cleared</span> - shown,
+not executed.
+
+A row went missing below:
+
+<span style="color:#808080">┌──────────┬───┬───┐</span>
+<span style="color:#808080">│</span> <span style="font-weight:700">a</span>        <span style="color:#808080">│</span> <span style="font-weight:700">b</span> <span style="color:#808080">│</span>   <span style="color:#808080">│</span>
+<span style="color:#808080">├──────────┼───┼───┤</span>
+<span style="color:#808080">│</span> only one <span style="color:#808080">│</span>   <span style="color:#808080">│</span>   <span style="color:#808080">│</span>
+<span style="color:#808080">│</span> 1        <span style="color:#808080">│</span> 2 <span style="color:#808080">│</span> 3 <span style="color:#808080">│</span>
+<span style="color:#808080">└──────────┴───┴───┘</span>
+
+Here is the patch, but I ran out of room:
+
+<span style="color:#808080">╭─ diff</span>
+<span style="color:#808080">│</span> - old := parse(cfg)
+<span style="color:#808080">│</span> + cfg, err := parse(cfg)
+<span style="color:#808080">╰─</span></pre></div>
+  </div>
+
+  <h2>Verification</h2>
+  <ul>
+    <li><b>Per construct</b>: headings (including <code>#hashtag</code> and <code>C#</code>), each inline style, nested emphasis restoring the outer style, and non-emphasis left alone (<code>snake_case_name</code>, <code>2 * 3 * 4</code>, <code>~5</code>, unclosed <code>**</code> and backticks, escapes). Also links, images and autolinks; paragraph line breaks and wrapping; fenced code with tabs, long lines hard-wrapped, and unclosed fences; bullet and ordered lists (nesting, right-aligned numbers, hanging indent, lazy continuation, fences inside items, loose items); quotes; rules; and tables (alignment, CJK and emoji widths, ragged rows, escaped pipes and pipes in code spans, shrinking to fit).</li>
+    <li><b>Passthrough</b>: with a disabled palette, <code>Markdown</code> and <code>AgentReply</code> return the input byte for byte, including CRLF, tabs and trailing newlines.</li>
+    <li><b>Wide characters</b>: CJK text without spaces wraps to the width and nothing changes when the lines are joined back. A Chinese sentence from a live session fills each line before the next CJK character, and no line starts with closing punctuation or ends with opening punctuation. Latin words and URLs inside Chinese text are never split. Table rows with CJK, Korean and emoji cells all have the same display width.</li>
+    <li><b>Malformed input</b>: 17 broken inputs, among them mixed fences, unclosed links, deep quotes and lists, over-long ordered markers and a 900-delimiter run. None loses a word.</li>
+    <li><b>Fuzzing</b> (<code>FuzzMarkdown</code>, any input, widths 12–111). The property: every letter and digit in the source appears at least as often in the output, leaving out link destinations, which a self-link shows once. The final runs made 50.5 million executions in 5 minutes, then 6.3 million in 2 minutes after line breaking was added, with no failures. Fuzzing found five problems, all fixed:
+      <ul>
+        <li>A list item kept its own marker in its body, so the item recursed forever.</li>
+        <li>Invalid UTF-8 merged with the grapheme next to it during wrapping.</li>
+        <li>Raw escape sequences passed through.</li>
+        <li>Words after the first one in a fence info string were dropped.</li>
+        <li>An escaped backtick next to a code-span run sliced out of range. Its input is kept as a seed.</li>
+      </ul>
+    </li>
+    <li><code>go vet</code> is clean, and <code>go test -buildvcs=false ./...</code> passes.</li>
+  </ul>
+
+  <h2>Limits and Follow-ups</h2>
+  <ul>
+    <li>Not supported, and shown as literal text: setext headings (<code>===</code>), indented code blocks, reference-style links, inline HTML and task-list checkboxes. Code blocks have no syntax highlighting.</li>
+    <li>A table with so many columns that they cannot each keep four cells overflows the width, and the terminal wraps it. No text is lost.</li>
+    <li>Not checked in a live terminal session against a real model. The samples above come from the renderer itself.</li>
+  </ul>
+</body>
+</html>

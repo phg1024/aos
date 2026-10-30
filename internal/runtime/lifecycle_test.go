@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aos/internal/artifact"
@@ -56,7 +57,7 @@ func newLifecycleFixture(t *testing.T) lifecycleFixture {
 }
 
 func (f lifecycleFixture) runtime(backend runtime.Backend) *runtime.AgentRuntime {
-	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Leases: f.leases, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6}
+	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Leases: f.leases, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
 }
 
 func messageResult(text string) runtime.GenerateResult {
@@ -258,5 +259,65 @@ func TestRecoverCarriesLeasesOver(t *testing.T) {
 	}
 	if !transferred {
 		t.Fatal("the transfer should be a lease.transferred kernel event")
+	}
+}
+
+// With ExitEndsTurn an agent's exit parks the process instead of ending
+// it: the next message resumes the same process, which sees its earlier
+// conversation and a notice that the session went on.
+func TestExitEndsTurnKeepsTheProcess(t *testing.T) {
+	f := newLifecycleFixture(t)
+	backend := &runtime.FakeBackend{Steps: []runtime.GenerateResult{
+		{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "found the host", Retryable: false}}},
+		messageResult("port 3001"),
+	}}
+	r := f.runtime(backend)
+	options := runtime.RunOptions{StopOnAssistantMessage: true, ExitEndsTurn: true}
+	if _, err := f.bus.Send("user", f.process.PID, "find the host running Uptime Kuma"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := r.RunWithOptions(context.Background(), f.process.PID, nil, options)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !result.Yielded || result.TurnExit == nil || result.TurnExit.Reason != "found the host" || result.TurnExit.Origin != kernel.ExitOriginAgent || result.ExitStatus.Reason != "" {
+		t.Fatalf("exit should end the turn: %+v", result)
+	}
+	process, _ := f.kernel.Get(f.process.PID)
+	if process.State != kernel.StateReady || process.ExitStatus != nil {
+		t.Fatalf("process should be parked ready: %s %+v", process.State, process.ExitStatus)
+	}
+	if latestCheckpoint(t, f, f.process.PID) != result.CheckpointID {
+		t.Fatalf("the turn's end should be checkpointed: %s", result.CheckpointID)
+	}
+
+	if _, err := f.bus.Send("user", f.process.PID, "and its port?"); err != nil {
+		t.Fatalf("a parked process takes mail: %v", err)
+	}
+	next, err := r.Resume(context.Background(), f.process.PID, result.CheckpointID, nil, options)
+	if err != nil || next.PID != f.process.PID || !next.Yielded {
+		t.Fatalf("resume: %+v %v", next, err)
+	}
+	history := backend.Requests[len(backend.Requests)-1].History
+	var roles, contents []string
+	for _, m := range history {
+		roles = append(roles, m.Role)
+		contents = append(contents, m.Content)
+	}
+	joined := strings.Join(contents, " | ")
+	for _, want := range []string{"find the host running Uptime Kuma", "You exited (found the host)", "and its port?"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("the resumed agent should see %q; it saw %v %s", want, roles, joined)
+		}
+	}
+
+	// Without the option an exit stays final.
+	other, _ := f.kernel.Spawn(kernel.ProcessSpec{Role: "worker"})
+	final := f.runtime(&runtime.FakeBackend{Steps: backend.Steps[:1]})
+	if result, err := final.RunWithOptions(context.Background(), other.PID, nil, runtime.RunOptions{StopOnAssistantMessage: true}); err != nil || result.TurnExit != nil || result.ExitStatus.Reason != "found the host" {
+		t.Fatalf("exit without ExitEndsTurn: %+v %v", result, err)
+	}
+	if process, _ := f.kernel.Get(other.PID); process.State != kernel.StateExited {
+		t.Fatalf("exit without ExitEndsTurn should end the process: %s", process.State)
 	}
 }

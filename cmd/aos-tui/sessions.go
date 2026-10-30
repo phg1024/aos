@@ -55,6 +55,9 @@ func listSessions(dir string) ([]sessionInfo, error) {
 		}
 		info.InUse, _ = statedir.InUse(path)
 		if session, _, err := latestSession(path, root.PID); err == nil {
+			if store, err := artifact.New(filepath.Join(path, "artifacts")); err == nil {
+				session = withArchive(store, session)
+			}
 			for _, turn := range conversation(session) {
 				if turn.user {
 					if info.Turns == 0 {
@@ -122,6 +125,26 @@ func latestSession(dir, pid string) (runtime.Session, string, error) {
 		return runtime.Session{}, "", err
 	}
 	return session, id, nil
+}
+
+// withArchive is session with the history compaction moved to its archive
+// put back in front of its messages, oldest first, so the whole
+// conversation can be shown. A segment that cannot be read is left out.
+func withArchive(store *artifact.Store, session runtime.Session) runtime.Session {
+	var messages []runtime.Message
+	for _, ref := range session.MemoryRefs {
+		if ref.ArtifactID == "" {
+			continue
+		}
+		var segment struct {
+			Messages []runtime.Message `json:"messages"`
+		}
+		if store.ReadJSON(ref.ArtifactID, &segment) == nil {
+			messages = append(messages, segment.Messages...)
+		}
+	}
+	session.Messages = append(messages, session.Messages...)
+	return session
 }
 
 type turn struct {

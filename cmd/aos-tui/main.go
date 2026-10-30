@@ -55,7 +55,7 @@ func runTUI() []string {
 
 	flag.StringVar(&workflowPath, "workflow", "", "optional workflow JSON path")
 	flag.StringVar(&agentID, "agent", "", "agent ID when using a workflow")
-	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and before exiting after completing a user task always send one final user-facing message that summarizes the outcome.", "system prompt for direct interactive mode")
+	flag.StringVar(&systemPrompt, "system-prompt", "You are a helpful AOS agent in an interactive terminal. Respond conversationally, inspect the workspace with list_dir or find_files before assuming file paths, use tools when useful, keep internal exploration in tool actions instead of visible chatter, use wait when you need more user input, and when a task is done, send one final user-facing message that summarizes the outcome: that ends your turn, and the user's next message continues the conversation.", "system prompt for direct interactive mode")
 	flag.StringVar(&stateDir, "state-dir", "", "optional persistent state directory")
 	flag.StringVar(&sessionsDir, "sessions-dir", os.Getenv("AOS_TUI_SESSIONS_DIR"), "directory of saved sessions for /resume (default: the state directory's parent)")
 	flag.StringVar(&workdir, "workdir", ".", "workspace directory for read/write tools")
@@ -113,16 +113,21 @@ func runTUI() []string {
 
 	// A state directory that already holds this agent's session continues
 	// it; otherwise a new interactive process starts.
-	process, checkpointID, currentSession, seed, resumeNote, resumed := resumePoint(k, stateDir, agent.ID)
-	if process.PID == "" {
-		process, err = k.Spawn(kernel.ProcessSpec{
+	spawnRoot := func() (kernel.Process, error) {
+		return k.Spawn(kernel.ProcessSpec{
 			Role:          "agent:" + agent.ID,
 			Metadata:      map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir},
 			Mounts:        agentMounts(agent, absWorkdir),
 			CapabilitySet: agentCapabilities(agent, absWorkdir),
 			Delegable:     agent.Delegable,
 		})
-		if err != nil {
+	}
+	var root tuiRoot
+	var resumeNote string
+	var resumed bool
+	root.process, root.checkpointID, root.session, root.seed, resumeNote, resumed = resumePoint(k, stateDir, agent.ID)
+	if root.process.PID == "" {
+		if root.process, err = spawnRoot(); err != nil {
 			fail(err)
 		}
 	}
@@ -203,9 +208,9 @@ func runTUI() []string {
 				footer.Draw()
 			}),
 		}
-		agentRuntime.DelegateHandler = engine.DelegateHandler(spec, agentflow.RunRequest{Goal: process.Metadata["goal"]}, agent, nil)
+		agentRuntime.DelegateHandler = engine.DelegateHandler(spec, agentflow.RunRequest{Goal: root.process.Metadata["goal"]}, agent, nil)
 		observeRoot = func(kind, detail string) {
-			progress.Observe(agentflow.TraceEvent{Time: time.Now(), AgentID: agent.ID, PID: process.PID, Kind: kind, Detail: detail})
+			progress.Observe(agentflow.TraceEvent{Time: time.Now(), AgentID: agent.ID, PID: root.process.PID, Kind: kind, Detail: detail})
 			footer.Draw()
 		}
 		stopTicker := startProgressTicker(progress, footer)
@@ -218,7 +223,7 @@ func runTUI() []string {
 	}
 
 	fmt.Println(ui.Banner(render.AOSBanner()))
-	fmt.Println(ui.Header(fmt.Sprintf("AOS TUI ready  agent=%s  pid=%s", agent.ID, process.PID)))
+	fmt.Println(ui.Header(fmt.Sprintf("AOS TUI ready  agent=%s  pid=%s", agent.ID, root.process.PID)))
 	fmt.Println(ui.Subtle("Backend: " + string(llmConfig.Kind)))
 	fmt.Println(ui.Subtle("Model: " + modelName))
 	if tokenCounter != nil {
@@ -238,16 +243,12 @@ func runTUI() []string {
 		if resumeNote != "" {
 			fmt.Println(ui.Subtle(resumeNote))
 		}
-		turns := conversation(currentSession)
-		if len(turns) > 6 {
-			fmt.Println(ui.Subtle(fmt.Sprintf("… %d earlier messages", len(turns)-6)))
-			turns = turns[len(turns)-6:]
-		}
-		for _, turn := range turns {
+		// The whole conversation, including what compaction archived.
+		for _, turn := range conversation(withArchive(store, root.session)) {
 			if turn.user {
 				fmt.Println(ui.Prompt("you> ") + turn.text)
 			} else {
-				fmt.Println(ui.AgentBlock("agent> ", turn.text))
+				fmt.Println(ui.AgentReply("agent> ", turn.text))
 			}
 		}
 	}
@@ -260,10 +261,10 @@ func runTUI() []string {
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		footer.Update(render.FooterStatus{
-			Process:      process,
+			Process:      root.process,
 			Model:        modelName,
-			CheckpointID: checkpointID,
-			Session:      currentSession,
+			CheckpointID: root.checkpointID,
+			Session:      root.session,
 			Counter:      tokenCounter,
 			Backend:      agentRuntime.Backend.(agentflow.PromptBackend),
 		})
@@ -339,15 +340,15 @@ func runTUI() []string {
 			fmt.Print("\x1b[2J\x1b[H")
 			continue
 		case "/state":
-			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s", process.PID, checkpointID, stateDir)))
+			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s", root.process.PID, root.checkpointID, stateDir)))
 			continue
 		case "/recover":
-			if checkpointID == "" {
+			if root.checkpointID == "" {
 				footer.Println(ui.Warn("no checkpoint yet"))
 				continue
 			}
 			result, err := runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
-				return agentRuntime.Recover(ctx, process.PID, checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
+				return agentRuntime.Recover(ctx, root.process.PID, root.checkpointID, nil, interactiveRunOptions(ui, stream, footer, observeRoot))
 			})
 			if errors.Is(err, runtime.ErrRunCancelled) {
 				interrupted = true
@@ -357,46 +358,45 @@ func runTUI() []string {
 				footer.Println(ui.Error("recover error: " + err.Error()))
 				continue
 			}
-			if result.PID != "" {
-				process.PID = result.PID
-			}
-			checkpointID = result.CheckpointID
-			currentSession = result.Session
+			root.record(store, result)
 			stream.Clear()
 			printResult(ui, footer, result)
 			continue
 		}
 
 		message := line
+		wasInterrupted := interrupted
 		if interrupted {
 			message = interruptedPrefix + line
 			interrupted = false
 		}
+		// An agent whose exit is final cannot be recovered; a new one takes
+		// over its conversation, and the line goes to it.
+		if note, err := continueEnded(k, store, bus, &root, spawnRoot); err != nil {
+			footer.Println(ui.Error("not delivered: " + err.Error()))
+			interrupted = wasInterrupted
+			continue
+		} else if note != "" {
+			footer.Println(ui.Subtle(note))
+		}
 		// The line reaches the agent through its mailbox. An agent that
 		// exited cannot receive mail; resuming it recovers it, and the line
 		// goes with the recovery instead.
-		var appended []runtime.Message
-		if _, err := bus.Send("user", process.PID, message); errors.Is(err, ipc.ErrRecipientExited) {
-			appended = []runtime.Message{{Role: "user", Content: message}}
-		} else if err != nil {
-			footer.Println(ui.Error("send error: " + err.Error()))
+		appended, err := deliver(bus, &root, message)
+		if err != nil {
+			footer.Println(ui.Error("not delivered: " + err.Error()))
+			interrupted = wasInterrupted
 			continue
 		}
 
-		var result runtime.RunResult
 		observeRoot("start", line)
 		// Each message starts a turn with a fresh step allowance; tokens and
 		// time keep counting against the session's budget.
 		turnOptions := interactiveRunOptions(ui, stream, footer, observeRoot)
 		turnOptions.NewTurn = true
-		result, err = runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
-			if checkpointID == "" {
-				// A new agent continuing an ended one starts from its conversation.
-				initial := seed
-				seed = nil
-				return agentRuntime.RunWithOptions(ctx, process.PID, initial, turnOptions)
-			}
-			return agentRuntime.Resume(ctx, process.PID, checkpointID, appended, turnOptions)
+		before := root.checkpointID
+		result, err := runCancellable(ui, stream, func(ctx context.Context) (runtime.RunResult, error) {
+			return runTurn(ctx, agentRuntime, &root, appended, turnOptions)
 		})
 		if errors.Is(err, runtime.ErrRunCancelled) {
 			interrupted = true
@@ -407,12 +407,11 @@ func runTUI() []string {
 			footer.Println(ui.Error("runtime error: " + err.Error()))
 		}
 		observeRoot("exit", "")
-		if result.PID != "" {
-			// Resuming an exited process recovers it as a new one.
-			process.PID = result.PID
+		if lostLine(appended, before, result) {
+			footer.Println(ui.Warn("your message was not delivered; send it again"))
+			interrupted = interrupted || wasInterrupted
 		}
-		checkpointID = result.CheckpointID
-		currentSession = result.Session
+		root.record(store, result)
 		stream.Clear()
 		printResult(ui, footer, result)
 	}
@@ -685,16 +684,20 @@ func maxSteps(agent agentflow.AgentSpec) int {
 }
 
 func printResult(ui render.Palette, footer *render.FooterBar, result runtime.RunResult) {
+	if result.TurnExit != nil {
+		footer.Println(ui.Subtle(fmt.Sprintf("agent ended its turn: %s (code=%d); your next message continues the conversation", result.TurnExit.Reason, result.TurnExit.Code)))
+		return
+	}
 	if result.Yielded && len(result.Session.Messages) > 0 {
 		last := result.Session.Messages[len(result.Session.Messages)-1]
 		if last.Role == "assistant" {
-			footer.Println(ui.AgentBlock("agent> ", last.Content))
+			footer.Println(ui.AgentReply("agent> ", last.Content))
 			return
 		}
 	}
 	if result.Blocked {
 		if text := runtime.WaitText(result.Session.Messages); text != "" {
-			footer.Println(ui.AgentBlock("agent> ", text))
+			footer.Println(ui.AgentReply("agent> ", text))
 		}
 		footer.Println(ui.Subtle("(the agent is waiting for your reply)"))
 		return
@@ -726,8 +729,11 @@ func detectRepoRoot(workdir string) string {
 // mirrors it into the workflow progress row.
 func interactiveRunOptions(ui render.Palette, stream *render.StreamRenderer, footer *render.FooterBar, observe func(kind, detail string)) runtime.RunOptions {
 	stream.SetFooter(footer)
+	// An exit ends the turn, not the session: the next message continues
+	// the same agent, with its archive and working memory.
 	return runtime.RunOptions{
 		StopOnAssistantMessage: true,
+		ExitEndsTurn:           true,
 		ContinueOnToolError:    true,
 		OnAssistantMessage: func(message string) {
 			stream.Clear()

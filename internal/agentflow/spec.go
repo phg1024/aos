@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"aos/internal/capability"
+	"aos/internal/runtime"
 	"aos/internal/workflow"
 )
 
@@ -20,6 +21,9 @@ type WorkflowSpec struct {
 	// Verification gates the workflow on a verifier's recorded exit. Absent
 	// means policy none: success follows the entry agent alone.
 	Verification *VerificationSpec `json:"verification,omitempty"`
+	// Recall switches the memory-recall aids for every agent of the
+	// workflow, e.g. {"no_agent_index": true}. Absent turns them all on.
+	Recall runtime.RecallPolicy `json:"recall,omitzero"`
 }
 
 // VerificationSpec names the agent whose recorded kernel exit is the

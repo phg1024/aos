@@ -1,0 +1,40 @@
+Here is your current session context.
+
+{
+  "workflow": "golden",
+  "agent_id": "writer",
+  "process_id": "",
+  "goal": "",
+  "history": [
+    {
+      "role": "user",
+      "content": "[#121] goal"
+    },
+    {
+      "role": "notice",
+      "content": "[#122] runtime notice: x"
+    }
+  ],
+  "memory_refs": [
+    {
+      "artifact_id": "art-000042",
+      "message_count": 120,
+      "from_seq": 1,
+      "to_seq": 120,
+      "archived": "2026-10-29T04:05:00Z",
+      "tools": [
+        {
+          "name": "run",
+          "count": 40
+        }
+      ],
+      "paths": [
+        "/work/pt/src/bvh.cpp"
+      ]
+    }
+  ],
+  "working_memory": "Working memory v3 (0001-01-01 00:00, art-000099), as of your last compaction; later update_memory calls are in the history below. It is the record you keep of what is current; the archive is history.\ndecisions:\n- leaf2: rejected: biased build [evidence 236-243]\n\n",
+  "tool_errors": 0
+}
+
+Respond with the next action JSON only.
