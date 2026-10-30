@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/artifact"
 	"aos/internal/kernel"
@@ -163,5 +165,44 @@ func TestHandoffsIndexACheckpointOnACopy(t *testing.T) {
 	if _, err := memprobe.RunHandoffs(context.Background(), memprobe.Config{StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(),
 		Completer: &scriptedCompleter{}, NoWorkingMemory: true}, []string{checkpoint}); err == nil {
 		t.Fatal("a handoff without working memory should be refused")
+	}
+}
+
+// failingOnce fails its first call, then answers.
+type failingOnce struct{ calls int }
+
+func (c *failingOnce) CompleteJSON(_ context.Context, _, _ string, target any) error {
+	c.calls++
+	if c.calls == 1 {
+		return errors.New("endpoint down")
+	}
+	return json.Unmarshal([]byte(`{"action":{"type":"message","message":"TG4."}}`), target)
+}
+
+// Without BackendRetry a failed model call takes a step, as before d65b94f,
+// and nothing is retried; with it the call is retried within the step.
+func TestProbesRetryModelCallsOnlyWhenAsked(t *testing.T) {
+	stateDir, checkpoint, _ := probedRun(t)
+	probes := []memprobe.Probe{{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `TG4`}}
+	run := func(retry *runtime.BackendRetryPolicy) (memprobe.Sample, string) {
+		t.Helper()
+		work := t.TempDir()
+		samples, err := memprobe.Run(context.Background(), memprobe.Config{
+			StateDir: stateDir, WorkDir: work, Workflow: probeWorkflow(), Completer: &failingOnce{}, BackendRetry: retry,
+		}, probes)
+		if err != nil || len(samples) != 1 {
+			t.Fatalf("samples = %+v, %v", samples, err)
+		}
+		events, _ := os.ReadFile(filepath.Join(work, "kernel", "events.json"))
+		return samples[0], string(events)
+	}
+
+	sample, events := run(nil)
+	if sample.Error != "" || !sample.Correct || sample.Steps != 2 || sample.BackendErrors != 1 || strings.Contains(events, "backend.retry") {
+		t.Fatalf("without retry the failure should take a step and nothing be retried: %+v", sample)
+	}
+	sample, events = run(&runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond})
+	if sample.Error != "" || !sample.Correct || sample.BackendErrors != 1 || !strings.Contains(events, "backend.retry") {
+		t.Fatalf("with retry the failed call should be retried: %+v", sample)
 	}
 }
