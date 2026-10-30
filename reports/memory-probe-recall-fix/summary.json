@@ -1,0 +1,680 @@
+{
+ "rows": [
+  {
+   "probe": "r2-first-sah",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 8,
+   "contra": 1,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 36570.444444444445,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-first-sah",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 8,
+   "contra": 1,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 38787.22222222222,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-root-exit",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 6,
+   "contra": 3,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 36304,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-root-exit",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 8,
+   "contra": 1,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 38584.333333333336,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-shadow-limit",
+   "kind": "recorded-wrong",
+   "arm": "C",
+   "n": 9,
+   "frozen": 8,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 40739.444444444445,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-shadow-limit",
+   "kind": "recorded-wrong",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 42963.333333333336,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r2-verify-dir",
+   "kind": "unrecorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 2,
+   "main": 1,
+   "exact": 1,
+   "contra": 8,
+   "repeats_wrong_entry": 0,
+   "steps": 1.2222222222222223,
+   "tokens": 53715.88888888889,
+   "reads": 0.1111111111111111,
+   "bytes_read": 383
+  },
+  {
+   "probe": "r2-verify-dir",
+   "kind": "unrecorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 1,
+   "main": 1,
+   "exact": 1,
+   "contra": 8,
+   "repeats_wrong_entry": 0,
+   "steps": 1.2222222222222223,
+   "tokens": 48186.444444444445,
+   "reads": 0.1111111111111111,
+   "bytes_read": 955.1111111111111
+  },
+  {
+   "probe": "r5-empty-base",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 0,
+   "contra": 9,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 35396.555555555555,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-empty-base",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 5,
+   "contra": 4,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 36958.555555555555,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-entered-stack",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 7,
+   "contra": 2,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 35473.444444444445,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-entered-stack",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 7,
+   "contra": 2,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 37111.555555555555,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-register-counts",
+   "kind": "unrecorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 0,
+   "exact": 0,
+   "contra": 9,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 35609.555555555555,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-register-counts",
+   "kind": "unrecorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 4,
+   "exact": 3,
+   "contra": 6,
+   "repeats_wrong_entry": 0,
+   "steps": 1.1111111111111112,
+   "tokens": 41474.22222222222,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r5-tir-guard",
+   "kind": "recorded-wrong",
+   "arm": "C",
+   "n": 9,
+   "frozen": 0,
+   "main": 9,
+   "exact": 1,
+   "contra": 8,
+   "repeats_wrong_entry": 0,
+   "steps": 1.6666666666666667,
+   "tokens": 62210.555555555555,
+   "reads": 0.1111111111111111,
+   "bytes_read": 1476.111111111111
+  },
+  {
+   "probe": "r5-tir-guard",
+   "kind": "recorded-wrong",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 0,
+   "main": 6,
+   "exact": 2,
+   "contra": 7,
+   "repeats_wrong_entry": 3,
+   "steps": 1.3333333333333333,
+   "tokens": 53492.444444444445,
+   "reads": 0.2222222222222222,
+   "bytes_read": 3038.777777777778
+  },
+  {
+   "probe": "r8-trace-share",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 36068.22222222222,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r8-trace-share",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 37539.444444444445,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r8-small-node",
+   "kind": "recorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 36138.555555555555,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r8-small-node",
+   "kind": "recorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1.1111111111111112,
+   "tokens": 50445.22222222222,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "kind": "unrecorded",
+   "arm": "C",
+   "n": 9,
+   "frozen": 7,
+   "main": 9,
+   "exact": 7,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 2.6666666666666665,
+   "tokens": 98458.33333333333,
+   "reads": 0.7777777777777778,
+   "bytes_read": 3125.222222222222
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "kind": "unrecorded",
+   "arm": "A1",
+   "n": 9,
+   "frozen": 9,
+   "main": 9,
+   "exact": 9,
+   "contra": 0,
+   "repeats_wrong_entry": 0,
+   "steps": 1,
+   "tokens": 42211.77777777778,
+   "reads": 0,
+   "bytes_read": 0
+  }
+ ],
+ "primary": {
+  "A1_main": 5,
+  "C_main": 1,
+  "n": 18,
+  "fisher_p": 0.1774193548387097
+ },
+ "by_kind": {
+  "C recorded": {
+   "n": 54,
+   "steps": 1,
+   "tokens": 35991.87037037037,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  "C recorded-wrong": {
+   "n": 18,
+   "steps": 1.3333333333333333,
+   "tokens": 51475,
+   "reads": 0.05555555555555555,
+   "bytes_read": 738.0555555555555
+  },
+  "C unrecorded": {
+   "n": 27,
+   "steps": 1.6296296296296295,
+   "tokens": 62594.59259259259,
+   "reads": 0.2962962962962963,
+   "bytes_read": 1169.4074074074074
+  },
+  "C all": {
+   "n": 99,
+   "steps": 1.2323232323232323,
+   "tokens": 46062.27272727273,
+   "reads": 0.09090909090909091,
+   "bytes_read": 453.1212121212121
+  },
+  "A1 recorded": {
+   "n": 54,
+   "steps": 1.0185185185185186,
+   "tokens": 39904.38888888889,
+   "reads": 0,
+   "bytes_read": 0
+  },
+  "A1 recorded-wrong": {
+   "n": 18,
+   "steps": 1.1666666666666667,
+   "tokens": 48227.88888888889,
+   "reads": 0.1111111111111111,
+   "bytes_read": 1519.388888888889
+  },
+  "A1 unrecorded": {
+   "n": 27,
+   "steps": 1.1111111111111112,
+   "tokens": 43957.48148148148,
+   "reads": 0.037037037037037035,
+   "bytes_read": 318.3703703703704
+  },
+  "A1 all": {
+   "n": 99,
+   "steps": 1.0707070707070707,
+   "tokens": 42523.14141414141,
+   "reads": 0.030303030303030304,
+   "bytes_read": 363.0808080808081
+  }
+ },
+ "trusted_index_without_read": [
+  {
+   "probe": "r2-root-exit",
+   "sample": 1,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 2,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 3,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-empty-base",
+   "sample": 2,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-empty-base",
+   "sample": 3,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-register-counts",
+   "sample": 1,
+   "draw": 1,
+   "main": false,
+   "exact": false,
+   "contra": true
+  },
+  {
+   "probe": "r5-register-counts",
+   "sample": 2,
+   "draw": 1,
+   "main": true,
+   "exact": false,
+   "contra": true
+  },
+  {
+   "probe": "r5-register-counts",
+   "sample": 3,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 1,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 2,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 3,
+   "draw": 1,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 4,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 5,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 6,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 4,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 5,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 6,
+   "draw": 2,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 7,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 8,
+   "draw": 3,
+   "main": true,
+   "exact": false,
+   "contra": true
+  },
+  {
+   "probe": "r2-root-exit",
+   "sample": 9,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-empty-base",
+   "sample": 7,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-empty-base",
+   "sample": 8,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-empty-base",
+   "sample": 9,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-register-counts",
+   "sample": 8,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r5-register-counts",
+   "sample": 9,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 7,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 8,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  },
+  {
+   "probe": "r8-sibling-pairs",
+   "sample": 9,
+   "draw": 3,
+   "main": true,
+   "exact": true,
+   "contra": false
+  }
+ ],
+ "header_agent_index_bytes": [
+  [
+   1,
+   "r2",
+   3,
+   5554
+  ],
+  [
+   1,
+   "r5",
+   3,
+   4597
+  ],
+  [
+   1,
+   "r8",
+   2,
+   3437
+  ],
+  [
+   2,
+   "r2",
+   3,
+   5088
+  ],
+  [
+   2,
+   "r5",
+   2,
+   3247
+  ],
+  [
+   2,
+   "r8",
+   2,
+   3743
+  ],
+  [
+   3,
+   "r2",
+   3,
+   4679
+  ],
+  [
+   3,
+   "r5",
+   3,
+   4343
+  ],
+  [
+   3,
+   "r8",
+   2,
+   3195
+  ]
+ ]
+}

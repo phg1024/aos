@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Evaluation: Agent-Written Archive Index (A1), Follow-Up on the Handoff Fix</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Evaluation: Agent-Written Archive Index (A1), Follow-Up on the Handoff Fix</h1>
+    <p>The first A1 evaluation (<code>memory-probe-recall.html</code>) stopped after its handoff phase: 5 of 27 handoffs left an index. aos code changed the handoff in <code>50a7cfe</code>. This follow-up re-ran the same frozen plan on that runtime: the same 9 segments, 3 draws each, the same 11 probes, arms, rubric and stop rule.</p>
+    <p><b>The handoff now leaves an index:</b> <span class="good">26 of 27</span> (was 5), the stop rule passed, and all 198 probe answers ran.</p>
+    <p><b>Primary result, not significant:</b> on the two unrecorded probes the plan names as primary, A1 gave the main fact in <b>5 of 18</b> answers against <b>1 of 18</b> for C (two-sided Fisher p = 0.18).</p>
+    <ul>
+      <li><code>r5-register-counts</code>: <span class="good">4/9 vs 0/9</span>. All four right answers came from the index line (no memory read). The three answers from draw 2, which kept no index for that segment, were all wrong.</li>
+      <li><code>r2-verify-dir</code>: <b>1/9 vs 1/9</b>, but this half did not test the index. Every draw indexed the truth (#37, "unreadable, Operation not permitted"), yet the header shows agent indexes newest first within 6 KB, and the four round-2 indexes total about 8 KB. The oldest, which holds this truth, was replaced by a pointer in all three draws.</li>
+    </ul>
+    <p><b>Secondary:</b> <code>r8-sibling-pairs</code> exact <span class="good">9/9 vs 7/9</span>. A1 took the number from the index with no read; C needed a search and a read (2.7 model calls and 98K tokens per answer, against 1.0 and 42K).</p>
+    <p><b>Harm check:</b> 28 A1 answers stated a fact found only in an index line, without reading what it cites. 27 of them gave the main fact right. None repeated an error from an index line; one misread a correct line.</p>
+    <p><b>One possible regression, not established:</b> <code>r5-tir-guard</code> main 6/9 in A1 against 9/9 in C (Fisher p = 0.21). Three A1 answers say the guard never fires, restating the wrong working-memory entry, which no C answer did outright.</p>
+    <p><b>Cost:</b></p>
+    <ul>
+      <li>Answers: A1 used fewer tokens overall (42.5K vs 46.1K per answer), because unrecorded probes no longer search. Recorded probes cost about 3.9K more tokens per answer, roughly the 4.3 KB of index in the header.</li>
+      <li>Handoffs: about 198K tokens each (154K in the first run).</li>
+    </ul>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Plan:</b> <code>reports/memory-probe-recall-fix/PLAN.md</code>, frozen in <code>affbad2</code> before any model call. Unchanged from the first plan (<code>../memory-probe-recall/PLAN.md</code>) except the runtime; the stop rule was part of it from the start and ran inside <code>run.sh</code>.</li>
+    <li><b>Runtime:</b> <code>50a7cfe</code> (aos code), on <code>68538ea</code>, merged into this branch. memprobe unchanged.</li>
+    <li><b>Binary:</b> <code>.cache/bin/aos-eval-affbad2</code> (sha <code>282e372b64c9</code>), probes sha prefix <code>e5e11d8560f5</code>.</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> on phg-gpu (vLLM), context 65536, compaction ratio 0.8, temperature 0.6, top_p 0.95, thinking budget 16384, 12 steps per answer.</li>
+    <li><b>Timeline (2026-10-30):</b>
+      <ul>
+        <li>handoffs 19:28:30Z to 19:59:09Z (30.6 min);</li>
+        <li>gate PASS at 19:59:09Z;</li>
+        <li>arm C 19:59Z to 20:48Z;</li>
+        <li>A1 draws 1 to 3 20:48Z to 21:40:06Z.</li>
+      </ul>
+      No handoff or answer failed, so no re-run was needed.</li>
+    <li><b>Arms:</b> C ran with every recall aid off (<code>RecallOff()</code>). A1 ran with <code>--recall a1</code> and the draw's indexes on the probe checkpoints' segments, 3 answers per draw per probe. The other aids (w1, w2, w4) were off in both arms, and in the handoffs too.</li>
+  </ul>
+
+  <h2>Step 1: Handoffs</h2>
+  <p><b>Stop rule:</b> PASS. 26 of 27 draws kept an index line (rule: at least 14). art-000414 kept one in 3 of 3 draws and art-001661 in 2 of 3 (rule: at least 2 each).</p>
+  <table>
+    <tr><th></th><th>first run (<code>d65b94f</code>)</th><th>this run (<code>50a7cfe</code>)</th></tr>
+    <tr><td>handoffs that kept an index</td><td class="num bad">5 / 27</td><td class="num good">26 / 27</td></tr>
+    <tr><td>first action was <code>index_memory</code></td><td class="num">0 / 27 (25 began with working memory)</td><td class="num">26 / 27</td></tr>
+    <tr><td>archive equal to the notice's range</td><td class="num">4 / 27</td><td class="num">27 / 27</td></tr>
+    <tr><td>handoffs with lines rejected or a refused write</td><td class="num">15 refused whole, 0 retried</td><td class="num">17 had lines rejected, all 17 got the retry step</td></tr>
+    <tr><td>lines per kept index</td><td class="num">9 to 19</td><td class="num">1 to 30 (median 12.5)</td></tr>
+    <tr><td>model calls / tokens per handoff</td><td class="num">2.6 / 154K</td><td class="num">3.2 / 198K (5.35M in all)</td></tr>
+  </table>
+  <ul>
+    <li><b>How handoffs ended</b> (<code>handoff_end</code>, asked for by aos code):
+      <ul>
+        <li><code>other_action</code> 20: the agent's next step was not a memory write, so the handoff compacted.</li>
+        <li><code>step_limit</code> 4.</li>
+        <li><code>overrun</code> 2: the 16 KB bound.</li>
+        <li><code>no_write</code> 1.</li>
+      </ul>
+      So after the fix the 16 KB bound ended 2 handoffs, and both had already kept their index (art-001657 draws 1 and 3).</li>
+    <li><b>Rejected lines:</b> 71 in all.
+      <ul>
+        <li>36 cited messages outside the range.</li>
+        <li>13 were over the cap.</li>
+        <li>11 were malformed.</li>
+        <li>11 more were cut from the report ("... and N more"), reason not shown.</li>
+      </ul>
+      Every handoff with a rejection got its retry step; the good lines were kept either way.</li>
+    <li><b>The one handoff with no index:</b> art-001657 draw 2. Its first and only action was <code>run</code>, a tool the handoff process does not have, and it ended at 1 step (<code>no_write</code>). There was no reminder, because the reminder aid (w4) was off by plan.</li>
+    <li><b>Two indexes kept but malformed:</b> art-000503 draw 3 and art-001608 draw 1 each wrote the whole index on one line ("59: ... 61: ... 63: ..."). The parser kept each as one line citing only its first message (#59 or #1), 1173 and 908 bytes. The text is shown, but its message numbers after the first are not parsed. The gate counts them, as its rule says.</li>
+  </ul>
+  <p class="note">Per handoff (tools, steps, end, retry, rejected lines by reason, bytes against cap, tokens): <code>handoff_summary.json</code>.</p>
+
+  <h2>Step 2: Probes, Hand-Read</h2>
+  <p>Main, exact and contra are the own-memory rubric (<code>../memory-probe-own-memory/handread.py</code>). The frozen regex score is shown next to them and is not the result: it counted all 18 <code>r5-register-counts</code> answers right, against a hand-read 4. A1 answers are 1 to 9: draw 1's indexes for 1 to 3, draw 2's for 4 to 6, draw 3's for 7 to 9.</p>
+  <table>
+    <tr><th>probe</th><th>kind</th><th>C main / exact / contra</th><th>A1 main / exact / contra</th><th>frozen regex C / A1</th><th>steps C / A1</th><th>reads C / A1</th></tr>
+    <tr><td><code>r2-verify-dir</code></td><td>unrecorded</td><td class="num">1 / 1 / 8</td><td class="num">1 / 1 / 8</td><td class="num">2 / 1</td><td class="num">1.22 / 1.22</td><td class="num">0.11 / 0.11</td></tr>
+    <tr><td><code>r5-register-counts</code></td><td>unrecorded</td><td class="num">0 / 0 / 9</td><td class="num good">4 / 3 / 6</td><td class="num">9 / 9</td><td class="num">1.00 / 1.11</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r8-sibling-pairs</code></td><td>unrecorded</td><td class="num">9 / 7 / 0</td><td class="num good">9 / 9 / 0</td><td class="num">7 / 9</td><td class="num">2.67 / 1.00</td><td class="num">0.78 / 0</td></tr>
+    <tr><td><code>r2-shadow-limit</code></td><td>recorded-wrong</td><td class="num">9 / 9 / 0</td><td class="num">9 / 9 / 0</td><td class="num">8 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r5-tir-guard</code></td><td>recorded-wrong</td><td class="num">9 / 1 / 8</td><td class="num bad">6 / 2 / 7</td><td class="num">0 / 0</td><td class="num">1.67 / 1.33</td><td class="num">0.11 / 0.22</td></tr>
+    <tr><td><code>r2-first-sah</code></td><td>recorded</td><td class="num">9 / 8 / 1</td><td class="num">9 / 8 / 1</td><td class="num">9 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r2-root-exit</code></td><td>recorded</td><td class="num">9 / 6 / 3</td><td class="num">9 / 8 / 1</td><td class="num">9 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r5-empty-base</code></td><td>recorded</td><td class="num">9 / 0 / 9</td><td class="num good">9 / 5 / 4</td><td class="num">9 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r5-entered-stack</code></td><td>recorded</td><td class="num">9 / 7 / 2</td><td class="num">9 / 7 / 2</td><td class="num">9 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r8-trace-share</code></td><td>recorded</td><td class="num">9 / 9 / 0</td><td class="num">9 / 9 / 0</td><td class="num">9 / 9</td><td class="num">1 / 1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>r8-small-node</code></td><td>recorded</td><td class="num">9 / 9 / 0</td><td class="num">9 / 9 / 0</td><td class="num">9 / 9</td><td class="num">1 / 1.11</td><td class="num">0 / 0</td></tr>
+  </table>
+
+  <h3>The Unrecorded Probes</h3>
+  <ul>
+    <li><b><code>r5-register-counts</code></b> (truth #31 to #35: no offline compiler, occupancy proxy 1024 from #33).
+      <ul>
+        <li>Draws 1 and 3 indexed it. Draw 1: "31: no offline metal compiler (missing Metal Toolchain); max_threads_per_group trace=1024". Draw 3: separate lines at #31 and #33.</li>
+        <li>Four answers (A1 2, 3, 8, 9) gave 1024 with no read. A1 2 places it "earlier in this phase" rather than this round, so it is main but not exact.</li>
+        <li>A1 1 cites the line but calls 1024 a device cap and says no occupancy figure was obtained (contra). A1 7, draw 3, ignored its lines.</li>
+        <li>Draw 2 (A1 4 to 6) had no index for the segment and gave the same wrong answer as every C answer: no occupancy figure this round.</li>
+      </ul></li>
+    <li><b><code>r2-verify-dir</code></b> (truth #37: the verification directory is not readable).
+      <ul>
+        <li>The handoffs indexed it in all three draws. The probed agent never saw those lines: the header's cap shows indexes newest first, so it showed the three later round-2 segments (5554, 5088 and 4679 bytes) and replaced art-000414's index with "over the header's cap: read_memory artifact_id=art-000414 shows it".</li>
+        <li>In this probe setup that read would not have shown it either: the index is on the probe checkpoint's segment reference, not in the segment. This is a known difference in the plan.</li>
+        <li>So 1/9 against 1/9 measures the same no-index condition in both arms. In each arm the one right answer searched for <code>frozen.json</code> and read #36 onward.</li>
+      </ul></li>
+    <li><b><code>r8-sibling-pairs</code></b>.
+      <ul>
+        <li>All three draws indexed #30, the writer-log grep: "line 163: 32-byte sibling-pair BVH blocks already tried, wash (n=41, +0.104ms)".</li>
+        <li>All 9 A1 answers gave that result with no read. In C, 7 searched and read #30 (or #29 to #31) and gave it; 2 answered from the rejected list without a number.</li>
+        <li>The probe file lists #29 and #31 as truth, so #30's lines were not in the plan's index-quality set. They are graded below as an extra: all three hold.</li>
+      </ul></li>
+  </ul>
+
+  <h3>Regression Check</h3>
+  <ul>
+    <li><b><code>r5-tir-guard</code>: main 6/9 in A1 against 9/9 in C.</b>
+      <ul>
+        <li>A1 1, 5 and 9 say the reflectance-1 branch never fires, restating the wrong working-memory entry. The archive (#14, #63) shows it fires for rays entering the glass, because eta = ior_t / ior_i.</li>
+        <li>Draws 2 and 3 have an index line for #14. Draw 2's reads "pt_fresnel (TIR guard (ior_t/ior_i)^2, must not correct)", and A1 5 argues from (ior_t/ior_i)^2 to the wrong conclusion. That is suggestive, not shown.</li>
+        <li>On the other side: exact was 2 vs 1. A1 4 read #13 to #15 with no search, guided by the index, and corrected its entry.</li>
+        <li>Fisher p for main is 0.21. With 9 answers per arm this is not a measured regression, but it should be watched in a live run.</li>
+      </ul></li>
+    <li><b><code>r5-empty-base</code>: exact 5/9 vs 0/9.</b> All 9 C answers, and A1 1 and 4 to 6, say the shaders were missing (contra). The A1 answers that got the mechanism right (round-3 header, so the round-4 shaders failed to compile) took it from the index line at #68, with no read. Three of those five add a wrong side detail; a stricter reading would leave exact at 2/9.</li>
+    <li><b><code>r2-root-exit</code>: exact 8/9 vs 6/9.</b> All 9 A1 answers quote 107.004 / 125.973 from the index line at #143 or #135 to #143; C quotes 107.0 / 126.0 from working memory. The contra answers misstate the no-clamp baseline (the archive: 101.150 / 116.465 at #133).</li>
+    <li>The other recorded and recorded-wrong probes are equal between arms.</li>
+  </ul>
+
+  <h2>Harm Check</h2>
+  <table>
+    <tr><th>per answer</th><th>C</th><th>A1</th></tr>
+    <tr><td>model calls, all / recorded / unrecorded</td><td class="num">1.23 / 1.00 / 1.63</td><td class="num">1.07 / 1.02 / 1.11</td></tr>
+    <tr><td>tokens, all / recorded / unrecorded</td><td class="num">46.1K / 36.0K / 62.6K</td><td class="num">42.5K / 39.9K / 44.0K</td></tr>
+    <tr><td>memory reads (bytes read)</td><td class="num">0.09 (453)</td><td class="num">0.03 (363)</td></tr>
+    <tr><td>agent index bytes in the header</td><td class="num">0</td><td class="num">3195 to 5554 (mean 4277)</td></tr>
+  </table>
+  <ul>
+    <li><b>Answers that trust an index line without reading what it cites:</b> 28.
+      <ul>
+        <li>An A1 answer counts here if it states a fact that is in an index line but not in the probe checkpoint's working memory, with no memory read. The facts: 107.004 (root-exit, 9 answers), +0.104 (sibling-pairs, 9), round-3 header (empty-base, 5) and 1024 (register-counts, 5).</li>
+        <li>27 of the 28 gave the main fact right. 3 are contra, each for a side detail: register-counts A1 1 and 2 (above) and root-exit A1 8 (the average got worse by "+12 to +22 ms"; the archive gives +9.5 to +16.5).</li>
+      </ul></li>
+    <li><b>Answers wrong because of an index line:</b> none found. The lines these answers used all hold, and register-counts A1 1 misreads a correct line. The tir-guard answers above are the one place where an index line may have pushed an answer the wrong way; that is not established.</li>
+  </ul>
+
+  <h2>Index Quality</h2>
+  <p>338 lines were kept across 26 indexes. By plan, 40 were drawn with <code>random.Random(20261030)</code>, plus every line citing a truth message of an unrecorded probe (6; one overlaps): 45 lines in all. Each was read against the messages it cites (<code>index_lines.py</code>, <code>index_lines.md</code>; grades in <code>index_grades.json</code>):</p>
+  <ul>
+    <li><span class="good">37 hold</span>, <b>8 partly</b>, <b>0 wrong</b>.</li>
+    <li>4 of the 8 partly cite the tool result of an edit or write whose detail is in the agent's call one message earlier (for example "75: rewrote pt_integrator.metal (constant params, per-thread atomic sample count)"; the detail is in #74).</li>
+    <li>2 cite #31 for facts that are at #33: "missing Metal Toolchain" and 1024. #31 only shows <code>xcrun</code> finding a metal path.</li>
+    <li>2 have a detail not in the cited message ("builder that gave 105ms"; a "-0.19%" not in #9).</li>
+    <li>Every line that cites a truth message holds, apart from the #31 lines just noted. The three #30 sibling-pairs lines, outside the plan's set, hold.</li>
+  </ul>
+  <ul>
+    <li><b>Size:</b> 1 to 30 lines and about 0.9 to 2.6 KB per index, against per-segment caps of 1536 to 4096 bytes. No line was dropped by the plan's range rule: every archive lay inside its original segment.</li>
+    <li><b>Coverage:</b> lines cite 1 to 71 of a segment's messages, typically about half (<code>index_lines.py</code> prints each).</li>
+  </ul>
+
+  <h2>For aos code</h2>
+  <ul>
+    <li><b>The fix works on all four points it targeted:</b> the index is asked for first, the archive equals the notice range, rejected lines no longer discard the index, and refusals get a retry.</li>
+    <li><b>The header cap now decides what is seen.</b> With 4 indexed segments the oldest segment's index was replaced by a pointer, and that segment held the fact the probe asked for. Showing newest first favours recent segments. The oldest segments, which working memory has had the longest to drop, lose their index first.</li>
+    <li><b>Run-on indexes:</b> 2 of 26 were written on one line and kept as one line. A parser that splits "N: ... M: ..." within a line, or a rejection of over-long lines, would catch it.</li>
+  </ul>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li><b>Re-run handoffs, not live ones.</b> The handoff process had only the memory tools, and earlier segments had no index. In the probes the index sits on the checkpoint's segment references, so a <code>read_memory</code> of a segment does not show it.</li>
+    <li><b>Small samples.</b> 9 answers per probe per arm, from 3 draws of one model on one live run.</li>
+    <li><b>Grading:</b> by hand and not blind; A1 answers can show they used the index. This session graded the three unrecorded probes. Two reader agents, briefed with the rubric, the earlier grades and the archive, graded the other eight; two of their claims were spot-checked against the archive and held. Their uncertain calls are listed in <code>grading/grades-a.json</code> and <code>grades-b.json</code>.</li>
+    <li><b>Direction of the sibling-pairs result:</b> not graded. The log gives a mean in the candidate's favour and p10 and p50 in the base's.</li>
+    <li><b>Other aids off:</b> w1, w2 and w4 were off in both arms and in the handoffs, as in the plan; this is not a live a1 configuration.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li>All in <code>reports/memory-probe-recall-fix/</code>.</li>
+    <li>Plan and run: <code>PLAN.md</code>, <code>run.sh</code>, <code>run.log</code>.</li>
+    <li>Gate: <code>gate.py</code>, <code>gate.log</code>.</li>
+    <li>Handoffs and indexes: <code>handoffs.jsonl</code>, <code>make_indexes.py</code>, <code>indexes-d1..3.json</code>, <code>indexes.log</code>, <code>handoff_summary.py</code> / <code>.json</code>.</li>
+    <li>Answers: <code>samples-C.jsonl</code>, <code>samples-A1-d1..3.jsonl</code>; <code>collect.py</code> and <code>answers.md</code> (all answers with their reads).</li>
+    <li>Grading: <code>grading/</code> (answers per probe and the two grade files), <code>handread.py</code>, <code>summarize.py</code>, <code>summary.json</code>.</li>
+    <li>Index quality: <code>index_lines.py</code>, <code>index_lines.json</code> / <code>.md</code>.</li>
+    <li>The <code>work-*/</code> state copies are not committed.</li>
+  </ul>
+</body>
+</html>

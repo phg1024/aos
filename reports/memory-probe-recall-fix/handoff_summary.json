@@ -1,0 +1,756 @@
+{
+ "handoffs": [
+  {
+   "checkpoint": "art-000410",
+   "draw": 1,
+   "pid": "pid-000028",
+   "outcome": "indexed",
+   "lines": 20,
+   "index_bytes": "2523 of 3712",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 57,
+   "archived": "1-57",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 167792,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000410",
+   "draw": 2,
+   "pid": "pid-000029",
+   "outcome": "indexed",
+   "lines": 15,
+   "index_bytes": "2181 of 3712",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 57,
+   "archived": "1-57",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 166469,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000410",
+   "draw": 3,
+   "pid": "pid-000030",
+   "outcome": "indexed",
+   "lines": 15,
+   "index_bytes": "1979 of 3712",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 57,
+   "archived": "1-57",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 3
+   },
+   "first_tool": "index_memory",
+   "tokens": 280549,
+   "tools": [
+    "index_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 1,
+   "pid": "pid-000031",
+   "outcome": "indexed",
+   "lines": 22,
+   "index_bytes": "1441 of 2944",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 102,
+   "archived": "58-102",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 2
+   },
+   "first_tool": "index_memory",
+   "tokens": 229318,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 2,
+   "pid": "pid-000032",
+   "outcome": "indexed",
+   "lines": 9,
+   "index_bytes": "1321 of 2944",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 102,
+   "archived": "58-102",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 170026,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000503",
+   "draw": 3,
+   "pid": "pid-000033",
+   "outcome": "indexed",
+   "lines": 1,
+   "index_bytes": "1178 of 2944",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 102,
+   "archived": "58-102",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 169203,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 1,
+   "pid": "pid-000034",
+   "outcome": "indexed",
+   "lines": 30,
+   "index_bytes": "2318 of 4096",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 192,
+   "archived": "106-192",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 174137,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 2,
+   "pid": "pid-000035",
+   "outcome": "indexed",
+   "lines": 17,
+   "index_bytes": "2244 of 4096",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 192,
+   "archived": "106-192",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 6,
+    "unlisted": 4
+   },
+   "first_tool": "index_memory",
+   "tokens": 239400,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000553",
+   "draw": 3,
+   "pid": "pid-000036",
+   "outcome": "indexed",
+   "lines": 26,
+   "index_bytes": "2300 of 4096",
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_end": "step_limit",
+   "handoff_retried": false,
+   "notice_through": 192,
+   "archived": "106-192",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 291708,
+   "tools": [
+    "index_memory",
+    "update_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 1,
+   "pid": "pid-000037",
+   "outcome": "indexed",
+   "lines": 13,
+   "index_bytes": "1564 of 3328",
+   "model_calls": 2,
+   "handoff_steps": 1,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 245,
+   "archived": "195-245",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 117279,
+   "tools": [
+    "index_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 2,
+   "pid": "pid-000038",
+   "outcome": "indexed",
+   "lines": 12,
+   "index_bytes": "1346 of 3328",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 245,
+   "archived": "195-245",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 177012,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-000642",
+   "draw": 3,
+   "pid": "pid-000039",
+   "outcome": "indexed",
+   "lines": 9,
+   "index_bytes": "1028 of 3328",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 245,
+   "archived": "195-245",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 5
+   },
+   "first_tool": "index_memory",
+   "tokens": 177351,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 1,
+   "pid": "pid-000040",
+   "outcome": "indexed",
+   "lines": 1,
+   "index_bytes": "912 of 1920",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 29,
+   "archived": "1-29",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 165846,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 2,
+   "pid": "pid-000041",
+   "outcome": "indexed",
+   "lines": 9,
+   "index_bytes": "1878 of 1920",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 29,
+   "archived": "1-29",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "cap": 5
+   },
+   "first_tool": "index_memory",
+   "tokens": 168850,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001605",
+   "draw": 3,
+   "pid": "pid-000042",
+   "outcome": "indexed",
+   "lines": 11,
+   "index_bytes": "952 of 1920",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 29,
+   "archived": "1-29",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 222361,
+   "tools": [
+    "index_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 1,
+   "pid": "pid-000043",
+   "outcome": "indexed",
+   "lines": 18,
+   "index_bytes": "2083 of 4096",
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_end": "overrun",
+   "handoff_retried": true,
+   "notice_through": 118,
+   "archived": "30-118",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 114048,
+   "tools": [
+    "index_memory",
+    "index_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 2,
+   "pid": "pid-000044",
+   "outcome": "never called index_memory",
+   "lines": 0,
+   "index_bytes": "",
+   "model_calls": 1,
+   "handoff_steps": 1,
+   "handoff_end": "no_write",
+   "handoff_retried": false,
+   "notice_through": 118,
+   "archived": "30-118",
+   "archive_matches_notice": true,
+   "index_calls": 0,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "run",
+   "tokens": 55495,
+   "tools": [
+    "run"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001657",
+   "draw": 3,
+   "pid": "pid-000045",
+   "outcome": "indexed",
+   "lines": 17,
+   "index_bytes": "1988 of 4096",
+   "model_calls": 2,
+   "handoff_steps": 2,
+   "handoff_end": "overrun",
+   "handoff_retried": true,
+   "notice_through": 118,
+   "archived": "30-118",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 2
+   },
+   "first_tool": "index_memory",
+   "tokens": 170656,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 1,
+   "pid": "pid-000046",
+   "outcome": "indexed",
+   "lines": 12,
+   "index_bytes": "1540 of 2816",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 163,
+   "archived": "121-163",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 6
+   },
+   "first_tool": "index_memory",
+   "tokens": 240797,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 2,
+   "pid": "pid-000047",
+   "outcome": "indexed",
+   "lines": 7,
+   "index_bytes": "1337 of 2816",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 163,
+   "archived": "121-163",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 5,
+    "unlisted": 1,
+    "format": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 241661,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-001762",
+   "draw": 3,
+   "pid": "pid-000048",
+   "outcome": "indexed",
+   "lines": 7,
+   "index_bytes": "1333 of 2816",
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_end": "step_limit",
+   "handoff_retried": true,
+   "notice_through": 163,
+   "archived": "121-163",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 6,
+    "unlisted": 6
+   },
+   "first_tool": "index_memory",
+   "tokens": 301146,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 1,
+   "pid": "pid-000049",
+   "outcome": "indexed",
+   "lines": 6,
+   "index_bytes": "1227 of 1536",
+   "model_calls": 4,
+   "handoff_steps": 3,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 15,
+   "archived": "1-15",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "format": 2,
+    "cap": 3
+   },
+   "first_tool": "index_memory",
+   "tokens": 235723,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 2,
+   "pid": "pid-000050",
+   "outcome": "indexed",
+   "lines": 10,
+   "index_bytes": "1492 of 1536",
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_end": "step_limit",
+   "handoff_retried": true,
+   "notice_through": 15,
+   "archived": "1-15",
+   "archive_matches_notice": true,
+   "index_calls": 2,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "cap": 5
+   },
+   "first_tool": "index_memory",
+   "tokens": 233994,
+   "tools": [
+    "index_memory",
+    "index_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003059",
+   "draw": 3,
+   "pid": "pid-000051",
+   "outcome": "indexed",
+   "lines": 8,
+   "index_bytes": "1500 of 1536",
+   "model_calls": 4,
+   "handoff_steps": 4,
+   "handoff_end": "step_limit",
+   "handoff_retried": false,
+   "notice_through": 15,
+   "archived": "1-15",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 229374,
+   "tools": [
+    "index_memory",
+    "update_memory",
+    "update_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 1,
+   "pid": "pid-000052",
+   "outcome": "indexed",
+   "lines": 16,
+   "index_bytes": "2166 of 3584",
+   "model_calls": 2,
+   "handoff_steps": 1,
+   "handoff_end": "other_action",
+   "handoff_retried": false,
+   "notice_through": 72,
+   "archived": "18-72",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {},
+   "first_tool": "index_memory",
+   "tokens": 182841,
+   "tools": [
+    "index_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 2,
+   "pid": "pid-000053",
+   "outcome": "indexed",
+   "lines": 13,
+   "index_bytes": "2205 of 3584",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 72,
+   "archived": "18-72",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 1
+   },
+   "first_tool": "index_memory",
+   "tokens": 245073,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  },
+  {
+   "checkpoint": "art-003129",
+   "draw": 3,
+   "pid": "pid-000054",
+   "outcome": "indexed",
+   "lines": 14,
+   "index_bytes": "1651 of 3584",
+   "model_calls": 3,
+   "handoff_steps": 2,
+   "handoff_end": "other_action",
+   "handoff_retried": true,
+   "notice_through": 72,
+   "archived": "18-72",
+   "archive_matches_notice": true,
+   "index_calls": 1,
+   "index_refusals": 0,
+   "rejected_lines": {
+    "range": 4
+   },
+   "first_tool": "index_memory",
+   "tokens": 184797,
+   "tools": [
+    "index_memory",
+    "update_memory"
+   ],
+   "error": ""
+  }
+ ],
+ "outcomes": {
+  "indexed": 26,
+  "never called index_memory": 1
+ },
+ "handoff_end": {
+  "other_action": 20,
+  "step_limit": 4,
+  "overrun": 2,
+  "no_write": 1
+ },
+ "retried": 17,
+ "with_rejected_lines": 17,
+ "rejected_lines": {
+  "format": 11,
+  "range": 36,
+  "unlisted": 11,
+  "cap": 13
+ },
+ "first_tool": {
+  "index_memory": 26,
+  "run": 1
+ },
+ "archive_matches_notice": 27,
+ "tokens_total": 5352906,
+ "tokens_mean": 198255.77777777778,
+ "model_calls_mean": 3.185185185185185
+}

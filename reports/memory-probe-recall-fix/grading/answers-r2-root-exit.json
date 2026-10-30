@@ -1,0 +1,146 @@
+[
+ {
+  "arm": "C",
+  "sample": 1,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was reverted.\n\nWhat I did: I added pt_ray_aabb_exit so each ray's mesh traversal started with t_max set to the distance at which the ray leaves the bunny's root bounding box (computed once per ray from the root node), instead of the open-ended 1e30f, in both the closest-hit and the shadow traversal.\n\nMeasured effect: 107.0ms best / 126.0ms average at 512x512/64spp, versus ~93ms best / ~97ms average for the same code without it. That is a clear regression, so I removed it entirely (the pt_ray_aabb_exit helper is left in the file but unused). This is recorded in my notes as items (d) of the round-2 progress entry, evidence messages #143 and #151.\n\nWhy it likely hurt: the extra root-node work is paid on every ray, including the many that miss the model or leave almost immediately, while the t-pruning benefit it buys is largely redundant \u2014 the near-first child ordering (the actual round-2 win, 93.5ms -> 64.9ms, #283) already tightens best_t before deep nodes are visited, so a tighter initial t_max adds little but costs a branch and extra live registers.\n\nFor context, the round-2 result stands at render_ms_best=59.1 / gpu_ms_best=58.8 at 512x512/64spp seed 1 (best run; repeats land 60-66ms with ~\u00b15ms machine noise), about 1.8x faster than the 109.656ms gate, with bit-identical PFMs for a given seed."
+ },
+ {
+  "arm": "C",
+  "sample": 2,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 root-AABB exit pruning did not help this round; it regressed and was reverted.\n\nWhat I did: I computed, per ray, the distance at which the ray leaves the BVH root box (via a slab test on node 0 that reports the 'exited' value) and used that as the ray's initial t_max instead of 1e30, in both the closest-hit and the shadow traversal, so every subsequent node test gets a tighter upper bound and the traversal can terminate as soon as it passes the model.\n\nMeasured result: at 512x512/64spp seed 1 it gave render_ms_best=107.0 with render_ms_avg=126.0, versus 101.8-103.4 for the same code without it \u2014 i.e. slower on both best and (especially) average. I reverted it completely; the helper pt_ray_aabb_exit is still defined in shaders/pt_trace.metal but is no longer called by either traversal.\n\nWhy it lost, as far as I can tell: the extra slab test plus the branch that skips the mesh entirely has to be paid on every ray, including the many camera rays that hit the bunny or its caustic region anyway, and the extra live value (the exit distance) and branch cost registers/occupancy in a kernel that is already register-limited. The gain from a tighter t_max was smaller than that fixed cost.\n\nWhat actually did pay off was a different form of early termination: ordering the two children by their 'entered' distance and pushing a child only when it is actually hit, which cut the best time from ~93.5ms to ~64.9ms with a bit-identical PFM (evidence: messages #143/#151 for the root-exit regression, #283/#285 for the near-first win; final best this round 59.1ms render / 58.8ms gpu)."
+ },
+ {
+  "arm": "C",
+  "sample": 3,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was reverted. Early in round 2 I added a root-node slab test that reported where each ray exits the bunny's outermost (model-space) AABB and used that distance as the traversal's initial t_max in both the closest-hit and shadow traversals. Measured at 512x512/64spp it came out at 107.0 ms best / 126.0 ms average versus ~101.8-103.4 ms best for the same build without it, i.e. a clear regression (evidence: my round-2 progress notes, messages #143 and #151). The likely reason is that most rays never hit the bunny at all, so the extra root test plus the branch to set up the tighter bound costs more than the pruning saves, and it also adds a value to keep live in registers. The helper pt_ray_aabb_exit is now unused in the live source. What did win this round instead was near-first child ordering in the closest-hit traversal (test both children, descend into the one with the smaller slab 'entered' distance, push the other only if it is also hit) plus shrinking BVH leaves from 4 to 1 triangle: render_ms_best 59.1-60.4 / gpu_ms_best 58.8-60.1, about 1.8x the 109.656 ms gate, with bit-identical PFMs for a given seed."
+ },
+ {
+  "arm": "C",
+  "sample": 4,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No. I implemented that exact optimization this round \u2014 computing the ray's exit distance against the BVH root box and using it as the traversal's t_max instead of an open-ended bound \u2014 in both the closest-hit and the shadow traversals. It made the renderer slower, not faster: render_ms_best went to ~107ms with render_ms_avg ~126ms, versus the ~101ms best / ~97ms average of the same build without it, so I fully reverted it (the pt_ray_aabb_exit helper is still in the shader but unused). My read on why: the extra slab computation and the extra live variable cost more per traversal step than the pruning saves, since near-first child ordering plus per-node t_max already prunes most of the far subtree. The gains this round instead came from visiting the nearer BVH child first (93.5 -> 64.9ms) and shrinking BVH leaves to one triangle (64.9 -> ~59-62ms), both bit-identical in output. Evidence: my round-2 progress notes citing messages #143/#151 (the regression and revert) and #283/#316 (the changes that did work)."
+ },
+ {
+  "arm": "C",
+  "sample": 5,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that experiment regressed and was reverted, so it contributes nothing to the current speedup.\n\nWhat I tried: computing, once per ray, the distance at which the ray exits the BVH root's axis-aligned box and using that as the traversal's t_max instead of an open-ended / current-best value, in both the closest-hit and shadow traversals (the pt_ray_aabb_exit helper is still in shaders/pt_trace.metal but is now unused).\n\nMeasured result: render_ms_best ~107.0ms with render_ms_avg ~126.0ms, versus ~101-103ms for the same code without it (my notes at messages #143 and #151). That is a clear regression, so I removed it entirely rather than keep it.\n\nWhy it likely lost: the extra slab computation and the extra dependency on the root node's bounds cost more per ray than the pruning saves \u2014 the near-first child ordering (descend into the child with the smaller 'entered' distance, push the other only if it is also hit) already tightens the hit distance very early, so an exit-distance bound adds little. Note that the real win this round came from that near-first ordering plus leaf size 1 (93.5ms -> ~59-64ms best at 512x512/64spp, ~1.8x over the 109.656ms gate), not from root-box pruning."
+ },
+ {
+  "arm": "C",
+  "sample": 6,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (clamping each ray's t_max to the distance at which it exits the model's outermost/root AABB, computed once per ray with a pt_ray_aabb_exit helper) was tried this round and it made things slower, so it was fully reverted. Measured at the time it came in at ~107.0 ms best / ~126.0 ms average versus ~101-103 ms for the then-current stack-based traversal at 512x512/64spp, i.e. a clear regression on both best and average (writer notes around messages #143 and #151; the helper pt_ray_aabb_exit was left unused in the shader after the revert). The likely reason is that the extra slab test and the extra live value cost more than the pruning saves \u2014 most rays that miss the bunny exit the traversal after only a couple of node tests anyway, and rays that hit already tighten t_max quickly. This round's real traversal win came from a different ordering rule: test both children up front and descend into the nearer one (smaller slab 'entered' distance), pushing the other child only when it is actually hit. That change alone took the frame from ~93.5 ms to ~64.9 ms with a bit-identical PFM, and combined with 1-triangle BVH leaves the current best is render_ms_best=59.11 / gpu_ms_best=58.84 (~1.8x faster than the 109.656/109.397 gate)."
+ },
+ {
+  "arm": "C",
+  "sample": 7,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was reverted.\n\nWhat I did: I added a variant of the slab test (pt_ray_aabb_exit) that reports where the ray leaves the root node's AABB, and used that exit distance as the initial t_max for the rest of the closest-hit and shadow traversals instead of the open-ended 1e30f, so the walk could stop as soon as the ray left the bunny's outer box.\n\nMeasured result: it regressed the default-scene render to about 107.0 ms best / 126.0 ms average, versus roughly 101 ms best for the same code without it at that point in the round. Both traversals were changed, so the extra root-test cost and the extra branch/register pressure per ray outweighed the pruning, especially since the BVH already rejects those rays at the top levels. I fully reverted it (the pt_ray_aabb_exit helper is still in shaders/pt_trace.metal but is not called by anything).\n\nHow I know: this is recorded in my working memory entry round2-progress item (d), resting on history messages #143 (the regressed benchmark run) and #151 (the revert). For context, the win this round came from a different traversal change \u2014 testing both child nodes and descending into the nearer one first while pushing only children the ray actually hits \u2014 which took the frame from ~93 ms to ~65 ms with a bit-identical PFM, and leaf size 1 in the BVH build then brought the best run to 59.1 ms."
+ },
+ {
+  "arm": "C",
+  "sample": 8,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization regressed and was reverted. Early in round 2 I added root-AABB exit pruning (a pt_ray_aabb_exit helper that computed where each ray leaves the bunny's outermost bounding box and used that as the traversal's t_max instead of 1e30, in both the closest-hit and shadow traversals). Measured at 512x512/64spp it came out at render_ms_best=107.0 with render_ms_avg=126.0, versus about 101-102 best / ~97 avg for the same code without it, so it was both slower in the best case and much worse on average. I reverted it completely; the pt_ray_aabb_exit helper is still in shaders/pt_trace.metal but is currently unused. Evidence: my round-2 progress notes citing runs #143 and #151.\n\nThe traversal win this round came from a different change: in the closest-hit walk I now test both children with the slab test, descend into the child with the smaller 'entered' distance, and push the other child onto the stack only when it is actually hit. That near-first ordering tightens the hit distance earlier so more subtrees get pruned, and it cut render_ms_best from about 93.5 to about 64.9 with a bit-identical PFM (so the estimator is untouched). Combining that with kLeafSize 4 -> 1 in the BVH build brought the best run to render_ms_best=59.114 / gpu_ms_best=58.839 (~1.8x the 109.656ms gate). Notably, the same 'test both children, push only hit ones' rule applied to the any-hit shadow traversal blew up to 478ms (register pressure pathology, #291), so that one was reverted too."
+ },
+ {
+  "arm": "C",
+  "sample": 9,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 root-AABB exit pruning did not help this round; it regressed and was reverted.\n\nWhat I did and measured: I added pt_ray_aabb_exit so each ray's traversal t_max was clamped to the distance at which the ray leaves the bunny's outermost (root) bounding box, applied in both the closest-hit and the shadow traversal. At that point the best stack-based build was running 101.8-103.4 ms at 512x512/64spp; with exit pruning it measured render_ms_best=107.0 with render_ms_avg=126.0 (writer log / history #143, confirmed #151). Since the average got much worse than the best, the extra per-ray work (an extra slab computation and a tighter t_max that had to be threaded through both traversals) cost more than the pruning saved, so I fully reverted it. The pt_ray_aabb_exit helper is still present in shaders/pt_trace.metal but is not called by any traversal.\n\nWhat actually sped traversal up this round was a different traversal change: instead of always descending left and unconditionally pushing the right child, the closest-hit loop now tests both children with pt_ray_aabb_entered, descends into the nearer one (smaller entered distance) and pushes the other only when it is actually hit. That cut 93.5 ms -> 64.9 ms with a bit-identical PFM (#283, #285), and shrinking BVH leaves from 4 to 1 triangles took it to render_ms_best=59.114 / gpu_ms_best=58.839 (#316) \u2014 about 1.8x versus the 109.656 ms gate."
+ },
+ {
+  "arm": "A1",
+  "sample": 1,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (clamping each ray's t_max to where it exits the root/model AABB, so the traversal can prune against the model's exit distance instead of an open-ended t_max) was tried this round and it made things slower, so I reverted it.\n\nHow I know: I added a pt_ray_aabb_exit helper that reports the slab exit distance on the root node and used it as the initial t_max in both the closest-hit and the shadow traversals. Measured on the then-current build (median-split BVH, 512x512/64spp, seed 1): render_ms_best=107.004, render_ms_avg=125.973, gpu_ms_best=106.738, versus ~101.2\u2013103.4 best / ~109.6 avg for the same code without it \u2014 i.e. roughly 4% worse on the best frame and ~15% worse on the average. I reverted the change in both traversals and re-measured 103.410/109.625, confirming the regression was caused by it. The pt_ray_aabb_exit helper is now unused dead code in the shader source.\n\nThe likely reason it hurt: most rays in this scene do hit something (the floor or the bunny), so the extra root test and the extra live register for the clamped t_max cost more than the pruning saves, and the tighter t_max also perturbs register allocation in the two inlined traversals \u2014 the same pathology that made an unrelated shadow-traversal edit explode to 478ms.\n\nWhat did work this round instead: ordering the two BVH children by their slab 'entered' distance in the closest-hit traversal (descend into the nearer child, push the other only if it is also hit) took 93.5ms -> 64.9ms, and shrinking BVH leaves from 4 triangles to 1 took it to 59.1\u201366.3ms best (best observed 59.114 / gpu 58.839, ~1.8x the 109.656ms gate), all with bit-identical PFMs."
+ },
+ {
+  "arm": "A1",
+  "sample": 2,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (clamping each ray's t_max to where it exits the model's root AABB, so traversal can prune against a finite exit distance instead of 1e30) was tried this round and it made things slower, so I fully reverted it.\n\nEvidence: with the root-AABB exit clamp added to both the closest-hit and shadow traversals (the pt_ray_aabb_exit helper), the 512x512/64spp default-scene benchmark measured render_ms_best=107.004 / render_ms_avg=125.973 / gpu_ms_best=106.738, versus roughly 101-103ms best and ~110-115ms avg for the same code without it (message #143, after the median-split BVH at #121/#129 gave 103.290 and 101.771). The much worse average in particular suggested the extra slab test on the root node plus the extra live variable hurt more than the pruning saved. I removed it from both traversals and re-measured 103.410 / 109.625 / 103.098, confirming the regression was caused by the change (#145-#151). The pt_ray_aabb_exit helper still sits unused in shaders/pt_trace.metal as a leftover.\n\nFor context, the traversal win this round came from a different ordering idea: in the closest-hit walk I now test both children and descend into the nearer one (smaller slab-entry distance) while pushing the other only if it is also hit, which tightens the hit distance early and prunes the far subtree \u2014 that alone took the frame from ~93ms to ~65ms with a bit-identical PFM (#283, #285)."
+ },
+ {
+  "arm": "A1",
+  "sample": 3,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was reverted.\n\nWhat I did: I added a pt_ray_aabb_exit helper that runs the slab test on the root node once per ray and uses the box exit distance as the ray's initial t_max, so traversal can prune as soon as the ray leaves the bunny's outer bounding box. It was applied to both the closest-hit and the any-hit (shadow) traversals.\n\nMeasured result (512x512, 64 spp, seed 1, best of 5 frames): render_ms_best=107.004 / render_ms_avg=125.973 / gpu_ms_best=106.738, versus 101.771 best / 114.621 avg / 101.237 gpu without it at that point in the round. So best got ~5% worse and the average got ~10% worse \u2014 a clear regression, not a win. I reverted it fully and re-measured 103.410 / 109.625 / 103.098, back in line with the un-pruned code (writer log / memory entry \"round2-progress\" item (d), messages #143 and #151).\n\nWhy it likely hurt: the extra pre-test costs work on every ray (including the many that miss the bunny entirely or start inside it, where the exit distance gives little or no pruning), and the extra live value/branch in the hot loop costs more in registers and divergent branches than the pruning saves on this scene.\n\nWhat actually sped traversal up this round was a different traversal change: test both children up front and descend into the nearer one first (by slab \"entered\" distance), pushing the farther child only if the ray actually hits it. That took the frame from ~93 ms to ~65 ms with a bit-identical PFM, and combined with single-triangle leaves it now sits around 59-62 ms best versus the 109.656 ms gate."
+ },
+ {
+  "arm": "A1",
+  "sample": 4,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (clamping each ray's t_max to the distance at which it exits the root/model-space AABB, instead of an open-ended t_max) was tried this round and it made things slower, so it was fully reverted.\n\nEvidence: in the same build state that otherwise measured 101.8-103.4 ms best, adding root-exit pruning to both the closest-hit and shadow traversals measured render_ms_best=107.004 with average 125.973 ms, versus 103.410/109.625 immediately after reverting it (writer history #135-#143 regression, #145-#151 revert; also recorded in working memory as measurement 'round2-progress' item (d)). The extra slab test per ray plus the extra live value cost more than the pruning saved \u2014 most rays in this scene either miss the bunny entirely or hit it quickly, so the tighter bound rarely excluded a subtree that the ordinary t_max did not already exclude. The pt_ray_aabb_exit helper is still defined in shaders/pt_trace.metal but is not called by either traversal.\n\nWhat did speed traversal up this round was a different traversal-ordering change: testing both children of an internal node up front and descending into the nearer one (by slab 'entered' distance) while pushing the farther child only when it is actually hit. That took the default scene from ~93 ms to ~65 ms with a bit-identical PFM (#283), and combined with kLeafSize 4->1 it now sits at ~59-62 ms best (gpu ~59-61), roughly 1.8x against the 109.656 ms round-1 gate."
+ },
+ {
+  "arm": "A1",
+  "sample": 5,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (root-AABB exit pruning: clamping each ray's t_max to the distance at which it leaves the BVH root box, via a pt_ray_aabb_exit helper applied to both the closest-hit and shadow traversals) was tried this round and it made things slower, so it was fully reverted.\n\nEvidence: measured at 512x512/64spp seed 1, the pruned build gave render_ms_best=107.004 with render_ms_avg=125.973, versus the immediately preceding unpruned build at 101.771 best / 114.621 avg (log entries #135-#143). Reverting it restored 103.410 best / 109.625 avg (#145-#151). The extra slab computation per ray plus the extra live value in the traversal loop cost more than the pruning saved, and the average regressed more than the best, indicating it hurt the long/coherent rays most. The pt_ray_aabb_exit helper is still present in shaders/pt_trace.metal but is unused dead code.\n\nWhat did speed traversal up this round was a different traversal change: testing both child nodes up front and descending into the nearer one (smaller slab 'entered' distance) while pushing the other child only when it is actually hit \u2014 that took the frame from ~93.5ms to ~64.9ms with a bit-identical PFM (#283), and combined with kLeafSize 4->1 it now sits around 59-62ms best (gate to beat: 109.656ms)."
+ },
+ {
+  "arm": "A1",
+  "sample": 6,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization (clamping each ray's t_max to where it exits the BVH root's bounding box, computed once per ray with a pt_ray_aabb_exit helper and applied in both the closest-hit and shadow traversals) was tried this round and it made things slower, so it was fully reverted.\n\nMeasured evidence: with root-exit pruning enabled the default 512x512/64spp benchmark came out at render_ms_best=107.004 with render_ms_avg=125.973, versus roughly 101.8-103.4 best / ~109-114 avg for the same build without it (#135-#143). Reverting it returned the run to render_ms_best=103.410 / gpu 103.098 / avg 109.625 (#145-#151). The extra per-ray slab test plus the extra live register for the clamp cost more than the pruning saved \u2014 most rays that miss the bunny already fall out of the tree quickly, and the shortened t_max also weakened nothing useful because the leaf triangle tests were already rejecting far hits.\n\nConsequently the pt_ray_aabb_exit helper still exists in shaders/pt_trace.metal but is unused by the traversals. The traversal win this round came from a different ordering change: testing both child nodes up front and descending into the nearer one (smaller slab 'entered' distance) while pushing the other only when it is actually hit, which took render_ms_best from ~93.5ms to ~64.9ms with a bit-identical PFM (#283), later ~59.1-60.4ms after also shrinking BVH leaves from 4 triangles to 1 (#314-#316)."
+ },
+ {
+  "arm": "A1",
+  "sample": 7,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was removed. Early in round 2 I added a pt_ray_aabb_exit helper that computed where each ray leaves the BVH root box and used that as the ray's initial t_limit in both the closest-hit and shadow traversals (messages #135-#141). Measured on the default scene at 512x512/64spp it gave render_ms_best=107.004 / render_ms_avg=125.973 / gpu_ms_best=106.738 (#143), versus about 101.8-103.4 for the same build without it, and the average regressed even more than the best time. I reverted it completely (#145-#149) and confirmed the revert restored 103.410/109.625 (#151); the helper is now unused dead code in the shader. The likely reason is cost per ray: the extra slab computation on the root node has to be paid on every ray, including the many that miss the bunny entirely, and the tighter t_limit pruned almost nothing because the median-split tree already rejects empty space quickly. The wins this round came from elsewhere \u2014 ordering the two child boxes by their ray-entry distance and pushing only children the ray actually hits (93.5ms -> 64.9ms, #283) and shrinking BVH leaves from 4 triangles to 1 (62.9 -> 59.1ms, #314/#316), both bit-identical in output. Current best is render_ms_best=59.114 / gpu_ms_best=58.839 versus the 109.656ms gate."
+ },
+ {
+  "arm": "A1",
+  "sample": 8,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that idea was tried this round and it made things slower, so it was reverted.\n\nWhat I did: I added a pt_ray_aabb_exit helper that reports where a ray leaves the root (model-space) bounding box, then clamped each traversal's t_max to min(current best hit, that exit distance) in both the closest-hit and the shadow traversal, so the walk could stop as soon as the ray was past the bunny.\n\nMeasured result (512x512, 64 spp, seed 1, this machine): with the root-exit clamp render_ms_best=107.004 / render_ms_avg=125.973 / gpu_ms_best=106.738, against roughly 101.8-103.4 best for the same code without it \u2014 about +4 ms on the best frame and +12 to +22 ms on the average. I reverted it and the run immediately after came back to render_ms_best=103.410 / gpu_ms_best=103.098. The helper function is still in shaders/pt_trace.metal but nothing calls it.\n\nWhy it likely lost: the clamp only helps rays that hit nothing and leave the box, and it costs an extra slab test plus a data-dependent t_max that breaks the uniform early-out; the extra work landed on every ray while the saving landed on few.\n\nWhat actually sped traversal up this round was a different ordering change: at each internal node I now test both children, descend into the nearer one (smaller slab 'entered' distance) and push the other only when it is also hit. That tightens the hit distance earlier and prunes more subtrees, and it took the frame from ~93 ms to ~65 ms with a bit-identical PFM; combined with 1-triangle leaves it is now ~59-62 ms best (gate to beat: 109.656 ms). So per-ray distance pruning is happening \u2014 but via the hit distance, not the root-box exit."
+ },
+ {
+  "arm": "A1",
+  "sample": 9,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 that optimization was tried this round and it made things slower, so it was reverted. Specifically, I added a pt_ray_aabb_exit helper that reports where a ray leaves the BVH root box, then clamped each traversal's t_max to min(current best hit, that exit distance) in both the closest-hit and the shadow traversal. Measured at 512x512/64spp seed 1 it gave render_ms_best=107.004 / gpu_ms_best=106.738 with a worse average (125.973) versus the 101.771/101.237 baseline it was tested against \u2014 i.e. roughly 5% slower best-case and ~10% worse average (history #135-#143). Reverting it restored 103.410/103.098 (#151), and the unused pt_ray_aabb_exit helper is still present in shaders/pt_trace.metal but not called by either traversal. Likely cause: almost every ray in this scene that enters the bunny's root box either hits something quickly or leaves it immediately, so the extra slab computation and dependency on its result cost more than the pruning saves; the near-first child ordering (descend into the child with the smaller slab 'entered' distance, push the other only if it is hit) is what actually paid off, cutting 93.5ms to 64.9ms with a bit-identical PFM (#283)."
+ }
+]

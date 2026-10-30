@@ -1,0 +1,146 @@
+[
+ {
+  "arm": "C",
+  "sample": 1,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk slightly slower, and I rejected it.\n\nWhat I tried: a 16-byte node holding the child box as six 16-bit integers plus a 4-byte payload, so a node costs one uint4 load instead of two float4 loads. Because the boxes are already quantized to a grid, float(u16) is exact, so the traversal is provably unchanged \u2014 I confirmed byte-identical PFMs on all three scenes (scene-default, scene-alt-view, scene-caustic-closeup) at 64 spp seed 1.\n\nHow I know it is slower: an interleaved paired A/B against the frozen round-7 binary, 16 pairs at 64 spp on the default scene \u2014 the candidate won 0 of 16 pairs, mean delta +0.2796 ms, geo-mean ratio 1.00900 (+0.90%), sd(log) 0.00221, t = +16.25. That is a statistically solid regression, not noise.\n\nWhy: moving the box decode into the hot loop costs six mask/shift/u2f ALU ops per node visit, and the closest-hit walk is latency/ALU-bound rather than node-bandwidth-bound. That matches the round-7 result where simply deleting the u2f conversion changed time by -0.44%, and with this round's profile (the trace dispatch is 30.30 ms of the 30.72 ms frame; disabling the shadow walk only saves 3.65 ms). Halving the bytes moved simply cannot pay for extra work per node.\n\nThe variant is preserved in _r8_node16/ and the shipped source was reverted to round-7 code (byte-identical PFM re-confirmed)."
+ },
+ {
+  "arm": "C",
+  "sample": 2,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it slightly slower. In round 8 I built that exact variant (E5): each BVH node packed into 16 bytes with the box coordinates stored as 16-bit integers plus a 4-byte payload, so a node costs one uint4 load instead of two float4 loads. Conversion is exact (float(u16) reproduces the original quantized float), and I confirmed the PFM was byte-identical to the round-7 baseline on all three scenes, so the estimator was untouched.\n\nHow I know it is slower: an interleaved paired A/B against the frozen round-7 build, 16 pairs at 512x512 / 64 spp on the default scene. The candidate won 0 of 16 pairs; mean delta +0.2796 ms, geometric-mean ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25 \u2014 a statistically solid regression, not noise.\n\nWhy: halving the node bytes trades memory traffic for six mask/shift/u2f ALU ops per node visit, and the walk is latency/ALU-bound, not node-bandwidth-bound. That matches round 7's finding that merely deleting the u2f conversion (a different way of getting the same coordinates) also cost about 0.4%. The candidate is preserved in _r8_node16/ and the shipped tree was reverted to round 7 (byte-identical PFM re-confirmed)."
+ },
+ {
+  "arm": "C",
+  "sample": 3,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it slightly slower. Halving the BVH node to 16 bytes (six u16 box coordinates plus the 4-byte payload, read as one uint4 instead of two float4 loads) is bit-identical \u2014 float(u16) is exact, so the PFM was byte-for-byte the same on all three scenes \u2014 but the interleaved paired A/B at 64 spp gave 0 wins in 16 pairs, mean +0.2796 ms, geometric-mean ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25. So moving half the node bytes costs more than it saves: each node now needs six mask/shift/u16-to-float conversions, and the traversal is ALU/latency-bound rather than node-bandwidth-bound. That is consistent with round 7, where simply deleting the u2f conversion (keeping 32-byte nodes) gained 0.44%, and with this round's profile, where the trace dispatch is 98.6% of GPU time and disabling the shadow walk only costs 3.65 ms. The candidate is preserved in _r8_node16/ and the shipped tree was reverted to the round-7 code (byte-identical PFM re-confirmed)."
+ },
+ {
+  "arm": "C",
+  "sample": 4,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made the walk slightly slower, and I rejected it.\n\nWhat I tried: a 16-byte BVH node holding the box as six 16-bit integers plus a 4-byte payload, so each node costs one uint4 load instead of two (32 bytes). Because float(u16) is exact, the traversal result is unchanged \u2014 I confirmed byte-identical PFMs on all three scenes at 64 spp seed 1.\n\nMeasured result (interleaved paired A/B against the frozen round-7 binary, 64 spp, default scene, 16 pairs): candidate won 0 of 16 pairs, mean delta +0.2796 ms, geo-mean ratio 1.00900 (i.e. +0.90% slower), sd_log 0.00221, t = +16.25. That is a large, consistent loss, not noise.\n\nWhy: decoding the box costs six mask/shift/ushort-to-float operations per visited node, and that ALU/latency work is more expensive than the extra 16 bytes of node traffic it saves. This fits the rest of the round-8 evidence \u2014 the traversal is bound by BVH-walk latency, not bandwidth: an earlier round gained 0.44% just by deleting one ushort-to-float conversion, and this round's profile shows the trace dispatch is 98.6% of the frame with the cost concentrated in the closest-hit walk.\n\nThe rejected variant is kept in _r8_node16/ for reference; the shipped code still uses the round-7 32-byte float nodes."
+ },
+ {
+  "arm": "C",
+  "sample": 5,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made the walk measurably slower, so it was rejected. In round 8 I built that exact variant: each BVH node packed into one 16-byte uint4 (six box coordinates as 16-bit integers plus the 4-byte payload), so a node costs a single 16-byte load instead of two 16-byte loads. Because the quantization maps back through float(uint16) exactly, the geometry is bit-identical, which I confirmed by byte-comparing the PFM of all three frozen scenes against the round-7 baseline.\n\nHow I know it is slower: an interleaved paired A/B against the frozen round-7 binary, 16 pairs at 512x512 / 64 spp on the default scene (the same binary and shaders on both sides where possible, so only the node layout differed). Result: candidate won 0 of 16 pairs, mean delta +0.2796 ms per frame, geometric-mean ratio 1.00900 (+0.90%), t = +16.25 \u2014 a statistically solid regression, not noise.\n\nWhy it loses: the packed form needs about six extra ALU ops per node visited (masks, shifts, u16-to-float converts) to recover the box, and the walk is bound by ALU throughput and dependent-load latency, not by node bandwidth. That reading is corroborated by two other round-8 measurements: deleting an existing u2f conversion in round 7 bought -0.44%, and the new u16 node costs +0.90% \u2014 moving work in and out of the inner loop flips the time in the expected direction. It also fits the profile: disabling the shadow walk only saves 3.65 ms of 30.3 ms, and the depth sweep shows the cost accumulating with traversal depth. The rejected candidate is preserved in _r8_node16/ for reference."
+ },
+ {
+  "arm": "C",
+  "sample": 6,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it slower, slightly but consistently.\n\nWhat I tried (round 8, experiment E5): a 16-byte BVH node holding the box as six 16-bit integers plus a 4-byte payload, so each node visit costs one uint4 load instead of two, halving node traffic. Because float(u16) is exact, the quantized boxes compare identically, and I confirmed the PFM was byte-identical to the round-7 baseline on all three scenes before timing it.\n\nMeasured result: interleaved paired A/B against the frozen round-7 binary, 16 pairs, 512x512 at 64 spp, scene-default: candidate won 0/16 pairs, mean_delta +0.2796 ms, geo_mean_ratio 1.00900 (+0.90% slower), sd_log 0.00221, t = +16.25. So the regression is far outside noise.\n\nWhy: the decode costs six mask/shift/ushort-to-float conversions per node, and the walk turned out to be ALU/latency-bound, not node-bandwidth-bound. That is consistent with two other round-8 findings \u2014 an earlier round-7 change that merely deleted a ushort-to-float convert gained -0.44%, and my E0 profile showing the trace dispatch is 98.6% of GPU time with a depth sweep that tracks traversal steps, not memory traffic. The candidate is preserved in _r8_node16/ and pathtracer/ was reverted to _r8b (byte-identical PFM re-confirmed)."
+ },
+ {
+  "arm": "C",
+  "sample": 7,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node size made the walk slightly slower, and I rejected it.\n\nWhat I tried: a 16-byte node holding six box coordinates as 16-bit integers plus a 4-byte payload, so each node costs one uint4 load instead of two (32 bytes). Because the quantization maps onto exact float values, the traversal result is unchanged \u2014 I confirmed the PFM is byte-identical to the round-7 baseline on all three scenes.\n\nMeasured result (interleaved paired A/B, n=16 at 64 spp, scene-default, against the frozen round-7 binary): candidate won 0 of 16 pairs, mean_delta +0.2796 ms, geo_mean_ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25. So the loss is well outside noise, not a tie.\n\nWhy: converting the six u16 fields back to float costs six mask/shift/u2f operations per node visited, and that ALU/latency work is on the critical path of the box test, while the node stream was never the bottleneck \u2014 reading half as many bytes bought nothing. This matches round 7, where simply deleting one redundant u2f conversion per node was worth about -0.44%, i.e. the walk's cost scales with per-node instructions, not node bytes. The same conclusion is now reinforced by round 8's cost profile: the trace dispatch is 98.6% of GPU time and the depth sweep shows the cost is in the closest-hit BVH walk, so the node format is an ALU decision, not a bandwidth one.\n\nEvidence: this experiment (E5) is recorded in my working memory as rejected with the numbers above, and the candidate source is preserved in _r8_node16/. The shipped pathtracer/ tree was reverted to the round-7 code and re-verified byte-identical on all three scenes."
+ },
+ {
+  "arm": "C",
+  "sample": 8,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk measurably slower, so I rejected it. What I tried (round 8, experiment E5): a 16-byte node holding six 16-bit box coordinates plus a 4-byte payload, so each node costs one uint4 load instead of two float4 loads. Because the boxes are already quantized, float(uint16) reproduces the exact same float, and I confirmed the PFM was byte-identical on all three scenes, so it was a pure speed experiment.\n\nHow I know it loses: an interleaved paired A/B against the frozen round-7 binary, 16 pairs at 512x512 / 64 spp on the default scene \u2014 the candidate won 0 of 16 pairs, mean delta +0.2796 ms, geometric-mean ratio 1.00900 (+0.90% slower), sd_log 0.00221, t = +16.25. That is far outside noise in the wrong direction.\n\nWhy: the traversal is ALU/latency-bound, not node-bandwidth-bound. Halving the node bytes saves memory traffic but adds six mask/shift/u2f unpack ops on the critical path of every node test. This matches two other round-7/8 findings: deleting the u2f convert alone cost -0.44% (i.e. that convert was already on the critical path), and a 16-byte node with the same unpacking also lost. The rejected candidate is preserved in _r8_node16/ if you want to re-measure it."
+ },
+ {
+  "arm": "C",
+  "sample": 9,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it slower. Round 8 experiment E5 stored each BVH box as six 16-bit integers plus the 4-byte payload, so a node became one 16-byte uint4 load instead of two 32-byte float4 loads (halving node traffic). Because float(u16) is exact, the PFM was byte-identical on all three scenes, so correctness was fine. But in an interleaved paired A/B against the frozen round-7 binary (n=16 pairs, 512x512, 64 spp, scene-default) it lost every single pair: mean_delta +0.2796 ms, geo_mean_ratio 1.00900, i.e. +0.90% slower, t = +16.25 (sd_log 0.00221). Reason: the saved loads cost more than they save \u2014 every node now needs six mask/shift/u2f conversions before the slab test, and the walk is ALU/latency-bound, not node-bandwidth-bound. That matches round 7's independent finding that simply deleting the u2f conversion (going to f32 nodes) was worth -0.44%, and with the E0 profile showing the trace kernel is 98.6% of GPU time. The candidate is preserved in _r8_node16/ and the shipped tree was reverted to round-7 code (byte-identical PFM re-confirmed)."
+ },
+ {
+  "arm": "A1",
+  "sample": 1,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk measurably slower, and I have the paired numbers to prove it.\n\nWhat I tried (round-8 experiment E5): each node became a single 16-byte uint4 holding its two boxes as six 16-bit integers plus the 4-byte leaf/child payload, loaded with one 128-bit access instead of the shipped two float4 loads. Because the quantization scale is a power of two, float(u16) reproduces the old coordinates exactly, so the traversal decisions are unchanged \u2014 I confirmed the PFM was byte-identical to the round-7 baseline on all three scenes at 64 spp, seed 1, so the comparison was strictly like-for-like work.\n\nMeasured result: interleaved paired A/B, n=16 pairs at 64 spp on the default scene, candidate vs the frozen round-7 binary \u2014 0 wins out of 16, mean_delta +0.2796 ms, geo_mean_ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25. That is a large, consistent regression, not noise.\n\nWhy it loses: saving 16 bytes of node traffic per visited node costs six unpack operations (mask, shift, unsigned-to-float) per node on the critical path of the box test. This walk is bound by ALU issue and dependent-load latency, not by node bandwidth \u2014 the same reason round 7's much smaller win came from deleting a single u2f conversion, and why the cost-profile shows the trace kernel at 98.6% of GPU time with shadow rays only 12% of it. The candidate is preserved in _r8_node16/ and the shipped source was reverted to round 7 (re-verified byte-identical), so nothing image-changing was kept."
+ },
+ {
+  "arm": "A1",
+  "sample": 2,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk measurably slower, so it was rejected.\n\nWhat I tried (round 8, experiment E5): a 16-byte node holding six 16-bit box coordinates plus a 4-byte payload, fetched with a single uint4 load instead of the round-7 32-byte float32 node (two float4 loads). Because the quantization scale is a power of two, float(u16) is exact, so the image was unchanged \u2014 I confirmed the PFM was byte-identical to the frozen round-7 baseline on all three scenes at 64 spp, seed 1.\n\nHow I know it loses: an interleaved paired A/B against the frozen round-7 binary, 16 pairs at 64 spp on the default scene. The candidate won 0 of 16 pairs; mean delta +0.2796 ms, geo-mean ratio 1.00900 (+0.90% slower), sd_log 0.00221, t = +16.25 \u2014 far outside noise.\n\nWhy: the traversal is ALU/latency-bound, not node-bandwidth-bound. Halving the bytes moved per node costs six mask/shift/convert operations to rebuild the boxes, and that decode work exceeds the memory traffic saved. Two independent results point the same way: round 7 gained -0.44% by deleting a u16-to-float conversion (going the opposite direction, to float32 nodes), and my cost profile shows the frame is 98.6% the trace kernel with the shadow walks only ~12%, i.e. the bottleneck is BVH-walk dependent latency in the closest-hit path. The candidate is preserved in _r8_node16/ and the working tree was reverted to round 7 (verified byte-identical)."
+ },
+ {
+  "arm": "A1",
+  "sample": 3,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it measurably slower. In round 8 I implemented exactly that (experiment E5): each BVH node became a single 16-byte uint4 holding its box as six 16-bit integers plus a 4-byte payload, replacing the current 32-byte pair of float4s. Because float(u16) is exact, the traversal results were unchanged \u2014 the PFM came out byte-identical to the round-7 baseline on all three scenes at 64 spp, seed 1, and the printed sample count was still width*height*spp.\n\nThe paired A/B (16 interleaved pairs, 5 benchmark passes each, 512x512 at 64 spp, same machine, same binary tree) gave 0 wins out of 16 for the small-node version: mean delta +0.2796 ms, geometric-mean ratio 1.00900, i.e. +0.90% slower, with sd(log) 0.00221 and t = +16.25. That is far outside noise, not a wash.\n\nWhy it loses: halving node traffic saves bandwidth the walk does not need, while each node visit now has to extract six coordinates (mask, shift, and uint-to-float converts) before the slab test can start. The round-8 cost profile says the closest-hit walk is ALU/latency-bound rather than memory-bound \u2014 the trace kernel is 98.6% of the frame's GPU time, shadow rays only 12%, and round 7 had already gained -0.44% just by deleting a float conversion per node. So extra per-node instructions cost more than fewer bytes moved.\n\nThat candidate is preserved in _r8_node16/ and the working tree was reverted to the round-7 sources (re-verified byte-identical). The same reasoning predicted the sweep of lane footprints I measured afterwards, where coherence, not traffic, was the lever."
+ },
+ {
+  "arm": "A1",
+  "sample": 4,
+  "draw": 2,
+  "steps": 2,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk measurably slower, not faster.\n\nWhat I tried (round 8, experiment E5): the round-7 node is 32 bytes (float32 lo[4] + hi[4], the \"16-byte node\" comment was stale). I packed each node into 16 bytes \u2014 six u16 box coordinates plus a 4-byte payload \u2014 so the traversal reads one uint4 instead of two float4s, decoding with float(u16), which is exact, so the image is unchanged. I confirmed the PFM was byte-identical to the frozen round-7 binary on all three scenes at 64 spp / seed 1, with samples=16777216.\n\nMeasured result (interleaved paired A/B, n=16 pairs, 5 benchmark runs per pair, 512x512 at 64 spp, scene-default, candidate vs the frozen round-7 binary in _r8b/): wins 0/16, mean_delta +0.2796 ms, geo_mean_ratio 1.00900 (+0.90% slower), sd_log 0.00221, t=+16.25. That is a large, consistent regression, not noise.\n\nWhy: the walk is ALU/latency-bound, not node-bandwidth-bound. The saving of one 16-byte load per node is outweighed by the six mask/shift/u16-to-float conversions per node that the packed layout forces inside the box test. This matches two other findings: round 7's small win (-0.44%) came from deleting a u2f convert, and my earlier cost profile showed the trace dispatch is 30.30 of 30.72 ms of GPU time with the depth sweep and a shadow-walk disable pointing at traversal ALU/latency rather than memory traffic.\n\nThe rejected candidate is preserved in _r8_node16/, pathtracer/ was reverted from _r8b and re-verified byte-identical, and the round-7 shipped state is unchanged."
+ },
+ {
+  "arm": "A1",
+  "sample": 5,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk slower, so I rejected it. That was round-8 experiment E5: the node went from 32 bytes (float32 lo[4]+hi[4]) to 16 bytes holding the six box coordinates as 16-bit integers plus the 4-byte child/leaf payload, so a node visit became one uint4 load. It was bit-exact by design (power-of-two quantization scale, coordinates clamped to <=65535 integers, so float(u16) reproduces the old float exactly) and the PFM was byte-identical to the round-7 baseline on all three scenes at 64 spp seed 1, with samples printed = 16777216. But the interleaved paired A/B at 64 spp showed 0 wins in 16 pairs: mean +0.2796 ms, geo-mean ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25 \u2014 a solid regression, not noise. Cause: the traversal is ALU/latency-bound, not node-bandwidth-bound, so the six mask/shift/u16->float conversions per node cost more than the saved bytes. This agrees with round 7, where merely deleting the u2f conversion (keeping full f32 nodes) was itself a -0.44% win, and with the round-8 profile showing the trace dispatch is 98.6% of GPU time at ~1% of peak FLOPs. The candidate is kept in _r8_node16/ and pathtracer/ was reverted to the frozen round-7 code (PFM byte-identical confirmed)."
+ },
+ {
+  "arm": "A1",
+  "sample": 6,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made it measurably slower. That was round-8 experiment E5: the BVH node went from 32 bytes (float32 lo[4]/hi[4]) to 16 bytes holding six 16-bit integer box coordinates plus a 4-byte leaf/child payload, so each node visit became a single uint4 load. Because float(u16) is exact, the images were byte-identical to the round-7 baseline on all three scenes at 64 spp / seed 1 (samples printed = 16777216), so it was a legitimate candidate.\n\nHow I know it loses: an interleaved paired A/B against the frozen round-7 binary, 16 pairs at 64 spp on the default scene, comparing render_ms_best each pair \u2014 the candidate won 0 of 16 pairs, mean delta +0.2796 ms, geo-mean ratio 1.00900 (+0.90% slower), sd of the log-ratios 0.00221, t = +16.25. That is far outside noise, and the direction is consistent with the rest of round 8: the traversal is ALU/latency-bound, not bandwidth-bound. Halving the node traffic is paid for many times over by the six mask/shift/uint-to-float conversions needed per node to rebuild the box. It also matches round 7, where simply deleting one uint-to-float conversion from the slab test was itself a 0.44% win. The rejected candidate is preserved in _r8_node16/ and the working tree was reverted to the round-7 code (PFM byte-identity re-confirmed).\n\nFor contrast, the round-8 wins so far are all lane-grouping / occupancy freebies that change no arithmetic: a 4x8 instead of 8x4 simdgroup footprint (-0.21 to -0.28%), a 32x2 instead of 32x4 threadgroup (-0.21%), and a packed traversal stack; combined they measured -0.41% (15/16 pairs, t = -7.85)."
+ },
+ {
+  "arm": "A1",
+  "sample": 7,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made the walk slightly slower, and I rejected it.\n\nWhat I tried (round 8 experiment E5): the round-7 BVH node is 32 bytes (lo[4] + hi[4] floats, two float4 loads). I repacked it to 16 bytes \u2014 six 16-bit box coordinates (one uint4 load) plus a 4-byte payload \u2014 keeping the same tree, so it produced a byte-identical PFM on all three scenes at 64 spp seed 1 (the quantization scale is a power of two, so float(u16) reproduces the old coordinates exactly).\n\nMeasured result: paired interleaved A/B against the frozen round-7 binary, 16 pairs, 512x512, 64 spp, scene-default \u2014 candidate won 0 of 16 pairs, mean delta +0.2796 ms, geometric-mean ratio 1.00900 (+0.90%), sd_log 0.00221, t = +16.25. So halving the node bytes cost about 0.9% more time, with no overlap between the two distributions.\n\nWhy: the unpack costs six mask/shift/uint-to-float conversions per node visited, and the walk is latency/ALU-bound rather than node-bandwidth-bound. That matches two earlier findings \u2014 round 7's removal of the uint-to-float convert (a u2f op per node) alone gained 0.44%, and an earlier 32-byte child-pair block that also cut node traffic measured a wash (+0.104 ms over 41 pairs). The candidate is preserved in _r8_node16/ and the shipped tree was reverted to round-7 code (byte-identical PFM confirmed).\n\nCorroborating profile from this round: the trace dispatch is 30.30 ms of the 30.72 ms frame (combine 0.42 ms), and disabling the shadow walk only saves 3.65 ms \u2014 the cost is BVH-walk ALU/latency in the closest-hit path, not memory traffic."
+ },
+ {
+  "arm": "A1",
+  "sample": 8,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 it made the walk slightly slower, and I rejected it.\n\nWhat I tried (round 8, experiment E5): the shipped BVH node is 32 bytes (lo[4] + hi[4] floats). I packed each node into 16 bytes \u2014 six 16-bit integer box coordinates plus the existing 4-byte payload \u2014 so a node became a single uint4 load. Because the quantization scale is a power of two, float(u16) reconstructs the exact same coordinate, so the estimator was untouched: the PFM came out byte-identical to the round-7 baseline on all three scenes at 64 spp, seed 1.\n\nHow I measured it: interleaved paired A/B against the frozen round-7 binary, 16 pairs, 5 benchmark passes each, 512x512 at 64 spp on the default scene, judged on paired log-ratios rather than any single absolute number.\n\nResult: candidate won 0 of 16 pairs, mean delta +0.2796 ms, geometric-mean ratio 1.00900 (+0.90%), sd(log) 0.00221, t = +16.25 \u2014 a statistically solid regression, not noise. Preserved in _r8_node16/ and reverted out of the shipped tree.\n\nWhy it loses: unpacking the node costs about six mask/shift/convert ops per visited node, and the walk is latency/ALU-bound, not node-bandwidth-bound. That is the same signal as round 7, where simply deleting the u16->float conversion and keeping f32 coordinates bought -0.44%, and it also matches my cost profile of this frame (trace kernel = 98.6% of GPU time, shadow rays only 12%, so the bottleneck is closest-hit traversal math, not memory traffic)."
+ },
+ {
+  "arm": "A1",
+  "sample": 9,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "No \u2014 halving the BVH node made the walk measurably slower. That was round 8 experiment E5: each node went from 32 bytes (lo[4] + hi[4] floats, two float4 loads) to 16 bytes by storing the box as six 16-bit integers plus a 4-byte payload, fetched as one uint4 load. Since the quantization scale is a power of two, float(u16) is exact, so the image was byte-identical to the round-7 baseline on all three scenes at 64 spp / seed 1 \u2014 the correctness gate passed.\n\nThe timing did not. Interleaved paired A/B, 16 pairs at 64 spp on the default scene: the candidate won 0 of 16, mean_delta +0.2796 ms, geo_mean_ratio 1.00900 (+0.90% slower), sd_log 0.00221, t = +16.25 \u2014 a large, consistent regression, not noise. The six extra mask/shift/u2f ops per node cost more than the halved node traffic saves, so the BVH walk is ALU/latency-bound, not node-bandwidth-bound. That matches round 7's -0.44% win from deleting a single u2f conversion, and it is also why the 16-bit normal-table idea was dropped.\n\nThe variant is preserved in _r8_node16/ and pathtracer/ was reverted to the round-7 code (PFM byte-identical confirmed)."
+ }
+]

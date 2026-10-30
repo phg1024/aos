@@ -1,0 +1,146 @@
+[
+ {
+  "arm": "C",
+  "sample": 1,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child together with the t at which the ray entered its box, so a pop only needs `entered <= t_max_q` and pruned pops touch no memory) was a win, and it is still in the kept code.\n\nHow I measured it: interleaved A/B against the round-4 binary (which is the same tree minus that change), 8 rounds x 12 frames, --benchmark 12 per invocation, default scene at 512x512 / 64 spp / seed 1, binaries alternating inside each round so machine drift hit both sides equally.\n\nNumbers:\n- round-4 base: render_ms_best minimum 44.493 ms, mean of the per-invocation bests 46.042 ms\n- entered-distance candidate: minimum 44.425 ms, mean 45.607 ms\n- paired outcome: 6 of the 8 rounds favoured the candidate\n- mean improvement about -0.44 ms (~1%), and the minimum improved by 0.07 ms\n\nCorrectness was checked before accepting it: the resulting 64-spp seed-1 PFM was byte-identical to round 4 on all three scenes (default, alt-view, caustic-closeup), because entered/exited are independent of the t-limit used at push time and the pushed entry distance is always <= the box's exit, so the tightened pop test can never drop a box that could still contain a hit. On top of that base I later added the stack_payload variant (pushing the child's payload too, so pops need no global load), which measured base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5/8 pairs, -0.68 ms mean, and was also kept."
+ },
+ {
+  "arm": "C",
+  "sample": 2,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (storing each deferred child's entry t in the traversal stack so a pop only needs `entered <= t_max_q` and pruned pops touch no memory) beat the round-4 binary in its interleaved A/B, and I kept it.\n\nNumbers from that A/B (harness ./_ab.sh, base = frozen round-4 binary, 8 interleaved rounds x 12 benchmark frames each, default scene 512x512 at 64 spp, seed 1):\n- base (round-4): render_ms_best min = 44.493 ms, mean of per-round bests = 46.042 ms\n- candidate (entered-distance stack): min = 44.425 ms, mean = 45.607 ms\n- per-round pairing: 6 of the 8 rounds favoured the candidate\n\nHow I know it: those figures are recorded in my working-memory entry 'round5-glass-and-stack' (evidence messages 78-88), written from the harness output at the time, together with the correctness check that the candidate's 64-spp seed-1 PFMs were byte-identical to round 4 on all three scenes (default, alt-view, caustic-close-up), which is why a small-but-consistent timing win was safe to keep. The separate glass refract-skip idea measured in the same session went the other way (base 43.315 min / 45.632 mean vs candidate 45.025 / 46.563, 6/8 pairs favouring base) and was reverted."
+ },
+ {
+  "arm": "C",
+  "sample": 3,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack experiment (pushing each deferred child's entry t so the pop test reduces to `entered <= t_max_q`, letting pruned pops touch no memory) came out as a win and was kept. A/B setup: interleaved against the round-4 binary, 8 rounds x 12 frames, 64 spp, seed 1, default scene.\n\nNumbers: base (round-4 binary) render_ms_best minimum 44.493 ms, mean 46.042 ms; candidate (entered-distance stack) minimum 44.425 ms, mean 45.607 ms \u2014 about -0.44 ms on the minimum and -0.44 ms on the mean, with 6 of the 8 paired rounds favouring the candidate. It was also bit-identical to round-4 on all three scenes (default, alt-view, caustic-closeup) at 64 spp / seed 1, which was required since the estimator must not change.\n\nHow I know: this is recorded in my working memory entry \"round5-glass-and-stack\" (evidence: history messages 78-88), where the same A/B also notes the companion rejection from that session \u2014 the glass refract-skip/shared-cos_incident variant was bit-identical but slower (base 43.315 min / 45.632 mean vs cand 45.025 / 46.563, 6/8 pairs favouring base), so it was reverted while the entered-distance stack was kept and became the base for the later stack_payload gain (base 43.875 min / 45.583 mean vs cand 43.226 / 44.906, 5/8 pairs, -0.68 ms mean)."
+ },
+ {
+  "arm": "C",
+  "sample": 4,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child's entry t so a pop only needs `entered <= t_max_q`, touching no memory on pruned pops) came out a small but consistent win over the round-4 binary. Interleaved A/B, 8 rounds x 12 frames at 512x512/64spp seed 1 on the default scene: base (round-4) render_ms_best minimum 44.493 ms, mean 46.042 ms; candidate minimum 44.425 ms, mean 45.607 ms \u2014 i.e. -0.07 ms at the minimum and -0.44 ms on the mean, with 6 of the 8 paired rounds favouring the candidate. It was also verified bit-identical to round-4 on all three scene configs (default, alt-view, caustic-closeup) at 64 spp seed 1, which is why it was kept despite the modest margin: the pop test becomes strictly cheaper while the estimator is unchanged. That state became the revert point kept as _b/pathtracer, and it is the base every later round-5 experiment (the child-pair 32-byte blocks and the plane pre-filter, both rejected) was measured against."
+ },
+ {
+  "arm": "C",
+  "sample": 5,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child's entry t so a pop only tests entered <= t_max_q and touches no memory) was a win, and I kept it.\n\nA/B vs the round-4 binary, interleaved, 8 rounds x 12 frames at 512x512 / 64 spp, seed 1:\n- round-4 base: render_ms_best min 44.493 ms, mean of per-round bests 46.042 ms\n- entered-distance candidate: min 44.425 ms, mean 45.607 ms\n- 6 of the 8 paired rounds favoured the candidate; mean improvement about -0.44 ms (~1%)\n\nCorrectness first: it was bit-identical to round 4 on all three scenes (default, alt-view, caustic-closeup) at 64 spp / seed 1, which is expected because entered/exited are independent of the t-limit and t_min_q is a positive constant, so a pruned pop can only drop a child that could not have won.\n\nHow I know: that A/B is recorded in my working memory entry 'round5-glass-and-stack' (history messages ~78-88), which is also where the follow-up stack_payload variant is recorded (pushing the child payload too, so pops need no global load: base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5/8 pairs, about -0.68 ms mean) \u2014 that one was kept as well and is what snapshot _b/pathtracer holds."
+ },
+ {
+  "arm": "C",
+  "sample": 6,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child together with the t at which the ray entered it, so a pop only needs `entered <= t_max_q`) beat the round-4 binary in its interleaved A/B at 512x512 / 64 spp, seed 1, 8 rounds x 12 frames each:\n\n- base (round-4 binary): render_ms_best minimum 44.493 ms, mean of per-round bests 46.042 ms\n- candidate (entered-distance stack): minimum 44.425 ms, mean 45.607 ms\n- paired outcome: 6 of the 8 rounds favoured the candidate\n\nIt was also bit-identical to round 4 on all three scenes (default, alt-view, caustic-closeup), which was provable rather than lucky: entered/exited are independent of the t-limit used at push time, t_min_q is a constant 1e-4, and t_max_q can only tighten, so a pruned pop touches no memory and the hit set is unchanged. That combination (bit-identical + consistent paired win) is why it was kept, and it is the state later snapshots (_b and the live tree) build on. I know this from my own working-memory entry for that experiment (evidence messages 78-88), recorded from the A/B harness output at the time, not re-derived now."
+ },
+ {
+  "arm": "C",
+  "sample": 7,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child's entry distance so a pop only needs `entered <= t_max_q`, letting pruned pops touch no memory) beat the round-4 binary and was kept. Evidence: interleaved A/B with the _ab harness at 8 rounds x 12 frames, 64 spp, seed 1, default scene, base = the frozen round-4 binary in ab_r4/. Result \u2014 base: render_ms_best minimum 44.493 ms, mean of the per-round bests 46.042 ms; candidate: minimum 44.425 ms, mean 45.607 ms, i.e. about -0.44 ms on the minimum and -0.44 ms on the mean, with 6 of the 8 interleaved rounds favouring the candidate. It was also bit-identical to round 4 on all three scene configs (default, alt-view, caustic-closeup) at 64 spp seed 1, which was the gate for accepting it. That candidate state later became the _b binary used as the A/B base for everything after it, and the same tree plus stack_payload is what is live now (with the additional provably-redundant `exited > 0` compare removed). Source: my round-5 working-memory entry decisions/round5-glass-and-stack, recorded from history messages 78-88."
+ },
+ {
+  "arm": "C",
+  "sample": 8,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child with its entry t so a pop's box test reduces to `entered <= t_max_q`) was a win and is still in the kept code.\n\nA/B against the round-4 binary, interleaved, 8 rounds x 12 frames at 512x512/64spp seed 1:\n- base (round-4): render_ms_best min 44.493 ms, mean 46.042 ms\n- candidate (entered-distance stack): min 44.425 ms, mean 45.607 ms\n- paired outcome: 6 of the 8 rounds favoured the candidate (mean gain about 0.44 ms, min gain about 0.07 ms)\n\nIt was also bit-identical to round 4 on all three scenes (default, alt-view, caustic-closeup) at 64 spp / seed 1, so the estimator was untouched \u2014 the gain came purely from pruned pops touching no memory.\n\nHow I know: this is recorded in my round-5 working memory entry \"round5-glass-and-stack\" (evidence messages 78-88), which I wrote from the _ab.sh harness output at the time; the same entry also notes the separate glass refract-skip experiment that round, which was bit-identical but lost the same style of A/B (base 43.315 min / 45.632 mean vs candidate 45.025 / 46.563, 6/8 favouring base) and was reverted. A later, stronger variant of the same idea \u2014 also pushing the child's payload so pops need no global load \u2014 was kept as well (base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5/8 pairs, -0.68 ms mean), and that state is the snapshot _b/pathtracer used as the A/B base since."
+ },
+ {
+  "arm": "C",
+  "sample": 9,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack change won and was kept. Its A/B against the round-4 binary was an interleaved paired run of 8 rounds x 12 frames at 512x512 / 64 spp, seed 1, on the default scene:\n\n- round-4 base: render_ms_best minimum 44.493 ms, mean of the per-round bests 46.042 ms\n- entered-distance candidate: minimum 44.425 ms, mean 45.607 ms\n- 6 of the 8 paired rounds favoured the candidate (paired difference about -0.43 ms on the mean, -0.07 ms on the minimum)\n\nIt was also verified bit-identical to round 4 on all three scene configs (default, alt-view, caustic-closeup) at 64 spp / seed 1, so the gain came with no change to the estimator. The reason it works: pushing each deferred child together with the t at which the ray enters its box turns the pop test into just `entered <= t_max_q`, so a pruned pop touches no memory at all (entered/exited are independent of the limit, t_min_q is constant, and t_max_q only tightens as the hit gets closer). The win is small and within noise on a contended machine, which is why I judged it a win on the paired-round count plus the mechanism rather than on the minimum alone. I know this from my own working-memory entry for that experiment (recorded at the time, evidence messages 78-88), not from a new measurement."
+ },
+ {
+  "arm": "A1",
+  "sample": 1,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child's entry distance so a pop only needs `entered <= t_max_q` instead of a full slab test) came out a modest but consistent win in its first A/B against the round-4 binary.\n\nSetup: interleaved A/B harness (_ab.sh), 8 rounds x 12 frames each, default scene 512x512 at 64 spp, seed 1, alternating the two binaries inside every round so machine drift hits both equally. Correctness was checked first: the PFM was byte-identical to round 4 on all three scene configs (default, alt-view, caustic-closeup), which is what the change promises since entered/exited are independent of the t limits and t_min_q is a positive constant.\n\nNumbers (render_ms_best per round, min and mean over the 8 rounds):\n- base (round-4 binary): min 44.493 ms, mean 46.042 ms\n- candidate (entered-distance stack): min 44.425 ms, mean 45.607 ms\n- paired sign test: 6 of 8 rounds favoured the candidate, 2 favoured the base\n\nSo about -0.4 ms on the best-case figure and roughly -0.44 ms on the mean, i.e. ~1% on top of the round-4 45.220 ms, with 6/8 paired rounds in its favour. I kept it, and it became the base for the next kept change (also carrying the child's payload on the stack, which measured base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5/8 pairs, mean -0.68 ms).\n\nHow I know: that A/B and its numbers are recorded in my working-memory entry \"round5-glass-and-stack\" (evidence messages 78-88), written when I ran it earlier in this round."
+ },
+ {
+  "arm": "A1",
+  "sample": 2,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child with its entry distance so a pop only needs `entered <= t_max_q`) beat the round-4 binary and was kept.\n\nA/B setup: interleaved harness ./_ab.sh <base> <cand> 8 12 64 \u2014 8 rounds, each round running both binaries with --benchmark 12, default scene 512x512 at 64 spp, seed 1.\n\nNumbers (render_ms_best per invocation):\n- base (round-4 binary, frozen in ab_r4/): min 44.493 ms, mean 46.042 ms\n- candidate (entered-distance stack): min 44.425 ms, mean 45.607 ms\n- paired rounds favouring the candidate: 6 of 8\n- mean gain \u2248 0.43 ms (~1%)\n\nIt was also bit-identical to the round-4 reference PFMs on all three scenes (default, alt-view, caustic-closeup), which was the gate before timing: the entered/exited interval is independent of the query t-limits, t_min_q is the constant 1e-4, and a pushed child always has entered <= exited and exited > 0, so pruning a pop on `entered > t_max_q` can never drop a node that could contain a nearer hit.\n\nHow I know: this is recorded in my working memory entry round5-glass-and-stack (evidence messages 78-88), which cites that exact A/B run; the earlier glass refract-skip experiment in the same entry was the one rejected (base 43.315 min / 45.632 mean vs cand 45.025 / 46.563, 6/8 pairs favouring base)."
+ },
+ {
+  "arm": "A1",
+  "sample": 3,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child with its entry t so a pop only tests entered <= t_max) beat the round-4 binary in the interleaved A/B I ran against it. Numbers, from the harness run recorded in my history at message [#88] (8 interleaved rounds of 12 benchmark frames each at 512x512, 64 spp, seed 1, default scene):\n\n- round-4 base: render_ms_best minimum 44.493 ms, mean of per-round bests 46.042 ms\n- entered-stack candidate: render_ms_best minimum 44.425 ms, mean 45.607 ms\n- paired per-round comparison: 6 of the 8 rounds favoured the candidate\n\nSo the win was small (about -0.07 ms at the minimum, -0.44 ms on the paired mean) but consistent, and I kept it. The reason it can only help is structural: entered and exited are independent of the query interval while t_min_q is constant, so a pruned pop provably touches no memory, whereas the old pop re-tested the child's box. That kept change later became part of the _b revert point, which also includes the follow-on stack_payload win (pushing the child's payload too, so a pop needs no global load): that one measured base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5 of 8 pairs, mean -0.68 ms [#110]."
+ },
+ {
+  "arm": "A1",
+  "sample": 4,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (each pushed BVH child stored with its entry distance, so a pop only needs `entered <= t_max_q` and pruned pops touch no memory) beat the round-4 binary in the interleaved A/B I ran against it.\n\nNumbers, from that A/B at 512x512, 64 spp, seed 1, harness ./_ab.sh with 8 interleaved rounds of 12 benchmark frames each:\n- base (round-4 binary, ab_r4/pathtracer): render_ms_best minimum over the 8 rounds = 44.493 ms, mean of the per-round bests = 46.042 ms\n- candidate (round-4 + entered-distance stack): minimum = 44.425 ms, mean = 45.607 ms\n- 6 of the 8 paired rounds favoured the candidate; the paired mean gain was about 0.44 ms (~1%).\n\nCorrectness was checked first: the 64-spp seed-1 PFM was byte-identical to round 4 on all three scenes (default, alt-view, caustic-closeup), which is expected because entered/exited are independent of the t-limit and the pushed child's entered value can never exceed its exited value, so the tightened pop test prunes only pops that could not hit.\n\nI kept it, and it became the base for the follow-up stack_payload change (pushing the child's payload too, so pops need no global node load), which measured a further 43.875 min / 45.583 mean base vs 43.226 / 44.906 candidate, 5 of 8 pairs, about 0.68 ms; that combined state is the snapshot _b/pathtracer used as the A/B base and revert point for everything after it."
+ },
+ {
+  "arm": "A1",
+  "sample": 5,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack change (pushing each deferred child together with the t at which the ray entered that child's box, so a pop only needs `entered <= t_max_q` and pruned pops touch no memory) came out as a win and was kept.\n\nA/B against the round-4 binary, interleaved, 8 rounds x 12 frames at 512x512 / 64 spp, seed 1:\n- round-4 base: render_ms_best min 44.493 ms, mean of the per-round bests 46.042 ms\n- entered-stack candidate: min 44.425 ms, mean 45.607 ms\n- 6 of the 8 paired rounds favoured the candidate (mean gain about 0.4 ms, ~0.9%).\n\nIt was also byte-identical to round 4 on all three scene configs (default, alt-view, caustic-closeup) at 64 spp / seed 1, so the estimator is untouched \u2014 the win is purely the removed re-test of the popped box.\n\nHow I know: this is recorded in my working memory entry 'round5-glass-and-stack' with evidence pointing at messages 78-88, where the A/B was run and logged; the same entry notes the follow-up stack_payload addition (pushing the child's payload too) measured separately as base 43.875 min / 45.583 mean vs 43.226 / 44.906, 5/8 pairs, -0.68 ms mean, which is the state snapshotted as _b/pathtracer."
+ },
+ {
+  "arm": "A1",
+  "sample": 6,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child together with the t at which the ray entered that child, so a pop only needs `entered <= t_max_q` and pruned pops touch no memory) beat the round-4 binary and was kept. In the interleaved A/B at 512x512, 64 spp, seed 1, run as 8 rounds of 12 benchmark frames each, alternating the two binaries inside every round: base (round-4 binary) render_ms_best min = 44.493 ms, mean over rounds = 46.042 ms; candidate (entered-distance stack) min = 44.425 ms, mean = 45.607 ms \u2014 i.e. about -0.07 ms at the floor and -0.44 ms on the paired mean, with 6 of the 8 paired rounds favouring the candidate. It was also verified bit-identical to round 4 on all three scene configs (default, alt-view, caustic-closeup) at 64 spp / seed 1, so the estimator was unchanged. That is how I know it: the numbers are recorded in my working memory entry 'round5-glass-and-stack' (evidence messages 78-88), written from the _ab.sh output at the time, and the same entry notes the follow-up stack_payload addition (pushing the child's payload too) was kept as well on a later A/B (base 43.875 min / 45.583 mean vs candidate 43.226 / 44.906, 5/8 pairs, -0.68 ms mean, evidence 96-110). Caveat: the machine has since become heavily contended (load ~4, runs inflating to 60-96 ms), so later A/B runs in this round have been much noisier than these."
+ },
+ {
+  "arm": "A1",
+  "sample": 7,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (push each deferred child together with its entry distance so a pop only needs `entered <= t_max_q`, touching no memory) beat the round-4 binary in the interleaved A/B I ran at 512x512 / 64 spp, seed 1, 8 rounds x 12 benchmark frames:\n\n- round-4 base: render_ms_best min = 44.493 ms, mean of the per-round bests = 46.042 ms\n- entered-distance candidate: min = 44.425 ms, mean = 45.607 ms\n- 6 of the 8 interleaved rounds favoured the candidate; mean improvement about 0.44 ms (~1%)\n\nIt was also bit-identical to round 4 (byte-for-byte PFM at 64 spp seed 1 on default, alt-view and caustic-closeup), which is why I kept it. Note this was the first of the two stack changes: the follow-up that also carries the child's payload in the stack was measured separately against an entered-distance-only base (43.875/45.583 vs 43.226/44.906, 5/8 pairs, mean -0.68 ms) and was likewise kept.\n\nI know these numbers because they are recorded in my working memory entry 'round5-glass-and-stack' (evidence messages 78-88), written at the time from the _ab.sh harness output, not reconstructed now."
+ },
+ {
+  "arm": "A1",
+  "sample": 8,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child together with the t at which the ray enters it, so a pop only needs the test `entered <= t_max_q` and touches no memory when pruned) was bit-identical to round 4 on all three scenes and beat the round-4 binary in the interleaved A/B.\n\nNumbers, from the 8-round x 12-frame interleaved run at 512x512 / 64 spp, seed 1 (base = frozen round-4 binary in ab_r4/, candidate = the entered-stack build):\n- base: render_ms_best min = 44.493 ms, mean of the 8 rounds = 46.042 ms\n- candidate: render_ms_best min = 44.425 ms, mean of the 8 rounds = 45.607 ms\n- 6 of the 8 paired rounds favoured the candidate (mean gain about 0.44 ms, ~1%)\n\nThat is why it was kept. I know this from my own round-5 notes and the working-memory entry 'round5-glass-and-stack', which records that A/B run (archive messages 82-88); the same entry also notes the follow-up: adding the child payload to the stack on top of it (stack_payload) was a further win, measured against the entered-stack-only build _e as 43.875 ms min / 45.583 ms mean versus 43.226 ms min / 44.906 ms mean, 5 of 8 pairs, about -0.68 ms mean, and that pair of changes is the current _b baseline I am A/B-ing against."
+ },
+ {
+  "arm": "A1",
+  "sample": 9,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The entered-distance stack (pushing each deferred child's entry distance so a pop is just `entered <= t_max_q` instead of a full slab test, and pruned pops touch no memory) was bit-identical on all three scenes, and its interleaved A/B against the round-4 binary came out as a small but consistent win: over 8 paired rounds, base (round-4) render_ms_best min = 44.493 ms, mean = 46.042 ms; candidate min = 44.425 ms, mean = 45.607 ms, with 6 of the 8 interleaved pairs favouring the candidate. That is about -0.44 ms on the minimum and -0.44 ms on the mean, so I kept it. Later in the same round I added the payload carry (push the child's BVH payload together with its entry distance so pops need no global load at all); measured against an isolation build that had the entered-distance stack but not the payload carry, that second step went from 43.875 ms min / 45.583 ms mean to 43.226 ms / 44.906 ms, 5 of 8 pairs, mean -0.68 ms, and it was kept as well.\n\nHow I know: these are the numbers I recorded in my working memory entry 'round5-glass-and-stack' and 'round5-stack-payload' at the time I ran them (history messages 82-88 for the entered-distance stack, 90-110 for the payload carry), from the interleaved A/B harness _ab.sh/_abn.sh runs at 512x512, 64 spp, seed 1, where each round runs base and candidate back to back so machine drift hits both equally."
+ }
+]

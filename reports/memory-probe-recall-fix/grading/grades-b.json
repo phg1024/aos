@@ -1,0 +1,244 @@
+{
+ "r2-first-sah": {
+  "C": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9
+   ],
+   "contra": [
+    8
+   ],
+   "notes": {
+    "8": "says bvh_stats showed a depth 'far below the cap'; #102/#103: max_depth=16, the depth cap was binding",
+    "2": "kept exact: says the stats tool 'exposed' the shadow t_limit bug; #94 found it by reading the code (process detail)"
+   }
+  },
+  "A1": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    9
+   ],
+   "contra": [
+    7
+   ],
+   "notes": {
+    "7": "says later in the round it 'only tuned leaf size and depth cap' to reach 59.1-66.3 ms; the main win was near-first child ordering, 93.5 -> 64.9 ms (#283)",
+    "4": "kept exact: garbled self-correction 'mean_leaf=3.42? no: mean_leaf = 30.42'; final figure right"
+   }
+  }
+ },
+ "r2-root-exit": {
+  "C": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    2,
+    3,
+    5,
+    6,
+    7,
+    9
+   ],
+   "contra": [
+    1,
+    4,
+    8
+   ],
+   "notes": {
+    "1": "107.0/126.0 right, but says the same code without it ran ~93 ms best / ~97 ms avg; at #133/#144 it was 101.2 best / 116.5 avg (~93 came later, before near-first)",
+    "4": "107/126 right, but says the code without it averaged ~97 ms; #144: 101.2/116.5 avg (other no-prune runs 114.6, 109.6)",
+    "8": "107.0/126.0 right, but says ~97 ms avg without it; #144: 116.5 avg (other no-prune runs 114.6, 109.6)",
+    "5": "kept exact: explains the loss by near-first ordering, which only came later (#283); framed as a likely reason"
+   }
+  },
+  "A1": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9
+   ],
+   "contra": [
+    8
+   ],
+   "notes": {
+    "8": "107.004/125.973 right, but says +12 to +22 ms on the average; no-prune averages were 109.6-116.5 (#133, #129, #151), so +9.5 to +16.5",
+    "5": "kept exact: calls 101.771/114.621 (#129) the 'immediately preceding' build; #144 compared against the fastMath build 101.15/116.465 (#133)",
+    "9": "kept exact: calls 101.771/101.237 'the baseline it was tested against'; #144 compared against 101.2/116.5 (#133)"
+   }
+  }
+ },
+ "r8-trace-share": {
+  "C": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "contra": [],
+   "notes": {}
+  },
+  "A1": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "contra": [],
+   "notes": {
+    "2": "kept exact: says the two dispatches ran 'with no host sync between them'; the PT_SPLIT patch (#22) commits and waitUntilCompleted before the combine buffer (method detail, figures right)"
+   }
+  }
+ },
+ "r8-small-node": {
+  "C": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "contra": [],
+   "notes": {
+    "2": "kept exact: says round 7's deleting the u2f conversion 'also cost about 0.4%'; it was a -0.44% gain (ambiguous wording)",
+    "9": "kept exact: says 'two 32-byte float4 loads' (each float4 is 16 bytes; node 32 bytes); unit slip"
+   }
+  },
+  "A1": {
+   "main": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "exact": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "contra": [],
+   "notes": {
+    "9": "kept exact: says the ALU-bound finding is 'also why' the 16-bit normal table (E3) was dropped; archive: E3 dropped because host normals cannot round-trip 16-bit bit-exactly"
+   }
+  }
+ }
+}
