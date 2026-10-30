@@ -338,3 +338,20 @@ func TestProbeOwnWorkingMemoryConditions(t *testing.T) {
 		t.Fatal("stripping working memory changed the original state")
 	}
 }
+
+// The probed agent is not shown the probe's ID, which can hint at the
+// answer.
+func TestProbeIDIsNotShown(t *testing.T) {
+	stateDir, checkpoint, _ := probedRun(t)
+	completer := &promptCompleter{}
+	probe := memprobe.Probe{ID: "xyzzy-readopted", Kind: "superseded", Checkpoint: checkpoint, Question: "Is leaf2 adopted?", Expect: "rejected"}
+	samples, err := memprobe.Run(context.Background(), memprobe.Config{StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer}, []memprobe.Probe{probe})
+	if err != nil || len(samples) != 1 || len(completer.prompts) == 0 {
+		t.Fatalf("%v %+v", err, samples)
+	}
+	for _, prompt := range completer.prompts {
+		if strings.Contains(prompt, "xyzzy") {
+			t.Fatalf("the prompt names the probe:\n%s", prompt)
+		}
+	}
+}

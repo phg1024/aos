@@ -328,7 +328,10 @@ func (b *countingBackend) Generate(ctx context.Context, request runtime.Generate
 // recovered from its owner, so its own compacted memory is readable.
 func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint, workingMemory string) Sample {
 	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe, workingMemory), WorkingMemory: workingMemory}
-	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": probe.ID}
+	// Process metadata is shown in the agent's prompt header, so it marks
+	// the process as a probe without naming the probe: an ID such as
+	// "leaf2-readopted" would hint at the answer.
+	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": "true"}
 	for key, value := range owner.Metadata {
 		if _, set := metadata[key]; !set {
 			metadata[key] = value
