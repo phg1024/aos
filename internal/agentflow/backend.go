@@ -525,7 +525,7 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		OutputPath: request.Process.Metadata["output_path"],
 		Metadata:   cloneMap(request.Process.Metadata),
 		History:    historyMessages(request.History),
-		MemoryRefs: append([]runtime.MemoryRef(nil), request.MemoryRefs...),
+		MemoryRefs: b.promptRefs(request.MemoryRefs),
 		Memory:     b.workingMemorySnapshot(request.WorkingMemory),
 		ReadPaths:  append([]string(nil), request.Process.CapabilitySet.ReadPaths...),
 		WritePaths: append([]string(nil), request.Process.CapabilitySet.WritePaths...),
@@ -537,6 +537,18 @@ func (b PromptBackend) userPrompt(request runtime.GenerateRequest) string {
 		"Here is your current session context.\n\n%s\n\nRespond with the next action JSON only.",
 		string(bytes),
 	)
+}
+
+// promptRefs are the archive refs as the single-prompt form shows them:
+// without the agent's index when it is turned off.
+func (b PromptBackend) promptRefs(refs []runtime.MemoryRef) []runtime.MemoryRef {
+	out := append([]runtime.MemoryRef(nil), refs...)
+	if b.Recall.NoAgentIndex {
+		for i := range out {
+			out[i].Index = nil
+		}
+	}
+	return out
 }
 
 // historyMessage is a history entry as a single-prompt backend shows it:
