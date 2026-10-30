@@ -318,17 +318,34 @@ func runTUI() []string {
 				footer.Println(ui.Error("resume: " + err.Error()))
 				continue
 			}
+			// This session is where the user already is; it is not offered.
+			sessions = otherSessions(sessions, stateDir)
 			arg := strings.TrimSpace(strings.TrimPrefix(line, "/resume"))
+			var picked sessionInfo
 			if arg == "" {
-				footer.Println(sessionList(ui, sessions, stateDir, sessionsDir))
+				if len(sessions) == 0 || !useEditor {
+					footer.Println(sessionList(ui, sessions, sessionsDir))
+					continue
+				}
+				rows := make([]string, len(sessions))
+				for i, session := range sessions {
+					rows[i] = sessionRow(ui, i, session)
+				}
+				chosen, err := render.Pick(ui, os.Stdin, "Resume", rows)
+				switch {
+				case errors.Is(err, render.ErrLineEditorUnavailable):
+					footer.Println(sessionList(ui, sessions, sessionsDir))
+					continue
+				case err != nil || chosen < 0:
+					footer.Println(ui.Subtle("resume cancelled"))
+					continue
+				}
+				picked = sessions[chosen]
+			} else if picked, err = pickSession(sessions, arg); err != nil {
+				footer.Println(ui.Warn(err.Error()))
 				continue
 			}
-			picked, err := pickSession(sessions, arg)
 			switch {
-			case err != nil:
-				footer.Println(ui.Warn(err.Error()))
-			case filepath.Clean(picked.Dir) == filepath.Clean(stateDir):
-				footer.Println(ui.Subtle("already in that session"))
 			case picked.InUse:
 				footer.Println(ui.Warn("that session is open in another TUI"))
 			default:
@@ -421,40 +438,53 @@ func runTUI() []string {
 var tuiCommands = []render.Command{
 	{Name: "/help", Summary: "list commands and keys"},
 	{Name: "/state", Summary: "show the process, checkpoint and state directory"},
-	{Name: "/resume", Summary: "list saved sessions; /resume N switches to one"},
+	{Name: "/resume", Summary: "pick a saved session with ↑/↓ and Enter; /resume N switches to one"},
 	{Name: "/recover", Summary: "restart the agent from its last checkpoint"},
 	{Name: "/clear", Summary: "clear the screen"},
 	{Name: "/quit", Summary: "exit"},
 }
 
-// sessionList renders the saved sessions, numbered for /resume N.
-func sessionList(ui render.Palette, sessions []sessionInfo, current, dir string) string {
+// otherSessions is sessions without the one in stateDir.
+func otherSessions(sessions []sessionInfo, stateDir string) []sessionInfo {
+	var others []sessionInfo
+	for _, session := range sessions {
+		if filepath.Clean(session.Dir) != filepath.Clean(stateDir) {
+			others = append(others, session)
+		}
+	}
+	return others
+}
+
+// sessionRow is the i-th saved session as the list and the picker show it.
+func sessionRow(ui render.Palette, i int, session sessionInfo) string {
+	preview := session.Preview
+	if preview == "" {
+		preview = "(nothing said yet)"
+	}
+	if runes := []rune(preview); len(runes) > 60 {
+		preview = string(runes[:60]) + "…"
+	}
+	status := ""
+	if session.InUse {
+		status = "  " + ui.Warn("in use")
+	}
+	turns := fmt.Sprintf("%d turns", session.Turns)
+	if session.Turns == 1 {
+		turns = "1 turn"
+	}
+	return fmt.Sprintf("%2d  %-28s %-12s %9s  %s%s", i+1, session.Name, ago(session.Updated), turns, ui.Subtle(preview), status)
+}
+
+// sessionList renders the saved sessions, numbered for /resume N, where
+// the picker is not available.
+func sessionList(ui render.Palette, sessions []sessionInfo, dir string) string {
 	if len(sessions) == 0 {
-		return ui.Subtle("no saved sessions in " + dir)
+		return ui.Subtle("no other saved sessions in " + dir)
 	}
 	var builder strings.Builder
 	builder.WriteString(ui.Header(" Sessions ") + ui.Subtle("  "+dir) + "\n")
 	for i, session := range sessions {
-		mark := " "
-		if filepath.Clean(session.Dir) == filepath.Clean(current) {
-			mark = "*"
-		}
-		preview := session.Preview
-		if preview == "" {
-			preview = "(nothing said yet)"
-		}
-		if runes := []rune(preview); len(runes) > 60 {
-			preview = string(runes[:60]) + "…"
-		}
-		status := ""
-		if session.InUse && mark != "*" {
-			status = "  " + ui.Warn("in use")
-		}
-		turns := fmt.Sprintf("%d turns", session.Turns)
-		if session.Turns == 1 {
-			turns = "1 turn"
-		}
-		builder.WriteString(fmt.Sprintf(" %s%2d  %-28s %-12s %9s  %s%s\n", mark, i+1, session.Name, ago(session.Updated), turns, ui.Subtle(preview), status))
+		builder.WriteString("  " + sessionRow(ui, i, session) + "\n")
 	}
 	builder.WriteString(ui.Subtle("  /resume N switches to session N"))
 	return builder.String()

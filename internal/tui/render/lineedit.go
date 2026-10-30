@@ -155,6 +155,7 @@ const (
 	keyKillToStart
 	keyKillWord
 	keyEOF
+	keyEscape
 	keyIgnored
 )
 
@@ -225,7 +226,7 @@ func decodeKeys(input []byte) ([]key, []byte) {
 // Esc at the end of a read is taken as the Esc key itself.
 func decodeEscape(input []byte) (key, int, bool) {
 	if len(input) == 1 {
-		return key{kind: keyIgnored}, 1, true
+		return key{kind: keyEscape}, 1, true
 	}
 	switch input[1] {
 	case 'O':
