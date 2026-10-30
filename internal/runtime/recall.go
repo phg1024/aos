@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/tools"
@@ -131,9 +132,22 @@ func RenderIndex(lines []IndexLine) string {
 	return builder.String()
 }
 
-// MaxSegmentIndexBytes caps one segment's rendered index. An index over it
-// is refused, never truncated, as working memory is.
-const MaxSegmentIndexBytes = 1536
+// A segment's rendered index may take IndexBytesPerMessage for each
+// message it archives, within MinSegmentIndexBytes and
+// MaxSegmentIndexBytes: a short segment gets the old flat cap, a long one
+// room for about a line per two messages, and the largest still fits the
+// header's total for agent indexes with room to spare.
+const (
+	IndexBytesPerMessage = 64
+	MinSegmentIndexBytes = 1536
+	MaxSegmentIndexBytes = 4096
+)
+
+// SegmentIndexCap is the cap on the rendered index of a segment of
+// messages messages.
+func SegmentIndexCap(messages int) int {
+	return min(max(messages*IndexBytesPerMessage, MinSegmentIndexBytes), MaxSegmentIndexBytes)
+}
 
 // SegmentIndex reads the agent-written index of a memory_segment
 // artifact: nil when the agent wrote none.
@@ -182,9 +196,9 @@ func messageRange(part string) (from, to int, canonical string, ok bool) {
 }
 
 // parseIndex reads an index_memory argument: one "N: text" or "N-M: text"
-// line per entry, numbers in any evidence form, each inside from-to.
-func parseIndex(text string, from, to int) ([]IndexLine, error) {
-	var lines []IndexLine
+// line per entry, numbers in any evidence form, each inside from-to. A line
+// that is not is rejected on its own, with the reason, and the rest kept.
+func parseIndex(text string, from, to int) (lines []IndexLine, rejected []string) {
 	for _, raw := range strings.Split(text, "\n") {
 		raw = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(raw), "-*"))
 		if raw == "" {
@@ -193,24 +207,59 @@ func parseIndex(text string, from, to int) ([]IndexLine, error) {
 		where, what, found := strings.Cut(raw, ":")
 		what = strings.Join(strings.Fields(what), " ")
 		first, last, _, ok := messageRange(where)
-		if !found || !ok || what == "" {
-			return nil, fmt.Errorf("index_memory line %q should be \"N: what is there\" or \"N-M: what is there\", numbered as %s", raw, evidenceForms)
+		switch {
+		case !found || !ok || what == "":
+			rejected = append(rejected, fmt.Sprintf("%s: not \"N: what is there\" or \"N-M: what is there\" (numbers as %s)", quoteLine(raw), evidenceForms))
+		case first < from || last < first || last > to:
+			rejected = append(rejected, fmt.Sprintf("%s: cites messages outside %d-%d, the ones being archived", quoteLine(raw), from, to))
+		default:
+			lines = append(lines, IndexLine{From: first, To: last, Text: what})
 		}
-		if first < from || last < first || last > to {
-			return nil, fmt.Errorf("index_memory line %q cites messages outside the ones being archived, %d-%d", raw, from, to)
+	}
+	return lines, rejected
+}
+
+// maxRejectedReport bounds what an index_memory result or refusal says
+// about the lines it rejected, so a retry step sees a bounded report.
+const maxRejectedReport = 1024
+
+// maxQuotedLine bounds how much of a rejected line its reason quotes.
+const maxQuotedLine = 120
+
+// quoteLine quotes a rejected line, cut to maxQuotedLine bytes.
+func quoteLine(line string) string {
+	if len(line) <= maxQuotedLine {
+		return strconv.Quote(line)
+	}
+	cut := maxQuotedLine
+	for cut > 0 && !utf8.RuneStart(line[cut]) {
+		cut--
+	}
+	return strconv.Quote(line[:cut]) + "..."
+}
+
+// rejectedReport lists rejected lines with their reasons, within
+// maxRejectedReport.
+func rejectedReport(rejected []string) string {
+	var builder strings.Builder
+	for i, line := range rejected {
+		if builder.Len()+len(line)+1 > maxRejectedReport {
+			fmt.Fprintf(&builder, "... and %d more", len(rejected)-i)
+			break
 		}
-		lines = append(lines, IndexLine{From: first, To: last, Text: what})
+		builder.WriteString(line + "\n")
 	}
-	if len(lines) == 0 {
-		return nil, errors.New("index_memory needs index: one \"N: what is there\" line per entry")
-	}
-	return lines, nil
+	return strings.TrimSuffix(builder.String(), "\n")
 }
 
 // indexMemory checks the agent's index of the messages a pending handoff
 // archives and returns it canonically; the step keeps it with the handoff
 // until the segment is written, then it is stored in the segment, which is
-// never rewritten. A second call before that replaces the first.
+// never rewritten. A second call before that replaces the first. Lines
+// that are malformed, cite messages outside the archived range or come
+// after the cap is reached are rejected and reported, the rest kept; only
+// an index with no line to keep is refused. Either way the agent gets a
+// step to retry with the whole index.
 func (r *AgentRuntime) indexMemory(session Session, args map[string]string) (tools.Result, error) {
 	if r.Recall.NoAgentIndex {
 		return tools.Result{}, errors.New("index_memory is not enabled in this run")
@@ -219,24 +268,49 @@ func (r *AgentRuntime) indexMemory(session Session, args map[string]string) (too
 		return tools.Result{}, errors.New("index_memory indexes the messages a handoff notice says will move to the archive; there is no handoff pending")
 	}
 	from, to := session.Messages[0].Seq, session.HandoffSeq
-	lines, err := parseIndex(args["index"], from, to)
-	if err != nil {
-		return tools.Result{}, err
+	limit := SegmentIndexCap(handoffMessages(session))
+	parsed, rejected := parseIndex(args["index"], from, to)
+	var lines []IndexLine
+	size := 0
+	for i, line := range parsed {
+		if size+len(line.String())+1 > limit {
+			for _, over := range parsed[i:] {
+				rejected = append(rejected, fmt.Sprintf("%s: over the index's %d-byte cap for these messages", quoteLine(over.String()), limit))
+			}
+			break
+		}
+		size += len(line.String()) + 1
+		lines = append(lines, line)
 	}
-	if size := len(RenderIndex(lines)); size > MaxSegmentIndexBytes {
-		return tools.Result{}, fmt.Errorf("index_memory: the index is %d bytes, over its %d-byte cap; keep the lines you will need to find things again, then retry", size, MaxSegmentIndexBytes)
+	if len(lines) == 0 {
+		if len(rejected) == 0 {
+			return tools.Result{}, errors.New("index_memory needs index: one \"N: what is there\" line per entry")
+		}
+		return tools.Result{}, fmt.Errorf("index_memory kept no line of the index; retry with the whole index. Rejected:\n%s", rejectedReport(rejected))
 	}
-	return tools.Result{
-		Tool:    "index_memory",
-		Summary: "indexed archived messages",
-		Output: map[string]string{
-			"messages": fmt.Sprintf("%d-%d", from, to),
-			"lines":    strconv.Itoa(len(lines)),
-			"bytes":    fmt.Sprintf("%d of %d", len(RenderIndex(lines)), MaxSegmentIndexBytes),
-			"replaced": strconv.FormatBool(len(session.HandoffIndex) > 0),
-			"index":    RenderIndex(lines),
-		},
-	}, nil
+	output := map[string]string{
+		"messages": fmt.Sprintf("%d-%d", from, to),
+		"lines":    strconv.Itoa(len(lines)),
+		"bytes":    fmt.Sprintf("%d of %d", size, limit),
+		"replaced": strconv.FormatBool(len(session.HandoffIndex) > 0),
+		"index":    RenderIndex(lines),
+	}
+	if len(rejected) > 0 {
+		output["rejected"] = rejectedReport(rejected)
+		output["notice"] = fmt.Sprintf("%d lines were rejected and the rest kept. A later index_memory call replaces this index, so resend every line you want kept, fixed.", len(rejected))
+	}
+	return tools.Result{Tool: "index_memory", Summary: "indexed archived messages", Output: output}, nil
+}
+
+// handoffMessages counts the live messages a pending handoff archives.
+func handoffMessages(session Session) int {
+	n := 0
+	for _, message := range session.Messages {
+		if message.Seq <= session.HandoffSeq {
+			n++
+		}
+	}
+	return n
 }
 
 // maxDroppedTokens bounds the tokens an overwrite warning lists.

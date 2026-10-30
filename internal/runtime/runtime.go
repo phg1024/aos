@@ -151,11 +151,15 @@ type Session struct {
 	HandoffSeq     int `json:"handoff_seq,omitempty"`
 	HandoffUpdates int `json:"handoff_updates,omitempty"`
 	// HandoffSteps counts the steps taken since the notice, HandoffWrote
-	// says the last of them wrote memory, HandoffRenoticed that the notice
+	// says the last of them wrote memory, HandoffRefused that it tried to
+	// and was refused or had index lines rejected, HandoffRetried that
+	// the step a refusal earns was given, HandoffRenoticed that the notice
 	// was repeated, and HandoffIndex is the agent's index of the messages
 	// the handoff archives, stored with the segment once it is written.
 	HandoffSteps     int         `json:"handoff_steps,omitempty"`
 	HandoffWrote     bool        `json:"handoff_wrote,omitempty"`
+	HandoffRefused   bool        `json:"handoff_refused,omitempty"`
+	HandoffRetried   bool        `json:"handoff_retried,omitempty"`
 	HandoffRenoticed bool        `json:"handoff_renoticed,omitempty"`
 	HandoffIndex     []IndexLine `json:"handoff_index,omitempty"`
 	// MailboxSeen lists the IDs of the messages already in this session, so
@@ -958,6 +962,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					return stop()
 				}
 				if options.ContinueOnToolError {
+					if session.HandoffSeq != 0 && writesMemory(result.Action) {
+						session.HandoffRefused = true
+					}
 					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
 						"tool":  result.Action.ToolCall.Name,
 						"error": err.Error(),
@@ -1025,12 +1032,13 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					session.HandoffWrote = true
 				}
 			case toolResult.Tool == "index_memory":
-				lines, err := parseIndex(toolResult.Output["index"], 1, session.HandoffSeq)
-				if err != nil {
-					return RunResult{}, err
+				lines, rejected := parseIndex(toolResult.Output["index"], 1, session.HandoffSeq)
+				if len(rejected) > 0 {
+					return RunResult{}, fmt.Errorf("index_memory returned an index it would reject: %s", rejected[0])
 				}
 				session.HandoffIndex = lines
 				session.HandoffWrote = true
+				session.HandoffRefused = toolResult.Output["rejected"] != ""
 			}
 			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
@@ -1529,8 +1537,10 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		// ends the run with its history whole.
 		return r.beginHandoff(process, session)
 	}
+	end := "other_action"
 	if handoff && !now {
-		wait, renotice := r.handoffContinues(&session)
+		var wait, renotice bool
+		wait, renotice, end = r.handoffContinues(&session)
 		if renotice {
 			session.Messages = append(session.Messages, Message{Role: "notice", Content: r.renotice(session)})
 			session = numberMessages(session)
@@ -1540,6 +1550,14 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		}
 		if wait {
 			return session, nil
+		}
+	}
+	if handoff && !r.Recall.NoAgentIndex {
+		// Archive exactly what the notice named, which the agent indexed,
+		// not what the history has grown to since.
+		if i := slices.IndexFunc(session.Messages, func(m Message) bool { return m.Seq == session.HandoffSeq }); i >= 0 {
+			cut = i + 1
+			oversized = policy.MaxChars > 0 && historyChars(session.Messages[cut:]) > policy.targetChars()
 		}
 	}
 	prior, priorCut, refused, err := r.priorSegment(process.PID, session.Messages, parents)
@@ -1604,6 +1622,8 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		}
 		if !r.Recall.NoAgentIndex {
 			data["agent_index_lines"] = strconv.Itoa(len(segment.Index))
+			data["handoff_end"] = end
+			data["handoff_retried"] = strconv.FormatBool(session.HandoffRetried)
 		}
 	}
 	if _, err := r.Kernel.RecordEvent(process.PID, "memory.compacted", data); err != nil {
@@ -1636,7 +1656,8 @@ func (r *AgentRuntime) beginHandoff(process kernel.Process, session Session) (Se
 	through := session.Messages[cut-1].Seq
 	notice := fmt.Sprintf(handoffNotice, through)
 	if !r.Recall.NoAgentIndex {
-		notice += fmt.Sprintf(handoffIndexNotice, session.Messages[0].Seq, through)
+		from := session.Messages[0].Seq
+		notice = fmt.Sprintf(handoffIndexFirstNotice, through, from, through, from, through, SegmentIndexCap(cut))
 	}
 	session.Messages = append(session.Messages, Message{Role: "notice", Content: notice})
 	session = numberMessages(session)
@@ -1669,39 +1690,59 @@ const maxHandoffExtraChars = 16 * 1024
 // compact now or give the agent another step: while it keeps writing
 // memory (update_memory, index_memory) when it is asked for an index, or
 // once more, with the notice repeated, when it ignored the notice and has
-// no working memory or no index. Every path compacts within
-// maxHandoffSteps.
-func (r *AgentRuntime) handoffContinues(session *Session) (wait, renotice bool) {
-	wrote := session.HandoffWrote
-	session.HandoffWrote = false
+// no working memory or no index. A write that was refused, or had index
+// lines rejected, earns one step to retry whatever the other bounds: that
+// step sees the history the refused step saw plus the refused call and its
+// bounded report. Every path compacts within maxHandoffSteps+1. end says
+// why a handoff that does not wait ends.
+func (r *AgentRuntime) handoffContinues(session *Session) (wait, renotice bool, end string) {
+	wrote, refused := session.HandoffWrote, session.HandoffRefused
+	session.HandoffWrote, session.HandoffRefused = false, false
 	session.HandoffSteps++
+	if refused && !session.HandoffRetried && !r.Recall.NoAgentIndex {
+		session.HandoffRetried = true
+		return true, false, ""
+	}
 	policy := r.compactionPolicy()
-	if session.HandoffSteps >= maxHandoffSteps || (policy.MaxChars > 0 && historyChars(session.Messages) > policy.MaxChars+maxHandoffExtraChars) {
-		return false, false
+	if session.HandoffSteps >= maxHandoffSteps {
+		return false, false, "step_limit"
+	}
+	if policy.MaxChars > 0 && historyChars(session.Messages) > policy.MaxChars+maxHandoffExtraChars {
+		return false, false, "overrun"
 	}
 	if wrote && !r.Recall.NoAgentIndex {
-		return true, false
+		return true, false, ""
 	}
 	missing := session.WorkingMemory == "" || (!r.Recall.NoAgentIndex && len(session.HandoffIndex) == 0)
 	if !wrote && missing && !session.HandoffRenoticed && !r.Recall.NoHandoffRenotice {
 		session.HandoffRenoticed = true
-		return true, true
+		return true, true, ""
 	}
-	return false, false
+	if wrote {
+		return false, false, "wrote"
+	}
+	return false, false, "no_write"
 }
 
-// renotice repeats a handoff notice the agent did not act on.
+// renotice repeats a handoff notice the agent did not act on, naming
+// index_memory when the index is what is missing.
 func (r *AgentRuntime) renotice(session Session) string {
-	if r.Recall.NoAgentIndex {
+	if r.Recall.NoAgentIndex || len(session.HandoffIndex) > 0 {
 		return fmt.Sprintf(handoffRenotice, session.HandoffSeq)
 	}
-	return fmt.Sprintf(handoffRenotice, session.HandoffSeq) + fmt.Sprintf(handoffIndexNotice, session.Messages[0].Seq, session.HandoffSeq)
+	from := session.Messages[0].Seq
+	notice := fmt.Sprintf(handoffIndexRenotice, session.HandoffSeq, from, session.HandoffSeq, SegmentIndexCap(handoffMessages(session)))
+	if session.WorkingMemory == "" {
+		notice += handoffMemoryRenotice
+	}
+	return notice
 }
 
 // endHandoff clears a session's handoff state.
 func endHandoff(session Session) Session {
 	session.HandoffSeq, session.HandoffUpdates = 0, 0
 	session.HandoffSteps, session.HandoffWrote, session.HandoffRenoticed = 0, false, false
+	session.HandoffRefused, session.HandoffRetried = false, false
 	session.HandoffIndex = nil
 	return session
 }
@@ -1734,16 +1775,28 @@ const handoffNotice = "runtime notice: History through message %d will move to t
 	"Your working memory is what you will still see. Update it now with anything from messages up to that one you will need: " +
 	"results, decisions, and what you rejected and why, with the message numbers they rest on as evidence."
 
-// handoffIndexNotice follows handoffNotice when the agent indexes what it
-// archives.
-const handoffIndexNotice = " Then index messages %d-%d with index_memory: one line per thing you might need to find again " +
-	"(measurements with their numbers, decisions and why, rejected approaches, errors and their fixes), as \"N: what is there\" or \"N-M: what is there\". " +
-	"The index stays in your context as a map of the archive, so you know what to read back."
+// handoffIndexFirstNotice replaces handoffNotice when the agent indexes
+// what it archives: the index first, with its range and cap, then working
+// memory.
+const handoffIndexFirstNotice = "runtime notice: History through message %d will move to the archive before your next call. " +
+	"First index messages %d-%d with index_memory: one line per thing you might need to find again " +
+	"(measurements with their numbers, decisions and why, rejected approaches, errors and their fixes), as \"N: what is there\" or \"N-M: what is there\", " +
+	"citing only messages %d-%d, in at most %d bytes. The index stays in your context as a map of the archive, so you know what to read back. " +
+	"Then update your working memory with anything from those messages you will need: results, decisions, and what you rejected and why, " +
+	"with the message numbers they rest on as evidence."
 
 // handoffRenotice repeats a handoff notice the agent's last step ignored;
 // compaction follows the next step whatever it does.
 const handoffRenotice = "runtime notice: Reminder: history through message %d moves to the archive after your next action, and you have not saved what you need from it. " +
 	"Update your working memory now with anything from those messages you will need, with the message numbers as evidence."
+
+// handoffIndexRenotice repeats a handoff notice whose index the agent has
+// not written; handoffMemoryRenotice follows it when working memory is
+// missing too.
+const handoffIndexRenotice = "runtime notice: Reminder: history through message %d moves to the archive after your next action, and you have not indexed it. " +
+	"Call index_memory now for messages %d-%d: one \"N: what is there\" line per thing you might need to find again, citing only those messages, in at most %d bytes."
+
+const handoffMemoryRenotice = " Then update your working memory with anything from those messages you will need, with the message numbers as evidence."
 
 // toolResultMessage records a tool result in the history. Tools cap their
 // own output; this holds every result to tools.MaxToolResultBytes, the

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS A1 Handoff Index Fix Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>A1 Fix: Handoffs That Leave an Index</h1>
+    <p>In eval's live run, only 5 of 27 handoffs left an agent index in their segment. Eval's breakdown named four causes:</p>
+    <ul>
+      <li>8 indexes were refused for size, at 1566–2684 B against a flat 1536 B cap.</li>
+      <li>7 were refused because one line cited a message past the notice's range. In 23 of the 27 handoffs, the archive itself went past the range the notice named, because compaction recomputed the cut.</li>
+      <li>A refusal never earned a step to retry in.</li>
+      <li>7 handoffs never called <code>index_memory</code>: the notice asked for working memory first.</li>
+    </ul>
+    <p>This change fixes all four, in one commit on top of <code>68538ea</code>.</p>
+    <p><b>Result:</b> <span class="good">4 new tests pass, and so does the existing suite</span> (<code>go test -buildvcs=false ./internal/... ./cmd/...</code>). With every aid off (<code>RecallOff()</code>), the prompts and behaviour are unchanged, checked by the existing golden and pinned tests. <span class="warn">Whether agents now index more handoffs is unmeasured</span> until eval reruns.</p>
+  </div>
+
+  <h2>What Changed</h2>
+  <table>
+    <tr><th>#</th><th>Problem</th><th>Change</th><th>Test</th></tr>
+    <tr><td>1</td><td>The notice range was not the archived range. The notice named the cut at notice time. At compaction, <code>compactionCut</code> ran again on a history that had grown during the handoff, and moved the cut later.</td>
+      <td>With the index on, compaction archives exactly the messages the notice named: the cut is the message whose number is the notice's <code>through</code>. History that grew during the handoff stays live. If the history is still over the trigger, the next handoff archives it, under its own notice and index, so nothing is archived unindexed. With the index off, the cut is still recomputed as before.</td>
+      <td><code>TestHandoffArchivesWhatTheNoticeNamed</code>: the archived <code>from_seq</code>–<code>to_seq</code> equals the notice's range, after the history grew past the target. With <code>RecallOff()</code>, the same script still archives past the notice, which shows the scenario exercises the old cut.</td></tr>
+    <tr><td>2</td><td>One bad line sank the whole index.</td>
+      <td>Each line is checked on its own. Good lines are kept. Lines that are malformed, out of range or past the cap are returned in <code>rejected</code> with a reason each, and a <code>notice</code> asks the agent to resend every line it wants kept, fixed. Only an index with no good line is refused. A call still replaces the previous index. The index is final at the cut, when it is written into the segment, which is never rewritten. So there is no merging across calls and no later edit: what the segment holds is exactly the agent's last accepted call. The report of rejected lines is held to 1 KB and quotes at most 120 B of each line, so a retry step sees a bounded report.</td>
+      <td><code>TestIndexKeepsGoodLinesAndRetries</code>: one call has 2 good lines, 1 out of range, 1 malformed and 1 past the cap. It keeps 2 and reports 3, each with its reason. The retry's 3 lines replace them and are what the segment stores.</td></tr>
+    <tr><td>3</td><td>A refusal did not earn a retry, so the handoff compacted.</td>
+      <td>A memory write (<code>index_memory</code> or <code>update_memory</code>) that was refused, or had index lines rejected, earns exactly one more step, once per handoff. The step is given past both the step limit and the 16 KB bound, so a handoff takes at most <code>maxHandoffSteps + 1</code> = 5 steps. The retry step sees exactly what the refused step saw plus two messages: the refused call's record and its report of at most about 1.1 KB. The record is the model's own output from that step, so the model's output limit bounds it. A second refusal ends the handoff.</td>
+      <td><code>TestRefusedIndexGetsOneRetry</code>: a 24 KB index with no valid line is refused, which takes the history past the 16 KB bound (the refused step was shown 13,622 chars; the call's record is 25,082 and its report 1,116). The retry step is still given, sees exactly those 2 extra messages, and its index is kept (<code>handoff_end=overrun</code> after it). A second refusal compacts with no index after 2 steps. <code>TestHandoffOverrunIsBounded</code> still holds.</td></tr>
+    <tr><td>4</td><td>A flat 1536 B cap, which 8 indexes overran by up to 1.1 KB.</td>
+      <td>The cap is <code>SegmentIndexCap(n) = clamp(64 × n, 1536, 4096)</code> bytes for <code>n</code> archived messages. A line runs about 50–120 B, so 64 B per message allows roughly a line for every one or two messages. Short segments keep the old 1536 B cap. The 4096 B ceiling (<code>MaxSegmentIndexBytes</code>, the name eval's memprobe already checks against) is two-thirds of the header's 6 KB total for agent indexes (<code>agentflow.MaxAgentIndexBytes</code>). So the newest segment's index always fits whole, and older indexes fall back to their pointer line as before. All of eval's refused sizes (≤ 2684 B) fit once a segment has 42 messages or more. A line past the cap is rejected, with the earlier lines kept, not the whole index refused.</td>
+      <td><code>TestIndexCapScalesWithTheArchive</code>: floor, scaling and ceiling, and the notice states the cap.</td></tr>
+    <tr><td>5</td><td>The notice asked for working memory first, and 7 handoffs never indexed.</td>
+      <td>With the index on, the notice asks for the index first, with its range, the rule that lines cite only that range, and the cap in bytes. Working memory comes second. The W4 reminder, when the index is what is missing, says <i>you have not indexed it</i> and names <code>index_memory</code>, the range and the cap. It adds the working-memory request when that is missing too. With the index off, both texts are as before.</td>
+      <td><code>TestIndexCapScalesWithTheArchive</code> (index first) and <code>TestHandoffArchivesWhatTheNoticeNamed</code> (the reminder names <code>index_memory</code>, the range and the cap).</td></tr>
+  </table>
+
+  <h2>6. Did the 16 KB Bound End Handoffs Early?</h2>
+  <p>Eval's event data is not on this machine, so the code settles some cases but not all of them.</p>
+  <ul>
+    <li>Before this change, <code>handoffContinues</code> checked <code>historyChars &gt; MaxChars + 16 KB</code> before it gave any later step. A refused write never set <code>HandoffWrote</code>.</li>
+    <li><b>Refusal in the first handoff step:</b> the step limit (4) cannot fire yet, and the W4 reminder is still unused. A missing index counts as "missing", so the only way such a handoff compacted without another step is the 16 KB bound. For this case, the hypothesis is confirmed by elimination.</li>
+    <li><b>Refusal in a later step:</b> the handoff also ends when the reminder was already used ("no write"). Only the events can tell these two apart.</li>
+    <li>To make that readable from now on, <code>memory.compacted</code> records <code>handoff_end</code> (<code>step_limit</code>, <code>overrun</code>, <code>wrote</code>, <code>no_write</code> or <code>other_action</code>) and <code>handoff_retried</code>, whenever the index is on.</li>
+    <li>After this change, a refusal earns its retry whichever bound would have fired.</li>
+  </ul>
+
+  <h2>Overrun Measurements</h2>
+  <table>
+    <tr><th>Scenario (<code>TestHandoffOverrunIsBounded</code>, trigger 157,284 chars)</th><th>Peak history shown, aids off</th><th>Aids on</th></tr>
+    <tr><td>Worst-case tool outputs</td><td>224,220</td><td>220,054</td></tr>
+    <tr><td>Small messages (the extra steps are given)</td><td>160,954</td><td>171,907 (+10,953; H+14,793 before this change)</td></tr>
+  </table>
+  <p>The test's bound is the larger of two values: the aids-off peak plus 1 KB, or the trigger plus 16 KB plus two working-memory writes and two indexes. The bound grew by 5 KB with the 4 KB index ceiling, and both scenarios stay well under it.</p>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li><code>RecallOff()</code> behaviour, the golden prompts from <code>ccb6e8b</code>, and every switch's independence.</li>
+    <li><code>internal/memprobe</code>, probe definitions and patterns, which eval owns. <code>MaxSegmentIndexBytes</code> is kept as the per-segment ceiling, so memprobe's size check still compiles and still holds.</li>
+    <li>Nothing pushed.</li>
+  </ul>
+</body>
+</html>
