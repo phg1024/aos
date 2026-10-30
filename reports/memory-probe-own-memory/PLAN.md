@@ -1,14 +1,13 @@
-# Own working memory evaluation plan (draft: design fixed, probes not yet written)
+# Own working memory evaluation plan (frozen)
 
 Proposed by aos code at the user's request on 2026-10-29; designed and run
 by the evaluation session. The phase-3 probes injected a hand-written,
 correct working memory, so they measure only whether the agent reads a
 good memory. This evaluation measures the memory the agent wrote itself.
 
-This file fixes the design and the rules for choosing checkpoints and
-questions now, before the live run they come from has finished. The probe
-file is written from the finished run and committed, with this plan
-marked frozen, before any sample is run.
+The design and the rules below were committed (34fa829) before the live
+run finished. The probe file was then written from the finished run and
+is committed with this plan, now frozen, before any sample is run.
 
 ## Harness
 
@@ -18,7 +17,11 @@ it (header and `search_memory`) and is labelled `no-memory`. Each sample
 records the working_memory version it resumed with. The runtime is
 `74510b7` unchanged: `git diff 74510b7 e528cde` touches only
 `internal/memprobe`, the probe CLI's flag text, `bench/` and `reports/`.
-Binary `.cache/bin/aos-eval-e528cde`.
+`956d59b` adds one harness fix on top: the probe ID is no longer put in
+the resumed process's metadata, which the prompt header shows. The
+runtime is still `74510b7`'s (`git diff --stat 74510b7 956d59b --
+internal/runtime internal/agentflow internal/tools` is empty). Binary
+`.cache/bin/aos-eval-956d59b`, built by this session from `956d59b`.
 
 ## Source run
 
@@ -36,6 +39,51 @@ process, take the last such checkpoint; if there are more than four
 processes, take the four with the most such entries. The list, with each
 checkpoint's working memory version and archive range, goes into the
 frozen probe file's notes.
+
+### Checkpoints chosen (rule applied to the finished run)
+
+Writer and coordinator checkpoints right after a compaction, counting the
+header snapshot's entries whose evidence lies wholly in the archive.
+Only three processes reach three such entries; no other writer, and not
+the coordinator (0 in its one post-compaction snapshot), qualifies.
+
+| process | checkpoint | snapshot | archive | live | archived-evidence entries |
+| --- | --- | --- | --- | --- | --- |
+| pid-000006 writer, round 2 | art-000648 (after art-000646, 4th compaction) | art-000643 v8 | #1-#249 | #250-#331 | 6 of 8 |
+| pid-000015 writer, round 5 | art-001768 (after art-001766, 3rd) | art-001763 v7 | #1-#167 | #168-#255 | 4 of 5 |
+| pid-000025 writer, round 8 | art-003135 (after art-003133, 2nd) | art-003130 v5 | #1-#72 | #73-#135 | 3 of 4 |
+
+Best of the rest: pid-000009 and pid-000022, 2 each.
+
+### Probes (`bench/memory/pathtracer-bunny-phase3-own-memory-probes.json`)
+
+| id | checkpoint | kind | truth (archive) |
+| --- | --- | --- | --- |
+| r2-first-sah | art-000648 | recorded | #93, #94, #103 |
+| r2-root-exit | art-000648 | recorded | #144 |
+| r2-shadow-limit | art-000648 | recorded-wrong | entry open/round2-open-bugs says the shadow t_limit bug is open; fixed at #112 |
+| r2-verify-dir | art-000648 | unrecorded | #37, #38 |
+| r5-empty-base | art-001768 | recorded | #75 |
+| r5-entered-stack | art-001768 | recorded | #89 |
+| r5-register-counts | art-001768 | unrecorded | #31-#35 |
+| r5-tir-guard | art-001768 | recorded-wrong | entry says the Fresnel TIR guard never fires; code at #14, #61, #63 |
+| r8-trace-share | art-003135 | recorded | #26 |
+| r8-small-node | art-003135 | recorded | #51-#53 |
+| r8-sibling-pairs | art-003135 | unrecorded | #29, #31 (and writer log line 163) |
+
+`check_probes.py` (this folder) checks every row against the run: the
+checkpoint follows the named compaction, the header snapshot is the named
+version, each truth message is archived and holds the quoted text, the
+answer's key token is not in live history, "recorded" keys are in the
+snapshot and "unrecorded" keys are not, and the expect pattern matches the
+archived truth. It reported 0 failures before freezing.
+
+Two notes on what both arms can see. The run's files are on disk in their
+final state, so later rounds' writer-log sections are readable by the
+probed agent in both arms (r5-register-counts and r8-sibling-pairs can be
+answered from the log; r2-verify-dir by listing the directory). And the
+B arm keeps the archive and the archived update_memory calls, reachable
+only by search_memory.
 
 ## Questions, per checkpoint
 
@@ -79,5 +127,7 @@ reported beside it.
 
 ## Queue
 
-After the phase-3 probe conditions now running and the live-run analysis.
-Nothing on phg-gpu runs alongside it.
+After the phase-3 probe conditions and the live-run analysis, both done.
+The live run ended at 2026-10-30T10:31:19Z. Nothing else on phg-gpu runs
+alongside it. 11 probes x 9 samples x 2 arms = 198 samples, run A then B,
+by `run.sh` in this folder.

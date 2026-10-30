@@ -171,3 +171,22 @@ func readWholeArchive(t *testing.T, root string, spec agentflow.WorkflowSpec, pr
 	}
 	return text.String()
 }
+
+// TestOwnMemoryProbesLoad checks that the frozen own-memory probes parse
+// and their patterns compile as Go regexps. Their pointers into the
+// phase-3 live run are checked by
+// reports/memory-probe-own-memory/check_probes.py.
+func TestOwnMemoryProbesLoad(t *testing.T) {
+	probes, err := memprobe.LoadProbes("../../bench/memory/pathtracer-bunny-phase3-own-memory-probes.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(probes) != 11 {
+		t.Fatalf("got %d probes, want 11", len(probes))
+	}
+	for _, probe := range probes {
+		if len(probe.WorkingMemory) > 0 {
+			t.Errorf("%s injects working memory; own-memory probes must keep the checkpoint's own", probe.ID)
+		}
+	}
+}
