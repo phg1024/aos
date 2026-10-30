@@ -61,6 +61,21 @@ picked because an index mentions it.
   facts already accepted for the segment, and (d) a question can be asked
   that does not give it away. Up to 3 per segment; every candidate
   considered is logged with its reason (`selection.md`).
+- **Second pass (rule amended after the first pass, still without any
+  index):** the first pass gave 11 probes, because candidates ran out
+  before 3 were accepted in every segment (about 40% are source or config
+  reads, and the working memories hold most benchmark numbers). The first
+  pass was committed (`86f8f05`), then the writer revisited, for each
+  segment short of 3, the candidates in the same order and could accept a
+  secondary measured fact per message (one value of a sweep, a node count,
+  one check among several; never a source or config constant), under the
+  same checks (a)-(d). This gave 12 more: **23 probes** (art-000414 3,
+  art-000507 2, art-000557 3, art-000646 3, art-001608 3, art-001661 3,
+  art-001766 3, art-003062 2, art-003133 1; 11 on art-000648, 9 on
+  art-001768, 3 on art-003135). All 23 are kept as the rule produced them,
+  including minor values (setup times, one run's average) an operator is
+  unlikely to ask about. First-pass against second-pass probes is a
+  pre-declared breakdown, not a filter.
 - **Disclosure:** this session (not the writer) had already seen 45 index
   lines and a few greps of the follow-up's indexes while grading it. It
   did not write, choose or edit the new probes beyond fixing format.
@@ -84,27 +99,30 @@ Reported per probe, per segment and overall. Not used to choose probes.
 
 - **C:** `RecallOff()`, no indexes.
 - **A1:** `--recall a1 --agent-indexes indexes-dN.json`, N = 1, 2, 3.
-- New probes: 6 answers per probe per arm (A1: 2 per draw).
+- New probes: 9 answers per probe per arm (A1: 3 per draw).
 - Frozen 11 probes: 9 per arm (A1: 3 per draw), as before.
 - Order: C (new, then frozen), then A1 draws 1 to 3 (new, then frozen).
 
-**Why 6 answers per new probe.** A simulation of the primary test (below)
-with 27 probes, a C rate per probe drawn from Beta(0.5, 4.5) (mean 0.1,
+**Why 9 answers per new probe.** A simulation of the primary test (below)
+with 23 probes, a C rate per probe drawn from Beta(0.5, 4.5) (mean 0.1,
 most near 0, as seen for unrecorded facts), and A1 correct with
-probability max(C rate, q) on facts its index covers:
+probability max(C rate, q) on facts its index covers (300 trials, 300
+permutations each):
 
 | answers per arm | covered share | q | power |
 | --- | --- | --- | --- |
-| 3 | 0.25 | 0.5 | 0.37 |
-| 3 | 0.50 | 0.5 | 0.88 |
-| 6 | 0.25 | 0.5 | 0.73 |
-| 6 | 0.25 | 0.7 | 0.89 |
-| 6 | 0.50 | 0.5 | 0.97 |
+| 6 | 0.15 | 0.6 | 0.40 |
+| 6 | 0.25 | 0.5 | 0.57 |
+| 9 | 0.15 | 0.6 | 0.56 |
+| 9 | 0.25 | 0.5 | 0.70 |
+| 9 | 0.25 | 0.7 | 0.90 |
+| 9 | 0.50 | 0.5 | 0.99 |
 
-The follow-up saw q about 0.67 on the one covered unrecorded probe
-(4 of 6). Covered share is unknown; at 6 answers the test keeps at least
-about 0.7 power down to a quarter of facts covered. Cost: about 27 x 12 +
-11 x 18 = 522 answers, about 4.5 h and 23M tokens on phg-gpu.
+The follow-up saw q about 0.67 on the one covered unrecorded probe (4 of
+6). Covered share is unknown and may be low, since many of the new facts
+are minor values; 9 answers keep about 0.7 power at a quarter covered.
+Cost: 23 x 18 + 11 x 18 = 612 answers, about 5 h and 28M tokens on
+phg-gpu.
 
 ## Scoring
 
@@ -119,7 +137,7 @@ next to it.
 Main score on the new probes, A1 against C. Unit: the probe (answers about
 one fact are not independent). Statistic: total A1 main minus total C main
 over all new probes. Two-sided stratified permutation test: within each
-probe, the 12 answers' arm labels are permuted (6 and 6), 100,000 times
+probe, the 18 answers' arm labels are permuted (9 and 9), 100,000 times
 with `random.Random(20261031)`; p = share of permuted |statistic| at least
 the observed. Alpha 0.05. Reported with the per-probe differences and the
 pooled rates.
@@ -131,6 +149,7 @@ pooled rates.
   before model calls, from the index-recall table).
 - Continuity: the 3 frozen unrecorded probes, main / exact / contra per arm,
   next to the follow-up's numbers.
+- First-pass (11) against second-pass (12) probes.
 - Per-draw A1 scores.
 
 ## Harm check

@@ -42,5 +42,53 @@
   "h-3062-1": {
     "main": "The image changed (not byte-identical), so the tree shape is part of the frozen estimator and tree changes are ruled out.",
     "exact": "Depth 16->20 changed the scene-alt-view PFM (at byte 1022129) because equal-t ties resolve by tree test order; so tree topology (depth, leaf size, bins, split order) is part of the frozen estimator and tree-quality ideas are ruled out."
+  },
+  "h-414-3": {
+    "main": "No: it could not write the image to /tmp (cannot open output).",
+    "exact": "No: it printed the benchmark line but then 'ppm error: cannot open output: /tmp/base.ppm' and exited 1, so no image was written to /tmp."
+  },
+  "h-557-1": {
+    "main": "The average was about 126.4 ms.",
+    "exact": "render_ms_avg=126.379 ms (best 119.866, gpu best 119.359)."
+  },
+  "h-557-2": {
+    "main": "About 100.9 ms.",
+    "exact": "gpu_ms_best=100.887 ms (render_ms_best 101.150, avg 116.465)."
+  },
+  "h-557-3": {
+    "main": "About 101 ms.",
+    "exact": "8x8: render_ms_best=101.026 ms (avg 106.438, gpu 100.761)."
+  },
+  "h-646-2": {
+    "main": "About 103.2 ms and 100.7 ms.",
+    "exact": "render_ms_avg=103.183 ms (run 1, best 93.366) and 100.692 ms (run 2, best 96.614)."
+  },
+  "h-646-3": {
+    "main": "About 180.8 ms.",
+    "exact": "setup_ms=180.8 (samples=1048576 = 512*512*4, bvh_nodes=40597)."
+  },
+  "h-1608-3": {
+    "main": "About 318 ms.",
+    "exact": "setup_ms=318.0 for the default scene (alt-view 269.6, caustic-closeup 272.2)."
+  },
+  "h-1661-2": {
+    "main": "Under a millisecond: about 0.46 ms on the GPU.",
+    "exact": "gpu_ms_best=0.458 ms (render_ms_best 0.623)."
+  },
+  "h-1661-3": {
+    "main": "About 44.76 ms.",
+    "exact": "Candidate gpu_min=44.757 ms (base gpu_min 43.026)."
+  },
+  "h-1766-3": {
+    "main": "About 245.7 ms.",
+    "exact": "setup_ms=245.7 (samples=16777216, bvh_nodes=81521), followed by IDENTICAL_DEFAULT."
+  },
+  "h-3062-2": {
+    "main": "Round 7 won every interleaved pair (10/10), about 0.9% faster.",
+    "exact": "Round 7 was faster in 10/10 interleaved pairs: 31.003 vs 31.264 ms best-of-50 (1.008x), mean delta -0.29 ms (0.83-1.05%)."
+  },
+  "h-3133-1": {
+    "main": "About 31.2 ms.",
+    "exact": "render_ms_best=31.236 ms (avg 35.855) while the split trace dispatch took 30.329 ms."
   }
 }

@@ -150,3 +150,105 @@ Candidates exhausted at 1 accepted.
 10. #19: rejected. Harness scripts and scene configs, no measured fact.
 
 Candidates exhausted at 0 accepted.
+
+# Second pass
+
+Rule: for each segment with fewer than 3 accepted, revisit its candidates in
+`candidates.json` order, skipping messages already used for a probe. Accept at
+most one SECONDARY fact per message: any measured or observed output (a
+printed number, a build/run result, one check among several). The fact must
+still pass (a)-(d). Source-code and config constants still do not count. Stop
+a segment at 3 accepted in total.
+
+Totals after the second pass: 23 accepted (11 first pass + 12 second pass).
+
+| segment | first pass | second pass new / revisited | total |
+|---|---|---|---|
+| art-000414 | 2 | 1 / 3 | 3 |
+| art-000507 | 2 | 0 / 0 (both candidates already used) | 2 |
+| art-000557 | 0 | 3 / 5 | 3 |
+| art-000646 | 1 | 2 / 9 | 3 |
+| art-001608 | 2 | 1 / 1 | 3 |
+| art-001661 | 1 | 2 / 8 | 3 |
+| art-001766 | 2 | 1 / 2 | 3 |
+| art-003062 | 1 | 1 / 5 | 2 |
+| art-003133 | 0 | 1 / 10 | 1 |
+
+## art-000414 (second pass)
+
+1. #13: rejected. Source code only, no observed output.
+2. #21: rejected. Source code only, no observed output.
+3. #43: **accepted, h-414-3**. Secondary fact: 'ppm error: cannot open output: /tmp/base.ppm' (exit 1; the benchmark line still printed). The other secondary values (avg 113.523, gpu 105.574) are in WM baseline-timing. Grepped: /tmp, 'cannot open output', 'ppm error', base.ppm: all 0.
+(#56 already used.) Segment reaches 3; stop.
+
+## art-000507 (second pass)
+
+No unused candidates (#83 and #79 are both probes). Stays at 2.
+
+## art-000557 (second pass)
+
+1. #115: rejected. Source code only.
+2. #109: rejected. Source code only.
+3. #125: **accepted, h-557-1**. Secondary fact: stack-16/cap-15 run render_ms_avg=126.379. Grepped: 126.379, 126.4, 119.359: 0. '126.' hits once, the root-exit 'avg 126.0', which is a different event (expect excludes 126.0).
+4. #133: **accepted, h-557-2**. Secondary fact: fastMath run gpu_ms_best=100.887. The deprecation warning is already in WM (c) ('still enabled but deprecated'), so I took the gpu number. Grepped: 100.887, 116.465, 116.5: 0.
+5. #167: **accepted, h-557-3**. Secondary fact: 8x8 threadgroup render_ms_best=101.026 (WM lists every other shape except 8x8). Grepped: 8x8, 101.026, '101.0', 100.761: 0.
+Segment reaches 3; stop.
+
+## art-000646 (second pass)
+
+1. #216: **accepted, h-646-2**. Secondary fact: the two snapshot runs' render_ms_avg 103.183 and 100.692 (the best times and gpu are in WM (f)). Grepped: 103.183, 100.692, 103.2, 100.7: 0.
+2. #220: rejected. Source code only.
+3. #214: rejected. Secondary fact: stackless gpu_ms_best=101.802. Fails the semantic check: WM (f) gives the same run as '102.1 best / 114.6 avg', and 101.8 vs 102.1 is the same timing to within noise. A grader could not separate a right answer from a recalled WM number (101.8 also appears in WM (a) as an unrelated range).
+4. #222: rejected. Source code only.
+5. #212: rejected. Secondary values: smoke.ppm size 786447 and the timestamp are trivial file facts; PROG_EXIT=0 is implied by WM (h)/(f).
+6. #218: rejected. 'PT_BVH_STACK_SIZE 20' is a source constant grepped from a header; BUILD_OK is implied by WM (f) (reverted to the snapshot).
+7. #224: rejected. Source code only.
+8. #198: rejected. Source code only.
+9. #245: **accepted, h-646-3**. Secondary fact: merged-tone-map 4 spp smoke run setup_ms=180.8. bvh_nodes=40597 is in WM, and the sample count passing is implied. Grepped: 180.8, 1048576, merged.ppm: 0.
+Segment reaches 3; stop.
+
+## art-001608 (second pass)
+
+1. #27: **accepted, h-1608-3**. Secondary fact: setup_ms=318.0 for the default-scene reference render (bvh_nodes 81521 is in live history; the MD5 hashes are not something an operator would ask about). Grepped: 318.0, 'setup_ms=318', 269.6, 272.2: 0. setup_ms occurs in live history only with other values.
+(#24 and #5 already used.) Segment reaches 3; stop.
+
+## art-001661 (second pass)
+
+1. #114: rejected. Source header printed with sed, no observed output.
+2. #96: rejected. Its only outputs are the three BIT_IDENTICAL checks (in WM round5-stack-payload) and grep line numbers of source.
+3. #68: rejected. Secondary values (candidate render_min 43.714 / mean 45.855) belong to the A/B whose base printed nothing. Asking about them means describing that event, which is frozen probe r5-empty-base's topic, so the question could not be posed cleanly under (b)/(d).
+4. #118: rejected. Output is 'BUILT _b' only, implied by WM (_b snapshot).
+5. #58: **accepted, h-1661-2**. Secondary fact: PT_PROF=3 (no shadow + no mesh) gpu_ms_best=0.458, render 0.623 (WM has settings 0, 1, 2, 4, 8 but not 3). Grepped: 0.458, 0.623, 'PT_PROF=3': 0.
+6. #116: rejected. File listing and grep of source, no observed output.
+7. #98: rejected. Output 'stack_payload' count 0 and 'BUILT' only; this confirms a scratch edit, not a measurement.
+8. #78: **accepted, h-1661-3**. Secondary fact: glass refract-skip candidate gpu_min=44.757 (WM has render min/mean for both sides, not gpu_min). Grepped: 44.757, 44.76, 43.026: 0.
+Segment reaches 3; stop.
+
+## art-001766 (second pass)
+
+1. #146: rejected. Output 'walks rewritten' only.
+2. #163: **accepted, h-1766-3**. Secondary fact: child-pair default-scene identity run setup_ms=245.7. IDENTICAL_DEFAULT is in WM; threads_used=4 and bvh_nodes=81521 appear in live history. Grepped: 245.7: 0.
+(#153 and #159 already used.) Segment reaches 3; stop.
+
+## art-003062 (second pass)
+
+1. #17: rejected. Source code only.
+2. #7: **accepted, h-3062-2**. Secondary fact: round 7 vs round 6 interleaved, 10/10 pair wins, 31.003 vs 31.264 ms (1.008x), mean delta -0.2925 ms. Grepped: 31.003, 31.264, 1.008, 10/10, 0.2925, 36.283, 1.171: all 0.
+3. #13: rejected. Source code only (cat of header and host).
+4. #15: rejected. Source code only.
+5. #11: rejected. Source code only.
+(#9 already used.) Candidates exhausted; stays at 2.
+
+## art-003133 (second pass)
+
+1. #56: rejected. Secondary output 'sample_parallel=1' is implied by WM (r8-rejected E4 'samples pipeline', r8-measurement-table 'sample-major' buffer); 'sample-parallel' appears 6 times in context. The 1024 limit is in WM and is r5-register-counts' topic.
+2. #48: rejected. Output 'trace patched / integrator patched 3' confirms a patch (3 = replacements made), not a measurement.
+3. #60: rejected. Output 'integrator variants ok' only.
+4. #36: rejected. Output 'host diag patched' plus grep line numbers of source.
+5. #42: rejected. grep listing of source, no observed output.
+6. #40: rejected. Source code via grep.
+7. #38: **accepted, h-3133-1**. Secondary fact: under PT_SPLIT=1 the default configuration printed render_ms_best=31.236 (wall), while the trace dispatch alone took 30.329. The trace numbers are in WM r8-cost-split; the wall times are not. Grepped: 31.236, 35.855, 27.593, 7.204: 0.
+8. #23: rejected. Output 'patched' only.
+9. #21: rejected. BUILD_OK of _r8b (implied by WM 'frozen A/B binary'); the binary size is not a measurement.
+10. #19: rejected. Harness scripts and scene configs. The 'which python3 perl' paths are environment facts, not a measured number or outcome.
+Candidates exhausted; stays at 1.
