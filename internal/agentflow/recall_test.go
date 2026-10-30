@@ -28,7 +28,9 @@ func TestPromptRecallWording(t *testing.T) {
 		indexGuidance   = "When a handoff notice asks for an index, call index_memory with one line per thing in the messages being archived that you might need to find again"
 		indexTool       = "- index_memory(index) (available after a handoff notice: indexes the messages it archives)"
 	)
-	header := func() string { return backend.PromptMessages(runtime.GenerateRequest{WorkingMemory: memory})[1].Content }
+	header := func() string {
+		return backend.PromptMessages(runtime.GenerateRequest{WorkingMemory: memory})[1].Content
+	}
 	for _, want := range []string{writeMechanism, pointer, deleteStale, indexGuidance, indexTool} {
 		if !strings.Contains(backend.systemPrompt(), want) {
 			t.Fatalf("the prompt lacks %q", want)

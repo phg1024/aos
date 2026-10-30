@@ -39,10 +39,13 @@ func goldenPrompts(backend PromptBackend, request runtime.GenerateRequest) map[s
 
 // With every recall aid off, the prompts are byte for byte what they were
 // before the aids (testdata/prompts-before-recall, written by this test at
-// ccb6e8b with AOS_WRITE_GOLDEN set), so frozen probe arms stay valid.
+// ccb6e8b with AOS_WRITE_GOLDEN set), so frozen probe arms stay valid. That
+// holds on every prompt path even when a segment carries an agent index,
+// which a checkpoint written with the aid on does.
 func TestRecallOffKeepsThePromptsAsBefore(t *testing.T) {
 	backend, request := goldenRequest()
 	backend.Recall = runtime.RecallOff()
+	request.MemoryRefs[0].Index = []runtime.IndexLine{{From: 33, To: 33, Text: "measured occupancy"}}
 	dir := filepath.Join("testdata", "prompts-before-recall")
 	for name, got := range goldenPrompts(backend, request) {
 		path := filepath.Join(dir, name)

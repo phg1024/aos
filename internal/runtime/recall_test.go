@@ -360,7 +360,7 @@ func TestAgentIndexIsStoredWithItsSegment(t *testing.T) {
 	if script.notices != 2 {
 		t.Fatalf("expected two handoffs, got %d", script.notices)
 	}
-	if len(errs) != 1 || !strings.Contains(errs[0].Error(), fmt.Sprintf("outside the ones being archived, %d-%d", ranges[1][0], ranges[1][1])) {
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), fmt.Sprintf("cites messages outside %d-%d, the ones being archived", ranges[1][0], ranges[1][1])) {
 		t.Fatalf("the out-of-range line should be refused with the range: %v", errs)
 	}
 
@@ -462,10 +462,10 @@ func TestIndexMemoryRefusals(t *testing.T) {
 		}
 		return errs
 	}
-	if errs := refused(runtime.RecallPolicy{}, "%d-%d: "+strings.Repeat("x", runtime.MaxSegmentIndexBytes)); len(errs) != 1 || !strings.Contains(errs[0].Error(), "over its 1536-byte cap") {
+	if errs := refused(runtime.RecallPolicy{}, "%d-%d: "+strings.Repeat("x", runtime.MaxSegmentIndexBytes)); len(errs) != 1 || !strings.Contains(errs[0].Error(), "over the index's 1536-byte cap") {
 		t.Fatalf("an index over the cap should be refused: %v", errs)
 	}
-	if errs := refused(runtime.RecallPolicy{}, "%d to %d the goal"); len(errs) != 1 || !strings.Contains(errs[0].Error(), `should be "N: what is there"`) {
+	if errs := refused(runtime.RecallPolicy{}, "%d to %d the goal"); len(errs) != 1 || !strings.Contains(errs[0].Error(), `not "N: what is there"`) {
 		t.Fatalf("a line without its numbers should be refused: %v", errs)
 	}
 	if errs := refused(runtime.RecallPolicy{NoAgentIndex: true}, ""); len(errs) != 1 || !strings.Contains(errs[0].Error(), "not enabled") {
@@ -617,5 +617,219 @@ func TestRecallSwitchesAreIndependent(t *testing.T) {
 	}
 	if off := runtime.RecallOff(); !off.NoOverwriteWarning || !off.NoPointerPrompt || !off.NoHandoffRenotice || !off.NoAgentIndex {
 		t.Fatalf("RecallOff should turn every aid off: %+v", off)
+	}
+}
+
+// handoffThrough returns the through_seq of each memory.handoff event.
+func handoffThrough(t *testing.T, k *kernel.Kernel) []string {
+	var out []string
+	for _, event := range kernelEvents(t, k, "memory.handoff") {
+		out = append(out, event.Data["through_seq"])
+	}
+	return out
+}
+
+// With the index on, a handoff archives exactly the messages its notice
+// named, which are the ones the agent indexed, however much the history
+// grew during the handoff; with the aids off the cut is recomputed then and
+// can go past the notice, as before. A reminder for a missing index names
+// index_memory and the range.
+func TestHandoffArchivesWhatTheNoticeNamed(t *testing.T) {
+	policy := runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}
+	run := func(t *testing.T, recall runtime.RecallPolicy) (*kernel.Kernel, *handoffScript, [2]int) {
+		k, store, process := newMemoryFixture(t)
+		script := &handoffScript{}
+		var named [2]int
+		backend := script.backend(1, func(notice, from, to int) []runtime.GenerateResult {
+			if notice > 1 {
+				return nil
+			}
+			named = [2]int{from, to}
+			return []runtime.GenerateResult{
+				say("busy " + strings.Repeat("g", 6000)),
+				indexAction(fmt.Sprintf("%d-%d: everything so far", from, to)),
+				say("back to work"),
+			}
+		})
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy, Recall: recall}
+		if _, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+			t.Fatal(err)
+		}
+		return k, script, named
+	}
+
+	k, script, named := run(t, runtime.RecallPolicy{})
+	through := handoffThrough(t, k)
+	events := compactionEvents(t, k)
+	// What grew during the handoff is archived by the next one, under its
+	// own notice and index.
+	if len(through) == 0 || len(events) == 0 {
+		t.Fatalf("expected a compaction per handoff: %v %d", through, len(events))
+	}
+	data := events[0].Data
+	if data["from_seq"] != strconv.Itoa(named[0]) || data["to_seq"] != strconv.Itoa(named[1]) || data["to_seq"] != through[0] {
+		t.Fatalf("archived %s-%s, the notice named %d-%d (through %s)", data["from_seq"], data["to_seq"], named[0], named[1], through[0])
+	}
+	if data["agent_index_lines"] != "1" {
+		t.Fatalf("the index of the named range should be kept whole: %v", data)
+	}
+	if size, _ := strconv.Atoi(data["live_chars"]); size <= policy.MaxChars/2 {
+		t.Fatalf("the scenario should have grown the history past the target (%d), or it proves nothing", size)
+	}
+	reminded := false
+	for _, request := range script.requests {
+		if notice := lastNotice(request); strings.HasPrefix(notice, "runtime notice: Reminder:") {
+			reminded = true
+			if !strings.Contains(notice, fmt.Sprintf("you have not indexed it. Call index_memory now for messages %d-%d", named[0], named[1])) ||
+				!strings.Contains(notice, "in at most 1536 bytes") || !strings.Contains(notice, "Then update your working memory") {
+				t.Fatalf("the reminder should name index_memory, the range and the cap: %q", notice)
+			}
+		}
+	}
+	if !reminded {
+		t.Fatal("the ignored notice should have been repeated")
+	}
+
+	k, _, _ = run(t, runtime.RecallOff())
+	through, events = handoffThrough(t, k), compactionEvents(t, k)
+	if len(events) == 0 || events[0].Data["to_seq"] == through[0] {
+		t.Fatalf("with the aids off the cut should still be recomputed past the notice: %v %v", through, events)
+	}
+}
+
+// The notice asks for the index first and states its range and cap; the
+// cap grows with the messages archived, within its floor and ceiling.
+func TestIndexCapScalesWithTheArchive(t *testing.T) {
+	for messages, want := range map[int]int{1: 1536, 24: 1536, 40: 2560, 64: 4096, 500: 4096} {
+		if got := runtime.SegmentIndexCap(messages); got != want {
+			t.Fatalf("SegmentIndexCap(%d) = %d, want %d", messages, got, want)
+		}
+	}
+	k, store, process := newMemoryFixture(t)
+	script := &handoffScript{}
+	backend := script.backend(1, func(int, int, int) []runtime.GenerateResult { return nil })
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40,
+		Compaction: runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}}
+	if _, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, request := range script.requests {
+		notice := lastNotice(request)
+		if !strings.Contains(notice, "will move to the archive") {
+			continue
+		}
+		index, memory := strings.Index(notice, "First index messages"), strings.Index(notice, "Then update your working memory")
+		if index < 0 || memory < index || !strings.Contains(notice, "in at most 1536 bytes") {
+			t.Fatalf("the notice should ask for the index first, with its cap: %q", notice)
+		}
+		return
+	}
+	t.Fatal("no handoff notice")
+}
+
+// An index with bad lines keeps the good ones and reports the rest, with
+// reasons; the write earns a retry step, and the retry's index replaces
+// the first. Lines past the cap are rejected the same way.
+func TestIndexKeepsGoodLinesAndRetries(t *testing.T) {
+	k, store, process := newMemoryFixture(t)
+	var results []tools.Result
+	script := &handoffScript{}
+	backend := script.backend(1, func(_, from, to int) []runtime.GenerateResult {
+		return []runtime.GenerateResult{
+			indexAction(fmt.Sprintf("%d: the goal\n%d: past the range\nno numbers here\n%d-%d: filler\n%d: %s", from, to+5, from+1, to, from, strings.Repeat("c", 1600))),
+			indexAction(fmt.Sprintf("%d: the goal\n%d-%d: filler\n%d: the last one", from, from+1, to-1, to)),
+			say("back to work"),
+		}
+	})
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40,
+		Compaction: runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}}
+	if _, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{
+		ContinueOnToolError: true,
+		OnToolResult: func(result tools.Result) {
+			if result.Tool == "index_memory" {
+				results = append(results, result)
+			}
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("index_memory results: %d", len(results))
+	}
+	first := results[0].Output
+	if first["lines"] != "2" || strings.Count(first["rejected"], "\n") != 2 ||
+		!strings.Contains(first["rejected"], "cites messages outside") || !strings.Contains(first["rejected"], `"no numbers here": not "N: what is there"`) ||
+		!strings.Contains(first["rejected"], "over the index's 1536-byte cap") || !strings.Contains(first["notice"], "resend every line") {
+		t.Fatalf("the first index should keep two lines and report three: %v", first)
+	}
+	if results[1].Output["replaced"] != "true" || results[1].Output["rejected"] != "" {
+		t.Fatalf("the retry should replace the index: %v", results[1].Output)
+	}
+	events := compactionEvents(t, k)
+	if len(events) != 1 {
+		t.Fatalf("compactions: %d", len(events))
+	}
+	if data := events[0].Data; data["agent_index_lines"] != "3" || data["handoff_retried"] != "true" || data["handoff_end"] != "other_action" {
+		t.Fatalf("the segment should keep the retry's index: %v", data)
+	}
+}
+
+// A refused index earns exactly one retry step, even past the 16 KB bound
+// on later handoff steps; that step sees only the refused call and its
+// bounded report beyond what the refused step saw. A second refusal ends
+// the handoff.
+func TestRefusedIndexGetsOneRetry(t *testing.T) {
+	policy := runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}
+	huge := strings.Repeat("this line has no number\n", 1000)
+	run := func(t *testing.T, retry func(from, to int) runtime.GenerateResult) (*kernel.Kernel, *handoffScript, []error) {
+		k, store, process := newMemoryFixture(t)
+		var errs []error
+		script := &handoffScript{}
+		backend := script.backend(1, func(notice, from, to int) []runtime.GenerateResult {
+			if notice > 1 {
+				return nil
+			}
+			return []runtime.GenerateResult{indexAction(huge), retry(from, to), say("back to work")}
+		})
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40, Compaction: policy}
+		if _, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{
+			ContinueOnToolError: true,
+			OnToolError:         func(_ runtime.ToolCall, err error) { errs = append(errs, err) },
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return k, script, errs
+	}
+	k, script, errs := run(t, func(from, to int) runtime.GenerateResult {
+		return indexAction(fmt.Sprintf("%d-%d: everything so far", from, to))
+	})
+	if len(errs) != 1 || len(errs[0].Error()) > 1200 || !strings.Contains(errs[0].Error(), "... and ") {
+		t.Fatalf("the refusal should report within its bound: %d %v", len(errs), errs)
+	}
+	refusedAt := -1
+	for i, request := range script.requests {
+		if strings.Contains(lastNotice(request), "will move to the archive") {
+			refusedAt = i
+			break
+		}
+	}
+	shown, retried := historySize(script.requests[refusedAt]), historySize(script.requests[refusedAt+1])
+	if shown+len(huge) <= policy.MaxChars+16*1024 {
+		t.Fatal("the refused call should take the history past the 16 KB bound, or this proves nothing")
+	}
+	added := script.requests[refusedAt+1].History[len(script.requests[refusedAt].History):]
+	if len(added) != 2 || !strings.Contains(added[0].Content, `"index_memory"`) || added[1].Role != "tool" || len(added[1].Content) > 1300 {
+		t.Fatalf("the retry step should see only the refused call and its report beyond the refused step: %d messages", len(added))
+	}
+	t.Logf("refused step shown %d chars, retry step %d: the call's record %d and its report %d", shown, retried, len(added[0].Content), len(added[1].Content))
+	data := compactionEvents(t, k)[0].Data
+	if data["handoff_retried"] != "true" || data["agent_index_lines"] != "1" || data["handoff_end"] != "overrun" {
+		t.Fatalf("the retry's index should be kept, then the overrun compacts: %v", data)
+	}
+
+	k, _, errs = run(t, func(int, int) runtime.GenerateResult { return indexAction(huge) })
+	data = compactionEvents(t, k)[0].Data
+	if len(errs) != 2 || data["agent_index_lines"] != "0" || data["handoff_steps"] != "2" {
+		t.Fatalf("a second refusal should end the handoff: %d errors, %v", len(errs), data)
 	}
 }

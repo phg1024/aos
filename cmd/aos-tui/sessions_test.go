@@ -67,9 +67,21 @@ func TestListAndPickSessions(t *testing.T) {
 			t.Fatalf("%q should not pick a session", bad)
 		}
 	}
-	text := sessionList(testPalette(), sessions, sessions[1].Dir, dir)
-	if !strings.Contains(text, "* 2  20261028-100000-strata") || !strings.Contains(text, "2 turns") || !strings.Contains(text, "check round 8") {
+	// The session the TUI is in is not offered; the rest are numbered
+	// from 1 for /resume N.
+	others := otherSessions(sessions, sessions[0].Dir)
+	if len(others) != 1 || others[0].Name != "20261028-100000-strata" {
+		t.Fatalf("others = %+v", others)
+	}
+	text := sessionList(testPalette(), others, dir)
+	if !strings.Contains(text, " 1  20261028-100000-strata") || !strings.Contains(text, "2 turns") || !strings.Contains(text, "check round 8") || strings.Contains(text, "ollama") {
 		t.Fatalf("listing:\n%s", text)
+	}
+	if picked, err := pickSession(others, "1"); err != nil || picked.Name != "20261028-100000-strata" {
+		t.Fatalf("the list's numbers should pick: %+v %v", picked, err)
+	}
+	if text := sessionList(testPalette(), nil, dir); !strings.Contains(text, "no other saved sessions") {
+		t.Fatalf("empty listing: %q", text)
 	}
 }
 
