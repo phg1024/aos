@@ -30,10 +30,10 @@
     <p><b>Result, behaviour:</b> agents almost never looked anything up. In the whole run there was <span class="bad">1 search_memory call and 0 read_memory calls</span> (memfix: 0 and 9). E3, counted separately:
       <ul>
         <li><b>Superseded or wrong fact cited as current:</b> <span class="bad">8</span> instances, plus 4 possible.</li>
-        <li><b>Experiment repeated:</b> <span class="bad">2</span>, plus 3 possible.</li>
+        <li><b>Experiment repeated:</b> <span class="bad">3</span>, plus 3 possible. B3 was added after this report first said 2 (see <a href="#b3">the B3 note</a>).</li>
         <li><b>Invented rationale recorded:</b> <span class="bad">7</span>, plus 4 possible.</li>
       </ul>
-      memfix was counted at 2 and 2, but by a narrower reading. These numbers are not the same measurement (see <a href="#compare">Against memfix</a>). What can be said: the failure phase 3 was built for still happens. In 4 cases (A6–A8 and B2, all in the round-7 writer) the right answer had been archived by compaction and the agent never searched for it. In 2 more (A3, A4, the round-3 writer) the agent overwrote its own working-memory entry and lost what the archive still held.</p>
+      memfix was counted at 2 and 2, but by a narrower reading. These numbers are not the same measurement (see <a href="#compare">Against memfix</a>). What can be said: the failure phase 3 was built for still happens. In 5 cases (A6–A8 and B2 in the round-7 writer, B3 in the round-5 writer) the right answer had been archived by compaction and the agent never searched for it. All counts here are lower bounds: the full read missed B3. In 2 more (A3, A4, the round-3 writer) the agent overwrote its own working-memory entry and lost what the archive still held.</p>
     <p><b>Outcome:</b> 8 rounds, stop rule met, every verification passed (one verifier was killed by a backend outage and re-run). Final 30.813 ms, 3.5588x over this run's own round-1 baseline. Three environment-fault windows are excluded from E3: an Xcode license prompt and two model-backend outages. The outages cost 4 h 15 m. Failed backend calls count as steps: one verifier ran out of steps that way.</p>
   </div>
 
@@ -162,7 +162,14 @@
     <tr><th>#</th><th>Process</th><th>Messages</th><th>Experiment</th><th>Already available</th><th>Where</th></tr>
     <tr><td>B1</td><td>pid-000006 writer r2</td><td>#301–#305</td><td>Shrinking the traversal stack 20 → 16 "to cut register pressure and raise occupancy". It regressed again (76.4 ms vs 62.9).</td><td>WM <code>measurements/round2-progress</code> (written #189): "(b) stack 16/depth cap 15 regressed to 119.9". The original #124–#130 is archived. The kernel had changed since, which would have justified a re-test, but the agent neither named that nor cited the earlier result.</td><td>WM, archive</td></tr>
     <tr><td>B2</td><td>pid-000022 writer r7</td><td>#105–#106</td><td>Threadgroup 32x8 against 32x4 on the unchanged round-6 binary (+0.1%, neutral).</td><td>The round-6 log section, inside the 4,000-byte tail it read at #26 (archived at #38), rejects 32x8 for exactly this kernel: "32x4 min 34.12 &lt; 32x8 34.61", and lists it under shapes "for the new kernel".</td><td>log (archived)</td></tr>
+    <tr id="b3"><td>B3</td><td>pid-000015 writer r5</td><td>#246–#264</td><td>Adds a host-side occupancy print (<code>maxTotalThreadsPerThreadgroup</code>) "as a register-pressure proxy for future experiments". The first build fails; after the fix it measures 1024 at #264. Log line 166 records it as "measured instead of guessed".</td><td>#33: its <code>PT_DEBUG=1</code> run printed "max_threads_per_group trace=1024"; #35: "Occupancy proxy max=1024". Archived in art-001661 (#30–#120). No working-memory entry held it, and the writer never searched for it.</td><td>archive</td></tr>
   </table>
+  <p class="note"><b>About B3.</b>
+    <ul class="note">
+      <li>It was found during the own-working-memory evaluation (<code>reports/memory-probe-own-memory.html</code>, probe r5-register-counts), after this report's full read had given B = 2. aos book checked it against art-001661.</li>
+      <li>The full read missed it, so every E3 count in this report is a lower bound.</li>
+      <li>It is the same pattern as B2: the answer was archived and never searched for.</li>
+    </ul></p>
   <p class="note"><b>Possible, not counted (medium):</b> all three are in pid-000025 (round 8).
     <ul class="note">
       <li>#39–#53: tried a 16-byte node as "never tried". It was misled by A8.</li>
@@ -196,10 +203,10 @@
     <tr><th>Round</th><th>Processes</th><th>A</th><th>B</th><th>C</th><th>possible (A/B/C)</th></tr>
     <tr><td>1–2</td><td>pid-000003 to pid-000008</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td class="num">3 / 0 / 0</td></tr>
     <tr><td>3–4</td><td>pid-000009 to pid-000014</td><td class="num">2</td><td class="num">0</td><td class="num">1</td><td class="num">0 / 0 / 2</td></tr>
-    <tr><td>5–6</td><td>pid-000015 to pid-000021</td><td class="num">1</td><td class="num">0</td><td class="num">3</td><td class="num">0 / 0 / 2</td></tr>
+    <tr><td>5–6</td><td>pid-000015 to pid-000021</td><td class="num">1</td><td class="num">1</td><td class="num">3</td><td class="num">0 / 0 / 2</td></tr>
     <tr><td>7–8</td><td>pid-000022 to pid-000027</td><td class="num">3</td><td class="num">1</td><td class="num">2</td><td class="num">1 / 3 / 0</td></tr>
     <tr><td>coordinator</td><td>pid-000002</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0 / 0 / 0</td></tr>
-    <tr><th colspan="2">Total</th><th class="num">8</th><th class="num">2</th><th class="num">7</th><th class="num">4 / 3 / 4</th></tr>
+    <tr><th colspan="2">Total</th><th class="num">8</th><th class="num">3</th><th class="num">7</th><th class="num">4 / 3 / 4</th></tr>
   </table>
   <p>All counted instances are in writers, plus one in a benchmarker (C7). Verifiers are clean. The coordinator was read by this session directly. It stated nothing contradicted by what it had: its ledger and delegations match the workers' reports. Its stale WM entries are covered above.</p>
 
@@ -213,10 +220,10 @@
         <li>B: pid-000020 re-tested 2-triangle leaves (E84).</li>
       </ul>
       Those were found by reading the leaf2 thread and the motivating failures, not by reading every process. The phase-3 count is a full read of all 26 processes under a written definition, which also counts mistakes that have nothing to do with memory (A1, A2, A5).</li>
-    <li><b>So 8 + 2 against 2 + 2 is not a measured change.</b> A rate comparison needs the same full read of memfix under the same brief. That has not been done.</li>
+    <li><b>So 8 + 3 against 2 + 2 is not a measured change.</b> A rate comparison needs the same full read of memfix under the same brief. That has not been done.</li>
     <li><b>What the phase-3 count does show, by where the right answer was:</b>
       <ul>
-        <li><b>Archived and never looked up</b> (the memfix failure): A6, A7, A8, B2, all in the round-7 writer, which made no search_memory or read_memory call. In A6, working memory had held the reason and lost it in a rewrite.</li>
+        <li><b>Archived and never looked up</b> (the memfix failure): A6, A7, A8 and B2, all in the round-7 writer, which made no search_memory or read_memory call; and B3, in the round-5 writer, which never searched for its own archived measurement. In A6, working memory had held the reason and lost it in a rewrite.</li>
         <li><b>In working memory but lost or not used:</b> A3 and A4 (the round-3 writer overwrote its entry after a compaction notice), B1 (the result was in WM and the stack test was rerun anyway), A5 (the number was in WM and the comparison ignored it).</li>
         <li><b>Live, a reasoning or recording slip:</b> A1, A2.</li>
       </ul>
@@ -226,7 +233,8 @@
 
   <h2>Caveats</h2>
   <ul>
-    <li>The reviewers' first counts, medium confidence included, were 12 A, 7 B and 11 C. After this session checked them: 8 A, 2 B and 7 C counted, with 4 / 3 / 4 listed as possible and 2 B dropped. Medium-confidence items were moved to "possible", and two B instances were dropped because the earlier result was not available to the process. The worksheets keep the reviewers' original wording and confidence. Where this table differs from them, this table is the evaluation's verdict.</li>
+    <li>The reviewers' first counts, medium confidence included, were 12 A, 7 B and 11 C. After this session checked them: 8 A, 2 B and 7 C counted, with 4 / 3 / 4 listed as possible and 2 B dropped. Medium-confidence items were moved to "possible", and two B instances were dropped because the earlier result was not available to the process. The worksheets keep the reviewers' original wording and confidence. Where this table differs from them, this table is the evaluation's verdict. B3 was added later, after the own-working-memory evaluation found it.</li>
+    <li><b>The counts are lower bounds.</b> The full read missed B3, which a probe question later exposed. Other instances may have been missed the same way.</li>
     <li>"Available" means present in the process's own history (live or archived), its working memory, its delegation, or a file it read in that process. A finding in another process's history that never reached a shared file or delegation was not counted.</li>
     <li>The model's reasoning is not logged. Where a change of mind has no stated cause (round 6 after the outage, for example), it is reported as coinciding, not caused.</li>
     <li>The coordinator was read by this session alone, without a second reader.</li>
