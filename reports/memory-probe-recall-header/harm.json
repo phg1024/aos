@@ -1,0 +1,207 @@
+{
+ "new": {
+  "main0-contra1-stated_shown": {
+   "no memory call": 3
+  },
+  "main1-contra1-stated_shown": {
+   "no memory call": 14,
+   "searched only": 1,
+   "read the truth": 2
+  },
+  "main1-contra0-stated_shown": {
+   "read the truth": 28,
+   "no memory call": 47,
+   "searched only": 1
+  },
+  "main0-contra1-not_stated_shown": {
+   "no memory call": 13,
+   "searched only": 8,
+   "read other messages": 1
+  },
+  "main1-contra0-not_stated_shown": {
+   "read the truth": 68,
+   "searched only": 7,
+   "read other messages": 2,
+   "no memory call": 3
+  },
+  "main0-contra0-not_stated_shown": {
+   "no memory call": 3,
+   "searched only": 1,
+   "read other messages": 1
+  },
+  "main1-contra1-not_stated_shown": {
+   "searched only": 2,
+   "read the truth": 2
+  }
+ },
+ "frozen": {
+  "r2-first-sah": {
+   "main1-contra0": {
+    "no memory call": 9
+   }
+  },
+  "r2-root-exit": {
+   "main1-contra0": {
+    "no memory call": 9
+   }
+  },
+  "r2-shadow-limit": {
+   "main1-contra0": {
+    "no memory call": 9
+   }
+  },
+  "r2-verify-dir": {
+   "main1-contra0": {
+    "no memory call": 7
+   },
+   "main1-contra1": {
+    "no memory call": 2
+   }
+  },
+  "r5-empty-base": {
+   "main1-contra0": {
+    "no memory call": 1
+   },
+   "main1-contra1": {
+    "no memory call": 8
+   }
+  },
+  "r5-entered-stack": {
+   "main1-contra1": {
+    "no memory call": 2
+   },
+   "main1-contra0": {
+    "no memory call": 7
+   }
+  },
+  "r5-register-counts": {
+   "main1-contra0": {
+    "no memory call": 6
+   },
+   "main0-contra1": {
+    "no memory call": 1
+   },
+   "main1-contra1": {
+    "no memory call": 2
+   }
+  },
+  "r5-tir-guard": {
+   "main0-contra1": {
+    "no memory call": 4
+   },
+   "main1-contra0": {
+    "read": 2
+   },
+   "main1-contra1": {
+    "no memory call": 3
+   }
+  },
+  "r8-sibling-pairs": {
+   "main1-contra1": {
+    "no memory call": 5
+   },
+   "main0-contra0": {
+    "no memory call": 1
+   },
+   "main1-contra0": {
+    "no memory call": 3
+   }
+  },
+  "r8-small-node": {
+   "main1-contra0": {
+    "no memory call": 8
+   },
+   "main1-contra1": {
+    "no memory call": 1
+   }
+  },
+  "r8-trace-share": {
+   "main1-contra0": {
+    "no memory call": 9
+   }
+  }
+ },
+ "index_blame": {
+  "A1_contra_answers": 74,
+  "by_kind": {
+   "new-no": 19,
+   "new-partly": 24,
+   "new-yes": 3,
+   "frozen-no": 15,
+   "frozen-partly": 3,
+   "frozen-yes": 10
+  },
+  "yes_with_line_misstating_its_range": 7,
+  "yes_with_faithful_line": 6,
+  "per_probe": {
+   "h-414-1": {
+    "no": 8
+   },
+   "h-414-3": {
+    "partly": 1
+   },
+   "h-507-1": {
+    "partly": 7
+   },
+   "h-507-2": {
+    "no": 1,
+    "partly": 1
+   },
+   "h-557-3": {
+    "no": 5
+   },
+   "h-646-1": {
+    "no": 1
+   },
+   "h-646-2": {
+    "yes": 1
+   },
+   "r2-verify-dir": {
+    "no": 2
+   },
+   "h-1608-1": {
+    "partly": 3,
+    "yes": 2
+   },
+   "h-1608-2": {
+    "partly": 6
+   },
+   "h-1661-2": {
+    "partly": 2
+   },
+   "h-1661-3": {
+    "no": 2
+   },
+   "h-1766-1": {
+    "partly": 3
+   },
+   "h-1766-2": {
+    "no": 2
+   },
+   "h-3133-1": {
+    "partly": 1
+   },
+   "r5-empty-base": {
+    "no": 5,
+    "partly": 3
+   },
+   "r5-entered-stack": {
+    "no": 2
+   },
+   "r5-register-counts": {
+    "no": 3
+   },
+   "r5-tir-guard": {
+    "yes": 6,
+    "no": 1
+   },
+   "r8-sibling-pairs": {
+    "yes": 3,
+    "no": 2
+   },
+   "r8-small-node": {
+    "yes": 1
+   }
+  }
+ }
+}

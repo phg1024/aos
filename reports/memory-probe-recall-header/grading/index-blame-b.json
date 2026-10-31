@@ -1,0 +1,284 @@
+{
+ "g0037": {
+  "from_index": "partly",
+  "line": "68-76: A/B base ab_r4 produced no output: cp -R nesting bug created ab_r4/include/include so round-3 header (float[3] PtTri) mismatched round-4 shaders -> silent shader compile failure",
+  "index_line_wrong": false,
+  "note": "The cp -R nesting / round-3 float[3] PtTri mechanism is copied almost verbatim from the 68-76 line (correct, about the later A/B base), misapplied to the #24 reference render whose 24-24 line names the real cause (mesh path typo) without saying it produced no files."
+ },
+ "g0337": {
+  "from_index": "partly",
+  "line": "68-76: A/B base ab_r4 produced no output: cp -R nesting bug created ab_r4/include/include so round-3 header (float[3] PtTri) mismatched round-4 shaders -> silent shader compile failure",
+  "index_line_wrong": false,
+  "note": "Explicitly cites 'messages 68-76'; the correct A/B-base line was transplanted onto the reference-render failure, while the 24-24 mesh-typo line was ignored."
+ },
+ "g0273": {
+  "from_index": "partly",
+  "line": "24-24: mesh path typo (must be /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj) | 68-76: A/B base ab_r4 produced no output: cp -R nesting bug created ab_r4/include/include so round-3 header (float[3] PtTri) mismatched round-4 shaders -> silent shader compile failure",
+  "index_line_wrong": false,
+  "note": "Nesting cause comes from working memory/68-76 (another event); the d1 24-24 line gives only the correct path, not the typed one, and the answer filled the gap by inventing that the typo pointed under phase3."
+ },
+ "g0371": {
+  "from_index": "yes",
+  "line": "24-24: wrong mesh path typo (missing reports/) -> mesh error",
+  "index_line_wrong": true,
+  "note": "Answer's typed path (Code/aos/rasterizer-bunny, 'omitting reports/') is a direct reading of 'missing reports/'; #24 shows the path also lacked aos/ (Code/rasterizer-bunny), the line echoing the agent's own incomplete note at #26."
+ },
+ "g0498": {
+  "from_index": "yes",
+  "line": "24-24: wrong mesh path typo (missing reports/) -> mesh error",
+  "index_line_wrong": true,
+  "note": "Quotes the line verbatim ('wrong mesh path typo (missing reports/) -> mesh error') and reconstructs the path as missing only reports/; #24 path is missing aos/reports/."
+ },
+ "g0031": {
+  "from_index": "partly",
+  "line": "1-1: round-5 goal text (candidates, constraints, gates 0.848/0.755/2.058, best 45.220/44.907) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normals one-cache-line, ballot, 256spp harness, child ordering) | 16-16: _ab.sh + _abenv.sh harness usage; benchmark.json round-4 numbers 45.220/44.907, exact compile cmd",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log."
+ },
+ "g0515": {
+  "from_index": "partly",
+  "line": "1-1: round-5 goal text (candidates, constraints, gates 0.848/0.755/2.058, best 45.220/44.907) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normals one-cache-line, ballot, 256spp harness, child ordering) | 16-16: _ab.sh + _abenv.sh harness usage; benchmark.json round-4 numbers 45.220/44.907, exact compile cmd",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log."
+ },
+ "g0439": {
+  "from_index": "partly",
+  "line": "1-1: round-5 goal text (candidates, constraints, gates 0.848/0.755/2.058, best 45.220/44.907) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normals one-cache-line, ballot, 256spp harness, child ordering) | 16-16: _ab.sh + _abenv.sh harness usage; benchmark.json round-4 numbers 45.220/44.907, exact compile cmd",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log. It cites 'history entries #5 and #16' as both carrying 45.220."
+ },
+ "g0425": {
+  "from_index": "partly",
+  "line": "1-1: task goal round 5 (beat 45.220ms/44.907ms gpu, round-4 pt_round_04; constraints, rejected list, candidate list) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normal interleave, ballot, SAH child order) | 16-16: _ab.sh usage (base cand rounds frames spp) + benchmark.json round4 best line 45.220/44.907",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log."
+ },
+ "g0010": {
+  "from_index": "partly",
+  "line": "1-1: task goal round 5 (beat 45.220ms/44.907ms gpu, round-4 pt_round_04; constraints, rejected list, candidate list) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normal interleave, ballot, SAH child order) | 16-16: _ab.sh usage (base cand rounds frames spp) + benchmark.json round4 best line 45.220/44.907",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log."
+ },
+ "g0538": {
+  "from_index": "partly",
+  "line": "1-1: task goal round 5 (beat 45.220ms/44.907ms gpu, round-4 pt_round_04; constraints, rejected list, candidate list) | 5-5: writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normal interleave, ballot, SAH child order) | 16-16: _ab.sh usage (base cand rounds frames spp) + benchmark.json round4 best line 45.220/44.907",
+  "index_line_wrong": false,
+  "note": "45.220 appears nowhere in working memory or live history, so it came from the 1-1/16-16 lines (correct for goal and benchmark.json); the 5-5 writer-log line omits round 4's own 45.635 figure and the answer attributed 45.220 to the log."
+ },
+ "g0070": {
+  "from_index": "partly",
+  "line": "58-58: PT_PROF cost shares gpu_ms_best: full 45.35, no shadow 44.05, no NEE 43.17, no mesh 4.77, glass always-reflect 35.76 -> closest-hit BVH walk is ~89% of frame",
+  "index_line_wrong": false,
+  "note": "The 58-58 line (like working memory round5-cost-shares) lists only the single-bit settings; the answer inferred PT_PROF=3 was never measured, though #58 printed it (0.623/0.458)."
+ },
+ "g0413": {
+  "from_index": "partly",
+  "line": "58-58: PT_PROF cost shares gpu_ms_best 512x512/64spp: full 45.35, no shadow 44.05, no NEE 43.17, no mesh 4.77 (closest-hit walk ~89% of frame), glass always-reflect 35.76",
+  "index_line_wrong": false,
+  "note": "The 58-58 line lists only single-bit settings (as does working memory); the answer inferred the combined PT_PROF=3 run never happened."
+ },
+ "g0085": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The 'run list ends with 45.025 44.757' claim misreads the #78 output it fetched via search_memory; no shown line gives run order."
+ },
+ "g0152": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The ~1.4 ms regression is an arithmetic error; the 78-78 line gives the correct min/mean figures (1.7 ms gap) and no gpu_min."
+ },
+ "g0291": {
+  "from_index": "partly",
+  "line": "153-155: build error — pt_metal_host.hpp GpuMeshData::nodes still PtBvhNodeQ*; sed fixed to PtBvhChild*",
+  "index_line_wrong": false,
+  "note": "The line names only the pt_metal_host.hpp PtBvhNodeQ* error ('build error', singular), omitting the pt_main.cpp:165 initializer error in #153; the answer turned that into a single '1 error generated' block."
+ },
+ "g0296": {
+  "from_index": "partly",
+  "line": "153-155: build errors — GpuMeshData::nodes still typed PtBvhNodeQ* in pt_metal_host.hpp; fixed to PtBvhChild*",
+  "index_line_wrong": false,
+  "note": "The line names only the GpuMeshData::nodes error, omitting the pt_main.cpp initializer error; the extra 'also fixed newBufferWithBytes sizeof' claim has no index basis (136-144 says .mm was already switched)."
+ },
+ "g0220": {
+  "from_index": "partly",
+  "line": "153-157: build failed - pt_metal_host.hpp GpuMeshData::nodes still PtBvhNodeQ*; fixed to PtBvhChild*; build clean after",
+  "index_line_wrong": false,
+  "note": "Quotes this line verbatim, which names only the header member error and omits the pt_main.cpp error; the sizeof-fix claim contradicts the shown 144-146 line and is invention."
+ },
+ "g0602": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "'out/nx_default.pfm' appears in no shown line (157-163 names no compared file); invented filename."
+ },
+ "g0302": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Opening claim that the reference PFM was missing contradicts the 157-163 line and the #159 it read; misreading, not index-driven."
+ },
+ "g0376": {
+  "from_index": "partly",
+  "line": "23-25: _r8p profiler: PT_SPLIT=1 splits trace/combine into two command buffers, prints trace_gpu_ms; trace=30.3ms, combine=0.42ms",
+  "index_line_wrong": false,
+  "note": "The 23-25 line (and working memory r8-cost-split) report only trace_gpu_ms and combine 0.42 ms, omitting the render_ms_best=31.236 wall line printed alongside; the answer inferred no wall-time line was recorded."
+ },
+ "g0158": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Shaders/shaders nesting is not in the 68-76 line (include/include only); it extrapolates working memory's 'include/ + shaders/ copied flat'."
+ },
+ "g0106": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The line says include/include and round-3 header with round-4 shaders; the 'shaders not found' story contradicts it and is invented."
+ },
+ "g0142": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d2 76-76 line names only include/include and the round-3 header; 'found no .metal files' is invented."
+ },
+ "g0304": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d2 76-76 line states the round-3 header cause; the bogus '45.0 vs 43.3' empty-base comparison and samples=16777216 are misattributions not stated by any shown line."
+ },
+ "g0386": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Shaders/shaders nesting and 'found nothing' contradict the d2 76-76 line (include/include, round-3 header)."
+ },
+ "g0257": {
+  "from_index": "partly",
+  "line": "68-76: A/B base printed nothing: cp -R nested include/include so ab_r4 used round-3 header (float[3] PtTri) with round-4 shaders -> shader compile error; fixed with rm -rf + flat copies; always verify base prints a benchmark line",
+  "index_line_wrong": false,
+  "note": "The line's vague 'fixed with rm -rf + flat copies' plausibly led to listing src/ among the copies (#76 copied include, shaders, binary); the shaders/shaders nesting claim contradicts the line and is invented."
+ },
+ "g0171": {
+  "from_index": "partly",
+  "line": "68-76: A/B base printed nothing: cp -R nested include/include so ab_r4 used round-3 header (float[3] PtTri) with round-4 shaders -> shader compile error; fixed with rm -rf + flat copies; always verify base prints a benchmark line",
+  "index_line_wrong": false,
+  "note": "Paraphrases the line (round-3 float[3] PtTri header, rm -rf + flat copies) and fills its unspecified 'flat copies' with include/ shaders/ src/; the shaders-nested claim has no index basis."
+ },
+ "g0170": {
+  "from_index": "partly",
+  "line": "68-76: A/B base printed nothing: cp -R nested include/include so ab_r4 used round-3 header (float[3] PtTri) with round-4 shaders -> shader compile error; fixed with rm -rf + flat copies; always verify base prints a benchmark line",
+  "index_line_wrong": false,
+  "note": "Only the src/-in-the-fix detail traces to the line's unspecified 'flat copies'; 'stale round-3 SHADERS' and shaders/shaders contradict the line's round-3 header with round-4 shaders."
+ },
+ "g0514": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The 88-88 line gives 44.493 vs 44.425 correctly; the -0.44 ms best-of delta is the answer's arithmetic error (copied from the mean delta)."
+ },
+ "g0183": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The 88-88 line gives correct mins; -0.47 ms is an arithmetic error."
+ },
+ "g0363": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d2 33-33 line states 'PT_DEBUG prints max_threads_per_group trace=1024'; the denial comes from the live-history failed occupancy-probe build (#246-251)."
+ },
+ "g0545": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d3 30-33 line puts the 1024 proxy in this round's history; 'measured in round 4' has no basis (1024 is absent from the round-4 writer-log tail and live history)."
+ },
+ "g0250": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Cites messages 30-33 (this round's archive) yet calls the 1024 figure round-4/earlier; self-contradictory, not from any line."
+ },
+ "g0420": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (dead branch)",
+  "index_line_wrong": false,
+  "note": "'Fresnel return-1 branch is dead' is stated by the line ('Fresnel TIR guard never fires (dead branch)'); the 1/1.5 rationale is the answer's own. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0005": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (dead branch)",
+  "index_line_wrong": false,
+  "note": "'Branch effectively dead' matches the line's 'TIR guard never fires (dead branch)'; the Schlick rationale is invented. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0352": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (dead branch)",
+  "index_line_wrong": false,
+  "note": "'Return-1 path cannot trigger' is a direct reading of the line's 'never fires (dead branch)'. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0402": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d2 lines (14-14, 60-62, 64-64, 78-78) never say which rays reach the guard and omit 'never fires'; the 'unreachable for air->glass' claim comes from working memory plus textbook physics."
+ },
+ "g0366": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (sin2_t<=0.444) - dead code",
+  "index_line_wrong": false,
+  "note": "'Never fires for entering rays (sin2_t<=4/9=0.444)' and 'reflectance>=1 is dead code' restate the line's 'never fires (sin2_t<=0.444) - dead code'. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0603": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (sin2_t<=0.444) - dead code",
+  "index_line_wrong": false,
+  "note": "'Provably cannot fire on the outside call, sin2_t<=0.444 ... dead code' is the line's claim, now limited to entering rays. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0222": {
+  "from_index": "yes",
+  "line": "78-78: glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (sin2_t<=0.444) - dead code",
+  "index_line_wrong": false,
+  "note": "'Guard provably never fired, sin^2_t capped at 0.444 (message 78)' is a direct reading of this line. The line faithfully carries the agent's own wrong note (#67, #79; also working memory round5-glass-and-stack), which #14's eta=ior_t/ior_i code contradicts."
+ },
+ "g0058": {
+  "from_index": "yes",
+  "line": "30-30: writer log grep - line 163 shows round-7 REJECTED 32-byte sibling-pair BVH blocks as a wash (+0.104ms +-0.218, n=41)",
+  "index_line_wrong": true,
+  "note": "'Round 7' sibling-pair wash with n=41/+0.104 restates the line. #30 is a bare grep with no round; line 163 is the round-5 child-pair result (p50 45.25 ms, same as working memory round5-childpair), so 'round-7' is the line's own error."
+ },
+ "g0311": {
+  "from_index": "yes",
+  "line": "30-30: writer log grep - line 163 shows round-7 REJECTED 32-byte sibling-pair BVH blocks as a wash (+0.104ms +-0.218, n=41)",
+  "index_line_wrong": true,
+  "note": "'Round 7' attribution comes from the line; the 2*index+1/+2 addressing is a separate invention. #30 is a bare grep with no round; line 163 is the round-5 child-pair result (p50 45.25 ms, same as working memory round5-childpair), so 'round-7' is the line's own error."
+ },
+ "g0019": {
+  "from_index": "yes",
+  "line": "30-30: writer log grep - line 163 shows round-7 REJECTED 32-byte sibling-pair BVH blocks as a wash (+0.104ms +-0.218, n=41)",
+  "index_line_wrong": true,
+  "note": "'Round 7 tested exactly this' restates the line's 'round-7 REJECTED'. #30 is a bare grep with no round; line 163 is the round-5 child-pair result (p50 45.25 ms, same as working memory round5-childpair), so 'round-7' is the line's own error."
+ },
+ "g0494": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Claims working memory lists '32-byte node pairs'; no shown line says so (only the archived goal #1 does), and the d2 30-30 line says only 'an earlier round'."
+ },
+ "g0045": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d3 30-30 line gives no round, and the d3 9-9 r7 line lists other rejects; 'round 7' is the answer's own inference."
+ },
+ "g0319": {
+  "from_index": "yes",
+  "line": "30-30: writer log grep - line 163 shows round-7 REJECTED 32-byte sibling-pair BVH blocks as a wash (+0.104ms +-0.218, n=41)",
+  "index_line_wrong": true,
+  "note": "Its 'round-7 32-byte sibling-pair experiment was a wash' aside restates the line. #30 is a bare grep with no round; line 163 is the round-5 child-pair result (p50 45.25 ms, same as working memory round5-childpair), so 'round-7' is the line's own error."
+ }
+}

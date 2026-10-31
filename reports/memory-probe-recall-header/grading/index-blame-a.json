@@ -1,0 +1,164 @@
+{
+ "g0599": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Denial of the #55-#56 copy-and-run rests on the answer's own zero-hit search_memory; no shown line covers #53-#57 (that range's line was not shown), and no shown line says the run did not happen."
+ },
+ "g0489": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Denial of the #55-#56 copy-and-run rests on the answer's own zero-hit search_memory; no shown line covers #53-#57 (that range's line was not shown), and no shown line says the run did not happen. The claim that round-1 timing came 'not by a copied binary' is right; the error is the denial."
+ },
+ "g0542": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Error string came from read_memory 55-57; the false claim that round1_default.pfm was produced afterwards and used for comparisons is an inference from the #56 out/ listing (file dated 12:36, pre-existing), not from any shown line (d2 shows no line past 41 in art-000414)."
+ },
+ "g0464": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "It found the #55-#56 command via search but invented 'no error printed / could not start'; shown line 23-23 only describes newLibraryWithSource concatenation and says nothing about this run's output."
+ },
+ "g0208": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Denial of the #55-#56 copy-and-run rests on the answer's own zero-hit search_memory; no shown line covers #53-#57 (that range's line was not shown), and no shown line says the run did not happen. d2 shows no art-000414 line after 41-41."
+ },
+ "g0522": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Conflation with the /tmp benchmark (#43) came from its read_memory 40-47 plus a zero-hit search; d3 shows no 43-45 or 55-57 line, only '46-46: created out/ dir.'"
+ },
+ "g0164": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Denial of the #55-#56 copy-and-run rests on the answer's own zero-hit search_memory; no shown line covers #53-#57 (that range's line was not shown), and no shown line says the run did not happen. It quotes the d3 35-37 line correctly but only for the true verification-dir fact."
+ },
+ "g0089": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Denial of the #55-#56 copy-and-run rests on the answer's own zero-hit search_memory; no shown line covers #53-#57 (that range's line was not shown), and no shown line says the run did not happen. The 'mix-up with bvh_stats' guess is invented."
+ },
+ "g0249": {
+  "from_index": "partly",
+  "line": "- 43-45: baseline re-measured on this machine: render_ms_best=105.947 render_ms_avg=113.523 gpu_ms_best=105.574; /tmp not writable (ppm error) -> write outputs to phase3/out.\n- 46-52: created out/ dir; saved working-memory entries baseline-timing and round2-plan.",
+  "index_line_wrong": false,
+  "note": "The answer's text quoted as the working-memory entry 'baseline-timing' ('/tmp not writable (ppm error) -> write outputs to phase3/out') is really the 43-45 index line, which the next line ties to 'saved working-memory entries baseline-timing'; both lines match #43-#52, so the error is the misattribution (and the invented out/base.ppm), not a wrong line."
+ },
+ "g0182": {
+  "from_index": "partly",
+  "line": "- 83-87: link error: transform_mesh missing from rewrite; restored it.",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten."
+ },
+ "g0094": {
+  "from_index": "partly",
+  "line": "- 83-87: link error: transform_mesh missing from rewrite; restored it.",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten."
+ },
+ "g0607": {
+  "from_index": "partly",
+  "line": "- 83-87: link error: transform_mesh missing from rewrite; restored it.",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten. It also attributes the declaration to pt_mesh.hpp (it is in pt_bvh.hpp), which no shown line states."
+ },
+ "g0314": {
+  "from_index": "partly",
+  "line": "- 83-83: link error transform_mesh missing -> 87 restored it",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten. The d2 header even shows '63-67: rewrote pt_bvh.hpp/cpp', so the pt_mesh.cpp attribution is the answer's guess on top of an incomplete line."
+ },
+ "g0080": {
+  "from_index": "partly",
+  "line": "- 83-83: link error transform_mesh missing -> 87 restored it",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten. Its claim that the index lists edits on 'pt_mesh/pt_bvh' is not true of the d2 lines."
+ },
+ "g0132": {
+  "from_index": "partly",
+  "line": "- 83-87: link error transform_mesh dropped -> restored",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten."
+ },
+ "g0564": {
+  "from_index": "partly",
+  "line": "- 83-87: link error transform_mesh dropped -> restored",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten."
+ },
+ "g0587": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The error count (8 vs 9 in #79) came from its own read_memory 79-89; no shown line gives an error count, and its file attribution for transform_mesh (pt_bvh.cpp) is right."
+ },
+ "g0570": {
+  "from_index": "partly",
+  "line": "- 83-87: link error: transform_mesh missing from rewrite; restored it.",
+  "index_line_wrong": false,
+  "note": "The line is accurate (#83-#87) but does not say which file's rewrite lost transform_mesh (it was pt_bvh.cpp); the answer filled the gap by guessing the mesh module, which no shown line says was rewritten. It quotes this line; the 'pt_metal_host.mm still called it' detail (really pt_main.cpp) is invented."
+ },
+ "g0043": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "'8x8 never measured' comes from working memory round2-progress (e), which omits 8x8; the 167-167 line listing 8x8=101.0 was not shown in d2 (art-000557 lines stop at 145-151)."
+ },
+ "g0395": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Cites working memory round2-progress (e), which omits 8x8; the 167-167 index line with 8x8=101.0 was not shown in d2."
+ },
+ "g0519": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Cites working memory round2-progress (e), which omits 8x8; the 167-167 index line with 8x8=101.0 was not shown in d2."
+ },
+ "g0113": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Cites working memory round2-progress (e), which omits 8x8; d3 shows art-000557 lines only through 129, so the 8x8 line was not shown."
+ },
+ "g0502": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "Follows working memory round2-progress (e), which omits 8x8; d3 shows art-000557 lines only through 129, so the 8x8 line was not shown."
+ },
+ "g0049": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The d1 header showed no art-000646 lines; the 'bvh_stats linked fine' claim is a misreading of its own read_memory 195-215, where #208 printed the error followed by stats from the old bvh_stats binary."
+ },
+ "g0495": {
+  "from_index": "yes",
+  "line": "- 214-218: stackless measured 102.08 best/114.59 avg vs stack-based 93.37/96.61 (gpu 92.9) in the same A/B -> REGRESSION, reverted to out/pt_snapshot_pre_stackless; stackless copy kept at pathtracer_backup_stackless",
+  "index_line_wrong": true,
+  "note": "The answer quotes this line and reads 96.61 as the stack-based avg by parallel with '102.08 best/114.59 avg'; per #216 93.366 and 96.614 are the render_ms_best of two runs (avgs 103.183/100.692), so the line drops the 'best' label and reads wrongly as best/avg."
+ },
+ "g0324": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "The shown 35-37 line says only the verification dir is unreadable; 'never saw the frozen RMSE numbers' is the answer's over-inference, and the same d1 header's 1-1 line shows them (0.848/0.755/2.058)."
+ },
+ "g0457": {
+  "from_index": "no",
+  "line": "",
+  "index_line_wrong": false,
+  "note": "'My sandbox only mounts pathtracer-bunny-phase3' is invented; the d3 35-37 line says only that the verification dir is not readable."
+ }
+}
