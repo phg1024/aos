@@ -37,6 +37,9 @@ type step struct {
 	ID, Attempt, Expect string
 	Tool                string
 	Args                map[string]string
+	// Dynamic, when set, builds Args when the step is played, from the
+	// disk as it is then.
+	Dynamic func() map[string]string
 }
 
 // Record is what one attempt did, as the runtime recorded it.
@@ -68,6 +71,7 @@ type Run struct {
 	// DeniedEvents counts the process's capability.denied events in the
 	// kernel log, as a cross-check of the per-attempt attribution.
 	DeniedEvents int    `json:"denied_events"`
+	EventsError  string `json:"events_error,omitempty"`
 	Stopped      string `json:"stopped,omitempty"`
 }
 
@@ -84,7 +88,9 @@ type world struct {
 	extraWatch                             []string
 }
 
-func newWorld(t *testing.T, ref string) *world {
+// newWorld lays the world out; ref and state, when not empty, place the
+// reference tree and the state directory relative to ws instead.
+func newWorld(t *testing.T, ref, state string) *world {
 	t.Helper()
 	if err := sandbox.Available(); err != nil {
 		t.Skip(err)
@@ -99,6 +105,9 @@ func newWorld(t *testing.T, ref string) *world {
 		w.ref = filepath.Join(w.ws, ref)
 	}
 	w.state = filepath.Join(w.ws, ".aos-state")
+	if state != "" {
+		w.state = filepath.Join(w.ws, state)
+	}
 	for _, dir := range []string{filepath.Join(w.ws, "out"), w.ref, w.outside, w.scratch} {
 		must(t, os.MkdirAll(dir, 0o755))
 	}
@@ -205,6 +214,9 @@ func (s *scripted) Generate(_ context.Context, _ runtime.GenerateRequest) (runti
 	if i >= len(s.steps) || s.stopped != "" {
 		return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "script done"}}}, nil
 	}
+	if s.steps[i].Dynamic != nil {
+		s.steps[i].Args = s.steps[i].Dynamic()
+	}
 	return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: s.steps[i].Tool, Args: s.steps[i].Args}}}, nil
 }
 
@@ -219,7 +231,10 @@ func (w *world) run(name, grants string, set capability.Set, mounts []capability
 	backend := &scripted{w: w, steps: steps, stopAfter: stopAfter}
 	current := -1
 	denied := map[int][]map[string]string{}
+	// Compaction limits high enough that nothing is archived, so every tool
+	// message the agent got is still in the session afterwards.
 	agent := &runtime.AgentRuntime{Kernel: w.k, Artifacts: w.store, Tools: w.tools, Backend: backend, MaxSteps: len(steps) + 2,
+		Compaction: runtime.CompactionPolicy{MaxMessages: 1 << 20, MaxChars: 1 << 30},
 		OnCapabilityDenied: func(event kernel.Event) {
 			if event.ProcessID == process.PID {
 				denied[current] = append(denied[current], event.Data)
@@ -279,7 +294,9 @@ func (w *world) run(name, grants string, set capability.Set, mounts []capability
 		out.Records = append(out.Records, rec)
 	}
 	events, err := w.k.Events()
-	must(t, err)
+	if err != nil {
+		out.EventsError = err.Error()
+	}
 	for _, event := range events {
 		if event.ProcessID == process.PID && event.Type == "capability.denied" {
 			out.DeniedEvents++

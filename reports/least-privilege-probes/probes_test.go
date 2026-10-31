@@ -3,6 +3,7 @@
 package lpprobes
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -23,7 +24,7 @@ var fileTools = []string{"read_file", "write_file", "list_dir"}
 // mount ref, the state directory inside ws; file tools only, then the same
 // with run.
 func TestP1DeniedWriteArc(t *testing.T) {
-	w := newWorld(t, "")
+	w := newWorld(t, "", "")
 	mounts := []capability.Mount{{Name: "ws", HostPath: w.ws}, {Name: "ref", HostPath: w.ref, ReadOnly: true}}
 	set := capability.Set{ReadPaths: []string{w.ws, w.ref}, WritePaths: []string{filepath.Join(w.ws, "out")}, Tools: fileTools}
 	grants := "mounts ws (rw), ref (ro); read ws, ref; write ws/out; state dir ws/.aos-state protected; tools " + strings.Join(set.Tools, ", ")
@@ -66,7 +67,7 @@ func TestP1DeniedWriteArc(t *testing.T) {
 
 // P3: sandbox escapes, run granted, network off.
 func TestP3SandboxEscapes(t *testing.T) {
-	w := newWorld(t, "")
+	w := newWorld(t, "", "")
 	tmpName := fmt.Sprintf("/tmp/aos-lp-probe-%d-x", os.Getpid())
 	w.extraWatch = []string{tmpName, "/private" + tmpName}
 	defer os.Remove(tmpName)
@@ -143,12 +144,36 @@ func TestP3SandboxEscapes(t *testing.T) {
 			run.Records[i].Extra = map[string]string{"scratch_root": scratch}
 		}
 	}
-	write(t, "P3", map[string]any{"runs": []Run{run}, "checks": extra})
+	// Controls: the network rows again with unconfined_run (no sandbox),
+	// to show the commands work here and the refusals are the sandbox's.
+	control := set
+	control.UnconfinedRun = true
+	controls := []step{
+		runCmd("u1c", "control, unconfined: UDP datagram to the loopback listener", "delivered", fmt.Sprintf("printf probe | nc -u -w 1 127.0.0.1 %d; echo nc_exit=$?", udpPort)),
+		runCmd("d1c", "control, unconfined: DNS query to the loopback listener", "listener receives the query", fmt.Sprintf("nslookup -port=%d -timeout=1 -retry=0 aos-probe.example 127.0.0.1; echo nslookup_exit=$?", dnsPort)),
+		runCmd("d2c", "control, unconfined: dscacheutil -q host -a name example.com", "an address", "dscacheutil -q host -a name example.com; echo dscacheutil_exit=$?"),
+	}
+	mu.Lock()
+	before := map[string]int{"udp": counts["udp"], "dns": counts["dns"]}
+	mu.Unlock()
+	controlRun := w.run("P3 controls, unconfined_run", strings.Replace(grants, "tools run", "tools run; unconfined_run true", 1), control, mounts, controls, nil)
+	time.Sleep(200 * time.Millisecond)
+	mu.Lock()
+	for i := range controlRun.Records {
+		switch controlRun.Records[i].ID {
+		case "u1c":
+			controlRun.Records[i].Extra = map[string]string{"listener_received": fmt.Sprint(counts["udp"] - before["udp"])}
+		case "d1c":
+			controlRun.Records[i].Extra = map[string]string{"listener_received": fmt.Sprint(counts["dns"] - before["dns"])}
+		}
+	}
+	mu.Unlock()
+	write(t, "P3", map[string]any{"runs": []Run{run, controlRun}, "checks": extra})
 }
 
 // P4: the two network paths, allow_network true and network_allow empty.
 func TestP4NetworkPaths(t *testing.T) {
-	w := newWorld(t, "")
+	w := newWorld(t, "", "")
 	var mu sync.Mutex
 	hits := map[string]int{}
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -177,49 +202,149 @@ func TestP4NetworkPaths(t *testing.T) {
 	write(t, "P4", map[string]any{"runs": []Run{run}, "port": port})
 }
 
-// P2: case-variant paths on the case-insensitive volume. Stops at the
-// first write that lands, as aos book asked.
+// P2: case-variant paths on the case-insensitive volume, each with a
+// lowercase control. (A first run stopped at c1, as aos book asked; aos
+// book then asked for every case.)
 func TestP2CaseVariantPaths(t *testing.T) {
-	landed := func(changes []string) bool { return len(changes) > 0 }
-	w := newWorld(t, "")
+	w := newWorld(t, "", "")
 	if _, err := os.Stat(filepath.Join(w.ws, ".AOS-STATE")); err != nil {
 		t.Fatalf("volume is not case-insensitive here: %v", err)
 	}
+	tools := append(append([]string{}, fileTools...), "run")
 	mounts := []capability.Mount{{Name: "ws", HostPath: w.ws}}
-	set := capability.Set{ReadPaths: []string{w.ws}, WritePaths: []string{w.ws}, Tools: append(append([]string{}, fileTools...), "run")}
-	grants := "mount ws (rw); read ws; write ws; state dir ws/.aos-state protected (lexically); tools read_file, write_file, list_dir, run"
+	set := capability.Set{ReadPaths: []string{w.ws}, WritePaths: []string{w.ws}, Tools: tools}
+	grants := "mount ws (rw); read ws; write ws; state dir ws/.aos-state protected; tools read_file, write_file, list_dir, run"
 	refused := "refused: tool_error + capability.denied, disk unchanged"
 	viaRun := "refused by the sandbox: nonzero exit, disk unchanged"
-	upper, mixed := filepath.Join(w.ws, ".AOS-STATE"), filepath.Join(w.ws, ".Aos-State")
+	upper, mixed, lower := filepath.Join(w.ws, ".AOS-STATE"), filepath.Join(w.ws, ".Aos-State"), w.state
+	readCmd := func(dir string) string {
+		return "head -c 80 " + filepath.Join(dir, "kernel", "events.json") + "; echo; echo read_exit=$?"
+	}
+	writeCmd := func(path string) string { return "echo x > " + path + "; echo write_exit=$?" }
 	steps := []step{
 		writeFile("c1", "write_file ws/.AOS-STATE/probe-case1.txt", refused, filepath.Join(upper, "probe-case1.txt")),
+		writeFile("c1L", "control: write_file ws/.aos-state/probe-case1-lower.txt", refused, filepath.Join(lower, "probe-case1-lower.txt")),
 		writeFile("c2", "write_file ws/.Aos-State/kernel/probe-case2.txt", refused, filepath.Join(mixed, "kernel", "probe-case2.txt")),
+		writeFile("c2L", "control: write_file ws/.aos-state/kernel/probe-case2-lower.txt", refused, filepath.Join(lower, "kernel", "probe-case2-lower.txt")),
 		tool("c3", "read_file ws/.AOS-STATE/kernel/events.json", refused, "read_file", "path", filepath.Join(upper, "kernel", "events.json")),
+		tool("c3L", "control: read_file ws/.aos-state/kernel/events.json", refused, "read_file", "path", filepath.Join(lower, "kernel", "events.json")),
 		tool("c4", "read_file ws/.Aos-State/kernel/processes.json", refused, "read_file", "path", filepath.Join(mixed, "kernel", "processes.json")),
-		runCmd("c5", "run: write ws/.AOS-STATE/probe-run1.txt", viaRun, "echo x > "+filepath.Join(upper, "probe-run1.txt")+"; echo write_exit=$?"),
-		runCmd("c6", "run: write ws/.Aos-State/kernel/probe-run2.txt", viaRun, "echo x > "+filepath.Join(mixed, "kernel", "probe-run2.txt")+"; echo write_exit=$?"),
-		runCmd("c7", "run: read ws/.AOS-STATE/kernel/events.json", viaRun, "head -c 120 "+filepath.Join(upper, "kernel", "events.json")+"; echo; echo read_exit=$?"),
+		tool("c4L", "control: read_file ws/.aos-state/kernel/processes.json", refused, "read_file", "path", filepath.Join(lower, "kernel", "processes.json")),
+		runCmd("c5", "run: write ws/.AOS-STATE/probe-run1.txt", viaRun, writeCmd(filepath.Join(upper, "probe-run1.txt"))),
+		runCmd("c5L", "control, run: write ws/.aos-state/probe-run1-lower.txt", viaRun, writeCmd(filepath.Join(lower, "probe-run1-lower.txt"))),
+		runCmd("c6", "run: write ws/.Aos-State/kernel/probe-run2.txt", viaRun, writeCmd(filepath.Join(mixed, "kernel", "probe-run2.txt"))),
+		runCmd("c6L", "control, run: write ws/.aos-state/kernel/probe-run2-lower.txt", viaRun, writeCmd(filepath.Join(lower, "kernel", "probe-run2-lower.txt"))),
+		runCmd("c7", "run: read ws/.AOS-STATE/kernel/events.json", viaRun, readCmd(upper)),
+		runCmd("c7L", "control, run: read ws/.aos-state/kernel/events.json", viaRun, readCmd(lower)),
 	}
-	runs := []Run{w.run("P2a state dir, case variants", grants, set, mounts, steps, landed)}
-	if runs[0].Stopped == "" {
-		// A read-only mount nested in a writable one.
-		n := newWorld(t, "ref")
-		nMounts := []capability.Mount{{Name: "ws", HostPath: n.ws}, {Name: "ref", HostPath: n.ref, ReadOnly: true}}
-		nSet := capability.Set{ReadPaths: []string{n.ws}, WritePaths: []string{n.ws}, Tools: set.Tools}
-		nGrants := "mounts ws (rw), ws/ref (ro, nested); read ws; write ws; tools read_file, write_file, list_dir, run"
-		upperRef, mixedRef := filepath.Join(n.ws, "REF"), filepath.Join(n.ws, "Ref")
-		nSteps := []step{
-			writeFile("c8", "write_file ws/REF/probe-ro.txt", refused, filepath.Join(upperRef, "probe-ro.txt")),
-			tool("c9", "write_file over ws/Ref/reference.txt", refused, "write_file", "path", filepath.Join(mixedRef, "reference.txt"), "content", "tampered\n"),
-			runCmd("c10", "run: write ws/REF/probe-ro-run.txt", viaRun, "echo x > "+filepath.Join(upperRef, "probe-ro-run.txt")+"; echo write_exit=$?"),
-			runCmd("c11", "run: overwrite ws/Ref/reference.txt", viaRun, "echo tampered > "+filepath.Join(mixedRef, "reference.txt")+"; echo write_exit=$?"),
+	runs := []Run{w.run("P2a state dir, case variants", grants, set, mounts, steps, nil)}
+
+	// The kernel's event log and the artifact index: write_file with a copy
+	// of the live file plus one marked forged entry, then ask the kernel and
+	// the store what they hold; run only opens them for append (": >>").
+	k := newWorld(t, "", "")
+	kUpper, kMixed := filepath.Join(k.ws, ".AOS-STATE"), filepath.Join(k.ws, ".Aos-State")
+	events := func(dir string) func() map[string]string {
+		return func() map[string]string {
+			var list []map[string]any
+			raw, _ := os.ReadFile(filepath.Join(k.state, "kernel", "events.json"))
+			json.Unmarshal(raw, &list)
+			list = append(list, map[string]any{"id": "evt-999999", "process_id": "pid-forged", "type": "probe.forged",
+				"timestamp": time.Now().UTC().Format(time.RFC3339), "data": map[string]string{"via": dir}})
+			out, _ := json.Marshal(list)
+			return map[string]string{"path": filepath.Join(dir, "kernel", "events.json"), "content": string(out)}
 		}
-		runs = append(runs, n.run("P2b nested read-only mount, case variants", nGrants, nSet, nMounts, nSteps, landed))
 	}
-	write(t, "P2", runs)
-	for _, run := range runs {
-		if run.Stopped != "" {
-			t.Logf("STOPPED: a write landed at %s", run.Stopped)
+	index := func(dir string) func() map[string]string {
+		return func() map[string]string {
+			entries := map[string]any{}
+			raw, _ := os.ReadFile(filepath.Join(k.state, "artifacts", "index.json"))
+			json.Unmarshal(raw, &entries)
+			entries["art-999999"] = map[string]any{"id": "art-999999", "type": "probe.forged", "producer_pid": "pid-000001",
+				"path": "probe-forged.json", "created_at": time.Now().UTC().Format(time.RFC3339Nano), "metadata": map[string]string{"via": dir}}
+			out, _ := json.Marshal(entries)
+			return map[string]string{"path": filepath.Join(dir, "artifacts", "index.json"), "content": string(out)}
 		}
 	}
+	appendCmd := func(path string) string { return ": >> " + path + "; echo open_append_exit=$?" }
+	kSteps := []step{
+		{ID: "k1L", Attempt: "control: write_file ws/.aos-state/kernel/events.json (copy + forged event evt-999999)", Expect: refused, Tool: "write_file", Dynamic: events(k.state)},
+		{ID: "k1", Attempt: "write_file ws/.Aos-State/kernel/events.json (copy + forged event evt-999999)", Expect: refused, Tool: "write_file", Dynamic: events(kMixed)},
+		{ID: "k2L", Attempt: "control: write_file ws/.aos-state/artifacts/index.json (copy + forged art-999999)", Expect: refused, Tool: "write_file", Dynamic: index(k.state)},
+		{ID: "k2", Attempt: "write_file ws/.AOS-STATE/artifacts/index.json (copy + forged art-999999)", Expect: refused, Tool: "write_file", Dynamic: index(kUpper)},
+		runCmd("k3L", "control, run: open ws/.aos-state/kernel/events.json for append", viaRun, appendCmd(filepath.Join(k.state, "kernel", "events.json"))),
+		runCmd("k3", "run: open ws/.Aos-State/kernel/events.json for append", viaRun, appendCmd(filepath.Join(kMixed, "kernel", "events.json"))),
+		runCmd("k4", "run: open ws/.AOS-STATE/artifacts/index.json for append", viaRun, appendCmd(filepath.Join(kUpper, "artifacts", "index.json"))),
+	}
+	kSet := capability.Set{ReadPaths: []string{k.ws}, WritePaths: []string{k.ws}, Tools: tools}
+	kRun := k.run("P2b kernel files, case variants", grants, kSet, []capability.Mount{{Name: "ws", HostPath: k.ws}}, kSteps, nil)
+	checks := map[string]string{}
+	if list, err := k.k.Events(); err != nil {
+		checks["kernel_events_error"] = err.Error()
+	} else {
+		forged := false
+		for _, event := range list {
+			forged = forged || event.ID == "evt-999999"
+		}
+		checks["kernel_reports_forged_event_evt-999999"] = fmt.Sprint(forged)
+	}
+	if items, err := k.store.List(); err != nil {
+		checks["artifact_list_error"] = err.Error()
+	} else {
+		forged := false
+		for _, item := range items {
+			forged = forged || item.ID == "art-999999"
+		}
+		checks["store_lists_forged_artifact_art-999999"] = fmt.Sprint(forged)
+	}
+	// The snapshot leaves the runtime's own state files out, so the disk
+	// column of k1 and k2 comes from the checks above.
+	for i, record := range kRun.Records {
+		switch {
+		case record.ID == "k1" && record.ToolResult:
+			kRun.Records[i].Disk = []string{"rewrote " + filepath.Join(k.state, "kernel", "events.json") + " (a state file, outside the snapshot); Kernel.Events() then reports evt-999999: " + checks["kernel_reports_forged_event_evt-999999"]}
+		case record.ID == "k2" && record.ToolResult:
+			kRun.Records[i].Disk = []string{"rewrote " + filepath.Join(k.state, "artifacts", "index.json") + " (a state file, outside the snapshot); Store.List() then lists art-999999: " + checks["store_lists_forged_artifact_art-999999"]}
+		}
+	}
+	runs = append(runs, kRun)
+
+	// A read-only mount nested in a writable one.
+	n := newWorld(t, "ref", "")
+	nMounts := []capability.Mount{{Name: "ws", HostPath: n.ws}, {Name: "ref", HostPath: n.ref, ReadOnly: true}}
+	nSet := capability.Set{ReadPaths: []string{n.ws}, WritePaths: []string{n.ws}, Tools: tools}
+	nGrants := "mounts ws (rw), ws/ref (ro, nested); read ws; write ws; tools read_file, write_file, list_dir, run"
+	upperRef, mixedRef, lowerRef := filepath.Join(n.ws, "REF"), filepath.Join(n.ws, "Ref"), n.ref
+	over := func(id, attempt, path, content string) step {
+		return tool(id, attempt, refused, "write_file", "path", path, "content", content)
+	}
+	nSteps := []step{
+		writeFile("c8", "write_file ws/REF/probe-ro.txt", refused, filepath.Join(upperRef, "probe-ro.txt")),
+		writeFile("c8L", "control: write_file ws/ref/probe-ro-lower.txt", refused, filepath.Join(lowerRef, "probe-ro-lower.txt")),
+		over("c9", "write_file over ws/Ref/reference.txt", filepath.Join(mixedRef, "reference.txt"), "tampered c9\n"),
+		over("c9L", "control: write_file over ws/ref/reference.txt", filepath.Join(lowerRef, "reference.txt"), "tampered c9L\n"),
+		runCmd("c10", "run: write ws/REF/probe-ro-run.txt", viaRun, writeCmd(filepath.Join(upperRef, "probe-ro-run.txt"))),
+		runCmd("c10L", "control, run: write ws/ref/probe-ro-run-lower.txt", viaRun, writeCmd(filepath.Join(lowerRef, "probe-ro-run-lower.txt"))),
+		runCmd("c11", "run: overwrite ws/Ref/reference.txt", viaRun, "echo 'tampered c11' > "+filepath.Join(mixedRef, "reference.txt")+"; echo write_exit=$?"),
+		runCmd("c11L", "control, run: overwrite ws/ref/reference.txt", viaRun, "echo 'tampered c11L' > "+filepath.Join(lowerRef, "reference.txt")+"; echo write_exit=$?"),
+	}
+	runs = append(runs, n.run("P2c nested read-only mount, case variants", nGrants, nSet, nMounts, nSteps, nil))
+	raw, _ := os.ReadFile(filepath.Join(n.ref, "reference.txt"))
+	checks["nested_ref/reference.txt_after"] = string(raw)
+
+	// Extra: the scripts/tui.sh layout, where earlier sessions' state
+	// directories sit next to the current one inside the workdir.
+	s := newWorld(t, "", filepath.Join(".aos-sessions", "current"))
+	sibling := filepath.Join(s.ws, ".aos-sessions", "earlier")
+	must(t, os.MkdirAll(filepath.Join(sibling, "kernel"), 0o755))
+	must(t, os.WriteFile(filepath.Join(sibling, "kernel", "events.json"), []byte("[]\n"), 0o644))
+	sGrants := "mount ws (rw); read ws; write ws; state dir ws/.aos-sessions/current protected; an earlier session in ws/.aos-sessions/earlier; tools read_file, write_file, list_dir, run"
+	sSteps := []step{
+		writeFile("x1", "write_file into the earlier session (ws/.aos-sessions/earlier/kernel/probe-sibling.txt), lowercase", "not covered by Protected", filepath.Join(sibling, "kernel", "probe-sibling.txt")),
+		runCmd("x2", "run: write into the earlier session, lowercase", "not hidden from run", writeCmd(filepath.Join(sibling, "kernel", "probe-sibling-run.txt"))),
+		writeFile("x3", "control: write_file into the current session (ws/.aos-sessions/current/probe-current.txt)", refused, filepath.Join(s.state, "probe-current.txt")),
+	}
+	sSet := capability.Set{ReadPaths: []string{s.ws}, WritePaths: []string{s.ws}, Tools: tools}
+	runs = append(runs, s.run("P2d scripts/tui.sh layout: earlier sessions (extra)", sGrants, sSet, []capability.Mount{{Name: "ws", HostPath: s.ws}}, sSteps, nil))
+	write(t, "P2", map[string]any{"runs": runs, "checks": checks})
 }

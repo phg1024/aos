@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AOS Least-Privilege Probes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; line-height: 1.5; color: #1f2937; padding: 0 16px; background: #fff; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+    pre { white-space: pre-wrap; overflow-x: auto; }
+    code.saw { white-space: pre-wrap; word-break: break-all; font-size: 0.86em; background: none; padding: 0; }
+    .hero { background: linear-gradient(135deg, #fef2f2, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.9em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    tr.landed td { background: #fef2f2; }
+    .yes { font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .good { color: #047857; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+    p.grants { margin: 16px 0 4px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Least-Privilege Probes (Chapter 4), AOS 283a92e on macOS</h1>
+    <p>Four probes asked by aos book, run with a scripted backend through the real <code>AgentRuntime</code>, no model. Each attempt is recorded as what was tried, the exact tool message the agent saw, the disk change, and whether a <code>tool_error</code> or <code>tool_result</code> artifact and a <code>capability.denied</code> kernel event exist.</p>
+    <p><b class="bad">One real hole: the file tools' protection is case-sensitive on a case-insensitive volume.</b> <code>protected()</code> (<code>internal/tools/runtime.go</code>) and the read-only-mount check in <code>withinAllowed</code> (<code>internal/capability/policy.go</code>) compare paths lexically after <code>EvalSymlinks</code>, which keeps the caller's spelling. On this Mac's APFS volume <code>&lt;ws&gt;/.AOS-STATE</code> opens <code>&lt;ws&gt;/.aos-state</code>, so:</p>
+    <ul>
+      <li><code>write_file</code> and <code>read_file</code> reach the protected state directory through a case variant: new files, the kernel's <code>events.json</code> and <code>processes.json</code> read back, and <b>both kernel records rewritten</b>: after a case-variant <code>write_file</code>, the kernel reports a forged event (<code>evt-999999</code>) and the artifact store lists a forged artifact (<code>art-999999</code>; its next ID became <code>art-1000000</code>). Every one is an ordinary <code>tool_result</code> with <b>no <code>capability.denied</code> event</b>.</li>
+      <li><code>write_file</code> reaches a <b>read-only mount nested in a writable one</b> the same way (created a file, overwrote <code>reference.txt</code>).</li>
+      <li><b>Sandboxed <code>run</code> refuses every case variant</b> ("Operation not permitted"): writes, reads and append-opens of the state dir, the kernel files and the nested read-only mount. Seatbelt judges the real file, not the spelling.</li>
+      <li><b>Every lowercase control is refused</b> (tool_error + capability.denied for the file tools, "Operation not permitted" for run), so the hole is the case alone.</li>
+      <li><b>Exposed shipped layout:</b> <code>scripts/tui.sh</code>, the README's way to start the TUI, puts the state dir in <code>$ROOT/.aos-sessions/&lt;ts&gt;-&lt;backend&gt;</code> inside the writable <code>--workdir $ROOT</code>, with <code>write_file</code> in the default tools. Workflow runs with <code>--state-dir &lt;workspace&gt;/.aos-state</code> expose it to the writer and benchmarker of the metal workflows. Plain <code>aos run</code> and plain <code>aos-tui</code> use a temp dir and are not exposed.</li>
+    </ul>
+    <p><b>Not case-related, found on the way (extra):</b> in the <code>scripts/tui.sh</code> layout only the <i>current</i> session's state dir is protected; earlier sessions next to it in <code>.aos-sessions/</code> are writable by <code>write_file</code> and by sandboxed <code>run</code>, in plain lowercase.</p>
+    <p><b>P1, P3, P4 behave as the code says:</b> the denied-write arc gives a <code>tool_error</code> plus <code>capability.denied</code> per refusal; a sandbox refusal inside <code>run</code> is an ordinary <code>tool_result</code> with a nonzero exit and no <code>capability.denied</code> (confirmed); hardlink, rename-in, <code>/tmp</code>, <code>../</code>, loopback UDP and DNS are refused with the network off (unconfined controls succeed); <code>web_fetch</code> refuses loopback while <code>run curl</code> reaches it.</p>
+    <p>Nothing was fixed; the fix is aos code's and the decision the user's.</p>
+  </div>
+
+  <h2>How It Was Run</h2>
+  <ul>
+    <li><b>Code:</b> branch <code>claude/competent-heyrovsky-566e83</code>, which contains <code>283a92e</code> (local main); probes only under <code>reports/least-privilege-probes/</code>, nothing in <code>internal/</code> or <code>cmd/</code> changed.</li>
+    <li><b>Harness</b> (<code>harness_test.go</code>): a throwaway <code>t.TempDir()</code> per world with <code>ws</code>, <code>ref</code>, <code>outside</code> and the state directory (default <code>ws/.aos-state</code>, holding the kernel and artifact stores); <code>tools.Runtime.Protected = [state, state.lock]</code> as <code>cmd/aos</code> and <code>cmd/aos-tui</code> set it; one kernel process per run with the stated grants; a scripted backend that plays the tool calls in order and then exits 0; <code>RunOptions{ContinueOnToolError: true}</code> as agentflow runs; compaction limits raised so every tool message stays in the session. The disk is hashed before every model call, so each attempt's change is the difference between two snapshots (the runtime's own state files and the run scratch dirs are left out; any file named <code>probe*</code> is in).</li>
+    <li><b>Records:</b> "agent saw" is the tool message in the session, verbatim (paths shortened to <code>&lt;root&gt;</code>, long text cut); tool_error / tool_result is the artifact the runtime recorded for that call; capability.denied is the kernel event attributed to the call through <code>OnCapabilityDenied</code>, cross-checked against the kernel log count.</li>
+    <li><b>Environment:</b> macOS 27.0.1 (26A434), APFS, case-insensitive (checked: <code>ws/.AOS-STATE</code> stats as <code>ws/.aos-state</code>); Go 1.26.3; <code>/usr/bin/sandbox-exec</code>.</li>
+    <li><b>Commands</b>, from the repository root, in this order:
+      <pre><code>go test ./reports/least-privilege-probes/ -count=1 -v -run 'TestP1|TestP3|TestP4'
+go test ./reports/least-privilege-probes/ -count=1 -v -run TestP2
+python3 -I reports/least-privilege-probes/make_tables.py --build</code></pre></li>
+    <li><b>History:</b> a first P2 run (commit <code>21afa55</code>) stopped at c1, the first write that landed, as aos book asked, and reported it. aos book checked c1 against the code and asked for every case; P2 was then rewritten with lowercase controls, the kernel files and the nested mount, and all four probes re-run from scratch for this report.</li>
+  </ul>
+
+  <h2>P2: Case-Variant Paths</h2>
+  <p>State dir at <code>ws/.aos-state</code> inside the writable mount <code>ws</code>, write scope <code>ws</code>. Variants <code>.AOS-STATE</code> and <code>.Aos-State</code>; each case has a lowercase control (<i>L</i>). Red rows: a case-variant attempt that landed.</p>
+  <h3>Answers</h3>
+  <div class="wrap"><table>
+    <tr><th>Question</th><th>Answer</th><th>Evidence</th></tr>
+    <tr><td>1. Sandboxed <code>run</code> through a case-variant path</td><td class="good">Refused</td><td>c5, c6 (writes), c7 (read), k3, k4 (append-open of <code>events.json</code>, <code>index.json</code>), c10, c11 (nested read-only mount): "Operation not permitted", nothing on disk; no capability.denied (a <code>tool_result</code>, as for every sandbox refusal).</td></tr>
+    <tr><td>2a. Can a case-variant write reach <code>kernel/events.json</code>?</td><td class="bad">Yes</td><td>k1: <code>write_file</code> to <code>ws/.Aos-State/kernel/events.json</code> with the live log plus one forged event; <code>tool_result</code>, no capability.denied; afterwards <code>Kernel.Events()</code> reports <code>evt-999999</code>. (Non-<code>process.*</code> events are not replayed, so the kernel kept working; a forged <code>process.*</code> event would be replayed into the process table. Not tried.)</td></tr>
+    <tr><td>2b. Can a case-variant write reach <code>artifacts/index.json</code>?</td><td class="bad">Yes</td><td>k2: <code>write_file</code> to <code>ws/.AOS-STATE/artifacts/index.json</code> with the live index plus one forged entry; <code>Store.List()</code> lists <code>art-999999</code>, and the store's next artifact ID became <code>art-1000000</code>. The forged type was <code>probe.forged</code>; reserved types such as <code>verification</code> were not tried, but the index does not check who wrote an entry.</td></tr>
+    <tr><td>3. Nested read-only mount</td><td class="bad">write_file: yes</td><td>c8 created <code>ws/ref/probe-ro.txt</code> through <code>ws/REF/</code>; c9 overwrote <code>ws/ref/reference.txt</code> through <code>ws/Ref/</code> (file afterwards: "tampered c9"). <code>run</code>: refused (c10, c11).</td></tr>
+    <tr><td>4. Lowercase controls</td><td class="good">All refused</td><td>c1L–c4L, k1L, k2L, c8L, c9L: tool_error + capability.denied ("path outside the granted scopes or mounts"); c5L–c7L, k3L, c10L, c11L: "Operation not permitted". So the hole comes from the case alone.</td></tr>
+    <tr><td>Reads (not asked)</td><td class="bad">Yes</td><td>c3, c4: <code>read_file</code> through a case variant returned <code>events.json</code> and <code>processes.json</code> (every process's mounts and capability set).</td></tr>
+  </table></div>
+  <!-- run: P2a state dir, case variants -->
+<p class="grants"><b>P2a state dir, case variants</b>. Grants: mount ws (rw); read ws; write ws; state dir ws/.aos-state protected; tools read_file, write_file, list_dir, run. Exit 0 (script done); capability.denied events in the kernel log: 4.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr class="landed"><td>c1</td><td>write_file ws/.AOS-STATE/probe-case1.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.AOS-STATE/probe-case1.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/.AOS-STATE/probe-case1.txt]</code></td><td>created &lt;root&gt;/ws/.aos-state/probe-case1.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c1L</td><td>control: write_file ws/.aos-state/probe-case1-lower.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-state/probe-case1-lower.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr class="landed"><td>c2</td><td>write_file ws/.Aos-State/kernel/probe-case2.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.Aos-State/kernel/probe-case2.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/.Aos-State/kernel/probe-case2.txt]</code></td><td>created &lt;root&gt;/ws/.aos-state/kernel/probe-case2.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c2L</td><td>control: write_file ws/.aos-state/kernel/probe-case2-lower.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-state/kernel/probe-case2-lower.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>c3</td><td>read_file ws/.AOS-STATE/kernel/events.json<br><code>read_file path=&lt;root&gt;/ws/.AOS-STATE/kernel/events.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">read_file:map[content:[
+  {
+    &quot;id&quot;: &quot;evt-000001&quot;,
+    &quot;process_id&quot;: &quot;pid-000001&quot;,
+    &quot;type&quot;: &quot;process.spawned&quot;,
+    &quot;timestamp&quot;: &quot;2026-10-31T16:35:05.915227Z&quot;,
+    &quot;data&quot;: {
+      &quot;process&quot;: &quot;{\&quot;pid\&quot;:\&quot;pid-000001\&quot;,\&quot;role\&quot;:\&quot;probe\&quot;,\&quot;state\&quot;:\&quot;ready\&quot;,\&quot;mounts\&quot;:[{\&quot;name\&quot;:\&quot;ws\&quot;,\&quot;host_path\&quot;:\&quot;&lt;root&gt;/ws\&quot;,\&quot;read_only\&quot;:false}],\&quot;capability_set\&quot;:{\&quot;r … [1261 more bytes]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c3L</td><td>control: read_file ws/.aos-state/kernel/events.json<br><code>read_file path=&lt;root&gt;/ws/.aos-state/kernel/events.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=read_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>read_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>c4</td><td>read_file ws/.Aos-State/kernel/processes.json<br><code>read_file path=&lt;root&gt;/ws/.Aos-State/kernel/processes.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">read_file:map[content:{
+  &quot;pid-000001&quot;: {
+    &quot;pid&quot;: &quot;pid-000001&quot;,
+    &quot;role&quot;: &quot;probe&quot;,
+    &quot;state&quot;: &quot;running&quot;,
+    &quot;mounts&quot;: [
+      {
+        &quot;name&quot;: &quot;ws&quot;,
+        &quot;host_path&quot;: &quot;&lt;root&gt;/ws&quot;,
+        &quot;read_only&quot;: false
+      }
+    ],
+    &quot;capability_set&quot;: {
+      &quot;read_paths&quot;: [
+        &quot;&lt;root&gt;/ws&quot;
+      ],
+      &quot;write_paths&quot;: [
+        &quot;&lt;root&gt;/ws&quot;
+      ], … [381 more bytes]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c4L</td><td>control: read_file ws/.aos-state/kernel/processes.json<br><code>read_file path=&lt;root&gt;/ws/.aos-state/kernel/processes.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=read_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>read_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>c5</td><td>run: write ws/.AOS-STATE/probe-run1.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/.AOS-STATE/probe-run1.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c5L</td><td>control, run: write ws/.aos-state/probe-run1-lower.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/.aos-state/probe-run1-lower.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c6</td><td>run: write ws/.Aos-State/kernel/probe-run2.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/.Aos-State/kernel/probe-run2.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c6L</td><td>control, run: write ws/.aos-state/kernel/probe-run2-lower.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/.aos-state/kernel/probe-run2-lower.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c7</td><td>run: read ws/.AOS-STATE/kernel/events.json<br><code>run command=head -c 80 &lt;root&gt;/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:head -c 80 &lt;root&gt;/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: &lt;root&gt;/ws/.AOS-STATE/kernel/events.json: Operation not permitted
+ stdout:
+read_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c7L</td><td>control, run: read ws/.aos-state/kernel/events.json<br><code>run command=head -c 80 &lt;root&gt;/ws/.aos-state/kernel/events.json; echo; echo read_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:head -c 80 &lt;root&gt;/ws/.aos-state/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: &lt;root&gt;/ws/.aos-state/kernel/events.json: Operation not permitted
+ stdout:
+read_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <!-- run: P2b kernel files, case variants -->
+<p class="grants"><b>P2b kernel files, case variants</b>. Grants: mount ws (rw); read ws; write ws; state dir ws/.aos-state protected; tools read_file, write_file, list_dir, run. Exit 0 (script done); capability.denied events in the kernel log: 2.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>k1L</td><td>control: write_file ws/.aos-state/kernel/events.json (copy + forged event evt-999999)<br><code>write_file content=&lt;1225 bytes&gt; path=&lt;root&gt;/ws/.aos-state/kernel/events.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr class="landed"><td>k1</td><td>write_file ws/.Aos-State/kernel/events.json (copy + forged event evt-999999)<br><code>write_file content=&lt;1585 bytes&gt; path=&lt;root&gt;/ws/.Aos-State/kernel/events.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:1585 path:&lt;root&gt;/ws/.Aos-State/kernel/events.json]</code></td><td>rewrote &lt;root&gt;/ws/.aos-state/kernel/events.json (a state file, outside the snapshot); Kernel.Events() then reports evt-999999: true</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>k2L</td><td>control: write_file ws/.aos-state/artifacts/index.json (copy + forged art-999999)<br><code>write_file content=&lt;1877 bytes&gt; path=&lt;root&gt;/ws/.aos-state/artifacts/index.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr class="landed"><td>k2</td><td>write_file ws/.AOS-STATE/artifacts/index.json (copy + forged art-999999)<br><code>write_file content=&lt;2704 bytes&gt; path=&lt;root&gt;/ws/.AOS-STATE/artifacts/index.json</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:2704 path:&lt;root&gt;/ws/.AOS-STATE/artifacts/index.json]</code></td><td>rewrote &lt;root&gt;/ws/.aos-state/artifacts/index.json (a state file, outside the snapshot); Store.List() then lists art-999999: true</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>k3L</td><td>control, run: open ws/.aos-state/kernel/events.json for append<br><code>run command=: &gt;&gt; &lt;root&gt;/ws/.aos-state/kernel/events.json; echo open_append_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:: &gt;&gt; &lt;root&gt;/ws/.aos-state/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ws/.aos-state/kernel/events.json: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>k3</td><td>run: open ws/.Aos-State/kernel/events.json for append<br><code>run command=: &gt;&gt; &lt;root&gt;/ws/.Aos-State/kernel/events.json; echo open_append_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:: &gt;&gt; &lt;root&gt;/ws/.Aos-State/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ws/.Aos-State/kernel/events.json: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>k4</td><td>run: open ws/.AOS-STATE/artifacts/index.json for append<br><code>run command=: &gt;&gt; &lt;root&gt;/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:: &gt;&gt; &lt;root&gt;/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ws/.AOS-STATE/artifacts/index.json: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <!-- run: P2c nested read-only mount, case variants -->
+<p class="grants"><b>P2c nested read-only mount, case variants</b>. Grants: mounts ws (rw), ws/ref (ro, nested); read ws; write ws; tools read_file, write_file, list_dir, run. Exit 0 (script done); capability.denied events in the kernel log: 2.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr class="landed"><td>c8</td><td>write_file ws/REF/probe-ro.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/REF/probe-ro.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/REF/probe-ro.txt]</code></td><td>created &lt;root&gt;/ws/ref/probe-ro.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c8L</td><td>control: write_file ws/ref/probe-ro-lower.txt<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/ref/probe-ro-lower.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr class="landed"><td>c9</td><td>write_file over ws/Ref/reference.txt<br><code>write_file content=tampered c9
+ path=&lt;root&gt;/ws/Ref/reference.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">write_file:map[bytes:12 path:&lt;root&gt;/ws/Ref/reference.txt]</code></td><td>changed &lt;root&gt;/ws/ref/reference.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c9L</td><td>control: write_file over ws/ref/reference.txt<br><code>write_file content=tampered c9L
+ path=&lt;root&gt;/ws/ref/reference.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>c10</td><td>run: write ws/REF/probe-ro-run.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/REF/probe-ro-run.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/REF/probe-ro-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/REF/probe-ro-run.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c10L</td><td>control, run: write ws/ref/probe-ro-run-lower.txt<br><code>run command=echo x &gt; &lt;root&gt;/ws/ref/probe-ro-run-lower.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/ref/probe-ro-run-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/ref/probe-ro-run-lower.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c11</td><td>run: overwrite ws/Ref/reference.txt<br><code>run command=echo &#x27;tampered c11&#x27; &gt; &lt;root&gt;/ws/Ref/reference.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo &#x27;tampered c11&#x27; &gt; &lt;root&gt;/ws/Ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/Ref/reference.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>c11L</td><td>control, run: overwrite ws/ref/reference.txt<br><code>run command=echo &#x27;tampered c11L&#x27; &gt; &lt;root&gt;/ws/ref/reference.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox: nonzero exit, disk unchanged</span></td><td><code class="saw">run:map[command:echo &#x27;tampered c11L&#x27; &gt; &lt;root&gt;/ws/ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: &lt;root&gt;/ws/ref/reference.txt: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <p class="note">c7/c7L: the command prints <code>read_exit</code> after an <code>echo</code>, so that value is echo's (0); the refusal is in stderr and stdout is empty. Commands that end in <code>; echo X_exit=$?</code> report the inner exit there and exit 0 overall.</p>
+
+  <h3>Extra: earlier sessions in the <code>scripts/tui.sh</code> layout</h3>
+  <p>Not case-related and not asked: <code>Protected</code> holds only the current session's state dir and its lock. In <code>.aos-sessions/</code>, earlier sessions' state dirs sit next to it inside the workdir, and <code>/resume</code> loads them.</p>
+  <!-- run: P2d scripts/tui.sh layout: earlier sessions (extra) -->
+<p class="grants"><b>P2d scripts/tui.sh layout: earlier sessions (extra)</b>. Grants: mount ws (rw); read ws; write ws; state dir ws/.aos-sessions/current protected; an earlier session in ws/.aos-sessions/earlier; tools read_file, write_file, list_dir, run. Exit 0 (script done); capability.denied events in the kernel log: 1.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr class="landed"><td>x1</td><td>write_file into the earlier session (ws/.aos-sessions/earlier/kernel/probe-sibling.txt), lowercase<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling.txt</code><br><span class="note">expected: not covered by Protected</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling.txt]</code></td><td>created &lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr class="landed"><td>x2</td><td>run: write into the earlier session, lowercase<br><code>run command=echo x &gt; &lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$? timeout=30s</code><br><span class="note">expected: not hidden from run</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr: stdout:write_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>created &lt;root&gt;/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>x3</td><td>control: write_file into the current session (ws/.aos-sessions/current/probe-current.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-sessions/current/probe-current.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+</table></div>
+
+  <h2>Real-World Exposure (by reading the code and the disk; not probed live)</h2>
+  <div class="wrap"><table>
+    <tr><th>Layout</th><th>State dir</th><th>Inside a writable mount and write scope?</th><th>Exposed to the case hole</th></tr>
+    <tr><td><code>scripts/tui.sh</code> (README: how to start the TUI)</td><td><code>$ROOT/.aos-sessions/&lt;ts&gt;-&lt;backend&gt;</code>, workdir <code>$ROOT</code></td><td>Yes: the direct interactive agent mounts <code>--workdir</code> writable with read and write scope = workdir; default tools <code>list_dir,find_files,read_file,write_file,run,web_search,web_fetch</code>, so <code>allow_network</code> is on as well.</td><td class="bad">Yes (write_file and read_file). Also the earlier-sessions gap above, in lowercase. This machine's <code>/Users/peihongguo/Code/aos/.aos-sessions</code> holds 12 session directories.</td></tr>
+    <tr><td><code>aos-tui</code> with <code>--state-dir</code> inside <code>--workdir</code></td><td>as given</td><td>Yes, same agent</td><td class="bad">Yes</td></tr>
+    <tr><td><code>aos-tui</code> without <code>--state-dir</code></td><td><code>os.MkdirTemp("", "aos-tui-*")</code></td><td>No (unless the workdir contains <code>$TMPDIR</code>)</td><td>No</td></tr>
+    <tr><td><code>aos run --workflow</code> without <code>--state-dir</code> (e.g. <code>scripts/run.sh</code>)</td><td><code>os.MkdirTemp("", "aos-workflow-*")</code></td><td>No</td><td>No</td></tr>
+    <tr><td><code>aos run</code> with <code>--state-dir &lt;workspace&gt;/.aos-state</code>: the convention on disk in <code>reports/rasterizer-bunny-metal</code>, <code>reports/pathtracer-bunny-metal</code>, <code>reports/pathtracer-bunny-phase3</code> (command lines not in <code>scripts/</code>)</td><td><code>&lt;workspace&gt;/.aos-state</code></td><td>In <code>rasterizer-bunny-metal.json</code> and <code>pathtracer-bunny-metal.json</code> the writer and benchmarker mount the workspace writable with write scope = the whole workspace and have <code>write_file</code> (writer also <code>edit_file</code>, network on); the coordinator may write two files only; the verifier mounts it read-only.</td><td class="bad">Yes for writer and benchmarker writes; reads for every agent whose read scope covers the workspace.</td></tr>
+    <tr><td>Nested read-only mounts</td><td></td><td>None of the 10 shipped workflows nests a read-only mount inside a writable one (scanned).</td><td>Only custom specs</td></tr>
+    <tr><td>Harbor adapter (<code>bench/harbor</code>)</td><td><code>/logs/agent/aos-state</code> in a Linux container</td><td>Depends on the task workdir</td><td>Not on a case-sensitive Linux filesystem; not probed</td></tr>
+  </table></div>
+  <p>The case hole needs a case-insensitive volume (macOS default APFS, Windows); on Linux ext4 or overlayfs the lexical check matches what the filesystem opens. The README states that keeping agents out of the state directory is the job of confining <code>run</code>; the file tools are the other path in, and their check is the lexical one.</p>
+
+  <h2>P1: The Denied-Write Arc</h2>
+  <p>Write scope <code>ws/out</code>, read-only mount <code>ref</code>, state dir inside <code>ws</code>. Expected and observed: four refusals, each a <code>tool_error</code> artifact and a <code>capability.denied</code> event; only the legal write changes the disk; exit 0.</p>
+  <!-- run: P1a without run -->
+<p class="grants"><b>P1a without run</b>. Grants: mounts ws (rw), ref (ro); read ws, ref; write ws/out; state dir ws/.aos-state protected; tools read_file, write_file, list_dir. Exit 0 (script done); capability.denied events in the kernel log: 4.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>1</td><td>write_file outside the write scope (ws/probe-outside-scope.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/probe-outside-scope.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>2</td><td>write_file into the read-only mount (ref/probe-ref.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ref/probe-ref.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>3</td><td>write_file into the state dir (ws/.aos-state/kernel/probe-state.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-state/kernel/probe-state.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>4</td><td>run (not granted)<br><code>run command=echo hi timeout=30s</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=run error=tool execution denied by capabilities: run needs run try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>run: capability not granted</td></tr>
+<tr><td>5</td><td>legal write_file (ws/out/probe-legal.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/out/probe-legal.txt</code><br><span class="note">expected: tool_result, file created</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/out/probe-legal.txt]</code></td><td>created &lt;root&gt;/ws/out/probe-legal.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <p>With <code>run</code> granted, the same three writes through <code>run</code> come back as <code>tool_result</code> artifacts with <code>exit_code:1</code> and "Operation not permitted", <b>no capability.denied event</b>, followed by a <code>tool_notice ... reason=non_zero_exit</code> message. Confirmed: a sandbox refusal is not a capability denial in the records.</p>
+  <!-- run: P1b with run -->
+<p class="grants"><b>P1b with run</b>. Grants: mounts ws (rw), ref (ro); read ws, ref; write ws/out; state dir ws/.aos-state protected; tools read_file, write_file, list_dir, run. Exit 0 (script done); capability.denied events in the kernel log: 3.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>1</td><td>write_file outside the write scope<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/probe-outside-scope-b.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>2</td><td>write_file into the read-only mount<br><code>write_file content=probe
+ path=&lt;root&gt;/ref/probe-ref-b.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>3</td><td>write_file into the state dir<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-state/kernel/probe-state-b.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>4r</td><td>run: write outside the write scope<br><code>run command=echo x &gt; &lt;root&gt;/ws/probe-outside-scope-run.txt timeout=30s</code><br><span class="note">expected: sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/probe-outside-scope-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ws/probe-outside-scope-run.txt: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>5r</td><td>run: write into the read-only mount<br><code>run command=echo x &gt; &lt;root&gt;/ref/probe-ref-run.txt timeout=30s</code><br><span class="note">expected: sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ref/probe-ref-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ref/probe-ref-run.txt: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>6r</td><td>run: write into the state dir<br><code>run command=echo x &gt; &lt;root&gt;/ws/.aos-state/kernel/probe-state-run.txt timeout=30s</code><br><span class="note">expected: sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/.aos-state/kernel/probe-state-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: &lt;root&gt;/ws/.aos-state/kernel/probe-state-run.txt: Operation not permitted
+ stdout: timeout:30s timeout_bound:10m0s]
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>7r</td><td>run: legal write (ws/out/probe-legal-run.txt)<br><code>run command=echo x &gt; &lt;root&gt;/ws/out/probe-legal-run.txt timeout=30s</code><br><span class="note">expected: tool_result, exit 0, file created</span></td><td><code class="saw">run:map[command:echo x &gt; &lt;root&gt;/ws/out/probe-legal-run.txt confinement:sandbox exit_code:0 stderr: stdout: timeout:30s timeout_bound:10m0s]</code></td><td>created &lt;root&gt;/ws/out/probe-legal-run.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>8</td><td>legal write_file (ws/out/probe-legal-b.txt)<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/out/probe-legal-b.txt</code><br><span class="note">expected: tool_result, file created</span></td><td><code class="saw">write_file:map[bytes:6 path:&lt;root&gt;/ws/out/probe-legal-b.txt]</code></td><td>created &lt;root&gt;/ws/out/probe-legal-b.txt</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <p>Extra: with the write scope widened to cover <code>ref</code> and the state dir, the read-only mount and <code>Protected</code> alone refuse. The kernel event and the agent's message carry the same generic reason, "path outside the granted scopes or mounts" / "path access denied by capabilities", so neither tells which check fired.</p>
+  <!-- run: P1c refusal by mount and protection alone (extra) -->
+<p class="grants"><b>P1c refusal by mount and protection alone (extra)</b>. Grants: mounts ws (rw), ref (ro); read ws, ref; write ws, ref; state dir ws/.aos-state protected; tools read_file, write_file, list_dir. Exit 0 (script done); capability.denied events in the kernel log: 2.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>2w</td><td>write_file into the read-only mount, write scope covering it<br><code>write_file content=probe
+ path=&lt;root&gt;/ref/probe-ref-c.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+<tr><td>3w</td><td>write_file into the state dir, write scope covering it<br><code>write_file content=probe
+ path=&lt;root&gt;/ws/.aos-state/kernel/probe-state-c.txt</code><br><span class="note">expected: refused: tool_error + capability.denied, disk unchanged</span></td><td><code class="saw">tool_error name=write_file error=path access denied by capabilities try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>write_file: path outside the granted scopes or mounts</td></tr>
+</table></div>
+
+  <h2>P3: Sandbox Escapes, Network Off</h2>
+  <p>Run granted, write scope <code>ws/out</code>, read scope <code>ws</code>, <code>allow_network</code> false. Afterwards: <code>outside/secret.txt</code> unchanged ("hunter2", link count 1), <code>outside/movable.txt</code> still there, <code>/tmp/aos-lp-probe-…-x</code> not created, loopback UDP listener 0 datagrams, loopback DNS listener 0 queries. <code>TMPDIR</code> is <code>&lt;root&gt;/scratch/pid-000001</code>, the runtime's per-PID scratch dir, and writable.</p>
+  <!-- run: P3 escapes, network off -->
+<p class="grants"><b>P3 escapes, network off</b>. Grants: mount ws (rw); read ws; write ws/out; tools run; allow_network false. Exit 0 (script done); capability.denied events in the kernel log: 0.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>h1</td><td>hardlink ws/out/probe-hardlink -&gt; outside/secret.txt<br><code>run command=ln &lt;root&gt;/outside/secret.txt &lt;root&gt;/ws/out/probe-hardlink; echo ln_exit=$?; ls -l &lt;root&gt;/ws/out timeout=30s</code><br><span class="note">expected: refused by the sandbox, nothing changes</span></td><td><code class="saw">run:map[command:ln &lt;root&gt;/outside/secret.txt &lt;root&gt;/ws/out/probe-hardlink; echo ln_exit=$?; ls -l &lt;root&gt;/ws/out confinement:sandbox exit_code:0 stderr:ln: &lt;root&gt;/ws/out/probe-hardlink: Operation not permitted
+ stdout:ln_exit=1
+total 0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>h2</td><td>write through the hardlink path, if it exists<br><code>run command=if [ -e &lt;root&gt;/ws/out/probe-hardlink ]; then cat &lt;root&gt;/ws/out/probe-hardlink; echo pwned &gt;&gt; &lt;root&gt;/ws/out/probe-hardlink; echo append_exit=$?; else echo no_link; fi timeout=30s</code><br><span class="note">expected: outside/secret.txt unchanged</span></td><td><code class="saw">run:map[command:if [ -e &lt;root&gt;/ws/out/probe-hardlink ]; then cat &lt;root&gt;/ws/out/probe-hardlink; echo pwned &gt;&gt; &lt;root&gt;/ws/out/probe-hardlink; echo append_exit=$?; else echo no_link; fi confinement:sandbox exit_code:0 stderr: stdout:no_link
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>r1</td><td>rename outside/movable.txt into ws/out<br><code>run command=mv &lt;root&gt;/outside/movable.txt &lt;root&gt;/ws/out/probe-moved.txt; echo mv_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox, nothing changes</span></td><td><code class="saw">run:map[command:mv &lt;root&gt;/outside/movable.txt &lt;root&gt;/ws/out/probe-moved.txt; echo mv_exit=$? confinement:sandbox exit_code:0 stderr:mv: rename &lt;root&gt;/outside/movable.txt to &lt;root&gt;/ws/out/probe-moved.txt: Operation not permitted
+ stdout:mv_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>t1</td><td>write /tmp/aos-lp-probe-2076-x by name<br><code>run command=echo x &gt; /tmp/aos-lp-probe-2076-x; echo write_exit=$? timeout=30s</code><br><span class="note">expected: refused by the sandbox, nothing changes</span></td><td><code class="saw">run:map[command:echo x &gt; /tmp/aos-lp-probe-2076-x; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /tmp/aos-lp-probe-2076-x: Operation not permitted
+ stdout:write_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>t2</td><td>TMPDIR is the per-PID scratch dir, and writable<br><code>run command=echo &quot;TMPDIR=$TMPDIR&quot;; echo x &gt; &quot;$TMPDIR/probe-tmp&quot; &amp;&amp; echo tmp_write_ok timeout=30s</code><br><span class="note">expected: TMPDIR = scratch/&lt;pid&gt;, write ok</span><br><i>scratch_root: &lt;root&gt;/scratch</i></td><td><code class="saw">run:map[command:echo &quot;TMPDIR=$TMPDIR&quot;; echo x &gt; &quot;$TMPDIR/probe-tmp&quot; &amp;&amp; echo tmp_write_ok confinement:sandbox exit_code:0 stderr: stdout:TMPDIR=&lt;root&gt;/scratch/pid-000001
+tmp_write_ok
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>p1</td><td>relative ../ from inside the scope (cd out; write ../probe-rel.txt = ws/probe-rel.txt)<br><code>run command=cd out &amp;&amp; echo x &gt; ../probe-rel.txt; echo write_exit=$?; pwd timeout=30s</code><br><span class="note">expected: refused by the sandbox, nothing changes</span></td><td><code class="saw">run:map[command:cd out &amp;&amp; echo x &gt; ../probe-rel.txt; echo write_exit=$?; pwd confinement:sandbox exit_code:0 stderr:/bin/sh: ../probe-rel.txt: Operation not permitted
+ stdout:write_exit=1
+&lt;root&gt;/ws/out
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>p2</td><td>relative ../ from the run directory (ws; ../probe-rel-up.txt = root/probe-rel-up.txt)<br><code>run command=echo x &gt; ../probe-rel-up.txt; echo write_exit=$?; pwd timeout=30s</code><br><span class="note">expected: refused by the sandbox, nothing changes</span></td><td><code class="saw">run:map[command:echo x &gt; ../probe-rel-up.txt; echo write_exit=$?; pwd confinement:sandbox exit_code:0 stderr:/bin/sh: ../probe-rel-up.txt: Operation not permitted
+ stdout:write_exit=1
+&lt;root&gt;/ws
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>u1</td><td>UDP datagram to a local listener on 127.0.0.1:64876<br><code>run command=printf probe | nc -u -w 1 127.0.0.1 64876; echo nc_exit=$? timeout=30s</code><br><span class="note">expected: refused, listener receives nothing</span><br><i>listener_received: 0</i></td><td><code class="saw">run:map[command:printf probe | nc -u -w 1 127.0.0.1 64876; echo nc_exit=$? confinement:sandbox exit_code:0 stderr: stdout:nc_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>d1</td><td>DNS query over UDP to a local listener (nslookup -port=61120 ... 127.0.0.1)<br><code>run command=nslookup -port=61120 -timeout=2 -retry=1 aos-probe.example 127.0.0.1; echo nslookup_exit=$? timeout=30s</code><br><span class="note">expected: refused, listener receives nothing</span><br><i>listener_received: 0</i></td><td><code class="saw">run:map[command:nslookup -port=61120 -timeout=2 -retry=1 aos-probe.example 127.0.0.1; echo nslookup_exit=$? confinement:sandbox exit_code:0 stderr:/AppleInternal/Library/BuildRoots/4~CV2DugBH9CYUdHSUah9pNqw427QX0cseF9X74W4/Library/Caches/com.apple.xbs/TemporaryDirectory.KGWzHV/Sources/bind9/bind9/lib/isc/unix/socket.c:5580: bind: Operation not permitted
+nslo … [98 more bytes]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>d2</td><td>DNS lookup through the system directory service (dscacheutil -q host -a name example.com)<br><code>run command=dscacheutil -q host -a name example.com; echo dscacheutil_exit=$? timeout=30s</code><br><span class="note">expected: no address returned</span></td><td><code class="saw">run:map[command:dscacheutil -q host -a name example.com; echo dscacheutil_exit=$? confinement:sandbox exit_code:0 stderr: stdout:dscacheutil_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>d3</td><td>DNS lookup through getaddrinfo (curl http://example.com/, connect refused either way)<br><code>run command=curl -sS -m 5 -o /dev/null http://example.com/; echo curl_exit=$? timeout=30s</code><br><span class="note">expected: could not resolve</span></td><td><code class="saw">run:map[command:curl -sS -m 5 -o /dev/null http://example.com/; echo curl_exit=$? confinement:sandbox exit_code:0 stderr:curl: (6) Could not resolve host: example.com
+ stdout:curl_exit=6
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+  <p>Controls for the network rows, the same commands with <code>unconfined_run</code> (no sandbox): the loopback UDP listener got the datagram (1), the loopback DNS listener got the query (1; nslookup then timed out, since it never answers), and <code>dscacheutil</code> resolved <code>example.com</code>. So the refusals above are the sandbox's. (d2 inside the sandbox exits 0 with empty output; d3's "Could not resolve host" is curl's own report.)</p>
+  <!-- run: P3 controls, unconfined_run -->
+<p class="grants"><b>P3 controls, unconfined_run</b>. Grants: mount ws (rw); read ws; write ws/out; tools run; unconfined_run true; allow_network false. Exit 0 (script done); capability.denied events in the kernel log: 0.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>u1c</td><td>control, unconfined: UDP datagram to the loopback listener<br><code>run command=printf probe | nc -u -w 1 127.0.0.1 64876; echo nc_exit=$? timeout=30s</code><br><span class="note">expected: delivered</span><br><i>listener_received: 1</i></td><td><code class="saw">run:map[command:printf probe | nc -u -w 1 127.0.0.1 64876; echo nc_exit=$? confinement:unconfined (unconfined_run) exit_code:0 stderr: stdout:nc_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>d1c</td><td>control, unconfined: DNS query to the loopback listener<br><code>run command=nslookup -port=61120 -timeout=1 -retry=0 aos-probe.example 127.0.0.1; echo nslookup_exit=$? timeout=30s</code><br><span class="note">expected: listener receives the query</span><br><i>listener_received: 1</i></td><td><code class="saw">run:map[command:nslookup -port=61120 -timeout=1 -retry=0 aos-probe.example 127.0.0.1; echo nslookup_exit=$? confinement:unconfined (unconfined_run) exit_code:0 stderr: stdout:;; connection timed out; no servers could be reached
+
+nslookup_exit=1
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+<tr><td>d2c</td><td>control, unconfined: dscacheutil -q host -a name example.com<br><code>run command=dscacheutil -q host -a name example.com; echo dscacheutil_exit=$? timeout=30s</code><br><span class="note">expected: an address</span></td><td><code class="saw">run:map[command:dscacheutil -q host -a name example.com; echo dscacheutil_exit=$? confinement:unconfined (unconfined_run) exit_code:0 stderr: stdout:name: example.com
+ipv6_address: 2606:4700:10::ac42:93f3
+ipv6_address: 2606:4700:10::6814:179a
+
+name: example.com
+ip_address: 172.66.147.243
+ip_address: 104.20.23.154
+
+dscacheutil_exit=0
+ timeout:30s timeout_boun … [8 more bytes]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+
+  <h2>P4: The Two Network Paths</h2>
+  <p><code>allow_network</code> true, <code>network_allow</code> empty, a local <code>httptest</code> server on 127.0.0.1; nothing else was contacted. <code>web_fetch</code> refuses both the loopback address and <code>localhost</code> (tool_error + capability.denied, capability <code>network</code>, 0 server hits); <code>run</code> with <code>curl</code> reaches the same server (exit 0, "reached /curl", 1 hit, no event). Confirmed: the same grant gives <code>run</code> any address and <code>web_fetch</code> only public ones.</p>
+  <!-- run: P4 network paths -->
+<p class="grants"><b>P4 network paths</b>. Grants: mount ws (rw); tools web_fetch, run; allow_network true; network_allow empty. Exit 0 (script done); capability.denied events in the kernel log: 2.</p>
+<div class="wrap"><table><tr><th>#</th><th>Attempt</th><th>Agent saw (exact)</th><th>Disk</th><th>tool_error</th><th>tool_result</th><th>capability.denied</th></tr>
+<tr><td>w1</td><td>web_fetch http://127.0.0.1:&lt;port&gt;/fetch-ip<br><code>web_fetch timeout=5s url=http://127.0.0.1:60077/fetch-ip</code><br><span class="note">expected: refused: non-public address</span><br><i>server_hits: 0</i></td><td><code class="saw">tool_error name=web_fetch error=web fetch refused: Get &quot;http://127.0.0.1:60077/fetch-ip&quot;: network access denied by capabilities: 127.0.0.1 resolves to non-public 127.0.0.1 try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>network: web fetch refused: Get &quot;http://127.0.0.1:60077/fetch-ip&quot;: network access denied by capabilities: 127.0.0.1 resolves to non-public 127.0.0.1</td></tr>
+<tr><td>w2</td><td>web_fetch http://localhost:&lt;port&gt;/fetch-name<br><code>web_fetch timeout=5s url=http://localhost:60077/fetch-name</code><br><span class="note">expected: refused: non-public address</span><br><i>server_hits: 0</i></td><td><code class="saw">tool_error name=web_fetch error=web fetch refused: Get &quot;http://localhost:60077/fetch-name&quot;: network access denied by capabilities: localhost resolves to non-public 127.0.0.1 try_different_strategy=true</code></td><td>unchanged</td><td><span class="yes">yes</span></td><td>no</td><td>yes<br>network: web fetch refused: Get &quot;http://localhost:60077/fetch-name&quot;: network access denied by capabilities: localhost resolves to non-public 127.0.0.1</td></tr>
+<tr><td>c1</td><td>run curl http://127.0.0.1:&lt;port&gt;/curl<br><code>run command=curl -sS -m 5 http://127.0.0.1:60077/curl; echo; echo curl_exit=$? timeout=30s</code><br><span class="note">expected: allowed: exit 0, server reached</span><br><i>server_hits: 1</i></td><td><code class="saw">run:map[command:curl -sS -m 5 http://127.0.0.1:60077/curl; echo; echo curl_exit=$? confinement:sandbox exit_code:0 stderr: stdout:reached /curl
+curl_exit=0
+ timeout:30s timeout_bound:10m0s]</code></td><td>unchanged</td><td>no</td><td><span class="yes">yes</span></td><td>no</td></tr>
+</table></div>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li>A scripted agent issues exactly the calls listed; whether a model would try case variants on its own was not tested.</li>
+    <li>All worlds are throwaway temp directories; no real state directory, session or network address other than loopback (and, in the controls, the system resolver for <code>example.com</code>) was touched.</li>
+    <li>The exposure table is from reading <code>cmd/aos</code>, <code>cmd/aos-tui</code>, <code>scripts/</code>, the shipped workflows and the directory layout on disk; it was not probed against those layouts live.</li>
+    <li>The forged kernel and index entries show write access and that both stores accept the result; what else could be forged (process records, reserved artifact types) was not tried.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <p><code>least-privilege-probes/</code>: <code>harness_test.go</code>, <code>probes_test.go</code>, <code>links_test.go</code> (the probes), <code>results/P1.json</code>–<code>P4.json</code> (records), <code>make_tables.py</code> + <code>report.src.html</code> (this page), <code>FINDINGS.md</code> (the interim note sent when P2 first stopped at c1).</p>
+</body>
+</html>

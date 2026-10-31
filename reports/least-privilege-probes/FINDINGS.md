@@ -1,5 +1,7 @@
 # Least-privilege probes (chapter 4), against AOS 283a92e: interim
 
+Superseded by ../least-privilege-probes.html (all cases, controls, exposure); kept as the note sent when P2 first stopped at c1.
+
 Scripted backend through the real `runtime.AgentRuntime` (ContinueOnToolError,
 as agentflow runs), `tools.Runtime` with `Protected = [state, state.lock]` as
 `cmd/aos` sets it, a throwaway `t.TempDir()` workspace and state dir on this
