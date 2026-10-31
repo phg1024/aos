@@ -833,3 +833,45 @@ func TestRefusedIndexGetsOneRetry(t *testing.T) {
 		t.Fatalf("a second refusal should end the handoff: %d errors, %v", len(errs), data)
 	}
 }
+
+// An index written on one line ("59: a 61: b") is split into its entries
+// at each later number within the archived range and after the entry
+// before it; a number in an entry's text is left alone.
+func TestRunOnIndexIsSplit(t *testing.T) {
+	k, store, process := newMemoryFixture(t)
+	var results []tools.Result
+	script := &handoffScript{}
+	backend := script.backend(1, func(notice, from, to int) []runtime.GenerateResult {
+		if notice > 1 {
+			return nil
+		}
+		return []runtime.GenerateResult{
+			indexAction(fmt.Sprintf("- #%d: the goal %d-%d: filler; %d: the last one, ratio 3: 1 kept %d: not in range", from, from+1, to-1, to, to+40)),
+			say("back to work"),
+		}
+	})
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 40,
+		Compaction: runtime.CompactionPolicy{MaxChars: 12000, Handoff: true}}
+	if _, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{
+		ContinueOnToolError: true,
+		OnToolResult: func(result tools.Result) {
+			if result.Tool == "index_memory" {
+				results = append(results, result)
+			}
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("index_memory results: %d", len(results))
+	}
+	from, to := 0, 0
+	fmt.Sscanf(results[0].Output["messages"], "%d-%d", &from, &to)
+	want := fmt.Sprintf("%d: the goal\n%d-%d: filler;\n%d: the last one, ratio 3: 1 kept %d: not in range\n", from, from+1, to-1, to, to+40)
+	if results[0].Output["index"] != want || results[0].Output["rejected"] != "" {
+		t.Fatalf("index = %q, want %q (rejected %q)", results[0].Output["index"], want, results[0].Output["rejected"])
+	}
+	if data := compactionEvents(t, k)[0].Data; data["agent_index_lines"] != "3" {
+		t.Fatalf("the segment should keep the three entries: %v", data)
+	}
+}

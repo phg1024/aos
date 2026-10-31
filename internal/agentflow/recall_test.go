@@ -3,6 +3,7 @@ package agentflow
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -55,8 +56,8 @@ func TestPromptRecallWording(t *testing.T) {
 }
 
 // The header shows each segment's agent index under its runtime line,
-// labelled as the agent's own and checked only for its numbers; newest
-// first within the cap, older ones falling back to how to read theirs.
+// labelled as the agent's own and checked only for its numbers, within the
+// header's budget for indexes.
 func TestArchiveIndexShowsTheAgentsIndex(t *testing.T) {
 	backend := PromptBackend{Agent: AgentSpec{ID: "writer", SystemPrompt: "Write."}}
 	ref := func(id string, from, to int, index ...runtime.IndexLine) runtime.MemoryRef {
@@ -88,9 +89,9 @@ func TestArchiveIndexShowsTheAgentsIndex(t *testing.T) {
 		many = append(many, ref("art-00010"+string(rune('0'+i)), i*10+1, i*10+10, runtime.IndexLine{From: i*10 + 1, To: i*10 + 1, Text: long}))
 	}
 	header = backend.PromptMessages(runtime.GenerateRequest{MemoryRefs: many})[1].Content
-	if !strings.Contains(header, "(your index of this segment is over the header's cap: read_memory artifact_id=art-000101 shows it)") ||
-		strings.Contains(header, "artifact_id=art-000105 shows it") || len(backend.archiveIndex(many)) > MaxAgentIndexBytes+2048 {
-		t.Fatalf("over the cap, the oldest segments should fall back:\n%s", header)
+	if !strings.Contains(header, "  1: "+long) || !strings.Contains(header, "(+1 more lines of this index: read_memory artifact_id=art-000105)") ||
+		len(backend.archiveIndex(many)) > MaxAgentIndexBytes+2048 {
+		t.Fatalf("over the cap, the oldest segments should keep their lines and the newest say how to read theirs:\n%s", header)
 	}
 
 	backend.Recall = runtime.RecallPolicy{NoAgentIndex: true}
@@ -163,5 +164,132 @@ func TestWorkflowRecallReachesPromptAndRuntime(t *testing.T) {
 	var spec WorkflowSpec
 	if err := json.Unmarshal([]byte(`{"recall":{"no_agent_index":true,"no_pointer_prompt":true}}`), &spec); err != nil || spec.Recall != (runtime.RecallPolicy{NoAgentIndex: true, NoPointerPrompt: true}) {
 		t.Fatalf("recall should decode from a workflow file: %+v %v", spec.Recall, err)
+	}
+}
+
+// indexRef is a segment whose agent index has lines lines of about width
+// bytes each.
+func indexRef(id string, from, lines, width int) runtime.MemoryRef {
+	ref := runtime.MemoryRef{ArtifactID: id, MessageCount: lines, FromSeq: from, ToSeq: from + lines - 1}
+	for n := range lines {
+		text := fmt.Sprintf("%s line %d ", id, n)
+		ref.Index = append(ref.Index, runtime.IndexLine{From: from + n, To: from + n, Text: text + strings.Repeat("t", max(width-len(text)-8, 1))})
+	}
+	return ref
+}
+
+// shownTotal is the bytes of agent index the header shows.
+func shownTotal(shown []string) int {
+	total := 0
+	for _, text := range shown {
+		total += len(text)
+	}
+	return total
+}
+
+// The header shares its budget for agent indexes by whole lines, every
+// segment's next line before any segment's line after it, oldest first:
+// the round-2 shape that hid art-000414's index now shows its first
+// lines; a short index leaves its share to the others; a shortened index
+// says how many lines it hides; the total never exceeds the budget, which
+// RecallPolicy.HeaderIndexBytes sets; and the same refs give the same
+// header.
+func TestHeaderSharesTheIndexBudget(t *testing.T) {
+	backend := PromptBackend{Agent: AgentSpec{ID: "writer", SystemPrompt: "Write."}}
+
+	// Round 2: four indexes, about 8 KB, the oldest holding the truth.
+	round2 := []runtime.MemoryRef{
+		indexRef("art-000414", 1, 24, 100),
+		indexRef("art-000503", 60, 20, 100),
+		indexRef("art-000560", 120, 20, 100),
+		indexRef("art-000611", 180, 16, 100),
+	}
+	header := backend.archiveIndex(round2)
+	shown, counts := backend.shownAgentIndexes(round2)
+	for n := range 5 {
+		if !strings.Contains(header, round2[0].Index[n].String()) {
+			t.Fatalf("the oldest segment's line %d should be shown:\n%s", n, header)
+		}
+	}
+	if total := shownTotal(shown); total > MaxAgentIndexBytes {
+		t.Fatalf("shown %d bytes, over the %d budget", total, MaxAgentIndexBytes)
+	}
+	for i, count := range counts {
+		if count.Shown == 0 || count.Shown+count.Hidden != len(round2[i].Index) {
+			t.Fatalf("segment %s: %+v", count.ArtifactID, count)
+		}
+		if more := fmt.Sprintf("(+%d more lines of this index: read_memory artifact_id=%s)", count.Hidden, count.ArtifactID); strings.Contains(header, more) != (count.Hidden > 0) ||
+			strings.Count(shown[i], "\n") != count.Shown+min(count.Hidden, 1) {
+			t.Fatalf("segment %s should end with %q: %+v\n%s", count.ArtifactID, more, count, shown[i])
+		}
+		if count.Shown < counts[len(counts)-1].Shown-1 {
+			t.Fatalf("lines should be shared round by round: %+v", counts)
+		}
+	}
+	if again := backend.archiveIndex(append([]runtime.MemoryRef(nil), round2...)); again != header {
+		t.Fatal("the same refs should give the same header")
+	}
+	t.Logf("round 2: %+v, %d of %d bytes", counts, shownTotal(shown), MaxAgentIndexBytes)
+
+	// A short index leaves its share to a long one.
+	short := []runtime.MemoryRef{indexRef("art-000001", 1, 2, 80), indexRef("art-000002", 10, 80, 80)}
+	shown, counts = backend.shownAgentIndexes(short)
+	if counts[0].Hidden != 0 || len(shown[1]) <= MaxAgentIndexBytes/2 || shownTotal(shown) > MaxAgentIndexBytes {
+		t.Fatalf("the short index's unused share should go to the long one: %+v, %d bytes", counts, len(shown[1]))
+	}
+
+	// Many segments: each still shows its first line, within the budget.
+	var many []runtime.MemoryRef
+	for i := range 30 {
+		many = append(many, indexRef(fmt.Sprintf("art-%06d", 100+i), i*20+1, 10, 90))
+	}
+	shown, counts = backend.shownAgentIndexes(many)
+	for _, count := range counts {
+		if count.Shown == 0 {
+			t.Fatalf("every segment should show its first line: %+v", counts)
+		}
+	}
+	if shownTotal(shown) > MaxAgentIndexBytes {
+		t.Fatalf("over the budget: %d", shownTotal(shown))
+	}
+
+	// The budget is the policy's, and holds even when it cannot fit every
+	// segment's "+K more" line: then the newest show nothing, as reported.
+	for _, budget := range []int{1, 100, 700, 2048, 12 * 1024} {
+		backend.Recall = runtime.RecallPolicy{HeaderIndexBytes: budget}
+		for _, refs := range [][]runtime.MemoryRef{round2, short, many} {
+			shown, counts = backend.shownAgentIndexes(refs)
+			if shownTotal(shown) > budget {
+				t.Fatalf("budget %d: shown %d bytes", budget, shownTotal(shown))
+			}
+			for i, count := range counts {
+				if i > 0 && count.Shown > 0 && counts[0].Shown == 0 {
+					t.Fatalf("budget %d: a newer segment shows lines while the oldest shows none: %+v", budget, counts)
+				}
+			}
+		}
+	}
+	backend.Recall = runtime.RecallPolicy{HeaderIndexBytes: 700}
+	if _, counts = backend.shownAgentIndexes(round2); counts[3].Shown != 1 {
+		t.Fatalf("700 bytes should still show every segment's first line: %+v", counts)
+	}
+	backend.Recall = runtime.RecallPolicy{HeaderIndexBytes: 250}
+	shown, counts = backend.shownAgentIndexes(round2)
+	if !strings.Contains(shown[0], "(+24 more lines") || shown[3] != "" || counts[3].Hidden != 16 {
+		t.Fatalf("with 250 bytes the newest should show nothing and be reported hidden: %q %+v", shown, counts)
+	}
+
+	backend.Recall = runtime.RecallPolicy{}
+	sizes := backend.HeaderSizes(runtime.GenerateRequest{MemoryRefs: round2})
+	_, counts = backend.shownAgentIndexes(round2)
+	lines := 0
+	for _, count := range counts {
+		if sizes["agent_index_shown."+count.ArtifactID] != count.Shown || sizes["agent_index_hidden."+count.ArtifactID] != count.Hidden {
+			t.Fatalf("the trace should say what each segment showed: %v %+v", sizes, count)
+		}
+		lines += count.Shown
+	}
+	if sizes["agent_index_lines_shown"] != lines || sizes["agent_index_budget"] != MaxAgentIndexBytes || sizes["agent_index_segments"] != 4 {
+		t.Fatalf("header sizes = %v", sizes)
 	}
 }

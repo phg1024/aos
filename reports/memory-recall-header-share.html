@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Index Header Share Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Agent Indexes in the Header: Every Segment Shows Its Lines</h1>
+    <p>Eval's A1 follow-up (<code>b87b59a</code>) found a problem with how the header showed agent indexes. It showed them newest first within 6 KB, and an older index that did not fit became a one-line pointer.</p>
+    <ul>
+      <li>In the round-2 checkpoint, 4 indexes came to about 8 KB, so the oldest, <code>art-000414</code>, was a pointer in every draw.</li>
+      <li>That segment holds r2-verify-dir's answer, so that probe never tested the index.</li>
+      <li>Eval also found 2 of 26 indexes written on a single line ("59: … 61: … 63: …"), each kept as one entry citing only its first message.</li>
+    </ul>
+    <p>This change shares the header's budget among all segments by whole lines, and splits run-on index lines. It is one commit on top of <code>50a7cfe</code>.</p>
+    <p><b>Result:</b> <span class="good">2 new tests pass, 1 is updated, and the whole suite passes</span> (<code>go test -buildvcs=false ./internal/... ./cmd/...</code>). <code>RecallOff()</code> is still byte-identical to the golden prompts. In the round-2 shape, <code>art-000414</code> now shows 15 of its 24 lines. <span class="warn">The effect on the probes is unmeasured</span> until eval reruns.</p>
+  </div>
+
+  <h2>The Rule</h2>
+  <ul>
+    <li><b>Round by round, by whole lines.</b> Every segment with an index gets its next line before any segment gets the line after it. Within a round, the oldest segment goes first. A short index finishes early and leaves the rest of the budget to the longer ones, so unused share is redistributed with no separate step.</li>
+    <li><b>Why lines, not bytes:</b> a line is one pointer into the archive, so an equal number of pointers per segment is the fair unit. Book suggested ⌊cap / segments⌋ bytes with redistribution. On whole lines, that gives about the same result for indexes of similar line length, and needs a second pass to place leftovers.</li>
+    <li><b>Why oldest first at the margin:</b> the oldest segments are the ones working memory has had longest to drop. That is the opposite of the old order, which lost them first.</li>
+    <li><b>Shortened indexes say so.</b> A shortened index ends with <code>(+K more lines of this index: read_memory artifact_id=…)</code>. That line counts against the budget, and <code>read_memory</code> still returns the full index. Lines are never cut.</li>
+    <li><b>Bounded.</b> The total shown never exceeds the budget.</li>
+    <li><b>Degenerate case.</b> If even the "+K more" lines do not all fit, which takes about 85 segments at 6 KB, the newest segments show nothing. The trace reports all of their lines as hidden.</li>
+    <li><b>Guarantee.</b> If the segments' first lines plus their "+K more" lines fit in the budget, every segment shows at least its first line. Round 1 adds the first lines in order, and each addition costs at most its line plus the "+K more" line already reserved.</li>
+    <li><b>Deterministic.</b> The result depends only on the refs, in their order.</li>
+  </ul>
+
+  <h2>Budget and Trade-off</h2>
+  <ul>
+    <li>The total stays at <b>6 KB by default</b>. It is now the new <code>RecallPolicy.HeaderIndexBytes</code> field (JSON <code>header_index_bytes</code>; zero means <code>runtime.DefaultHeaderIndexBytes</code> = 6144), so eval can hold it fixed or vary it.</li>
+    <li>Eval measured about +3.9K tokens per call for about 4.3 KB of index, and the header is on every call. Raising the total to show round 2 whole (about 8 KB) would add roughly another 1.8K tokens per call, for the 21 lines the fair share now leaves hidden behind "+K more".</li>
+    <li>With many segments the share gets thin: about 5 lines each at 12 segments of 90 B lines. Each segment's first lines still show, and the rest are one <code>read_memory</code> away.</li>
+  </ul>
+
+  <h2>Round-2 Shape (Test)</h2>
+  <p>The test uses 4 indexes of 24, 20, 20 and 16 lines of about 100 B each, about 8 KB in all, against the default 6 KB budget.</p>
+  <table>
+    <tr><th>Segment</th><th>Lines</th><th>Before (newest first)</th><th>Now</th></tr>
+    <tr><td><code>art-000414</code> (oldest)</td><td>24</td><td>pointer only</td><td>15 shown, +9 more</td></tr>
+    <tr><td><code>art-000503</code></td><td>20</td><td>all</td><td>15 shown, +5 more</td></tr>
+    <tr><td><code>art-000560</code></td><td>20</td><td>all</td><td>15 shown, +5 more</td></tr>
+    <tr><td><code>art-000611</code> (newest)</td><td>16</td><td>all</td><td>14 shown, +2 more</td></tr>
+  </table>
+  <p>In total, 6,133 of 6,144 bytes are shown.</p>
+
+  <h2>Trace</h2>
+  <p><code>memory.header</code> is logged at a run's first call and whenever the header changes. It now records:</p>
+  <ul>
+    <li><code>agent_index_shown.&lt;segment&gt;</code> and <code>agent_index_hidden.&lt;segment&gt;</code>: what the agent saw of each index.</li>
+    <li><code>agent_index_lines_shown</code> and <code>agent_index_lines_hidden</code>: the same, totalled.</li>
+    <li><code>agent_index_budget</code>.</li>
+    <li><code>agent_index_segments</code>: the segments showing at least one line.</li>
+  </ul>
+
+  <h2>Run-on Index Lines</h2>
+  <p><code>index_memory</code> now splits a line at each later <code>N:</code> or <code>N-M:</code> that meets all three conditions:</p>
+  <ul>
+    <li>it follows whitespace;</li>
+    <li>it cites messages inside the archived range;</li>
+    <li>it is numbered after the entry before it.</li>
+  </ul>
+  <p>So "59: a 61: b 63: c" becomes three entries. A number in an entry's text is left alone when it is below the entry's own, such as "ratio 3: 1" inside "13: …", or past the range.</p>
+  <p><span class="warn">Known limit:</span> such a number is split off when it is in range and above the entry's own, such as "ratio 3: 1" inside an entry for message 1. A false split mis-cites one fragment, while a missed split loses every number after the first, so the rule leans toward splitting. The result returns the canonical index, so the agent sees the split and can resend.</p>
+
+  <h2>Tests</h2>
+  <ul>
+    <li><code>TestHeaderSharesTheIndexBudget</code> covers:
+      <ul>
+        <li>the round-2 shape, where <code>art-000414</code>'s first 5 lines (and more) are shown;</li>
+        <li>the same refs giving the same header;</li>
+        <li>shown + hidden equalling each index, and the "+K more" count matching;</li>
+        <li>round-by-round sharing and redistribution from a short index;</li>
+        <li>30 segments each showing a first line;</li>
+        <li>the total staying within budgets of 1 B, 100 B, 700 B, 2 KB and 12 KB;</li>
+        <li>at 250 B, the newest segment silent and reported as hidden;</li>
+        <li>the trace's per-segment counts.</li>
+      </ul>
+    </li>
+    <li><code>TestRunOnIndexIsSplit</code>: a bulleted run-on line becomes 3 entries. A lower number in the text and an out-of-range number are not split.</li>
+    <li><code>TestArchiveIndexShowsTheAgentsIndex</code>: updated from the pointer fallback to the shared budget.</li>
+    <li><code>TestRecallOffKeepsThePromptsAsBefore</code>: unchanged and passing.</li>
+  </ul>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>RecallOff behaviour, golden prompts, the per-segment 4 KB ceiling, and the handoff logic from <code>50a7cfe</code>.</li>
+    <li>Eval's branch and runs, <code>internal/memprobe</code>, probes and patterns.</li>
+    <li>Nothing pushed.</li>
+  </ul>
+</body>
+</html>
