@@ -281,4 +281,119 @@ records derived from them are committed.
 
 ## Amendments
 
-(none yet)
+### A0, 2026-10-31, before any trial: backend is the Strata on phg-gpu
+
+**Why.** aos book relayed a correction from the user ("后端要用phg gpu上的strata啊"):
+the run uses the Strata on phg-gpu, not the local Strata on this Mac. This
+replaces the "Model and backend" item under "What is held fixed", and the
+sentences that rely on it.
+
+**Backend.** The server reports, before the run (2026-10-31 11:40 PDT):
+
+- **Server:** `http://phg-gpu.local:8080` (10.0.0.197), the server the AOS
+  live and memory runs used. The API key is read from the `strata-phg-gpu`
+  entry in `~/.hermes/config.yaml`, as in the memory runs' run.sh.
+- **Model:** `qwen3.8-flash-next-nvfp4-nvfp4` (NVFP4), with n_ctx 262144.
+- **Engine and server state:**
+  - engine version `0.1.54` (`/v1/status`);
+  - started at 1793427905 (2026-10-30 23:25:05 PDT);
+  - concurrency 1 (serving 1, requested 1);
+  - KV cache int8.
+- **Hardware:** an NVIDIA GeForce RTX 5070 Ti with 16 GB.
+- **Speed:** a test request through the relay decoded 800 tokens at
+  62.7 tok/s; the previous logged request decoded at 56.7 tok/s. Prefill is
+  about 1,020 tok/s on long prompts. The pilot measured 72 tok/s decode on
+  the Mac.
+
+**The pilot is not a baseline.** Its hardware (Apple Metal) and quantization
+(Unsloth UD-Q4_K_XL) differ, as do its prompt and its AOS build. Its 6/8 is
+context only. Every comparison is between this run's arms, and the report
+says so.
+
+**Reachability.** Docker Desktop's containers on this Mac cannot reach the
+LAN. From inside a container:
+
+- `phg-gpu.local` does not resolve;
+- 10.0.0.197 refuses every port;
+- the host itself reaches 10.0.0.197:8080, and containers reach
+  `host.docker.internal` and the internet.
+
+Strata's configuration on phg-gpu is not changed. Instead, `relay.py` (in
+this folder, stdlib only) runs on the host and listens on 127.0.0.1:18080
+only. It forwards each request to 10.0.0.197:8080. For each request it:
+
+- sets `Host: phg-gpu.local:8080`, the Host that Strata's DNS-rebinding check
+  already accepts from the memory runs;
+- adds the API key itself, so that the key never enters a task container
+  (`AOS_LLM_API_KEY` is empty in the containers);
+- streams responses through;
+- logs every forwarded request's time, path and status to
+  `relay.log`, without the key.
+
+The run sets `AOS_LLM_BASE_URL=http://127.0.0.1:18080`, which the adapter
+rewrites to `host.docker.internal:18080` inside the containers, and
+`AOS_LLM_MODEL=qwen3.8-flash-next-nvfp4-nvfp4`.
+
+**Checked from a container:** `/v1/models` and a chat completion through the
+relay returned 200. The pre-fix connectivity smoke trial is recorded under
+"A0 smoke" below.
+
+**Sampling.** The adapter's defaults, which are the pilot's: temperature 0.6,
+top_p 0.95, max_tokens 8192, thinking budget 2048, context window 262144,
+compaction ratio 0.8, LLM timeout 3600 s. A1 confirms them against the fix
+commit, and records any that changed and which were used.
+
+**Backend checks during the run.** These replace the local-Strata checks.
+
+- **Before each trial,** the driver reads `/v1/status`. The run stops if the
+  model ID or the server's `started` time has changed, or if the server does
+  not respond (a safety stop under the stop rule).
+- **After each trial,** the driver compares the server's `activity.requests`
+  delta with the number of requests the relay forwarded during the trial.
+  - Any surplus means another client used phg-gpu during the trial. The
+    trial is marked `contended` and kept, and the count is reported.
+  - If three trials in a row are contended, the run pauses, and aos book is
+    told before it continues.
+- **A relay failure** that ends a trial (HTTP 502 from the relay) is an
+  `infra_error`.
+
+**Other jobs on phg-gpu.** Checked at 11:42 PDT.
+
+- The server's last request before my test was at 03:50 PDT, about 8 hours
+  earlier, and `activity.requests` rose only by my own test request
+  (1070 → 1071).
+- The running aos-tui sessions are configured for `strata-phg-vllm`, a
+  different machine.
+- No other job is queued on phg-gpu. This session owns the phg-gpu queue.
+
+**Estimate at phg-gpu's speed.**
+
+- Decode is about 1.15 to 1.27 times slower than the pilot, and prefill is
+  about the same.
+- The two hard tasks still stop at about 900 s, so their trials take about
+  the same time.
+- Passing trials are scaled to about 190 s, from 144 s.
+- Total: 2 × 9 × ~950 s (4.75 h) + 6 × 9 × ~190 s (2.85 h) + overhead
+  (0.3 h) ≈ **7.9 h**, against 7.3 h on the Mac.
+- The upper bound is still about 20 h. With only two arms it would be about
+  5.3 h.
+- 7.9 h is about the same as the frozen estimate, so all three arms are kept.
+
+**A0 smoke, pre-fix connectivity check (not counted).**
+
+- **Run:** `fix-git` with the branch's pre-fix build (the 567b142 adapter and
+  workflow), job `tb2-budget-conn-smoke`, 2026-10-31 18:43:37–18:44:40Z.
+- **Outcome:**
+  - reward 1.0, no exception, `aos_exit=0`;
+  - 63 s of agent time;
+  - 10 model calls from the ledger: 62,644 prompt tokens and 2,635
+    completion tokens.
+- **Relay:** forwarded 12 requests, all 200: the 2 checks above plus the 10
+  calls. The server's `activity.requests` went from 1071 to 1081, so no
+  other client was active. `/v1/models` and `/v1/status` do not count as
+  requests, so the per-trial check compares the server's delta with the
+  relay's `POST /v1/chat/completions` count.
+- **The key stayed out of the job.** It does not appear in any file under
+  the job folder.
+- **What this does not check:** the fix build's budget switch. The A1 smoke
+  trial checks that.
