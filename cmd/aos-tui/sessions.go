@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/statedir"
@@ -263,4 +264,34 @@ func ago(t time.Time) string {
 		return fmt.Sprintf("%dh ago", int(d.Hours()))
 	}
 	return t.Local().Format("Jan 2 15:04")
+}
+
+// protectedPaths is what no tool may reach: this session's state directory
+// and its lock, and the other sessions /resume may load, which otherwise
+// sit in the workspace that scripts/tui.sh mounts writable. The whole
+// sessions directory is protected, so a session made after this one
+// started is too, unless it holds what the tools must reach: the
+// workspace, or the temporary directory where run keeps its scratch, as
+// the state directory's default parent can. Then each session found in
+// it at start is.
+func protectedPaths(stateDir, sessionsDir, workdir string) []string {
+	paths := []string{stateDir, statedir.LockPath(stateDir)}
+	holds := func(dir string) bool {
+		dir = capability.ResolvePath(dir)
+		return capability.Within(dir, capability.ResolvePath(workdir)) || capability.Within(dir, capability.ResolvePath(os.TempDir()))
+	}
+	if !holds(sessionsDir) {
+		return append(paths, sessionsDir)
+	}
+	entries, _ := os.ReadDir(sessionsDir)
+	for _, entry := range entries {
+		dir := filepath.Join(sessionsDir, entry.Name())
+		if !entry.IsDir() || holds(dir) || capability.Within(capability.ResolvePath(stateDir), capability.ResolvePath(dir)) {
+			continue
+		}
+		if _, ok := interactiveRoot(dir, ""); ok {
+			paths = append(paths, dir, statedir.LockPath(dir))
+		}
+	}
+	return paths
 }

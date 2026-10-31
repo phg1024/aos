@@ -1,6 +1,7 @@
 package tools_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,7 +87,7 @@ func TestToolRuntimeHonorsCapabilities(t *testing.T) {
 		},
 		Mounts:        req.Mounts,
 		CapabilitySet: req.CapabilitySet,
-	}); err != tools.ErrPathDenied {
+	}); !errors.Is(err, tools.ErrPathDenied) || tools.DenialReason(err) != tools.DeniedOutside {
 		t.Fatalf("expected path denied, got %v", err)
 	}
 

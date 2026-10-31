@@ -156,14 +156,24 @@ func DeriveChildSet(parent, requested Set) Set {
 // in mounts and in scopes are resolved first, so a link inside a mount that
 // leads outside it is refused.
 func withinAllowed(path string, mounts []Mount, scopes []string, write bool) bool {
-	resolved := resolvePath(path)
-	for _, mount := range mounts {
-		if write && mount.ReadOnly && within(resolvePath(mount.HostPath), resolved) {
-			return false
-		}
+	if write && InReadOnlyMount(path, mounts) {
+		return false
 	}
+	resolved := resolvePath(path)
 	for _, scope := range scopes {
 		if within(resolvePath(scope), resolved) && withinAnyMount(resolved, mounts) {
+			return true
+		}
+	}
+	return false
+}
+
+// InReadOnlyMount reports whether path, resolved, lies in a read-only
+// mount, which no write scope opens.
+func InReadOnlyMount(path string, mounts []Mount) bool {
+	resolved := resolvePath(path)
+	for _, mount := range mounts {
+		if mount.ReadOnly && within(resolvePath(mount.HostPath), resolved) {
 			return true
 		}
 	}
@@ -211,12 +221,52 @@ func resolveHops(path string, hops int) string {
 	}
 }
 
+// within reports whether target is base or lies inside it. A path is
+// judged by what it names, not how it is spelled: on a case-insensitive
+// volume (macOS's default) ws/.AOS-STATE opens ws/.aos-state, and APFS
+// also ignores Unicode normalization, so equal strings are not the only
+// way to name base. Failing a string match, target is inside base when
+// target or one of its existing ancestors is the same file as base
+// (os.SameFile: same device and inode), which no spelling changes. Every
+// ancestor is compared, not only the one as deep as base, since a path
+// may also reach base through a firmlink or bind mount of different
+// depth. Callers pass resolved paths (resolvePath), so no existing
+// ancestor is a symlink.
 func within(base, target string) bool {
-	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(target))
+	base, target = filepath.Clean(base), filepath.Clean(target)
+	if lexicallyWithin(base, target) {
+		return true
+	}
+	baseInfo, err := os.Stat(base)
+	if err != nil {
+		return false
+	}
+	for path := target; ; {
+		if info, err := os.Lstat(path); err == nil && os.SameFile(baseInfo, info) {
+			return true
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return false
+		}
+		path = parent
+	}
+}
+
+// lexicallyWithin reports whether target is base or lies inside it as
+// strings.
+func lexicallyWithin(base, target string) bool {
+	rel, err := filepath.Rel(base, target)
 	if err != nil {
 		return false
 	}
 	return rel == "." || (!strings.HasPrefix(rel, "..") && rel != "..")
+}
+
+// contains reports whether target lies within base once both are resolved:
+// where they really point, however they are spelled.
+func contains(base, target string) bool {
+	return within(resolvePath(base), resolvePath(target))
 }
 
 func intersectStrings(left, right []string) []string {

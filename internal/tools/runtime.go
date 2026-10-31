@@ -96,12 +96,54 @@ var ErrNetworkDenied = errors.New("network access denied by capabilities")
 // MaxFetchBytes caps how much of a web_fetch response body is read.
 const MaxFetchBytes = 4 << 20
 
-func (r *Runtime) canRead(path string, req Request) bool {
-	return r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet) && !r.protected(path)
+// Why a path is refused, as the denial records it.
+const (
+	DeniedProtected = "path is in the protected state directory"
+	DeniedReadOnly  = "path is in a read-only mount"
+	DeniedOutside   = "path outside the granted scopes or mounts"
+)
+
+// pathDenied is ErrPathDenied with its reason.
+type pathDenied struct{ reason string }
+
+func (e pathDenied) Error() string        { return ErrPathDenied.Error() + ": " + e.reason }
+func (e pathDenied) Is(target error) bool { return target == ErrPathDenied }
+
+// DenialReason is why err refused a path, or "" if it did not.
+func DenialReason(err error) string {
+	var denied pathDenied
+	if errors.As(err, &denied) {
+		return denied.reason
+	}
+	return ""
 }
 
-func (r *Runtime) canWrite(path string, req Request) bool {
-	return r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet) && !r.protected(path)
+func (r *Runtime) canRead(path string, req Request) bool {
+	return r.readDenied(path, req) == nil
+}
+
+// readDenied is why path may not be read, or nil.
+func (r *Runtime) readDenied(path string, req Request) error {
+	switch {
+	case r.protected(path):
+		return pathDenied{DeniedProtected}
+	case !r.evaluator.CanRead(path, req.Mounts, req.CapabilitySet):
+		return pathDenied{DeniedOutside}
+	}
+	return nil
+}
+
+// writeDenied is why path may not be written, or nil.
+func (r *Runtime) writeDenied(path string, req Request) error {
+	switch {
+	case r.protected(path):
+		return pathDenied{DeniedProtected}
+	case capability.InReadOnlyMount(path, req.Mounts):
+		return pathDenied{DeniedReadOnly}
+	case !r.evaluator.CanWrite(path, req.Mounts, req.CapabilitySet):
+		return pathDenied{DeniedOutside}
+	}
+	return nil
 }
 
 // protected reports whether path is, or lies inside, a protected path.
@@ -139,8 +181,8 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if !ok {
 			return Result{}, errors.New("write_file requires content")
 		}
-		if !r.canWrite(path, req) {
-			return Result{}, ErrPathDenied
+		if err := r.writeDenied(path, req); err != nil {
+			return Result{}, err
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return Result{}, err
@@ -158,8 +200,8 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		}, nil
 	case "read_file":
 		path := filepath.Clean(req.Args["path"])
-		if !r.canRead(path, req) {
-			return Result{}, ErrPathDenied
+		if err := r.readDenied(path, req); err != nil {
+			return Result{}, err
 		}
 		contentBytes, err := os.ReadFile(path)
 		if err != nil {
@@ -190,8 +232,12 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if oldText == "" {
 			return Result{}, errors.New("edit_file requires old_text")
 		}
-		if !r.canRead(path, req) || !r.canWrite(path, req) {
-			return Result{}, ErrPathDenied
+		denied := r.readDenied(path, req)
+		if denied == nil {
+			denied = r.writeDenied(path, req)
+		}
+		if denied != nil {
+			return Result{}, denied
 		}
 		contentBytes, err := os.ReadFile(path)
 		if err != nil {
@@ -228,8 +274,8 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if path == "." || path == "" {
 			path = mountRoot(req.Mounts)
 		}
-		if !r.canRead(path, req) {
-			return Result{}, ErrPathDenied
+		if err := r.readDenied(path, req); err != nil {
+			return Result{}, err
 		}
 		entries, err := os.ReadDir(path)
 		if err != nil {
@@ -257,8 +303,8 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if root == "." || root == "" {
 			root = mountRoot(req.Mounts)
 		}
-		if !r.canRead(root, req) {
-			return Result{}, ErrPathDenied
+		if err := r.readDenied(root, req); err != nil {
+			return Result{}, err
 		}
 		pattern := strings.ToLower(strings.TrimSpace(req.Args["pattern"]))
 		if pattern == "" {
