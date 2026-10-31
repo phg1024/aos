@@ -1,0 +1,422 @@
+{
+ "g0058": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0086": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0159": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0174": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0209": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0377": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Core cause correct (#24), but the aside says the later ab_r4 failure was a missing shaders directory; #75 shows shaders were present and the cause was include/include nesting (round-3 header with round-4 shaders)."
+ },
+ "g0015": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0053": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0063": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0075": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0100": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0123": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0125": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0130": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0142": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0150": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0168": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0187": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0188": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0189": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0253": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0284": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0305": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0320": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0324": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5). The answer also says the writer log carries 45.220, which #5 contradicts."
+ },
+ "g0330": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0361": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0363": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0368": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0378": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 45.220 ms (the benchmark.json/goal figure, #16/#1); the writer-log tail read at round-5 start recorded round 4's own final render_ms_best=45.635 (#5)."
+ },
+ "g0041": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0102": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0138": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0278": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0287": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0313": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0334": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0337": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0341": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0347": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0071": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "318.0 correct (#27), but it says 318 was higher than the 157-190 ms 'seen on the later two scenes'; #27 shows the later two scenes printed 269.6 and 272.2."
+ },
+ "g0379": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says it does not have the number; #27 shows setup_ms=318.0 for the default scene."
+ },
+ "g0013": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0022": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0040": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0068": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0099": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0167": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0285": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0294": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0351": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0060": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('compiled clean') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0072": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('the build was clean') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0145": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('succeeded with no errors') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0216": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('compiled and ran cleanly') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0244": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('ran cleanly') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0266": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the build succeeded ('compiled cleanly') but omits the BUILD_OK / single fastMathEnabled deprecation warning at pt_metal_host.mm:120 (#18)."
+ },
+ "g0252": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Build success with fastMath warning is right (#18), but it claims the rebuild reproduced 'same binary hash'; #20-#21 show the rebuilt binary md5 02a42502... differed from pt_round_04's 5c318568...."
+ },
+ "g0268": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Build success is right (#18), but it calls the warning '-ffast-math-related' (it is the fastMathEnabled API deprecation) and claims the freshly built binary matched the round-4 build; #20-#21 show its md5 differed."
+ },
+ "g0327": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Build success with fastMath warning is right (#18), but it says the environment 'reproduces the round-4 binary exactly'; #20-#21 show the rebuilt binary md5 differed from pt_round_04's."
+ }
+}

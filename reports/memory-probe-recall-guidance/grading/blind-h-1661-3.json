@@ -1,0 +1,122 @@
+[
+ {
+  "gid": "g0016",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "I don't have that number retained. In that 8x12 interleaved A/B of the glass refract-skip candidate (skip Snell when reflectance >= 1) against the round-4 binary, the figures I recorded and kept in working memory are the render timings only: base render_min 43.315 ms / render_mean 45.632 ms versus candidate render_min 45.025 ms / render_mean 46.563 ms, with 6 of 8 pairs favouring the base — which is why the candidate was rejected (with ior 1.5 the Fresnel TIR guard never fires, sin2_t <= 0.444, so the branch was dead code). The candidate's gpu_min line was in the _ab.sh tool output (message 78, now in my compacted archive segment art-001661) and I never copied it into my notes, so I can't quote it exactly; the only gpu_min I have on file from this round is from the later stack/child-pair runs (e.g. base 43.61 / cand 43.70 at p10 in the child-pair sample). If you want the exact glass-candidate gpu_min, I can read message 78 from the archive with read_memory rather than re-running anything — say the word and I'll fetch it."
+ },
+ {
+  "gid": "g0017",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "I don't have that number recorded. For the round-5 glass refract-skip candidate's 8×12 interleaved A/B against the round-4 binary, the only figures I wrote down were render times: candidate render_ms_best = 45.025 ms with render_ms_avg = 46.563 ms, versus the base at 43.315 ms best / 45.632 ms mean, with 6 of 8 paired rounds favouring the base — which is why the change was rejected (and why: with IOR 1.5 the Fresnel TIR guard never fires, sin²t ≤ 0.444, so the skipped branch was dead code the compiler had already CSE'd).\n\nHow I know: that rejection and those exact render numbers are in my persistent working memory entry decisions/round5-glass-and-stack (evidence messages 78–88), and I just searched my compacted archive for a gpu_min value from that run (#107 and variants) — the archived A/B record I kept contains only the render_ms fields, so the harness's gpu_min line for that specific run was never transcribed into my notes. I'm not guessing a value for it; the candidate's GPU time would have been roughly 0.3 ms under its render best (the usual host-overhead gap), but that is an inference, not a measurement I logged."
+ },
+ {
+  "gid": "g0027",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that run (512x512, 64 spp, seed 1; 8 interleaved rounds of 12 frames each).\n\nContext from the same measurement: the candidate's full line was render_ms_best=45.025, render_ms_avg=46.563, gpu_min=44.757, versus the round-4 base at render_ms_best=43.315, render_ms_avg=45.632, gpu_min=43.026, and 6 of 8 paired rounds favoured the base. The candidate was bit-identical on all three scenes but ~1.7 ms slower at the minimum, so it was rejected and the shader reverted — with ior 1.5 the Fresnel total-internal-reflection guard never fires (sin²ˆt ≤ 0.444), so the saved Snell setup was dead code the compiler had already common-subexpression-eliminated.\n\nHow I know: this exact output line is recorded in my archived session history (message #78, the `_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64` run), which I retrieved with search_memory and read in full."
+ },
+ {
+  "gid": "g0031",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B (512x512, 64 spp, seed 1, default scene).\n\nHow I know: it is the raw harness output from the run itself (my archived message #78), which printed\n  _ab_base.txt render_min=43.315 render_mean=45.632 gpu_min=43.026\n  _ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757\nso the candidate was 1.731 ms slower on render_min, 0.931 ms slower on mean, and 1.731 ms slower on gpu_min, with 6 of 8 interleaved pairs favouring the round-4 base. That is why the candidate was rejected and the integrator reverted to the round-4 text (with ior 1.5 the Fresnel TIR guard never fires, so the skipped Snell branch was effectively dead code and the compiler had already common-subexpressed the shared dot)."
+ },
+ {
+  "gid": "g0073",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate's gpu_min in that 8x12 interleaved A/B was 44.757 ms (candidate render_min 45.025 / render_mean 46.563). I know this from the archived _ab.sh output for that experiment — history message #78 prints \"_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757\", and the base (round-4) side of the same run measured render_min 43.315 / mean 45.632 with 6/8 pairs favouring the base, which is why the glass refract-skip was rejected."
+ },
+ {
+  "gid": "g0087",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that A/B (against the base's 43.026 ms).\n\nHow I know: the A/B was run at message #78 (./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64, interleaved 8 rounds x 12 frames at 512x512/64spp seed 1). Its raw output is preserved in my archive and I just re-read it: _ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757, versus _ab_base.txt render_min=43.315 render_mean=45.632 gpu_min=43.026. The candidate's gpu_min 44.757 comes from the same best run as its render_min 45.025 (the runs line shows the pair '45.025 44.757'). That result is why the candidate was rejected: +1.7 ms on the GPU minimum, with 6 of 8 pairs favouring the round-4 base — with ior 1.5 the Fresnel TIR guard never fires, so the skipped Snell branch was dead code and the shared cos_incident was already CSE'd by the compiler."
+ },
+ {
+  "gid": "g0116",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate (glass refract-skip variant) measured gpu_ms_best = 44.757 ms in that 8-round × 12-frame interleaved A/B, against the round-4 base's gpu_min = 43.026 ms. Its render_ms_best was 45.025 ms (base 43.315 ms), render_ms_avg 46.563 vs 45.632, and 6 of the 8 paired rounds favoured the base — which is why the change was rejected despite being bit-identical on all three scenes (with ior 1.5 the Fresnel TIR guard never fires, so the branch it skipped was dead code).\n\nI know this from the archived A/B tool output at message #78 of my session (retrieved just now via search_memory on 'render_min=45.025'; read_memory #78 shows the full run lists), and the same numbers are recorded in my working-memory entry 'round5-glass-and-stack' with evidence 78-88."
+ },
+ {
+  "gid": "g0152",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_min = 44.757 ms in that 8x12 interleaved A/B (its render_ms_best was 45.025 ms, render_ms_avg 46.563 ms; the round-4 base was render_min 43.315 ms / mean 45.632 ms, with gpu_min 43.026 ms). I know this from the A/B harness output recorded in message #78 of my session (the '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' line, whose run list ends with the 45.025/44.757 pair), which I just re-confirmed by searching my compacted archive; my working-memory entry decisions/round5-glass-and-stack records the same run and the verdict: the candidate was rejected (6/8 pairs favoured the base) because with ior 1.5 the Fresnel total-internal-reflection guard never fires, so the skipped branch was dead code the compiler had already folded."
+ },
+ {
+  "gid": "g0153",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that run (its render_ms_best was 45.025 ms, render_ms_avg 46.563 ms), against the round-4 base at gpu_ms_best 43.026 ms / render_ms_best 43.315 ms / render_ms_avg 45.632 ms — i.e. the candidate was ~1.7 ms slower on both the render and GPU minimums, with 6 of 8 interleaved pairs favouring the base, which is why it was rejected.\n\nHow I know: that 8 rounds x 12 frames interleaved A/B was run with ./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64 and its raw harness output is archived history message #78, which prints per-side render_min/render_mean/gpu_min plus the 16 per-round values (the candidate line reads exactly \"_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757\", with 44.757 also appearing as the last pair of its best round). My own note recording the rejection is message #79; it kept only the render numbers, so I read #78 to quote the GPU minimum rather than infer it."
+ },
+ {
+  "gid": "g0158",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that A/B (512x512, 64 spp, seed 1, 8 interleaved rounds x 12 frames), versus 43.026 ms for the round-4 base — i.e. the candidate was ~1.7 ms slower on the GPU minimum, consistent with its render_ms_best of 45.025 vs 43.315 and the paired means (46.563 vs 45.632, 6/8 rounds favouring the base). I know this from the harness output recorded in my history at message #78: the `_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64` run printed `_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757` and `_ab_base.txt render_min=43.315 render_mean=45.632 gpu_min=43.026`. That candidate was rejected (with ior 1.5 the Fresnel TIR guard never fires, so the skipped branch was dead code the compiler had already CSE'd)."
+ },
+ {
+  "gid": "g0161",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that 8-round x 12-frame interleaved A/B at 512x512 / 64 spp seed 1.\n\nHow I know: it is the exact output of the A/B run archived as message #78 (I re-read it with read_memory rather than relying on my notes, which recorded only the render numbers). Full line:\n\n  _ab_base.txt (round-4 binary, ab_r4/pathtracer): render_min=43.315 render_mean=45.632 gpu_min=43.026\n  _ab_cand.txt (glass refract-skip):                render_min=45.025 render_mean=46.563 gpu_min=44.757\n\nSo the candidate was ~1.7 ms slower on the gpu minimum and ~0.93 ms slower on the render minimum, with 6 of 8 pairs favouring the base — which is why that change was rejected and reverted: with ior 1.5 the Fresnel total-internal-reflection guard never fires (sin2_t <= 0.444), so the branch it skipped was dead code and the compiler had already common-subexpression'd the dot product."
+ },
+ {
+  "gid": "g0179",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_min = 44.757 ms in that 8-round x 12-frame interleaved A/B at 512x512 / 64 spp (round 5).\n\nHow I know: that run is archived tool output (message #78), which printed per-binary summaries from the _ab.sh harness:\n- base (round-4 binary, ab_r4/pathtracer): render_min=43.315, render_mean=45.632, gpu_min=43.026\n- candidate (glass refract-skip): render_min=45.025, render_mean=46.563, gpu_min=44.757\n\nThe paired comparison favoured the base in 6 of 8 rounds, and with ior 1.5 the Fresnel TIR guard that the skip relies on never fires (sin^2(theta_t) <= 0.444), so the branch was dead code and the compiler had already common-subexpression-folded the dot product. That candidate was therefore rejected and pt_integrator.metal was reverted to its round-4 text."
+ },
+ {
+  "gid": "g0184",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B (512x512, 64 spp, seed 1).\n\nHow I know: I re-read the archived tool output for that run (message #78, command `./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64`), which printed:\n- base (round-4 binary): render_min=43.315, render_mean=45.632, gpu_min=43.026\n- candidate (glass refract-skip): render_min=45.025, render_mean=46.563, gpu_min=44.757\n\nSo the candidate was ~1.7 ms slower on the GPU minimum and 6 of 8 paired rounds favoured the base, which is why it was rejected; with ior 1.5 the Fresnel total-internal-reflection guard that the optimization skipped never fires, so the branch was dead code whose cost was all overhead."
+ },
+ {
+  "gid": "g0199",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate measured gpu_ms_best = 44.757 ms in that run.\n\nHow I know: I re-read the archived tool result for that exact A/B (history message #78, `./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64`), whose output was:\n- base (round-4 binary, ab_r4): render_min=43.315, render_mean=45.632, gpu_min=43.026\n- cand (glass refract-skip): render_min=45.025, render_mean=46.563, gpu_min=44.757\n\nSo the candidate's gpu_min (44.757 ms) was 1.731 ms worse than the base's (43.026 ms), and 6 of the 8 paired rounds favoured the base — which is why the glass refract-skip was rejected (with ior 1.5 the Fresnel TIR guard never fires, so the skipped branch was dead code the compiler had already CSE'd)."
+ },
+ {
+  "gid": "g0240",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B.\n\nHow I know: I re-read the archived A/B tool output (message #78). It recorded, per side:\n- base (round-4 binary, ab_r4/pathtracer): render_ms_best=43.315, render_ms_avg(mean)=45.632, gpu_ms_best=43.026\n- candidate (glass refract-skip): render_ms_best=45.025, render_ms_avg(mean)=46.563, gpu_ms_best=44.757\n\nSo the candidate was ~1.7 ms slower on the GPU minimum and ~0.9 ms slower on the mean, with 6 of 8 interleaved pairs favouring the base — which is why that change was rejected and pt_integrator.metal was reverted to the round-4 text. The reason it could not win: with ior 1.5 the Fresnel total-internal-reflection guard (reflectance >= 1) never fires for the glass, so the branch I was skipping was effectively dead code whose dot product the compiler had already common-subexpressed."
+ },
+ {
+  "gid": "g0249",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate (glass refract-skip / shared cos_incident) measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B.\n\nHow I know: the archived tool output of the run (`./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64`) records `_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757` against `_ab_base.txt render_min=43.315 render_mean=45.632 gpu_min=43.026` (history message #78, summarized in my rejection note #79). Its best single frame was 45.025 render / 44.757 gpu, versus the round-4 base's 43.315 / 43.026, and 6 of 8 pairs favoured the base — which is why the candidate was rejected and the integrator reverted to the round-4 text (with ior 1.5 the Fresnel TIR guard never fires, so that branch was effectively dead code)."
+ },
+ {
+  "gid": "g0254",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate (glass refract-skip / shared cos_incident) measured gpu_ms_best = 44.757 ms in that run, against the round-4 base's 43.026 ms.\n\nHow I know: the A/B ran in message #78 via `./_ab.sh ab_r4/pathtracer pathtracer/pathtracer 8 12 64`, whose output was `_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757` (base: `render_min=43.315 render_mean=45.632 gpu_min=43.026`), with the candidate's 44.757 coming from the run whose render best was 45.025. I re-read messages 76-80 from my archive to quote the exact line rather than rely on my summary, since my working-memory entry had recorded only the render min/mean (45.025 / 46.563). That candidate was rejected: 6 of 8 interleaved pairs favoured the base, and with ior 1.5 the Fresnel TIR guard never fires (sin2_t <= 0.444), so the skipped branch was dead code that the compiler had already common-subexpression-eliminated."
+ },
+ {
+  "gid": "g0325",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The glass refract-skip candidate measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B (its render_ms_best was 45.025, render_ms_avg 46.563). I'm reading this from the archived harness output of the run itself (history message #78, which prints \"_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757\"), corroborated by my working-memory entry decisions/round5-glass-and-stack (evidence 78-88). For comparison, the round-4 base in the same session was render_min 43.315 / render_mean 45.632 with gpu_min 43.026, and 6 of 8 pairs favoured the base, so the candidate was rejected and reverted."
+ },
+ {
+  "gid": "g0328",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "In that 8x12 interleaved A/B of the glass refract-skip candidate vs the round-4 binary (ab_r4/pathtracer), the candidate measured gpu_ms_best = 44.757 ms (its render_min was 45.025 ms, render_mean 46.563 ms), against the base's gpu_min = 43.026 ms (render_min 43.315 ms, render_mean 45.632 ms). I know this from the archived tool result of that exact run (history message #78), which printed the per-side summary lines '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' and '_ab_base.txt render_min=43.315 render_mean=45.632 gpu_min=43.026'. The candidate lost on both min and mean (6/8 pairs favoured the base), so the refract-skip was rejected and reverted — with ior 1.5 the Fresnel TIR guard never fires, so that branch was dead code."
+ },
+ {
+  "gid": "g0358",
+  "probe": "h-1661-3",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "answer": "The candidate (glass refract-skip / shared cos_incident) measured gpu_ms_best = 44.757 ms in that 8x12 interleaved A/B, with render_ms_best = 45.025 ms and render_ms_avg = 46.563 ms. The round-4 base in the same harness was render_ms_best 43.315 / mean 45.632 and gpu_ms_best 43.026, and 6 of the 8 paired rounds favoured the base, so the candidate was rejected and reverted (with ior 1.5 the Fresnel total-internal-reflection guard never fires, so the branch it optimized was dead code and the compiler had already common-subexpressed the shared dot product). How I know: the harness output is archived verbatim as message #78, which reports \"_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757\"; the same numbers are in my working-memory entry decisions/round5-glass-and-stack (evidence 78-88)."
+ }
+]

@@ -1,0 +1,2215 @@
+[
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 5,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "3.7"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "tridata-order",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 1,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 2,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 3,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 7,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "tg-sweep",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 8,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-status",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-speedup",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.1"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.1"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "w4-first-ab",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "leaf2-readopted",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.15",
+   "47.11",
+   "49.02",
+   "50.05"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "44.49"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "49.02",
+   "50.05"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.15",
+   "47.11"
+  ]
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "wm-only-next",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 7,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-wm",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "memory",
+  "probe": "narrow-tree-own",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 2,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 6,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tridata-order",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 1,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 2,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 5,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 6,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 8,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "tg-sweep",
+  "sample": 9,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-status",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-speedup",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "4.3"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "w4-first-ab",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 1,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "0.523"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 3,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 4,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 6,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 8,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "leaf2-readopted",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "0.52"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "69.4"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.15",
+   "47.11"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "decide-leaf2-wide",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.15",
+   "47.11"
+  ]
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "wm-only-next",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 1,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 2,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 3,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 4,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 5,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 6,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 7,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-wm",
+  "sample": 9,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-check-rule",
+  "probe": "narrow-tree-own",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 1,
+  "steps": 5,
+  "correct": true,
+  "unsupported": [
+   "43.29"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 2,
+  "steps": 5,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 3,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 4,
+  "steps": 3,
+  "correct": true,
+  "unsupported": [
+   "43.29",
+   "48.88"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 5,
+  "steps": 7,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 6,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 7,
+  "steps": 4,
+  "correct": true,
+  "unsupported": [
+   "48.88"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 8,
+  "steps": 6,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tridata-order",
+  "sample": 9,
+  "steps": 8,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 1,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 2,
+  "steps": 6,
+  "correct": true,
+  "unsupported": [
+   "50.12"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 3,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 4,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 5,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 6,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 7,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 8,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "tg-sweep",
+  "sample": 9,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 1,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 3,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 4,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 5,
+  "steps": 2,
+  "correct": true,
+  "unsupported": [
+   "34.7"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 6,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 7,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-status",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 1,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 2,
+  "steps": 2,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 3,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 4,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 5,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 6,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 7,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 8,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-speedup",
+  "sample": 9,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 2,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 3,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 5,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 6,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 7,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 8,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "w4-first-ab",
+  "sample": 9,
+  "steps": 1,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 1,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 2,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 3,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 4,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 5,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 6,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 7,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 8,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "leaf2-readopted",
+  "sample": 9,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 1,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "46.1"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 2,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 3,
+  "steps": 2,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 4,
+  "steps": 1,
+  "correct": true,
+  "unsupported": [
+   "4.4"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 5,
+  "steps": 2,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 6,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 7,
+  "steps": 3,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 8,
+  "steps": 2,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "decide-leaf2-wide",
+  "sample": 9,
+  "steps": 2,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 1,
+  "steps": 1,
+  "correct": false,
+  "unsupported": [
+   "46.15",
+   "47.11"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 2,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 3,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 4,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 5,
+  "steps": 2,
+  "correct": false,
+  "unsupported": [
+   "44.69"
+  ]
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 6,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 7,
+  "steps": 2,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 8,
+  "steps": 3,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "wm-only-next",
+  "sample": 9,
+  "steps": 1,
+  "correct": false,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 1,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 2,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 3,
+  "steps": 9,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 4,
+  "steps": 7,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 5,
+  "steps": 7,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 6,
+  "steps": 7,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 7,
+  "steps": 5,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 8,
+  "steps": 7,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-wm",
+  "sample": 9,
+  "steps": 8,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 1,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 2,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 3,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 4,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 5,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 6,
+  "steps": 3,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 7,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 8,
+  "steps": 4,
+  "correct": true,
+  "unsupported": []
+ },
+ {
+  "condition": "no-memory",
+  "probe": "narrow-tree-own",
+  "sample": 9,
+  "steps": 6,
+  "correct": true,
+  "unsupported": []
+ }
+]

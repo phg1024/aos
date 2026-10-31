@@ -1,0 +1,31 @@
+[
+ {
+  "id": "h-1661-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5, when you first ran the PT_PROF cost-share sweep with the scratch profiling build in _prof/, it printed no timings. What was wrong?",
+  "topic": "(?i)(prof|profil|compile|shader|error|params)",
+  "expect": "(?i)(undeclared|params(\\.pad)?[^.]{0,40}(not (declared|defined|in scope)|unknown|no local)|scene\\.params|shader (compile|compilation)[^.]{0,30}(error|fail)|compil(e|ation) (error|fail)|fail(ed|s)? to compile)",
+  "note": "Truth: #54 \"metal init error: shader compile failed: program_source:615:10: error: use of undeclared identifier 'params'\" (the PT_PROF bit-2 guard in pt_intersect_scene; #55 changed it to scene.params->pad). Not in the checkpoint's working memory (art-001763, round5-cost-shares gives only the results) or live history (checked: undeclared, program_source, 'shader compile failed'; 'params.pad' occurs once, in the memory's description of the bitmask)."
+ },
+ {
+  "id": "h-414-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "At the start of round 2 you benchmarked the rebuilt round-1 code with its image outputs pointed at /tmp (base.ppm / base.pfm). Did that run write its image? If not, what did it report?",
+  "topic": "(?i)(/tmp|image|output|write|ppm|pfm|sandbox|error)",
+  "expect": "(?i)(cannot open output|ppm error|(could ?n[o']t|cannot|can'?t|unable to|failed to|not (allowed|permitted) to) (write|open|create)[^.]{0,40}(/tmp|output|ppm|image|file)|(/tmp|output)[^.]{0,40}(not writable|denied|not permitted|blocked|sandbox))",
+  "reject": "(?i)^\\W*yes\\b",
+  "note": "Truth: #43 'ppm error: cannot open output: /tmp/base.ppm' (exit 1; the benchmark line itself printed). Second pass, secondary fact (the primary, render_ms_best=105.947, is in working memory). Not in the checkpoint's working memory (art-000643) or live history (checked: /tmp, 'cannot open output', 'ppm error', base.ppm)."
+ },
+ {
+  "id": "n-1608-1",
+  "kind": "negative-claim",
+  "checkpoint": "art-001768",
+  "question": "During round 5, did you ever rebuild the live pathtracer/ directory from the unchanged round-4 sources, before making any edit of your own? If so, what did it show?",
+  "topic": "(?i)(build|rebuil|compil|clang|warning|round.?4|live)",
+  "expect": "(?i)(fast.?math|deprecat|mathMode|BUILD_OK|built (ok|fine|clean(ly)?|success(fully)?|without (any )?errors?)|compiled (ok|fine|clean(ly)?|success(fully)?|without (any )?errors?)|build (succeeded|passed|was (ok|fine|clean|successful))|succeeded)",
+  "reject": "(?i)(^\\W*no[,.;:]?\\s+(I\\s+)?(never|did ?n[o']t|have ?n[o']t)\\b|^\\W*no\\W*$|\\bI never (re)?buil)",
+  "note": "Truth: #18 \"pathtracer/src/pt_metal_host.mm:120:13: warning: 'fastMathEnabled' is deprecated: first deprecated in macOS 15.0 - Use mathMode instead ... 1 warning generated.\" then 'BUILD_OK' (printed only on clang++ success; the same command's `which metal` printed nothing and the Metal.framework Headers ls failed). Not in the checkpoint's working memory (art-001763) or live history (checked: BUILD_OK, fastMathEnabled, deprecat, mathMode, ab_r3, SOURCES_IDENTICAL, 'which metal', md5; '1 warning' occurs only in #249, the later occupancy-diag build that printed '1 warning and 1 error generated')."
+ }
+]

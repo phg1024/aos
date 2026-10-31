@@ -1,0 +1,236 @@
+{
+ "g0048": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0065": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0090": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0141": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": "Opening line says the probe 'never produced a number in round 5' (meaning the later NSLog diagnostic) but the body correctly gives the round-5 1024 proxy (#33) and no register counts (#33/#35)."
+ },
+ "g0250": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives no register counts and the 1024 proxy, but says the figure is from round 4/earlier, not this round; #32-#35 measured it this round."
+ },
+ "g0298": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0329": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0362": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0363": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0373": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right. Also claims the API exposes no register usage as the only reason, omitting the toolchain check (#31-#35)."
+ },
+ "g0458": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0473": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0484": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0526": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right. Also places the PT_PROF profiling in round 4; it was round 5 (#58)."
+ },
+ "g0545": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives no register counts and the 1024 proxy, but says the 1024 was measured in round 4; it was measured this round (#32-#33)."
+ },
+ "g0554": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0561": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0590": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any occupancy figure this round; archive #33/#35 record max_threads_per_group trace=1024 (occupancy proxy) obtained this round via PT_DEBUG; offline compiler missing is right."
+ },
+ "g0005": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63.",
+  "repeats_wrong_entry": 1
+ },
+ "g0008": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63. Also says air->glass can never take it.",
+  "repeats_wrong_entry": 1
+ },
+ "g0040": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63.",
+  "repeats_wrong_entry": 1
+ },
+ "g0172": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says 'yes' but places the reflectance-1 case on interior rays, says entering rays can never trigger it, and says the reflectance>=1 guard never fires; #14 code (eta=ior_t/ior_i) fires for air->glass rays above ~41.8 deg (#63).",
+  "repeats_wrong_entry": 1
+ },
+ "g0212": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63. Also says outside-to-inside legs can never TIR in the code.",
+  "repeats_wrong_entry": 1
+ },
+ "g0219": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": "",
+  "repeats_wrong_entry": 0
+ },
+ "g0222": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the branch fires but for the wrong rays: only interior rays, never air->glass; #14 code (eta=ior_t/ior_i) fires only for air->glass rays above ~41.8 deg (#63), never for glass->air.",
+  "repeats_wrong_entry": 0
+ },
+ "g0288": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Correct rays and reason (air->glass, eta=ior_t/ior_i, >41.81 deg), but states the interior pt_refract TIR threshold as c<2/3 / >48.19 deg; from the #14 code it is c<0.745 / >41.81 deg.",
+  "repeats_wrong_entry": 0
+ },
+ "g0352": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel return-1 branch cannot trigger; #14 code (eta=ior_t/ior_i) returns 1 for air->glass rays with sin(theta)>2/3, handled as 'air->glass fresnel-sat' at #63.",
+  "repeats_wrong_entry": 1
+ },
+ "g0366": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Self-contradictory: says the function returns 1 for interior rays and never for entering rays, then that reflectance>=1 is dead; #14 code fires only for air->glass rays above ~41.8 deg (#63).",
+  "repeats_wrong_entry": 1
+ },
+ "g0402": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel branch fires but only for interior rays and is unreachable air->glass; #14 code (eta=ior_t/ior_i) is the reverse: fires air->glass above ~41.8 deg, never glass->air.",
+  "repeats_wrong_entry": 0
+ },
+ "g0414": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": "Right rays and reason, but closes by echoing the memory entry ('almost never fires ... effectively dead code'), contrary to its own analysis and to #63's air->glass fresnel-sat case.",
+  "repeats_wrong_entry": 1
+ },
+ "g0420": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the branch is dead because Fresnel always uses ratio 1/1.5; #14 code uses eta=ior_t/ior_i = 1.5 for air->glass rays, so it returns 1 above ~41.8 deg (#63).",
+  "repeats_wrong_entry": 1
+ },
+ "g0442": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": "",
+  "repeats_wrong_entry": 0
+ },
+ "g0451": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63.",
+  "repeats_wrong_entry": 1
+ },
+ "g0575": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says interior rays get reflectance 1 and entering rays never, but also that the Fresnel reflectance>=1 guard only trips at grazing; #14 code fires for air->glass rays above ~41.8 deg (#63), never for interior rays.",
+  "repeats_wrong_entry": 1
+ },
+ "g0579": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the Fresnel reflectance-1 branch is dead (Schlick only reaches 1 at grazing) and TIR only happens for interior rays via pt_refract; the code read at #14 has eta=ior_t/ior_i in pt_fresnel, so it returns 1 for air->glass rays with sin(theta)>2/3 (~41.8 deg), the 'air->glass fresnel-sat' case at #63. Repeats 'with ior 1.5 the Fresnel TIR guard never fires'.",
+  "repeats_wrong_entry": 1
+ },
+ "g0603": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the branch fires but only for interior rays and provably cannot on the outside call; #14 code (eta=ior_t/ior_i) is the reverse: air->glass above ~41.8 deg fires (#63), glass->air never.",
+  "repeats_wrong_entry": 0
+ }
+}

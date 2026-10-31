@@ -1,0 +1,226 @@
+{
+ "g0021": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0106": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the exact error (#208), but calls the stale ./pathtracer a 'round-1' binary; the last successful build was the round-2 16x8 stack-based build (#167 in art-000557, binary dated 14:28 per #204)."
+ },
+ "g0213": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the exact error (#208), but calls the stale ./pathtracer a 'round-1' binary; the last successful build was the round-2 16x8 stack-based build (#167 in art-000557, binary dated 14:28 per #204)."
+ },
+ "g0243": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0008": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0010": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0036": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0066": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0070": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0128": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0133": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0215": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0227": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0235": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0283": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0311": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0312": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0317": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0338": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0343": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0039": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0044": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0059": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0067": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0089": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0097": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0154": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0224": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0257": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0264": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0290": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0366": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Says setup_ms=158.6 with threads_used=4; #245 printed setup_ms=180.8 with --threads 8 / threads_used=8."
+ }
+}

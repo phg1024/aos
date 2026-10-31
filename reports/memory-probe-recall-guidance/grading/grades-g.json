@@ -1,0 +1,352 @@
+{
+ "g0177": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0251": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0256": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0291": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0185": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Claims a second attempt failed on a sandbox_extension_issue_file error before any image was produced; those warnings are in #163, the successful rerun that printed IDENTICAL_DEFAULT."
+ },
+ "g0340": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Says no difference was reported; #159 shows DIFF_DEFAULT caused by 'cannot open scene config: scenes/scene-default.json' (cp_default.pfm missing)."
+ },
+ "g0020": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0042": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0054": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0092": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0113": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0117": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0121": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0132": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0135": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0162": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0221": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0232": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0263": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0269": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0296": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0371": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0375": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0026": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Says two attempts before #163 failed; the archive shows only one failed default-scene attempt (#158/#159), then the ls (#160/#161) and the successful run (#162/#163)."
+ },
+ "g0064": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Says two scene-config path mistakes came in between; there was only one (#159); #160/#161 was the directory listing."
+ },
+ "g0197": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Claims #162 was a second failed rerun; #162 is the corrected command whose result #163 is the successful IDENTICAL_DEFAULT run (only #159 failed)."
+ },
+ "g0061": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0126": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0149": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0210": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0286": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0300": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0331": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0002": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0025": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0046": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0119": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0131": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0136": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0144": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0181": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0198": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0202": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0277": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0292": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0299": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0303": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0333": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0357": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives the :399 hit and kInfinity-only constexpr and says it was added next to kInfinity, but not the value 0xFFFFFFFFu (#141)."
+ },
+ "g0359": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Says it never grepped for kInvalidNode; #139/#140 show the grep: only src/pt_bvh.cpp:399 use and only constexpr kInfinity, so it was undefined and added as 0xFFFFFFFFu (#141)."
+ }
+}

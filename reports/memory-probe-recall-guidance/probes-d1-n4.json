@@ -1,0 +1,22 @@
+[
+ {
+  "id": "n-1661-1",
+  "kind": "negative-claim",
+  "checkpoint": "art-001768",
+  "question": "During round 5, did you ever grep the profiling copy's src/pt_main.cpp (in _prof/) for params.pad, params.seed or getenv? If so, what did it show?",
+  "topic": "(?i)(grep|params|pad|seed|getenv|pt_main|pt_scene|prof)",
+  "expect": "(?i)(no (match|matches|hits?|results?|lines?|output)|nothing|empty|zero (match|hit|result)|found none|none of them|did ?n[o']t (find|match|turn up|show)|not (found|there|present|in pt_main)|pt_scene)",
+  "reject": "(?i)(^\\W*no[,.;:]?\\s+(I\\s+)?(never|did ?n[o']t|have ?n[o']t)\\b|^\\W*no\\W*$|\\bI never grep)",
+  "note": "Truth: #38 grep -n \"params.pad\\|params.seed =\\|getenv\" src/pt_main.cpp printed nothing (empty stdout): none of them is in pt_main.cpp; #36 had already shown 'pt_scene.cpp:206: params.pad = 0', where #41 then added the PT_PROF getenv. Not in the checkpoint's working memory (art-001763; round5-cost-shares says only that params.pad carries the PT_PROF bitmask) or live history (checked: getenv, params.seed, pt_scene.cpp:206; params.pad and PT_PROF occur only in that memory entry, pt_scene.cpp only in a #243 file listing, pt_main.cpp only in the plane-filter edit #219 and that listing)."
+ },
+ {
+  "id": "n-1766-1",
+  "kind": "negative-claim",
+  "checkpoint": "art-001768",
+  "question": "During round 5, while rewriting quantize_bvh for the child-pair layout, did you ever grep the sources for kInvalidNode? If so, what did it show?",
+  "topic": "(?i)(kInvalidNode|invalid|constant|defin|declar|quantize|child.?pair)",
+  "expect": "(?i)(not (yet )?(defined|declared)|undefined|undeclared|no (definition|declaration)|(was|is) ?n[o']t (defined|declared)|missing|only (used|referenced|appeared|one use|its use)|kInfinity|0xffffffff|:399|line 399)",
+  "reject": "(?i)(^\\W*no[,.;:]?\\s+(I\\s+)?(never|did ?n[o']t|have ?n[o']t)\\b|^\\W*no\\W*$|\\bI never grep)",
+  "note": "Truth: #140 'src/pt_bvh.cpp:399:    std::vector<unsigned int> block(bvh.nodes.size(), kInvalidNode);' and, for the constexpr search, only '21:constexpr float kInfinity = 1e30f;' - kInvalidNode was used but defined nowhere (#141: 'uses undefined kInvalidNode', added as 0xFFFFFFFFu next to kInfinity). Not in the checkpoint's working memory (art-001763) or live history (checked: kInvalidNode, kInvalid, invalid, kInfinity, constexpr, undefined, undeclared, 'not defined', 0xFFFFFFFF, :399; quantize_bvh occurs only in the round5-childpair memory entry and its #252 update)."
+ }
+]

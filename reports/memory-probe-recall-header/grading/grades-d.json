@@ -1,0 +1,650 @@
+{
+ "g0010": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0016": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0021": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0031": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0037": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0046": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0047": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0063": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0069": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Correct cause (mistyped mesh path) but no 'cannot open mesh' error and does not say the path lacked aos/reports/ (#24)."
+ },
+ "g0070": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says PT_PROF=3 was never measured; #58 shows PT_PROF=3 render_ms_best=0.623 gpu_ms_best=0.458."
+ },
+ "g0072": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0077": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0085": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "44.757 correct, but says the candidate run list ends with the 45.025/44.757 pair; in #78 that pair is the 5th of 8 (list ends 46.901 46.652)."
+ },
+ "g0091": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0097": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0109": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0123": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0149": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0152": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "44.757 correct, but calls it a ~1.4 ms regression on both metrics; #78 gives 45.025 vs 43.315 render and 44.757 vs 43.026 gpu, ~1.7 ms each."
+ },
+ "g0154": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0168": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0169": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0173": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0175": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0185": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0186": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0191": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says no recorded measurement (not given); #58 shows PT_PROF=3 gpu_ms_best=0.458 (render 0.623)."
+ },
+ "g0194": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0197": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0199": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0203": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0207": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0225": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0236": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0240": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0256": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0259": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0267": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0269": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0271": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0273": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives cp -R nesting as the cause; the wrong mesh path ('cannot open mesh', #24) was the actual cause, and its description of that path (not under phase3) is also wrong."
+ },
+ "g0275": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0276": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0277": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0280": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0281": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0282": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0299": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0313": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0316": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0321": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0327": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0335": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0337": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0340": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0342": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says the gpu_min was not recorded and declines; #78 shows candidate gpu_min=44.757 (base 43.026)."
+ },
+ "g0344": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0348": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0355": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0367": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0368": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0371": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Right cause, but states the typed path was /Users/peihongguo/Code/aos/rasterizer-bunny/... (missing only reports/); #24 shows /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/)."
+ },
+ "g0383": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0387": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says no PT_PROF=3 measurement exists; #58 shows render_ms_best=0.623 gpu_ms_best=0.458."
+ },
+ "g0397": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0398": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0406": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0410": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0413": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says PT_PROF=3 was never measured; #58 shows render_ms_best=0.623 gpu_ms_best=0.458."
+ },
+ "g0423": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0425": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0433": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0439": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0440": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0453": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0460": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0465": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0466": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0478": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0483": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0487": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "318.0 correct, but says the earlier wrong-mesh attempt 'failed on the sandbox'; #24 shows it failed with 'mesh error: cannot open mesh' on a wrong path."
+ },
+ "g0498": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Right cause, but states the typed path was /Users/peihongguo/Code/aos/rasterizer-bunny/... (missing only reports/); #24 shows /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/)."
+ },
+ "g0500": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Claims the host never wrote the mask and a host-side fix plus rebuild was needed; #54 shows a runtime shader compile error (undeclared identifier 'params'), fixed in #55 by scene.params->pad with no rebuild."
+ },
+ "g0503": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it never ran PT_PROF=3 and guesses ~43 ms; #58 shows render_ms_best=0.623 gpu_ms_best=0.458."
+ },
+ "g0509": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0515": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0517": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting of _prof so no shaders were found; #54 shows shader compile failed: use of undeclared identifier 'params' in pt_intersect_scene (#55 fix scene.params->pad)."
+ },
+ "g0525": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0527": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0530": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0536": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says no recorded number and offers only an inference (~3.5 ms); #58 shows PT_PROF=3 gpu_ms_best=0.458 (render 0.623)."
+ },
+ "g0538": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0540": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0543": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Blames a cp -R nesting / shader-compile failure of the ab_r4 base; archive #24 shows 'mesh error: cannot open mesh' for the wrong path /Users/peihongguo/Code/rasterizer-bunny/... (missing aos/reports/), fixed in #26-27."
+ },
+ "g0544": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the shaders could not compile, but attributes it to cp -R nesting leaving no shaders; #54 shows 'use of undeclared identifier params' in the PT_PROF guard (#55 fix scene.params->pad)."
+ },
+ "g0546": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0548": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0553": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Correct cause (mistyped mesh path) but no 'cannot open mesh' error or which part of the path was wrong (#24)."
+ },
+ "g0555": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0559": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0567": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Gives only render figures and declines the gpu_min; #78 shows candidate gpu_min=44.757 (base 43.026)."
+ },
+ "g0571": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0572": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0573": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0580": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 45.220 ms (the pathtracer_benchmark.json / task-brief figure) as what round 4 recorded in the writer log; the log tail (#5) records render_ms_best=45.635 (gpu 45.349, 1.074x over 49.020, 8/8 pairs vs r3 47.828)."
+ },
+ "g0592": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0594": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0605": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Correct cause (mistyped mesh path) but no 'cannot open mesh' error or which part of the path was wrong (#24)."
+ }
+}

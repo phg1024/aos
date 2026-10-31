@@ -1,0 +1,106 @@
+[
+  {
+    "id": "r2-first-sah",
+    "kind": "recorded",
+    "checkpoint": "art-000648",
+    "question": "Early this round you replaced the tree build and the node layout in one combined change. What did the first benchmark of that change show, and what did you find was causing it?",
+    "topic": "(?i)(sah|split|bvh|tree|leaf|leaves|partition|regress)",
+    "expect": "(?i)(4416|4,416|4\\.4 ?s\\b|7107|7,107|5398|5,398|(giant|huge|enormous|massive|fat|large) leaves|(unbalanced|degenerate|failing|broken|bad)[^.]{0,60}(split|partition|sah|leaves)|(split|partition|sah)[^.]{0,40}(unbalanced|degenerate|failing|broken))",
+    "note": "Round-2 writer pid-000006 after its 4th compaction (archive #1-#249 in art-000414/art-000507/art-000557/art-000646; live #250-#331). Truth: #93 render_ms_best 4416.3 vs 105.9 baseline; #94 bvh_nodes 7107, 'SAH partition must be failing and producing giant leaves'; #103 max_leaf 5398, mean 30.4, depth cap binding. Working memory measurements/round2-attempt1 (evidence 91-95) holds it. Not in live history."
+  },
+  {
+    "id": "r2-root-exit",
+    "kind": "recorded",
+    "checkpoint": "art-000648",
+    "question": "Did limiting each ray's search distance to the point where it leaves the scene's outermost bounding box speed up the traversal this round?",
+    "topic": "(?i)(root|exit|clamp|prun|aabb|bounding box|t_max|limit)",
+    "expect": "(?i)(107(\\.0)?\\b|126(\\.0)?\\b|regress|slower|worse|revert|reject|did ?n[o']t (help|speed|pay)|no (gain|speed-?up|improvement|benefit)|not faster|hurt)",
+    "reject": "(?i)(^\\W*yes\\b|\\b(it|this|that) (did )?(sped|speeds|speed) (it |things |traversal )?up\\b)",
+    "note": "Truth: #144 'Root-exit pruning REGRESSED (107.0/126.0 avg vs 101.2/116.5)', reverted #144-#151. Working memory measurements/round2-progress (d) (evidence 119-173). Not in live history."
+  },
+  {
+    "id": "r2-shadow-limit",
+    "kind": "recorded-wrong",
+    "checkpoint": "art-000648",
+    "question": "Is there still an open correctness bug in the shadow (occlusion) traversal, or has it been dealt with? Say what the bug is or was.",
+    "topic": "(?i)(shadow|occlu|any-hit|anyhit)",
+    "expect": "(?i)(\\bfix(ed|es)?\\b|added|adds|now (checks|rejects|compares|tests)|resolved|in place|already (has|checks|rejects|compares)|no longer)",
+    "reject": "(?i)(still (open|missing|unfixed|there|present|needs)|not (yet )?(been )?fixed|must (still )?(add|fix)|needs? to (be )?(add|fix)|remains? (open|unfixed)|is (an |still an )?open (bug|issue)|(bug|issue) is (still )?open)",
+    "note": "Working memory open/round2-open-bugs (art-000643) still says 'pt_shadow_hit ... never compares triangle t against t_limit, so shadow rays are over-occluded ... must add t < t_limit'. The archive says it was fixed: #94 found it, #112 'Fix the shadow-ray bug found earlier: pt_shadow_hit must reject hits beyond t_limit'. The entry was never updated (superseded, found not planted). The live history has the fixed shader code."
+  },
+  {
+    "id": "r2-verify-dir",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "Could you read the frozen reference data in the verification directory during this round, and how did that shape the way you checked that your changes kept the image correct?",
+    "topic": "(?i)(verif|reference|frozen|rmse|gate)",
+    "expect": "(?i)(not readable|unreadable|could ?n[o']t (read|access|open)|cannot (read|access)|can'?t (read|access)|no (read )?access|not permitted|denied|blocked|sandbox)",
+    "reject": "(?i)^\\W*yes\\b",
+    "note": "Truth: #37 'ls .../pathtracer-bunny-phase3-verification/: Operation not permitted'; #38 'Verification dir not readable (sandbox) - rely on gates in goal; keep RNG order identical so images stay statistically identical.' Not in the checkpoint's working memory (art-000643) or live history. The probed agent can also find it by trying to list the directory."
+  },
+  {
+    "id": "r5-empty-base",
+    "kind": "recorded",
+    "checkpoint": "art-001768",
+    "question": "At one point the frozen round-4 binary you were comparing against printed no benchmark line at all. What was the cause?",
+    "topic": "(?i)(base|ab_r4|round.?4|benchmark line|no output|empty|silent)",
+    "expect": "(?i)(nest|include/include|cp -r|round.?3 header|wrong header|old header|36.byte|shader[^.]{0,20}(compile|compilation)[^.]{0,20}(error|fail))",
+    "note": "Round-5 writer pid-000015 after its 3rd compaction (archive #1-#167 in art-001608/art-001661/art-001766; live #168-#255). Truth: #75 'cp -R ... nested the copy (ab_r4/include/include), so ab_r4 used the ROUND-3 header ... shader compile error, base silently produced nothing'. Working memory decisions/round5-refs (evidence 75-86)."
+  },
+  {
+    "id": "r5-entered-stack",
+    "kind": "recorded",
+    "checkpoint": "art-001768",
+    "question": "When you first changed the closest-hit traversal stack to also store each pushed child's entry distance, how did its A/B against the round-4 binary come out? Give the numbers.",
+    "topic": "(?i)(enter|stack|distance)",
+    "expect": "(?i)(6/8|6 of 8|six of (the )?eight|45\\.60|46\\.04|44\\.42|44\\.49)",
+    "note": "Truth: #89 'Entered-stack = modest WIN: 6/8 pairs favour cand, mean 45.607 vs 46.042, min 44.425 vs 44.493'. Working memory decisions/round5-glass-and-stack (evidence 78-88). Live history says only that it was kept."
+  },
+  {
+    "id": "r5-register-counts",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "Were you able to get register counts or an occupancy figure for the shaders this round? What did you find?",
+    "topic": "(?i)(register|occupan|compiler|metal|threads ?per|maxTotal)",
+    "expect": "(?i)(no offline|offline[^.]{0,40}(not|missing|unavailable|absent)|not installed|no (metal )?compiler|could ?n[o']t|unable|1024|1,024)",
+    "note": "Truth: #35 'No offline metal compiler (confirmed). Occupancy proxy max=1024.' (#31-#35). Not in the checkpoint's working memory (art-001763). The run's writer log, written later, has the 1024 figure (line 166), which both arms can read."
+  },
+  {
+    "id": "r5-tir-guard",
+    "kind": "recorded-wrong",
+    "checkpoint": "art-001768",
+    "question": "In this renderer's Fresnel function, can the total-internal-reflection branch (the one that returns reflectance 1) actually trigger in this scene? If it can, for which rays?",
+    "topic": "(?i)(tir|total.internal|fresnel|reflectance|guard)",
+    "expect": "(?i)(enter|air[^.]{0,8}(to|into|->|→)[^.]{0,8}glass|into the glass|from outside|ior_t ?/ ?ior_i|1\\.5 ?/ ?1|41(\\.8)?|42 ?°|42 deg|0\\.66|0\\.67|2/3|saturat)",
+    "reject": "(?i)(never (fires|triggers|fire|trigger|happens|taken)|can(no|')t (ever )?(fire|trigger|happen)|dead code|unreachable|cannot (fire|trigger|happen))",
+    "note": "Working memory decisions/round5-glass-and-stack (evidence 78-88) says 'with ior 1.5 the Fresnel TIR guard never fires'. The archive contradicts it: the code it read at #14 computes eta = ior_t / ior_i (1.5 for a ray entering glass from air, called with ior_i=1, ior_t=1.5), so the guard returns 1 when sin(theta_i) > 2/3 (about 41.8 degrees); its own #61/#63 handle 'the reflectance==1 (fresnel-guard) case' and 'air->glass fresnel-sat'. The code comment on pt_fresnel states the asymmetry."
+  },
+  {
+    "id": "r8-trace-share",
+    "kind": "recorded",
+    "checkpoint": "art-003135",
+    "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+    "topic": "(?i)(trace|combine|split|dispatch|sum)",
+    "expect": "(?i)(98\\.6|30\\.3|0\\.42|98 ?%|99 ?%|1\\.4 ?%)",
+    "note": "Round-8 writer pid-000025 after its 2nd compaction (archive #1-#72 in art-003062/art-003133; live #73-#135). Truth: #26 'trace dispatch = 30.30ms, combine dispatch = 0.42ms -> trace kernel is 98.6% of GPU time'. Working memory measurements/r8-cost-split (evidence 38)."
+  },
+  {
+    "id": "r8-small-node",
+    "kind": "recorded",
+    "checkpoint": "art-003135",
+    "question": "Did halving the size of each BVH node, by storing its box coordinates as small integers, make the walk faster?",
+    "topic": "(?i)(node|u16|16.?bit|16.?byte|integer|halv)",
+    "expect": "(?i)(slower|lost|loses|worse|0/16|0 of 16|\\+0\\.9|1\\.009|reject|revert|no(t a)? (win|speed-?up|gain)|did ?n[o']t|not faster|alu|latency)",
+    "reject": "(?i)(^\\W*yes\\b|\\b(it|this) (was|is|made it) faster\\b)",
+    "note": "Truth: #51-#53 'E5 RESULT: 16-byte u16 node is SLOWER - 0/16 pairs, +0.90%, t=16.25'. Working memory rejected/r8-rejected-e5-e3-e4 (evidence 50-56)."
+  },
+  {
+    "id": "r8-sibling-pairs",
+    "kind": "unrecorded",
+    "checkpoint": "art-003135",
+    "question": "Before coding a layout that keeps a node's two children next to each other in memory, did you check whether something like it had been tried in an earlier round? What had happened?",
+    "topic": "(?i)(sibling|child|pair|adjacent|block|32.?byte)",
+    "expect": "(?i)(wash|no (real )?(gain|win|difference|speed-?up)|neutral|did ?n[o']t help|not a win|round.?5|line 163|0\\.104|45\\.25)",
+    "note": "Truth: #29 'Must first check the log: 32-byte node pairs was rejected'; #31 'History line 163 confirms sibling-pair 32B node blocks were a wash -> node-traffic class exhausted' (writer log line 163, round 5: n=41, +0.104 +- 0.218 ms, p50 45.25/45.26). Not in the checkpoint's working memory (art-003130). Both arms can read the writer log."
+  }
+]

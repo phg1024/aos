@@ -1,0 +1,204 @@
+{
+ "indexes-d1.json": {
+  "art-000648": {
+   "budget": 6144,
+   "agent_index_bytes": 6129,
+   "segments_showing": 4,
+   "by_segment": {
+    "art-000414": {
+     "lines": 20,
+     "shown": 15,
+     "hidden": 5
+    },
+    "art-000507": {
+     "lines": 22,
+     "shown": 15,
+     "hidden": 7
+    },
+    "art-000557": {
+     "lines": 30,
+     "shown": 15,
+     "hidden": 15
+    },
+    "art-000646": {
+     "lines": 13,
+     "shown": 13,
+     "hidden": 0
+    }
+   }
+  },
+  "art-001768": {
+   "budget": 6144,
+   "agent_index_bytes": 4619,
+   "segments_showing": 3,
+   "by_segment": {
+    "art-001608": {
+     "lines": 12,
+     "shown": 12,
+     "hidden": 0
+    },
+    "art-001661": {
+     "lines": 18,
+     "shown": 18,
+     "hidden": 0
+    },
+    "art-001766": {
+     "lines": 12,
+     "shown": 12,
+     "hidden": 0
+    }
+   }
+  },
+  "art-003135": {
+   "budget": 6144,
+   "agent_index_bytes": 3437,
+   "segments_showing": 2,
+   "by_segment": {
+    "art-003062": {
+     "lines": 6,
+     "shown": 6,
+     "hidden": 0
+    },
+    "art-003133": {
+     "lines": 16,
+     "shown": 16,
+     "hidden": 0
+    }
+   }
+  }
+ },
+ "indexes-d2.json": {
+  "art-000648": {
+   "budget": 6144,
+   "agent_index_bytes": 6101,
+   "segments_showing": 4,
+   "by_segment": {
+    "art-000414": {
+     "lines": 15,
+     "shown": 12,
+     "hidden": 3
+    },
+    "art-000507": {
+     "lines": 9,
+     "shown": 9,
+     "hidden": 0
+    },
+    "art-000557": {
+     "lines": 17,
+     "shown": 12,
+     "hidden": 5
+    },
+    "art-000646": {
+     "lines": 12,
+     "shown": 12,
+     "hidden": 0
+    }
+   }
+  },
+  "art-001768": {
+   "budget": 6144,
+   "agent_index_bytes": 3247,
+   "segments_showing": 2,
+   "by_segment": {
+    "art-001608": {
+     "lines": 9,
+     "shown": 9,
+     "hidden": 0
+    },
+    "art-001766": {
+     "lines": 7,
+     "shown": 7,
+     "hidden": 0
+    }
+   },
+   "no_index_for": [
+    "art-001661"
+   ]
+  },
+  "art-003135": {
+   "budget": 6144,
+   "agent_index_bytes": 3743,
+   "segments_showing": 2,
+   "by_segment": {
+    "art-003062": {
+     "lines": 10,
+     "shown": 10,
+     "hidden": 0
+    },
+    "art-003133": {
+     "lines": 13,
+     "shown": 13,
+     "hidden": 0
+    }
+   }
+  }
+ },
+ "indexes-d3.json": {
+  "art-000648": {
+   "budget": 6144,
+   "agent_index_bytes": 6102,
+   "segments_showing": 4,
+   "by_segment": {
+    "art-000414": {
+     "lines": 15,
+     "shown": 15,
+     "hidden": 0
+    },
+    "art-000507": {
+     "lines": 18,
+     "shown": 18,
+     "hidden": 0
+    },
+    "art-000557": {
+     "lines": 26,
+     "shown": 20,
+     "hidden": 6
+    },
+    "art-000646": {
+     "lines": 9,
+     "shown": 9,
+     "hidden": 0
+    }
+   }
+  },
+  "art-001768": {
+   "budget": 6144,
+   "agent_index_bytes": 4343,
+   "segments_showing": 3,
+   "by_segment": {
+    "art-001608": {
+     "lines": 11,
+     "shown": 11,
+     "hidden": 0
+    },
+    "art-001661": {
+     "lines": 17,
+     "shown": 17,
+     "hidden": 0
+    },
+    "art-001766": {
+     "lines": 7,
+     "shown": 7,
+     "hidden": 0
+    }
+   }
+  },
+  "art-003135": {
+   "budget": 6144,
+   "agent_index_bytes": 3195,
+   "segments_showing": 2,
+   "by_segment": {
+    "art-003062": {
+     "lines": 8,
+     "shown": 8,
+     "hidden": 0
+    },
+    "art-003133": {
+     "lines": 14,
+     "shown": 14,
+     "hidden": 0
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AOS Memory Evaluation: A1 Re-Test with Fair-Share Header</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; background: #fff; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Evaluation: A1 Re-Test with Fair-Share Header Rendering</h1>
+    <p>The A1 follow-up (<code>memory-probe-recall-fix.html</code>) found that the header showed agent indexes newest first within 6 KB, so the oldest round-2 index became a bare pointer in every draw. aos code changed the header in <code>6c55bdb</code>: the 6 KB budget is now shared by whole lines, round by round, oldest segment first, and each index shows its first lines plus a "(+K more lines ...)" pointer. This re-test froze a new plan on that runtime (<code>d9e653e</code>): 27 fresh handoffs, 23 new unrecorded-fact probes written blind before any index existed, plus the 11 frozen probes, 9 answers per arm, graded blind by hand.</p>
+    <p><b>Primary result, significant:</b> on the 23 new probes A1 gave the main fact in <span class="good">177 of 207</span> answers (85.5%) against <b>146 of 207</b> (70.5%) for C (RecallOff). Difference +31, two-sided stratified permutation test <b>p &lt; 0.0001</b> (no permutation of 100,000 reached it).</p>
+    <ul>
+      <li>The gain sits where the index says the fact: on the 16 probes a <i>shown</i> line states in some draw, <span class="good">128/144 vs 96/144</span> (+32); on the other 7, <b>49/63 vs 50/63</b> (−1). A1 answers whose own draw's header showed a stating line: <span class="good">93 of 96</span> right; stating line hidden: 8 of 15.</li>
+      <li>All three draws scored the same: 59 of 69 each.</li>
+      <li>The follow-up's blind spot is fixed: <code>r2-verify-dir</code> <span class="good">9/9 vs 0/9</span> (follow-up 1/9 vs 1/9); <code>r5-register-counts</code> <span class="good">8/9 vs 0/9</span> (follow-up 4/9 vs 0/9).</li>
+    </ul>
+    <p><b>Harm check, no regression:</b> on the 8 recorded and recorded-wrong probes, main <b>68/72 vs 65/72</b> (Fisher p = 0.53), contra <b>18/72 vs 20/72</b> (p = 0.85); no probe flagged. Of the 74 A1 answers graded contra (46 new, 28 frozen; C had 69 + 45), <span class="bad">13</span> took the wrong statement from a shown index line: 7 from three lines that misstate their own range, 6 from lines that faithfully copy the agent's own wrong note (<code>r5-tir-guard</code>, where A1 still repeated the wrong entry less than C, 4/9 vs 8/9). 27 more were plausibly misled by a line that leaves a detail out.</p>
+    <p><b>Cost:</b> on the new probes A1 used fewer tokens (88.8K vs 116.2K per answer), fewer model calls (2.5 vs 3.1) and read half the bytes; the header carries about 5.2 KB of index. The 27 handoffs cost 4.94M tokens (183K each).</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Runtime:</b> <code>6c55bdb</code> (fair-share header), merged into this branch. Binaries built from the freeze commit <code>d9e653e</code> (<code>run.log</code> stamps hash <code>6e5368ca719e</code>). The header's agent-index budget is pinned to 6144 bytes in every handoff, probe and header check (<code>--header-index-bytes 6144</code>); every A1 sample records <code>agent_index_budget = 6144</code>.</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> via the OpenAI-compatible endpoint <code>phg-gpu.local:8080</code> (server behind it not recorded), temperature 0.6, top-p 0.95, 64K context, as in the earlier runs.</li>
+    <li><b>Arms:</b> C = own memory, RecallOff; A1 = own memory with recall a1 and the agent-written indexes of one draw. 9 answers per arm per probe; A1 takes 3 from each draw.</li>
+    <li><b>Probes:</b> 23 new unrecorded facts (11 first pass, 12 second pass; <code>selection.md</code>), written and frozen before any index existed; plus the 11 frozen own-memory probes (3 unrecorded, 6 recorded, 2 recorded-wrong).</li>
+    <li><b>Grading:</b> every answer hand-graded main / exact / contra by eight reader agents with the rubric, the archive and the checkpoint's working memory and live history, blind to arm (answers shuffled with <code>Random(20261031)</code>, arm, draw and reads stripped; <code>grading/BRIEF.md</code>). Grades were committed (<code>5f6d7ef</code>) before the key was opened.</li>
+    <li><b>Run:</b> 612 answers (207 + 99 per arm), none with a backend error; finished 2026-10-31T06:41Z.</li>
+  </ul>
+
+  <h3>Deviations, disclosed</h3>
+  <ul>
+    <li><b>G1 failed, so the draws were re-made.</b> <code>6c55bdb</code> changed how an index line holding several entries is parsed. The first freeze (<code>6d49bf7</code>) re-ran all 27 handoffs as its rule says. aos book asked, in a message that crossed it, to stop and report first; the run was stopped at 00:27:25 UTC, before any handoff step finished. aos book then chose the rule as written (option b), with the budget pinned and index recall graded on the new draws.</li>
+    <li><b>Two harness bugs, fixed before any probe was asked.</b> Seven new probes' regex patterns used <code>(?!\d)</code>, which Go's regexp rejects, so the probe file did not load; each became <code>(?:\D|$)</code>, which matches the same texts (probe file <code>5af3f5b442bb</code> → <code>e894f218de67</code>; only <code>expect</code> changed, and the regex score is secondary). The stop-rule check had a Python 3.10 syntax error and was rewritten. No Go code changed; the probe phase resumed only after checking that the gates had passed.</li>
+  </ul>
+
+  <h2>Step 1: Handoffs and Gates</h2>
+  <ul>
+    <li><b>G0 passed:</b> 26 of 27 handoffs left an index (art-000414 3/3, art-001661 3/3). The one miss: draw 1 of art-000642 ran a command first and never called <code>index_memory</code>. 17 handoffs had some lines rejected (36 range, 24 unlisted, 8 cap, 6 format); 17 were retried once.</li>
+    <li><b>G2 passed:</b> every indexed segment shows lines at every probe checkpoint; every header's budget is 6144.</li>
+    <li><b>G3 passed:</b> 21 of 23 new probes are range-covered by a shown line in some draw (need 5).</li>
+    <li>The live A1 headers showed exactly the line counts <code>headercheck</code> predicted, for every draw and checkpoint.</li>
+  </ul>
+  <div class="wrap"><table>
+    <tr><th>Draw</th><th>Checkpoint</th><th class="num">Index bytes in header</th><th>Lines shown / in index, per segment</th></tr>
+    <tr><td>d1</td><td>art-000648</td><td class="num">6133</td><td>414: 16/18, 507: 15/16, 557: 14/15, 646: no index</td></tr>
+    <tr><td>d2</td><td>art-000648</td><td class="num">6140</td><td>414: 14/18, 507: 13/14, 557: 13/20, 646: 13/21</td></tr>
+    <tr><td>d3</td><td>art-000648</td><td class="num">6142</td><td>414: 13/15, 507: 12/14, 557: 12/25, 646: 6/6</td></tr>
+    <tr><td>d1–d3</td><td>art-001768</td><td class="num">4612–4758</td><td>all lines shown</td></tr>
+    <tr><td>d1–d3</td><td>art-003135</td><td class="num">2919–3329</td><td>all lines shown</td></tr>
+  </table></div>
+  <p class="note">Only the round-2 checkpoint (four segments) exceeds the budget. There every index now shows its first 12–16 lines; under the follow-up's header, art-000414 showed none.</p>
+
+  <h2>Index Recall (graded before any answer was opened)</h2>
+  <p>For each new probe and draw, the index lines covering the truth message were graded <i>states</i> (the line says the fact), <i>points</i> (covers the range, does not say it) or <i>no</i>, and marked shown or hidden (<code>coverage_grades.json</code>, committed in <code>72ea5e9</code>).</p>
+  <div class="wrap"><table>
+    <tr><th></th><th class="num">d1</th><th class="num">d2</th><th class="num">d3</th><th class="num">some draw</th></tr>
+    <tr><td>A line states the fact</td><td class="num">11</td><td class="num">14</td><td class="num">12</td><td class="num">17 of 23</td></tr>
+    <tr><td>A <i>shown</i> line states the fact</td><td class="num">10</td><td class="num">12</td><td class="num">10</td><td class="num">16 of 23</td></tr>
+  </table></div>
+  <p>Not stated by a shown line in any draw: h-1608-3, h-1661-2, h-1661-3, h-1766-3, h-3133-1, h-414-1, h-646-3 (mostly minor values such as setup times). h-414-1's truth is #56, at the end of its segment; the header shows each index's first lines, so its only stating line (d1) is hidden.</p>
+  <p><b>Side result (not part of the re-test):</b> the follow-up's 27 stored draws, re-parsed offline under <code>6c55bdb</code>'s parser (<code>reparse/</code>, commit <code>ce01aa3</code>): 25 identical, 2 differ (d1 art-001608: 1 line into 12; d3 art-000507: 1 line into 18), with the same rejections and refusals in all 34 <code>index_memory</code> calls. Fact stated by a covering line in some draw: 16 of 23 under both parses; per draw 13, 12, 8 (old) and 13, 12, 10 (new); by a shown line 10, 11, 7 and 10, 11, 9. These old draws were not used.</p>
+
+  <h2>Primary Result</h2>
+  <p>Main score on the 23 new probes, stratified by probe, 100,000 permutations with <code>Random(20261031)</code>.</p>
+  <div class="wrap"><table>
+    <tr><th>Arm</th><th class="num">main</th><th class="num">exact</th><th class="num">contra</th></tr>
+    <tr><td>C (RecallOff)</td><td class="num">146 / 207</td><td class="num">132</td><td class="num">69</td></tr>
+    <tr><td>A1</td><td class="num">177 / 207</td><td class="num">135</td><td class="num">46</td></tr>
+  </table></div>
+  <p><b>Difference +31, p = 2.0e-5</b> (the smallest value 100,000 permutations can give). A1's exact rises less than main (+3): many A1 answers take the fact from a line and miss a detail the line leaves out (below).</p>
+  <div class="wrap"><table>
+    <tr><th>Probe</th><th class="num">C main/exact/contra</th><th class="num">A1 main/exact/contra</th><th>Index grade d1 d2 d3 (S = shown)</th><th class="num">A1 main by draw</th></tr>
+    <tr><td>h-414-1</td><td class="num">2/1/8</td><td class="num">2/1/8</td><td>states, points, points (none shown)</td><td class="num">1 1 0</td></tr>
+    <tr><td>h-414-2</td><td class="num">7/7/1</td><td class="num">9/9/0</td><td>pS sS pS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-414-3</td><td class="num">9/7/2</td><td class="num">9/8/1</td><td>sS s n</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-507-1</td><td class="num">0/0/9</td><td class="num good">9/1/7</td><td>sS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-507-2</td><td class="num">7/3/6</td><td class="num">9/7/2</td><td>sS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-557-1</td><td class="num">9/8/1</td><td class="num">9/9/0</td><td>pS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-557-2</td><td class="num">8/7/2</td><td class="num">9/9/0</td><td>sS sS s</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-557-3</td><td class="num">6/5/4</td><td class="num bad">4/2/5</td><td>sS s s</td><td class="num">3 0 1</td></tr>
+    <tr><td>h-646-1</td><td class="num">8/8/0</td><td class="num">9/3/1</td><td>n sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-646-2</td><td class="num">9/9/0</td><td class="num">8/8/1</td><td>n sS pS</td><td class="num">3 3 2</td></tr>
+    <tr><td>h-646-3</td><td class="num">9/9/0</td><td class="num">9/9/0</td><td>n p n</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-1608-1</td><td class="num">0/0/9</td><td class="num good">6/1/5</td><td>sS sS sS</td><td class="num">0 3 3</td></tr>
+    <tr><td>h-1608-2</td><td class="num">1/1/8</td><td class="num">3/3/6</td><td>pS pS sS</td><td class="num">0 0 3</td></tr>
+    <tr><td>h-1608-3</td><td class="num">9/8/1</td><td class="num">9/9/0</td><td>pS pS pS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-1661-1</td><td class="num">7/6/3</td><td class="num">9/9/0</td><td>sS sS n</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-1661-2</td><td class="num">6/6/2</td><td class="num">6/6/2</td><td>pS pS pS</td><td class="num">2 3 1</td></tr>
+    <tr><td>h-1661-3</td><td class="num">8/8/0</td><td class="num">8/6/2</td><td>pS pS pS</td><td class="num">3 3 2</td></tr>
+    <tr><td>h-1766-1</td><td class="num">1/1/8</td><td class="num good">9/3/3</td><td>sS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-1766-2</td><td class="num">8/8/1</td><td class="num">9/7/2</td><td>sS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-1766-3</td><td class="num">9/8/1</td><td class="num">8/8/0</td><td>pS pS n</td><td class="num">3 2 3</td></tr>
+    <tr><td>h-3062-1</td><td class="num">9/9/0</td><td class="num">9/9/0</td><td>pS sS sS</td><td class="num">3 3 3</td></tr>
+    <tr><td>h-3062-2</td><td class="num">7/7/0</td><td class="num">8/2/0</td><td>sS pS sS</td><td class="num">3 2 3</td></tr>
+    <tr><td>h-3133-1</td><td class="num">7/6/3</td><td class="num">7/6/1</td><td>pS pS pS</td><td class="num">2 3 2</td></tr>
+  </table></div>
+  <p class="note">Three probes carry most of the gain: h-507-1 (+9), h-1766-1 (+8), h-1608-1 (+6). In each, C mostly said the step succeeded or named a later event; A1's shown line said what failed. C answered 16 of the 23 probes at 7/9 or better, which caps the possible gain there.</p>
+
+  <h2>Secondary</h2>
+  <div class="wrap"><table>
+    <tr><th>Split (fixed before any probe call)</th><th class="num">probes</th><th class="num">A1 main</th><th class="num">C main</th><th class="num">diff</th><th class="num">p</th></tr>
+    <tr><td>Range-covered by a shown line in some draw</td><td class="num">21</td><td class="num">166/189</td><td class="num">135/189</td><td class="num">+31</td><td class="num">&lt;0.0001</td></tr>
+    <tr><td>Not range-covered by a shown line</td><td class="num">2</td><td class="num">11/18</td><td class="num">11/18</td><td class="num">0</td><td class="num">1.0</td></tr>
+    <tr><td>Stated by a shown line in some draw (hand grade)</td><td class="num">16</td><td class="num">128/144</td><td class="num">96/144</td><td class="num">+32</td><td class="num">&lt;0.0001</td></tr>
+    <tr><td>Not stated by a shown line</td><td class="num">7</td><td class="num">49/63</td><td class="num">50/63</td><td class="num">−1</td><td class="num">1.0</td></tr>
+    <tr><td>First-pass probes</td><td class="num">11</td><td class="num">83/99</td><td class="num">50/99</td><td class="num">+33</td><td class="num">&lt;0.0001</td></tr>
+    <tr><td>Second-pass probes</td><td class="num">12</td><td class="num">94/108</td><td class="num">96/108</td><td class="num">−2</td><td class="num">0.82</td></tr>
+  </table></div>
+  <p class="note">Descriptive; the p-values use the same permutation test. Second-pass probes ask for a secondary fact next to one held in working memory; C already answers 89% of them, so they test little.</p>
+  <p><b>A1 answers by their own draw's index grade</b> (new probes): stated by a shown line <span class="good">93/96</span>; stated by a hidden line 8/15; points 55/75; no covering line 21/21 (these are probes C also answers).</p>
+  <p><b>Per draw:</b> new probes 59/69 in each of d1, d2, d3; recorded probes 21, 24, 23 of 24.</p>
+  <p><b>Reading the truth:</b> C was right in 125 of 125 answers that read a range holding the truth message and in 21 of 82 that did not; A1 in 100 of 100 and 77 of 107. A1's gain is in answers that did not read.</p>
+
+  <h3>Continuity: the three frozen unrecorded probes</h3>
+  <div class="wrap"><table>
+    <tr><th>Probe</th><th class="num">C now (main/exact/contra)</th><th class="num">A1 now</th><th class="num">C follow-up</th><th class="num">A1 follow-up</th></tr>
+    <tr><td>r2-verify-dir</td><td class="num">0/0/9</td><td class="num good">9/7/2</td><td class="num">1/1/8</td><td class="num">1/1/8</td></tr>
+    <tr><td>r5-register-counts</td><td class="num">0/0/9</td><td class="num good">8/6/3</td><td class="num">0/0/9</td><td class="num">4/3/6</td></tr>
+    <tr><td>r8-sibling-pairs</td><td class="num">9/1/7</td><td class="num">8/2/5</td><td class="num">9/7/0</td><td class="num">9/9/0</td></tr>
+  </table></div>
+  <p class="note"><code>r2-verify-dir</code> is the case the header change was made for: its line (#37, "Operation not permitted") is now shown in every draw, and all 9 A1 answers took it from the header with no memory call. <code>r8-sibling-pairs</code>' contra counts are not comparable to the follow-up: this run's grader counted "my working memory lists it" (it does not) and a "round 7" attribution as contradicted; the follow-up's graders did not.</p>
+
+  <h2>Harm Check</h2>
+  <h3>Regression on the 8 recorded and recorded-wrong probes</h3>
+  <div class="wrap"><table>
+    <tr><th>Probe</th><th class="num">C main/exact/contra</th><th class="num">A1 main/exact/contra</th><th class="num">repeats wrong entry C / A1</th></tr>
+    <tr><td>r2-first-sah</td><td class="num">9/9/0</td><td class="num">9/9/0</td><td class="num">–</td></tr>
+    <tr><td>r2-root-exit</td><td class="num">9/8/1</td><td class="num">9/9/0</td><td class="num">–</td></tr>
+    <tr><td>r2-shadow-limit (recorded-wrong)</td><td class="num">9/8/1</td><td class="num">9/9/0</td><td class="num">0 / 0</td></tr>
+    <tr><td>r5-empty-base</td><td class="num">9/0/9</td><td class="num">9/1/8</td><td class="num">–</td></tr>
+    <tr><td>r5-entered-stack</td><td class="num">9/8/1</td><td class="num">9/7/2</td><td class="num">–</td></tr>
+    <tr><td>r5-tir-guard (recorded-wrong)</td><td class="num">2/1/8</td><td class="num">5/2/7</td><td class="num">8 / 4</td></tr>
+    <tr><td>r8-trace-share</td><td class="num">9/9/0</td><td class="num">9/9/0</td><td class="num">–</td></tr>
+    <tr><td>r8-small-node</td><td class="num">9/9/0</td><td class="num">9/8/1</td><td class="num">–</td></tr>
+    <tr><th>Pooled</th><th class="num">65 / 52 / 20</th><th class="num">68 / 54 / 18</th><th class="num">8 / 4</th></tr>
+  </table></div>
+  <p>Fisher two-sided, A1 against C: main p = 0.53, exact p = 0.85, contra p = 0.85. No probe has A1 main 3 or more below C. The follow-up's possible <code>r5-tir-guard</code> regression (6/9 vs 9/9) did not recur: this time A1 is ahead. <code>r5-empty-base</code>'s contra is high in both arms because this grader counted "shaders/ was nested too" as contradicted (#20, #74–75: only <code>include/</code> was).</p>
+
+  <h3>Answers that used an index line without reading what it cites</h3>
+  <ul>
+    <li><b>New probes:</b> of the 96 A1 answers whose header showed a line stating the fact, 66 never read a range holding the truth (64 made no memory call at all, 2 only searched). 63 of the 66 gave the main fact (48 with no contradicted detail, 15 with one); 3 were wrong.</li>
+    <li><b>Frozen unrecorded:</b> all 9 A1 <code>r2-verify-dir</code> answers and 8 of 9 <code>r5-register-counts</code> answers were right with no memory call; the fact is in no working memory or live history, only in the shown line.</li>
+    <li>A1 does not stop looking things up in general: when no shown line states the fact, it made no memory call in 19 of 111 answers (17%), against 46 of 207 (22%) for C.</li>
+  </ul>
+
+  <h3>Answers wrong because of an index line</h3>
+  <p>Every A1 answer graded contra (74) was checked by two reader agents against the exact lines its header showed and the archive (<code>grading/index-blame-*.json</code>).</p>
+  <div class="wrap"><table>
+    <tr><th>Wrong statement</th><th class="num">new</th><th class="num">frozen</th><th class="num">total</th></tr>
+    <tr><td>Taken from a shown line</td><td class="num">3</td><td class="num">10</td><td class="num">13</td></tr>
+    <tr><td>A shown line leaves a detail out or words it loosely, and plausibly led to it</td><td class="num">24</td><td class="num">3</td><td class="num">27</td></tr>
+    <tr><td>No basis in any shown line</td><td class="num">19</td><td class="num">15</td><td class="num">34</td></tr>
+  </table></div>
+  <p>The 13 "taken from a line" cases:</p>
+  <ul>
+    <li><b>3 lines that misstate their range (7 answers).</b> d1 art-003133 "30-30: ... line 163 shows round-7 REJECTED 32-byte sibling-pair ..." (#30 has no round; line 163 is round 5): 4 answers say "round 7". d2 art-001608 "24-24: wrong mesh path typo (missing reports/)" (the path also lacked <code>aos/</code>): 2 answers. d3 art-000646 "214-218: ... stack-based 93.37/96.61" (both are best times of two runs, not best/average): 1 answer.</li>
+    <li><b>Lines that faithfully keep the agent's own error (6 answers).</b> d1 and d3 art-001766 "78-78: ... ior 1.5 means Fresnel TIR guard never fires (dead branch)" repeat the wrong note at #67/#79, which is also in working memory. Even so, A1 repeated the wrong entry in 4 of 9 answers and C in 8 of 9.</li>
+  </ul>
+  <p>The 27 "partly" cases are mostly incomplete lines: "link error: transform_mesh missing from rewrite" without the file (7 of h-507-1's A1 answers then named the wrong file; all 9 still had the main fact, against 0/9 in C), "45.220" taken from goal-text lines when the writer-log line omits round 4's own 45.635 (6, h-1608-2), and a build-error line naming one of two errors (3, h-1766-1).</p>
+  <p><b>One probe where A1 did worse:</b> <code>h-557-3</code> (8x8 threadgroup time), 4/9 vs 6/9. Where the stating line was shown (d1), 3/3; where it was hidden (d2, d3), 1/6. Five of those six followed working memory's sweep list, which leaves out 8x8, and made no memory call, where 6 of 9 C answers searched and found it. The reviewers judged these errors as not coming from any shown line.</p>
+
+  <h2>Cost and Process</h2>
+  <div class="wrap"><table>
+    <tr><th>Arm, probes</th><th class="num">tokens / answer</th><th class="num">model calls</th><th class="num">memory reads</th><th class="num">searches</th><th class="num">bytes read</th><th class="num">index bytes in header</th></tr>
+    <tr><td>C, new</td><td class="num">116.2K</td><td class="num">3.09</td><td class="num">0.71</td><td class="num">1.29</td><td class="num">6198</td><td class="num">0</td></tr>
+    <tr><td>A1, new</td><td class="num">88.8K</td><td class="num">2.50</td><td class="num">0.55</td><td class="num">0.73</td><td class="num">3282</td><td class="num">5171</td></tr>
+    <tr><td>C, frozen</td><td class="num">47.2K</td><td class="num">1.24</td><td class="num">0.06</td><td class="num">0.12</td><td class="num">485</td><td class="num">0</td></tr>
+    <tr><td>A1, frozen</td><td class="num">41.0K</td><td class="num">1.22</td><td class="num">0.02</td><td class="num">0.01</td><td class="num">260</td><td class="num">4788</td></tr>
+  </table></div>
+  <p class="note">Handoffs: 4.94M tokens for 27 (mean 183K, 3.1 model calls). Regex score against the hand grade on the new probes: agrees on 203 of 207 answers in each arm (C regex 142 vs main 146; A1 175 vs 177).</p>
+
+  <h2>For aos code</h2>
+  <ul>
+    <li><b>First lines are not the same as the important lines.</b> Under the 6 KB budget, the round-2 checkpoint hides an index's last lines. h-414-1's truth (#56) and h-557-3's (#167 in d2/d3) sat in hidden lines; A1 was no better than C on the first and worse on the second. Choosing which lines to show (e.g. failures and outcomes first, or spreading the shown lines across the range) may matter more than the budget.</li>
+    <li><b>Index lines drop qualifiers.</b> "93.37/96.61" without "best", "transform_mesh missing from rewrite" without the file, "round-7" added where the source has no round. The handoff prompt could ask for the file, the unit and the measure for each number, and forbid attributions the range does not contain.</li>
+    <li><b>An index faithfully preserves the agent's own wrong conclusions</b> (<code>r5-tir-guard</code>). That is the working memory's problem too; an index line marked as the agent's conclusion, not an observation, might help.</li>
+  </ul>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li>One run of one task (pathtracer-bunny-phase3), one model, three checkpoints. The probes are facts this agent did not record; whether the gain holds on other tasks is untested.</li>
+    <li>The unit of the primary test is the probe, but the 23 probes cluster in 9 segments and 3 checkpoints, and the three draws come from the same handoff prompt.</li>
+    <li>Graders differ in strictness on side details: some counted a wrong round, a wrong cited source or a miscount as contra, others did not. Blindness means this falls on both arms alike, but contra and exact counts are less stable than main. Main is the primary measure.</li>
+    <li>The graders saw the probe notes, which state the truth and where it is recorded; they did not see arms, draws, reads or headers.</li>
+    <li>The index-blame review was done after unblinding (it concerns A1 only) by two reader agents; its "partly" category is a judgment call.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>memory-probe-recall-header/PLAN.md</code>: the frozen plan with its amendments.</li>
+    <li><code>run.sh</code>, <code>run.log</code>, <code>handoffs.jsonl</code>, <code>handoff_summary.json</code>, <code>indexes-d1..3.json</code>, <code>gate.log</code>, <code>header.json</code>, <code>gates.json</code>, <code>coverage.json/.md</code>, <code>coverage_grades.json</code>.</li>
+    <li><code>samples-*.jsonl</code>: all 612 answers. <code>grading/</code>: the brief, blind files, key, grades, archive text, shown lines, index-blame reviews.</li>
+    <li><code>primary.py</code> → <code>primary.json</code>; <code>analyze.py</code> → <code>analysis.json</code>; <code>harm.py</code> → <code>harm.json</code>, <code>harm.md</code>.</li>
+    <li><code>reparse/</code>, <code>coverage-oldparse.*</code>, <code>coverage-newparse.*</code>: the old-against-new parse side result.</li>
+  </ul>
+</body>
+</html>

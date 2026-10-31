@@ -1,0 +1,324 @@
+{
+ "h-414-1": {
+  "1": {
+   "grade": "states",
+   "note": "says copying fails because include/ and shaders/ must sit next to the binary"
+  },
+  "2": {
+   "grade": "points",
+   "note": "says it failed because shaders must sit next to the binary; not the header error"
+  },
+  "3": {
+   "grade": "no",
+   "note": ""
+  }
+ },
+ "h-414-2": {
+  "1": {
+   "grade": "points",
+   "note": "names the writer log's contents; no caustic figures"
+  },
+  "2": {
+   "grade": "states",
+   "note": "caustic mask mean 9.05/1185px"
+  },
+  "3": {
+   "grade": "states",
+   "note": "floor median 0.56, 1185 px, mean 9.05"
+  }
+ },
+ "h-507-1": {
+  "1": {
+   "grade": "states",
+   "note": "link error, transform_mesh missing"
+  },
+  "2": {
+   "grade": "states",
+   "note": "dropped transform_mesh"
+  },
+  "3": {
+   "grade": "states",
+   "note": "split line 83: link error transform_mesh missing"
+  }
+ },
+ "h-507-2": {
+  "1": {
+   "grade": "states",
+   "note": "PtVertex undeclared"
+  },
+  "2": {
+   "grade": "states",
+   "note": "dropped PtVertex from the shared header"
+  },
+  "3": {
+   "grade": "states",
+   "note": "split line 79: PtVertex missing from shared header"
+  }
+ },
+ "h-646-1": {
+  "1": {
+   "grade": "states",
+   "note": "'link_escapes' is a private member"
+  },
+  "2": {
+   "grade": "states",
+   "note": "link_escapes is private"
+  },
+  "3": {
+   "grade": "states",
+   "note": "link_escapes private, #208"
+  }
+ },
+ "h-1608-1": {
+  "1": {
+   "grade": "points",
+   "note": "split line 24-27 cites the render attempts; names the reference PFMs and md5, not the failure"
+  },
+  "2": {
+   "grade": "no",
+   "note": ""
+  },
+  "3": {
+   "grade": "no",
+   "note": ""
+  }
+ },
+ "h-1608-2": {
+  "1": {
+   "grade": "points",
+   "note": "split line 5: writer log tail, no round-4 time"
+  },
+  "2": {
+   "grade": "states",
+   "note": "round-4 final 45.635"
+  },
+  "3": {
+   "grade": "points",
+   "note": "writer log tail with timings; no value"
+  }
+ },
+ "h-1661-1": {
+  "1": {
+   "grade": "states",
+   "note": "bare params in pt_intersect_scene, must use scene.params->pad"
+  },
+  "2": {
+   "grade": "no",
+   "note": "draw 2 kept no index for the segment"
+  },
+  "3": {
+   "grade": "states",
+   "note": "undeclared 'params'"
+  }
+ },
+ "h-1766-1": {
+  "1": {
+   "grade": "states",
+   "note": "GpuMeshData::nodes still PtBvhNodeQ*"
+  },
+  "2": {
+   "grade": "states",
+   "note": "same"
+  },
+  "3": {
+   "grade": "states",
+   "note": "same"
+  }
+ },
+ "h-1766-2": {
+  "1": {
+   "grade": "states",
+   "note": "scene configs live at top level, not in scenes/"
+  },
+  "2": {
+   "grade": "no",
+   "note": ""
+  },
+  "3": {
+   "grade": "points",
+   "note": "listing shows scenes at top level; does not say a check used the wrong path"
+  }
+ },
+ "h-3062-1": {
+  "1": {
+   "grade": "no",
+   "note": "#9 line gives round-7 ledger, not the depth finding"
+  },
+  "2": {
+   "grade": "states",
+   "note": "BVH topology part of the estimator, MAX_DEPTH 16->20 changed alt-view PFM"
+  },
+  "3": {
+   "grade": "no",
+   "note": "#9 line is line counts; a #7 line states the finding but cites #7"
+  }
+ },
+ "h-414-3": {
+  "1": {
+   "grade": "states",
+   "note": "/tmp not writable (ppm error)"
+  },
+  "2": {
+   "grade": "states",
+   "note": "/tmp not writable"
+  },
+  "3": {
+   "grade": "states",
+   "note": "/tmp not writable (ppm error)"
+  }
+ },
+ "h-557-1": {
+  "1": {
+   "grade": "states",
+   "note": "avg=126.379"
+  },
+  "2": {
+   "grade": "points",
+   "note": "119.866/119.359, no average"
+  },
+  "3": {
+   "grade": "points",
+   "note": "best and gpu, no average"
+  }
+ },
+ "h-557-2": {
+  "1": {
+   "grade": "states",
+   "note": "gpu=100.887"
+  },
+  "2": {
+   "grade": "states",
+   "note": "gpu 100.887"
+  },
+  "3": {
+   "grade": "states",
+   "note": "gpu 100.887"
+  }
+ },
+ "h-557-3": {
+  "1": {
+   "grade": "states",
+   "note": "8x8=101.0"
+  },
+  "2": {
+   "grade": "states",
+   "note": "8x8=101.026"
+  },
+  "3": {
+   "grade": "states",
+   "note": "8x8=101.0"
+  }
+ },
+ "h-646-2": {
+  "1": {
+   "grade": "states",
+   "note": "93.366/103.183 and 96.614/100.692"
+  },
+  "2": {
+   "grade": "states",
+   "note": "same"
+  },
+  "3": {
+   "grade": "states",
+   "note": "same"
+  }
+ },
+ "h-646-3": {
+  "1": {
+   "grade": "points",
+   "note": "smoke OK, samples; no setup_ms"
+  },
+  "2": {
+   "grade": "points",
+   "note": "same"
+  },
+  "3": {
+   "grade": "points",
+   "note": "same"
+  }
+ },
+ "h-1608-3": {
+  "1": {
+   "grade": "points",
+   "note": "split line 24-27: no setup_ms"
+  },
+  "2": {
+   "grade": "no",
+   "note": ""
+  },
+  "3": {
+   "grade": "no",
+   "note": ""
+  }
+ },
+ "h-1661-2": {
+  "1": {
+   "grade": "points",
+   "note": "cost shares for 0,1,2,4,8; not PT_PROF=3"
+  },
+  "2": {
+   "grade": "no",
+   "note": "draw 2 kept no index for the segment"
+  },
+  "3": {
+   "grade": "points",
+   "note": "same as d1"
+  }
+ },
+ "h-1661-3": {
+  "1": {
+   "grade": "points",
+   "note": "render min/mean of both sides; no gpu_min"
+  },
+  "2": {
+   "grade": "no",
+   "note": "draw 2 kept no index for the segment"
+  },
+  "3": {
+   "grade": "points",
+   "note": "same"
+  }
+ },
+ "h-1766-3": {
+  "1": {
+   "grade": "points",
+   "note": "run printed samples; no setup_ms"
+  },
+  "2": {
+   "grade": "no",
+   "note": ""
+  },
+  "3": {
+   "grade": "points",
+   "note": "identity result; no setup_ms"
+  }
+ },
+ "h-3062-2": {
+  "1": {
+   "grade": "states",
+   "note": "10/10 pairs, mean -0.2925ms"
+  },
+  "2": {
+   "grade": "states",
+   "note": "10/10 vs r6 (-0.2925ms)"
+  },
+  "3": {
+   "grade": "no",
+   "note": "#7 line is the writer log tail; no head-to-head"
+  }
+ },
+ "h-3133-1": {
+  "1": {
+   "grade": "points",
+   "note": "combine gpu 0.420-0.425; no wall time"
+  },
+  "2": {
+   "grade": "points",
+   "note": "trace times; no wall time"
+  },
+  "3": {
+   "grade": "points",
+   "note": "trace times; no wall time"
+  }
+ }
+}

@@ -1,0 +1,1152 @@
+[
+  {
+    "probe": "tridata-order",
+    "memory": {
+      "n": 9,
+      "correct": 8,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 8,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.1111111111111112,
+        "min": 1,
+        "max": 2
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.1111111111111111,
+        "min": 0,
+        "max": 1
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 7,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 5.444444444444445,
+        "min": 3,
+        "max": 8
+      },
+      "bytes": {
+        "mean": 44241.666666666664,
+        "min": 26963,
+        "max": 82050
+      },
+      "searches": {
+        "mean": 1.7777777777777777,
+        "min": 1,
+        "max": 4
+      },
+      "reads": {
+        "mean": 2.6666666666666665,
+        "min": 1,
+        "max": 3
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "phase2": {
+      "n": 9,
+      "correct": 6,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 4.888888888888889,
+        "min": 4,
+        "max": 7
+      },
+      "bytes": {
+        "mean": 29556.333333333332,
+        "min": 6616,
+        "max": 34765
+      },
+      "searches": {
+        "mean": 1.3333333333333333,
+        "min": 1,
+        "max": 2
+      },
+      "reads": {
+        "mean": 2.5555555555555554,
+        "min": 1,
+        "max": 5
+      }
+    },
+    "p_vs_phase2": 0.5764705882352942,
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 0.9999999999999999
+  },
+  {
+    "probe": "tg-sweep",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 2.0,
+        "min": 1,
+        "max": 4
+      },
+      "bytes": {
+        "mean": 4298.666666666667,
+        "min": 0,
+        "max": 20774
+      },
+      "searches": {
+        "mean": 0.5555555555555556,
+        "min": 0,
+        "max": 2
+      },
+      "reads": {
+        "mean": 0.2222222222222222,
+        "min": 0,
+        "max": 1
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 2.6666666666666665,
+        "min": 1,
+        "max": 4
+      },
+      "bytes": {
+        "mean": 11824.333333333334,
+        "min": 0,
+        "max": 21932
+      },
+      "searches": {
+        "mean": 0.8888888888888888,
+        "min": 0,
+        "max": 2
+      },
+      "reads": {
+        "mean": 0.6666666666666666,
+        "min": 0,
+        "max": 1
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 4.666666666666667,
+        "min": 3,
+        "max": 6
+      },
+      "bytes": {
+        "mean": 19366.333333333332,
+        "min": 4407,
+        "max": 32147
+      },
+      "searches": {
+        "mean": 2.2222222222222223,
+        "min": 1,
+        "max": 4
+      },
+      "reads": {
+        "mean": 1.3333333333333333,
+        "min": 1,
+        "max": 2
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "phase2": {
+      "n": 3,
+      "correct": 3,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 4.333333333333333,
+        "min": 4,
+        "max": 5
+      },
+      "bytes": {
+        "mean": 19036.0,
+        "min": 13464,
+        "max": 22828
+      },
+      "searches": {
+        "mean": 2.3333333333333335,
+        "min": 2,
+        "max": 3
+      },
+      "reads": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      }
+    },
+    "p_vs_phase2": 1.0,
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  },
+  {
+    "probe": "leaf2-status",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.1111111111111112,
+        "min": 1,
+        "max": 2
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.6666666666666667,
+        "min": 1,
+        "max": 2
+      },
+      "bytes": {
+        "mean": 2549.0,
+        "min": 0,
+        "max": 4456
+      },
+      "searches": {
+        "mean": 0.6666666666666666,
+        "min": 0,
+        "max": 1
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "phase2": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.5555555555555556,
+        "min": 1,
+        "max": 3
+      },
+      "bytes": {
+        "mean": 2593.1111111111113,
+        "min": 0,
+        "max": 14034
+      },
+      "searches": {
+        "mean": 0.4444444444444444,
+        "min": 0,
+        "max": 1
+      },
+      "reads": {
+        "mean": 0.1111111111111111,
+        "min": 0,
+        "max": 1
+      }
+    },
+    "p_vs_phase2": 1.0,
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  },
+  {
+    "probe": "leaf2-speedup",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 8,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "bytes": {
+        "mean": 3550.5555555555557,
+        "min": 840,
+        "max": 4206
+      },
+      "searches": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "phase2": {
+      "n": 9,
+      "correct": 7,
+      "superseded": 0,
+      "off_topic": 1,
+      "errors": 0,
+      "steps": {
+        "mean": 3.111111111111111,
+        "min": 1,
+        "max": 9
+      },
+      "bytes": {
+        "mean": 6856.777777777777,
+        "min": 0,
+        "max": 33001
+      },
+      "searches": {
+        "mean": 1.2222222222222223,
+        "min": 0,
+        "max": 3
+      },
+      "reads": {
+        "mean": 0.2222222222222222,
+        "min": 0,
+        "max": 2
+      }
+    },
+    "p_vs_phase2": 0.47058823529411764,
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  },
+  {
+    "probe": "w4-first-ab",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "phase2": {
+      "n": 3,
+      "correct": 3,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_phase2": 1.0,
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  },
+  {
+    "probe": "leaf2-readopted",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 4,
+      "superseded": 5,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 0,
+      "superseded": 9,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_no-check-rule": 0.029411764705882353,
+    "p_vs_no-memory": 4.113533525298231e-05
+  },
+  {
+    "probe": "decide-leaf2-wide",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 5,
+      "superseded": 4,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.8888888888888888,
+        "min": 1,
+        "max": 3
+      },
+      "bytes": {
+        "mean": 3023.0,
+        "min": 0,
+        "max": 5746
+      },
+      "searches": {
+        "mean": 0.7777777777777778,
+        "min": 0,
+        "max": 1
+      },
+      "reads": {
+        "mean": 0.1111111111111111,
+        "min": 0,
+        "max": 1
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 0.08235294117647059
+  },
+  {
+    "probe": "wm-only-next",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 1,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.6666666666666667,
+        "min": 1,
+        "max": 3
+      },
+      "bytes": {
+        "mean": 2893.6666666666665,
+        "min": 0,
+        "max": 11342
+      },
+      "searches": {
+        "mean": 0.5555555555555556,
+        "min": 0,
+        "max": 2
+      },
+      "reads": {
+        "mean": 0.1111111111111111,
+        "min": 0,
+        "max": 1
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 0.00041135335252982314
+  },
+  {
+    "probe": "narrow-tree-wm",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.4444444444444444,
+        "min": 1,
+        "max": 5
+      },
+      "bytes": {
+        "mean": 330.0,
+        "min": 0,
+        "max": 2970
+      },
+      "searches": {
+        "mean": 0.3333333333333333,
+        "min": 0,
+        "max": 3
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 3.888888888888889,
+        "min": 1,
+        "max": 6
+      },
+      "bytes": {
+        "mean": 4813.111111111111,
+        "min": 0,
+        "max": 11734
+      },
+      "searches": {
+        "mean": 1.8888888888888888,
+        "min": 0,
+        "max": 3
+      },
+      "reads": {
+        "mean": 0.2222222222222222,
+        "min": 0,
+        "max": 1
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 6.777777777777778,
+        "min": 5,
+        "max": 9
+      },
+      "bytes": {
+        "mean": 14837.333333333334,
+        "min": 3629,
+        "max": 25130
+      },
+      "searches": {
+        "mean": 4.0,
+        "min": 3,
+        "max": 5
+      },
+      "reads": {
+        "mean": 0.7777777777777778,
+        "min": 0,
+        "max": 2
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  },
+  {
+    "probe": "narrow-tree-own",
+    "memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-check-rule": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "bytes": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "searches": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "reads": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "no-memory": {
+      "n": 9,
+      "correct": 9,
+      "superseded": 0,
+      "off_topic": 0,
+      "errors": 0,
+      "steps": {
+        "mean": 3.5555555555555554,
+        "min": 3,
+        "max": 6
+      },
+      "bytes": {
+        "mean": 11778.222222222223,
+        "min": 4692,
+        "max": 15687
+      },
+      "searches": {
+        "mean": 1.4444444444444444,
+        "min": 1,
+        "max": 3
+      },
+      "reads": {
+        "mean": 0.8888888888888888,
+        "min": 0,
+        "max": 2
+      },
+      "updates": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "p_vs_no-check-rule": 1.0,
+    "p_vs_no-memory": 1.0
+  }
+]

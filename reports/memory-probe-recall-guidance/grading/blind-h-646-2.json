@@ -1,0 +1,98 @@
+[
+ {
+  "gid": "g0008",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based A/B runs printed render_ms_avg=103.183 (first run, with render_ms_best=93.366 / gpu_ms_best=92.993) and render_ms_avg=100.692 (second run, render_ms_best=96.614 / gpu_ms_best=92.915). I know this because I just re-read the archived tool output: the A/B was one `run` call that built out/pt_snapshot_pre_stackless and looped `for i in 1 2` over `--benchmark 5` on scene-default at 512x512/64spp seed 1, and its stdout (message #216) contains exactly those two lines. For comparison, the stackless-Wald build measured in the immediately preceding call (#214) printed render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802, which is why the stackless variant was rejected and reverted (#217-#218). Note my earlier working-memory note summarized those runs only by their best times (93.4/96.6); the avg figures are 103.183 and 100.692."
+ },
+ {
+  "gid": "g0010",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "Answer: the two runs of the rebuilt stack-based snapshot (out/pt_snapshot_pre_stackless, built with the exact clang++ command and run with --scene-config ../../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5) printed:\n\n- run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993\n- run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915\n\nSo the two render_ms_avg values were 103.183 and 100.692 ms.\n\nHow I know: that A/B is in my session history at tool result #216 (the two lines above are verbatim from its stdout), with my note #215 explaining why I ran it twice — the stackless Wald traversal had just measured 102.084 best / 114.592 avg gpu 101.802 in #214, and since measurement noise on this machine is about ±5 ms I needed two identical-condition runs of the stack-based build for a fair comparison. That evidence led to note #217 and the revert of the stackless walk (#218), and I recorded it in working memory as measurements/round2-progress2 [evidence 202-236].\n\nContext on where the round stands since then: the near-first child-ordering change plus kLeafSize=1 brought the live source to render_ms_best=59.114 / gpu_ms_best=58.839 at 512x512/64spp seed 1 (best run; repeats 60.4-66.3), with bit-identical PFMs, versus the 109.656/109.397 gate."
+ },
+ {
+  "gid": "g0036",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "Answer: the two stack-based A/B runs printed render_ms_avg=103.183 (first run) and render_ms_avg=100.692 (second run).\n\nHow I know: I re-read the archived tool result at history message #216, which rebuilt the pre-stackless snapshot out/pt_snapshot_pre_stackless and then ran `--benchmark 5 --seed 1 --threads 8` on scene-default twice in a `for i in 1 2` loop. Its stdout was:\n- render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993 samples=16777216\n- render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915 samples=16777216\n\nSo the pair of bests was 93.366/96.614 (that is the '93.4/96.6' figure in my notes), while the requested averages were 103.183 and 100.692. The matched stackless run (#214) was 102.08 best / 114.59 avg, which is why the stack-based walk was kept. I also corrected my working memory to keep best and avg distinct."
+ },
+ {
+  "gid": "g0066",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based A/B runs printed render_ms_avg=103.183 (with render_ms_best=93.366, gpu_ms_best=92.993) and render_ms_avg=100.692 (with render_ms_best=96.614, gpu_ms_best=92.915).\n\nHow I know: those are the two 'render_ms_best=...' lines in the tool result at message #216, which is the run where I rebuilt out/pt_snapshot_pre_stackless (the 16x8 stack-based state) and benchmarked it twice under identical conditions to compare against the stackless Wald walk measured just before it at #214/#215 (102.08 best / 114.59 avg). One correction to my own working memory: the '93.4/96.6' pair I recorded there are the two BEST values, not best/avg — the avgs were 103.183 and 100.692."
+ },
+ {
+  "gid": "g0070",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based A/B runs (message #216, the A/B against the stackless Wald walk in #214) printed render_ms_avg=103.183 on the first run and render_ms_avg=100.692 on the second. Their full lines were: run 1 render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993, and run 2 render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915 (both 512x512, 64 spp, samples=16777216, threads_used=8). The stackless variant in the same round measured render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802 (#214), which is why it was rejected. I know these numbers because I just re-read them from my compacted history: search_memory on 'render_ms_avg' returned #216, which holds both benchmark lines from that two-run loop over ../ab_stack.pfm."
+ },
+ {
+  "gid": "g0128",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "Answer: the two stack-based (pre-stackless snapshot) runs printed render_ms_avg = 103.183 ms (run 1: render_ms_best 93.366 / gpu_ms_best 92.993) and render_ms_avg = 100.692 ms (run 2: render_ms_best 96.614 / gpu_ms_best 92.915), both at 512x512 / 64 spp, seed 1, threads_used=8, samples=16777216.\n\nHow I know: that A/B was a single `run` that looped the rebuilt stack-based binary twice over the same scene and grepped the benchmark line; its tool result (archive message #216, binary out/ab_stack.ppm / ab_stack.pfm) contains both lines verbatim. The paired stackless run (#214) printed render_ms_avg = 114.592 (best 102.084 / gpu 101.802), which is why the stackless walk was rejected and reverted to out/pt_snapshot_pre_stackless. These figures are also summarized in my working-memory entry measurements/round2-progress2 (evidence 202-236)."
+ },
+ {
+  "gid": "g0133",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two A/B runs of the rebuilt pre-stackless (stack-based, threadgroup 16x8) snapshot printed render_ms_avg=103.183 ms and render_ms_avg=100.692 ms.\n\nFull lines from that run (#216), each --benchmark 5 at 512x512/64spp, seed 1, 8 threads:\n1. render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993 samples=16777216\n2. render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915 samples=16777216\n\nHow I know: I rebuilt out/pt_snapshot_pre_stackless with the exact build command and looped the benchmark twice in one shell command (#215), and the tool result at #216 contains those two lines verbatim. The paired stackless-Wald measurement at #214 was render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802, which is why I judged stackless a ~9% regression and reverted to the stack-based walk (#217). Note the best-of-run numbers were 93.37 and 96.61 while the averages were the 103.18/100.69 pair above — the two are different columns, so I did not mix them up."
+ },
+ {
+  "gid": "g0215",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based runs of out/pt_snapshot_pre_stackless printed render_ms_avg = 103.183 ms and render_ms_avg = 100.692 ms (with render_ms_best = 93.366 / 96.614 ms and gpu_ms_best = 92.993 / 92.915 ms). I know this because that A/B was a single tool call at message #216 that compiled the snapshot and ran `--benchmark 5` twice in a loop, and its stdout shows both lines verbatim; the stackless candidate it was compared against printed render_ms_avg = 114.592 ms in the immediately preceding call (#214), which is why I reverted the stackless walk."
+ },
+ {
+  "gid": "g0227",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based runs of the pre-stackless snapshot (out/pt_snapshot_pre_stackless, built and run twice in one command, 512x512/64spp, seed 1, --benchmark 5, 8 threads) printed:\n\n- run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993\n- run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915\n\nSo the render_ms_avg values were 103.183 ms and 100.692 ms.\n\nHow I know: those lines are the verbatim stdout of the A/B run in tool result #216 (the command in #215), which I just re-read from my archived history rather than recomputing. For context, the stackless candidate measured in the same session (#214) was render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802, which is why the stackless walk was rejected and reverted.\n\nOne correction to my own earlier note: I had summarized that A/B as \"93.37/96.61\", but 96.61 was the second run's *best*, not an average — the averages are 103.183 and 100.692 as above. The conclusion is unchanged (stack-based beat stackless), and the current live kernel is far ahead of both: render_ms_best=59.114 gpu_ms_best=58.839 at the gate settings (~1.8x vs the 109.656/109.397 baseline)."
+ },
+ {
+  "gid": "g0235",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based (pre-stackless snapshot) runs in that A/B printed render_ms_avg=103.183 on the first run and render_ms_avg=100.692 on the second (both at 512x512, 64 spp, seed 1, 8 threads, best of 5 frames; their render_ms_best were 93.366 and 96.614, gpu_ms_best 92.993 and 92.915).\n\nHow I know: those two lines are the stdout of the single `run` action in my history at message #216, where I built out/pt_snapshot_pre_stackless with the exact build command and looped `for i in 1 2` over `./pathtracer --scene-config ../../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5`. The comparison run in #214 (the stackless walk in the live dir) had printed render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802, which is why I concluded stackless was a regression (~9% on best, ~14% on avg) and reverted the snapshot back into pathtracer/ in #217."
+ },
+ {
+  "gid": "g0283",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two runs printed render_ms_avg=103.183 and render_ms_avg=100.692 (with render_ms_best=93.366 / gpu_ms_best=92.993 on the first run and render_ms_best=96.614 / gpu_ms_best=92.915 on the second).\n\nHow I know: that A/B is archive message #216 — the command rebuilt out/pt_snapshot_pre_stackless with the exact build line and then looped `for i in 1 2` over `./pathtracer --scene-config ../../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5`, grepping render_ms_best; the captured stdout holds both full lines quoted above. For comparison, the stackless traversal measured in the same session (#214) printed render_ms_best=102.08 / render_ms_avg=114.59, which is why I concluded stackless was a ~9% best-case regression and reverted to the stack-based snapshot (#217, #218).\n\nNote on my working memory: the entry recorded those two runs as \"93.4/96.6\" — those are the render_ms_best figures; the avg figures are the 103.183 and 100.692 above."
+ },
+ {
+  "gid": "g0311",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based runs of out/pt_snapshot_pre_stackless printed render_ms_avg=103.183 and render_ms_avg=100.692 (with render_ms_best=93.366 / gpu_ms_best=92.993 and render_ms_best=96.614 / gpu_ms_best=92.915 respectively).\n\nHow I know: in that A/B I built the snapshot with the exact build command and ran `--benchmark 5 --seed 1 --spp 64 --threads 8` twice in one shell loop; tool result #216 holds both printed lines verbatim. For contrast, the stackless-Walk build it was compared against printed render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802 (tool result #214), which is why the stackless variant was judged a ~9% regression and reverted in #217. My working-memory entry round2-progress2 recorded these as \"93.4/96.6 best\" (the bests), so I re-read #214-#217 to quote the avg values exactly rather than from the summary."
+ },
+ {
+  "gid": "g0312",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two runs of the rebuilt pre-stackless (stack-based) snapshot printed:\n\n- run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993\n- run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915\n\nSo the two render_ms_avg values were 103.183 ms and 100.692 ms (both at 512x512, 64 spp, seed 1, --benchmark 5, threads_used=8).\n\nHow I know: this was history message #216, a single `run` that compiled out/pt_snapshot_pre_stackless with the exact build command and then looped `for i in 1 2` over `./pathtracer --scene-config ../../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5`. I just re-read messages 212-220 from my compacted archive to get the verbatim lines rather than rely on my note, which had only kept the best-of figures (93.4/96.6, gpu 92.9). For contrast, the stackless candidate it was compared against printed render_ms_best=102.084 render_ms_avg=114.592 (#214), which is what led to reverting the stackless walk. Note that in later runs on this machine the same kind of measurement drifts by roughly +/-5 ms, which is why I used repeated runs for every A/B."
+ },
+ {
+  "gid": "g0317",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "Answer: the two runs printed render_ms_avg=103.183 and render_ms_avg=100.692.\n\nHow I know: in the A/B I rebuilt the stack-based snapshot with the exact build command inside /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/out/pt_snapshot_pre_stackless and ran it twice in one shell loop (for i in 1 2; ... --seed 1 --threads 8 --spp 64 --benchmark 5). The captured stdout was:\n  run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993 ... samples=16777216\n  run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915 ... samples=16777216\nThat is history message #216, which I re-read from the archive just now (my notes and working memory only carried the best values 93.4/96.6 and gpu 92.9, so I checked the raw output for the averages).\n\nContext for the comparison: the stackless Wald traversal measured in the same A/B was render_ms_best=102.08 with render_ms_avg=114.59, i.e. ~9% worse on best and ~14ms worse on average, which is why I reverted to the stack-based version. Note the two stack-based averages (103.183, 100.692) are higher than their own bests (93.366, 96.614) because each run's average includes the first, warm-up frame; run-to-run noise on this machine is about +/-5ms.\n\nSince then round 2 improved further: near-first child ordering in the closest-hit traversal plus kLeafSize=1 now give render_ms_best=59.114 / gpu_ms_best=58.839 (repeats 60.4-66.3) at 512x512/64spp seed 1, bit-identical PFMs, vs the 109.656/109.397 gate (~1.8x). Remaining housekeeping: snapshot to pt_round_02 and append the writer-log entry."
+ },
+ {
+  "gid": "g0338",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two A/B runs of the rebuilt stack-based snapshot (out/pt_snapshot_pre_stackless, 512x512/64spp, seed 1, --benchmark 5, 8 host threads) printed:\n\n- run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993\n- run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915\n\nSo the two render_ms_avg values were 103.183 ms and 100.692 ms (mean ~101.9 ms), versus the stackless Wald build's 114.592 ms avg in the same session — which is why I judged stackless a regression and reverted it.\n\nHow I know: those are the literal stdout lines of my own benchmark call, history message #216 (the A/B loop I launched in #215 after seeing the stackless number 102.084/114.592 in #214); I just re-read messages 210-220 with read_memory to quote them exactly rather than from my summary note, which had compressed them as '93.4/96.6' (those are the bests, not the avgs)."
+ },
+ {
+  "gid": "g0343",
+  "probe": "h-646-2",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "answer": "The two stack-based runs of out/pt_snapshot_pre_stackless (both at 512x512, 64 spp, seed 1, --benchmark 5, --threads 8) printed:\n\n- run 1: render_ms_best=93.366 render_ms_avg=103.183 gpu_ms_best=92.993 samples=16777216\n- run 2: render_ms_best=96.614 render_ms_avg=100.692 gpu_ms_best=92.915 samples=16777216\n\nSo the two render_ms_avg values were 103.183 ms and 100.692 ms.\n\nHow I know: I read the archived tool output directly (message #216), which is the exact stdout of the loop `for i in 1 2; do ... --benchmark 5 ... | grep render_ms_best; done` run in out/pt_snapshot_pre_stackless. For reference, the stackless build it was compared against printed render_ms_best=102.084 render_ms_avg=114.592 gpu_ms_best=101.802 (#214), which is why the stackless walk was reverted (#217-#218)."
+ }
+]

@@ -1,0 +1,405 @@
+[
+  {
+    "id": "tridata-order",
+    "kind": "archive",
+    "checkpoint": "art-001084",
+    "question": "Earlier in round 3 you tried storing TriData in tree (leaf-emission) order instead of the original triangle order. What did it measure, and what did you decide?",
+    "topic": "(?i)(tri ?data|tree.order|emission)",
+    "expect": "(?i)\\bwash\\b|no win|no (real |measurable )?(gain|speedup)|(inside|within) (the )?[~±0-9% -]*session(-to-session)? (noise|drift)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "Phase 1/2 probe, question and patterns unchanged; working memory as in 74510b7's phase-3 probes."
+  },
+  {
+    "id": "tg-sweep",
+    "kind": "summary",
+    "checkpoint": "art-001084",
+    "question": "Which threadgroup size did your round-3 threadgroup sweep settle on, and what did the deciding A/B measure?",
+    "topic": "(?i)(threadgroup|\\bTG)",
+    "expect": "(?i)(\\bTG ?=? ?4\\b|4 ?x ?4|threadgroup size (of )?4\\b|PT_TG=4)",
+    "reject": "(?i)(settled on|kept|chose|use[sd]?|adopted) (TG ?=? ?2|2 ?x ?2)\\b",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "Phase 1/2 probe, question and patterns unchanged; working memory as in 74510b7's phase-3 probes."
+  },
+  {
+    "id": "leaf2-status",
+    "kind": "superseded",
+    "checkpoint": "art-001084",
+    "question": "Is leaf2 (two triangles per BVH leaf) adopted in pathtracer/ right now? Why or why not?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
+    "expect": "(?i)(not adopted|isn't adopted|is not in|rejected|reverted|biased|bug|invalid|dropped|a loss|lost|slower|wash)",
+    "reject": "(?i)(\\byes\\b[^.]{0,60}\\badopted|leaf2 is (currently )?adopted|leaf2 is (the )?current)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "Phase 1/2 probe, question and patterns unchanged; working memory as in 74510b7's phase-3 probes."
+  },
+  {
+    "id": "leaf2-speedup",
+    "kind": "superseded",
+    "checkpoint": "art-001084",
+    "question": "In round 3, did leaf2 (two triangles per BVH leaf) give a real speedup? Should pathtracer/ use it?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
+    "expect": "(?i)(\\bbiased\\b|non-?convergent|dropp(ed|ing) (about |roughly |~)?(half|triangles|geometry)|triangles? (was|were) (silently )?dropped|second triangle[^.]{0,80}dropped|missing (about |roughly |~)?(half|triangles)|missed geometry|0\\.79|0\\.7946|buggy build|real (numerical )?(bug|defect))",
+    "reject": "(?i)(\\byes\\b[,.]? (it|leaf2) (did|was|gave|is)|should (re-?)?adopt (it|leaf2)|re-?adopt leaf2|(adoption|adopted version) was lost)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "Phase 1/2 probe, question and patterns unchanged; working memory as in 74510b7's phase-3 probes."
+  },
+  {
+    "id": "w4-first-ab",
+    "kind": "live",
+    "checkpoint": "art-001084",
+    "question": "What did the first A/B of the 4-wide BVH (w4) against the current build measure, before you shrank BVH_STACK?",
+    "topic": "(?i)(w4|4-wide|four-wide)",
+    "expect": "(?i)(8 ?%|49\\.5|45\\.9|slower)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "Phase 1/2 probe, question and patterns unchanged; working memory as in 74510b7's phase-3 probes."
+  },
+  {
+    "id": "leaf2-readopted",
+    "kind": "superseded",
+    "checkpoint": "art-001094",
+    "question": "Is leaf2 (two triangles per BVH leaf) a real speedup, and should pathtracer/ keep it?",
+    "topic": "(?i)(leaf2|two triangles|2 triangles)",
+    "expect": "(?i)(\\bbiased\\b|non-?convergent|dropp(ed|ing) (about |roughly |~)?(half|triangles|geometry)|triangles? (was|were) (silently )?dropped|second triangle[^.]{0,80}dropped|missing (about |roughly |~)?(half|triangles)|missed geometry|0\\.79|0\\.7946|buggy build|real (numerical )?(bug|defect))",
+    "reject": "(?i)(should keep (it|leaf2)|keep leaf2\\b|leaf2 is a real (speedup|win)|confirmed (huge )?win|\\byes\\b[,.:;—-]*\\s*(it is|leaf2 is|it's|keep))",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "From 74510b7 (written by aos code), unchanged."
+  },
+  {
+    "id": "decide-leaf2-wide",
+    "kind": "decision",
+    "checkpoint": "art-001084",
+    "question": "Proposed next experiment: two triangles per leaf on the current 64-byte wide-node tree. Do you run it next? Decide, and say why.",
+    "topic": "(?i)(leaf ?2|two triangles|2 triangles|2-tri)",
+    "expect": "(?i)\\b(no|skip|decline|not run|won't run|will not run|do not run|don't run|not worth)\\b|already (been )?(tried|measured|tested|rejected|ruled out)",
+    "reject": "(?i)\\byes\\b[,.:;—-]*\\s*(i('ll| will)|run|let's)|i('ll| will) run it|run it next|worth (re-?)?running",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      }
+    ],
+    "note": "From 74510b7 (written by aos code), unchanged."
+  },
+  {
+    "id": "wm-only-next",
+    "kind": "working-memory",
+    "checkpoint": "art-001084",
+    "question": "If the 4-wide BVH (w4) does not pay off, which BVH experiment is next on your list?",
+    "topic": "(?i)(w4|4-wide|bvh|node|next)",
+    "expect": "(?i)(quantiz|qnode|16-bit|16 bit)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "2 triangles per leaf on the 64-byte wide tree: the 33.5 ms 'win' was a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); the fixed build is a wash vs R02 (49.8 vs 49.7) and loses to wide leaf-1 (44.3-46.4)",
+        "evidence": "232-248"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      },
+      {
+        "section": "next",
+        "key": "after w4",
+        "content": "if w4 does not beat wide1, try 16-bit quantized child bounds in the 64-byte wide node (QNODE16): smaller nodes, more children per cache line"
+      }
+    ],
+    "note": "Synthetic: the 'next' entry is not from the run. No message of pid-000009 through art-001084 (archive or live) mentions quantized, QNODE, 16-bit or half bounds, so the answer is only in working memory. Under --no-working-memory it should score about 0; that is the check that the answer is not elsewhere."
+  },
+  {
+    "id": "narrow-tree-wm",
+    "kind": "conflict",
+    "checkpoint": "art-001942",
+    "question": "One of your earlier notes says leaf2 (two triangles per BVH leaf) 'helped the old 32-byte narrow tree'. Is that right? Did leaf2 ever give a real speedup over one triangle per leaf, on any node layout?",
+    "topic": "(?i)(leaf ?2|two triangles|2 triangles|narrow|32-byte)",
+    "expect": "(?i)((\\bno\\b|\\bnot\\b|never|n't)[^.]{0,80}(help|faster|speed|win|gain|improv|right|correct|true)|\\bbug\\b|buggy|dropp(ed|ing)|biased|0\\.79|missed geometry|leaf ?1 (was |is )?(faster|won|best|fastest)|55\\.4|56\\.6|\\bwrong\\b|incorrect|mistaken)",
+    "reject": "(?i)(^\\W*(yes\\b|that'?s right|that is (right|correct))|\\byes\\b[,.:;—-]*\\s*(it|leaf ?2|that)\\b[^.]{0,40}\\b(did|helped|gave|was|is)\\b)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "leaf2 (2 triangles per leaf) never gave a real speedup over 1 triangle per leaf on any node layout. Round 2's leaf-size sweep on the narrow tree had leaf 1 fastest (avg 55.4 vs leaf 2 56.6 ms). Round 3's 33.5 ms leaf2 'win' on the 64-byte wide tree came from a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); fixed, leaf2 was a wash vs R02 (49.8 vs 49.7) and lost to wide leaf 1 (44.3-46.4).",
+        "evidence": "art-001056"
+      }
+    ],
+    "note": "Round-4 writer pid-000012 at its last checkpoint. Its archive holds the later, wrong claim: art-001816 message index 19 (#407), a read of pathtracer_writer_log.txt lines 157-161, '(Explains why leaf2 helped the old 32-byte narrow tree.)'. Its own history never holds the bug finding; the right fact is only in working memory, modelled on art-001056 msgs 46-62 (#232-#248 of pid-000009). The evidence art-001056 is pid-000009's segment, which update_memory would refuse for pid-000012 and read_memory cannot read: this models a working memory handed over from the previous writer (design doc, Open questions)."
+  },
+  {
+    "id": "narrow-tree-own",
+    "kind": "conflict",
+    "checkpoint": "art-001222",
+    "question": "One of your earlier notes says leaf2 (two triangles per BVH leaf) 'helped the old 32-byte narrow tree'. Is that right? Did leaf2 ever give a real speedup over one triangle per leaf, on any node layout?",
+    "topic": "(?i)(leaf ?2|two triangles|2 triangles|narrow|32-byte)",
+    "expect": "(?i)((\\bno\\b|\\bnot\\b|never|n't)[^.]{0,80}(help|faster|speed|win|gain|improv|right|correct|true)|\\bbug\\b|buggy|dropp(ed|ing)|biased|0\\.79|missed geometry|leaf ?1 (was |is )?(faster|won|best|fastest)|55\\.4|56\\.6|\\bwrong\\b|incorrect|mistaken)",
+    "reject": "(?i)(^\\W*(yes\\b|that'?s right|that is (right|correct))|\\byes\\b[,.:;—-]*\\s*(it|leaf ?2|that)\\b[^.]{0,40}\\b(did|helped|gave|was|is)\\b)",
+    "working_memory": [
+      {
+        "section": "decisions",
+        "key": "bvh layout",
+        "content": "WIDE1 adopted: 64-byte wide nodes, one triangle per leaf; ~45.5 ms vs R02 ~50.7 (~10%)",
+        "evidence": "248-250"
+      },
+      {
+        "section": "decisions",
+        "key": "threadgroup",
+        "content": "TG4 kept: interleaved TG4 45.3 vs TG2 47.0 ms; the blocked sweep that favored TG2 was slot-order bias",
+        "evidence": "275-280"
+      },
+      {
+        "section": "rejected",
+        "key": "tridata tree order",
+        "content": "TriData in leaf-emission order: 3x5 means best 47.1 vs 44.9, then 3x10 means best 43.1 vs 44.3, avg 48.9 vs 48.2: no win, inside session noise; reverted",
+        "evidence": "101-115"
+      },
+      {
+        "section": "rejected",
+        "key": "ilp2",
+        "content": "2 pixels per thread: 57-64 ms vs wide1 44.9-48.9, a loss (register pressure)",
+        "evidence": "264-266"
+      },
+      {
+        "section": "rejected",
+        "key": "leaf2",
+        "content": "leaf2 (2 triangles per leaf) never gave a real speedup over 1 triangle per leaf on any node layout. Round 2's leaf-size sweep on the narrow tree had leaf 1 fastest (avg 55.4 vs leaf 2 56.6 ms). Round 3's 33.5 ms leaf2 'win' on the 64-byte wide tree came from a bug that dropped the second triangle of every leaf (RMSE 0.79 vs 0.476); fixed, leaf2 was a wash vs R02 (49.8 vs 49.7) and lost to wide leaf 1 (44.3-46.4).",
+        "evidence": "232-248"
+      }
+    ],
+    "note": "Round-3 writer pid-000009 after its last compaction. The right fact is in its own archive (#232-#248 in art-001056, #330-#340 in art-001127), the wrong claim is archived later (#408 in art-001220) and is also in live history (the writer-log append, live messages 10-11). Working memory holds the right one with evidence 232-248. Harder than narrow-tree-wm: the wrong claim is in live history too."
+  }
+]

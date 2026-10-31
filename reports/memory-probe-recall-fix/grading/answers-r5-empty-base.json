@@ -1,0 +1,146 @@
+[
+ {
+  "arm": "C",
+  "sample": 1,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 baseline in ab_r4/ was missing its shader sources, so newLibraryWithSource failed at startup and the program aborted before it could run any frame \u2014 which is why it printed nothing (no error line, no benchmark line) while the candidate next to it ran fine.\n\nHow the files went missing: the host reads the .metal files from the shaders directory next to the binary, but when I staged the baseline I used `cp -R pathtracer/include ab_r4/include` (and the same for shaders) with the destination directory already existing. cp -R then nests instead of merging, creating ab_r4/include/include and ab_r4/shaders/shaders, so the expected flat layout was empty. The silent failure was the giveaway \u2014 the harness skipped any invocation that produced no render_ms_best line, so the base simply contributed no rows until I checked ab_r4/include directly and fixed the copy. That is why my working memory now says to always verify the baseline binary actually prints a benchmark line before trusting an A/B run."
+ },
+ {
+  "arm": "C",
+  "sample": 2,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "The frozen round-4 base binary printed no benchmark line because it could not find its Metal sources, so shader compilation failed at startup and the render aborted before any timing was printed.\n\nCause: the program compiles its shaders at startup with newLibraryWithSource, reading the shaders directory located next to the executable. When I froze the round-4 candidate into the A/B directory, my `cp -R` copied a directory onto an existing destination, which nests instead of merging \u2014 the tree came out as ab_r4/shaders/shaders/*.metal (and the same for include/include). The base binary therefore looked next to itself, found no .metal files, and its pipeline creation failed silently in the sense that the benchmark path just produced no output line, so every A/B round against it recorded nothing.\n\nHow I know: I caught it while setting up the round-5 A/B harness (my notes at messages 75-86, recorded in working memory as the round5-refs entry): the base side of the harness produced empty result files, I inspected the frozen directory layout, saw the doubled include/include and shaders/shaders levels, re-copied the files flat next to the binary, and the base then printed a normal benchmark line (and reproduced the 45ms-era timings). That is also why my standing rule now is to always verify the base binary prints a benchmark line before trusting an A/B run."
+ },
+ {
+  "arm": "C",
+  "sample": 3,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen baseline's shaders were not where the host looks for them, so it failed shader compilation at setup and exited before ever rendering a frame (hence no 'render_ms_best=...' line).\n\nDetail: the program has no offline .metallib (Xcode's `metal` compiler isn't installed), so at startup it reads the .metal sources from the `shaders` directory next to the binary and compiles them with newLibraryWithSource. When I froze round 4 I copied the tree with `cp -R pathtracer/include ab_r4/` and `cp -R pathtracer/shaders ab_r4/`; because the destination directories already existed, cp -R nested them, producing ab_r4/include/include and ab_r4/shaders/shaders/*.metal. The binary then found no kernels, newLibraryWithSource failed, setup aborted, and stdout had no benchmark line \u2014 which silently made every A/B 'round' record nothing for the base side until I noticed the base output was empty.\n\nHow I know: it is recorded in my round-5 working memory entry 'round5-refs' (evidence messages 75-86), which states exactly this \u2014 the cp -R nesting bug produced nested include/include and a silent shader-compile failure of the base \u2014 along with the standing rule I added from it: always verify the base binary prints a benchmark line before trusting an A/B run. The fix was to copy the files flat (contents directly into ab_r4/include and ab_r4/shaders), after which the baseline printed its line (~43-45ms at 512x512/64spp) and the harness worked."
+ },
+ {
+  "arm": "C",
+  "sample": 4,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 binary could not find its Metal sources, so it failed at startup before rendering anything and therefore printed no benchmark line. The host reads shaders from the `shaders/` directory next to the binary and compiles them with newLibraryWithSource (Xcode's offline metal compiler is unavailable), and my snapshot copy used `cp -R <dir> <target>/`, which nests instead of merging \u2014 the files landed in `ab_r4/include/include/...` and `ab_r4/shaders/shaders/...`, leaving `ab_r4/shaders/` empty of .metal files. newLibraryWithSource then returned an error, setup bailed out, and the run produced no output line at all (which is why the first A/B against that base silently compared against nothing). How I know: this is recorded in my round-5 working memory entry 'round5-refs' (evidence messages 75-86), where I noted the cp -R nesting bug, the silent shader-compile failure of the base, and the rule I adopted afterwards \u2014 always verify the base binary prints a benchmark line before trusting an A/B, and copy snapshot contents flat next to the binary (as I did again when preserving the plane-filter candidate in _p/, verified with ls in message 243)."
+ },
+ {
+  "arm": "C",
+  "sample": 5,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 baseline in ab_r4/ had no usable shaders directory next to its binary, so its startup shader compilation (MTLDevice newLibraryWithSource reads shaders/*.metal from the directory beside the executable) failed, pipeline state creation failed, no frames were ever dispatched, and the program exited without printing the render_ms_best line \u2014 silently, because the failure went to stderr and my harness piped stderr away and just took the last stdout line.\n\nWhy the directory was wrong: I copied the round-4 tree with `cp -R pathtracer/shaders ab_r4/shaders` when ab_r4/shaders already existed, which nests the source instead of replacing it (ab_r4/shaders/shaders/*.metal, and likewise include/include), so the expected path was empty. The fix was to place include/ and shaders/ flat next to ab_r4/pathtracer, and I now always check that the baseline itself prints a benchmark line before trusting an A/B run against it \u2014 an empty baseline file would otherwise be scored as an infinite win for the candidate."
+ },
+ {
+  "arm": "C",
+  "sample": 6,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 base had no readable shader sources, so it died before rendering.\n\nI had frozen the round-4 binary into a scratch directory (ab_r4/) and copied its include/ and shaders/ next to it so MTLDevice newLibraryWithSource could find the .metal files at runtime (the program reads shaders from the directory next to the binary). Because the destination directories already existed, `cp -R pathtracer/include ab_r4/include` nested them: the files landed in ab_r4/include/include and ab_r4/shaders/shaders. The host therefore could not read the .metal sources, shader compilation failed, and the run aborted before any frame was rendered \u2014 so it printed no 'render_ms_best=...' line at all. Since my A/B harness silently skips invocations with no benchmark line, a broken base would have looked like 'no data' rather than an error, which is why the lesson was recorded: always verify the base binary prints a benchmark line before trusting an A/B comparison. I fixed it by copying the file contents flat (cp _b/include/*.hpp .../include/ style) and re-checking the base's output line."
+ },
+ {
+  "arm": "C",
+  "sample": 7,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 baseline never got its Metal shaders, so it failed at startup before rendering anything. When I froze the round-4 binary into the A/B directory I copied the include/ and shaders/ directories next to it with `cp -R`; because the destination directories already existed, `cp -R` nested them (shaders/shaders/*.metal, include/include/*.hpp) instead of merging. The program reads its .metal sources from the shaders directory beside the binary and compiles them with newLibraryWithSource, so it found no shaders, the library compile failed, and the run aborted before any frame \u2014 hence no benchmark line at all (and no obvious error, which is why the base looked silently broken). I found it by inspecting the frozen directory layout after the base produced empty output, then re-copied the files flat and added a rule to my harness/notes: always verify the baseline binary prints a benchmark line before trusting an A/B comparison (my _abn.sh now drops any invocation whose output has no render_ms_best). This is recorded in my working memory entry round5-refs, evidence messages 75-86."
+ },
+ {
+  "arm": "C",
+  "sample": 8,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: my snapshot of the round-4 reference binary was broken, not the binary itself. I had copied the round-4 tree into ab_r4/ with `cp -R pathtracer/include ab_r4/include` (and the same for shaders/) after those directories already existed, so cp nested them as ab_r4/include/include and ab_r4/shaders/shaders. The host reads its Metal sources from the shaders directory next to the binary at startup, so with that directory missing MTLDevice newLibraryWithSource failed and the program aborted during setup before ever dispatching a frame \u2014 hence no 'render_ms_best=...' line at all, and no obvious error in the captured stdout (the failure surfaced as a shader-compile/validation message on stderr that my `tail -1` of stdout discarded). Once I moved the files flat (ab_r4/shaders/*.metal next to ab_r4/pathtracer) the base printed its benchmark line again and the A/B numbers became meaningful. That is why my working memory now says to always verify the base binary prints a benchmark line before trusting an interleaved A/B run."
+ },
+ {
+  "arm": "C",
+  "sample": 9,
+  "draw": null,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 base's shader sources were not where the host looks for them. When I froze the round-4 binary into the A/B directory I copied its include/ and shaders/ with `cp -R`, and because the destination directories already existed the copy nested them (shaders/shaders/*.metal, include/include/*.hpp). The program compiles its Metal kernels at startup with newLibraryWithSource by reading the .metal files from the shaders directory next to the binary, so it found nothing, shader compilation silently failed, no pipeline state was created, and the benchmark loop emitted no line at all \u2014 the binary just printed nothing useful instead of 'render_ms_best=...'.\n\nHow I know: it is recorded in my round-5 working memory entry 'round5-refs' (evidence messages 75-86), which notes exactly this \u2014 'cp -R nesting bug produced nested include/include and a silent shader-compile failure of the base \u2014 always verify the base prints a benchmark line'. The fix was to copy the files flat (contents into the existing directories) and, as a standing guard, to check that the base binary prints a benchmark line before trusting any A/B comparison against it."
+ },
+ {
+  "arm": "A1",
+  "sample": 1,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 baseline was not actually a self-contained copy. I created it with `cp -R pathtracer/include ab_r4/` (and the same for shaders/) when ab_r4/ already existed, and `cp -R` of a directory onto an existing directory nests it \u2014 the result was ab_r4/include/include/... and ab_r4/shaders/shaders/..., so no shaders/*.metal sat next to the ab_r4/pathtracer binary. The host reads its MSL sources from the shaders directory beside the executable at startup, so newLibraryWithSource failed, pipeline creation failed, and the program exited before printing any benchmark line \u2014 silently, because the failure was on stderr and my A/B harness discarded stderr and only parsed the last stdout line, so the base simply contributed no samples instead of erroring.\n\nHow I know: I diagnosed it at the time (archive messages 68-76) by running the frozen base directly and seeing the shader-compile failure with an empty stdout, then confirming the nested include/include and shaders/shaders layout with ls. I fixed it by copying the file contents flat (include/*.hpp and shaders/*.metal directly under ab_r4/) and re-ran the base, which then printed a proper benchmark line; I also recorded the rule in my working memory to always verify the A/B base prints a benchmark line before trusting a comparison. Note this is distinct from the later _p/ snapshot, where I deliberately used the flat `cp -R dir target` form into a fresh directory and verified with ls that no nesting occurred."
+ },
+ {
+  "arm": "A1",
+  "sample": 2,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 baseline in ab_r4/ was not actually a round-4 build \u2014 it silently failed to compile its shaders at startup, so it exited before printing anything. The reason was a copy mistake: I froze the snapshot with `cp -R pathtracer/include ab_r4/include`, and because ab_r4/include already existed, cp nested the tree as ab_r4/include/include. The host reads shaders from the directory next to the binary and the program compiles them against the headers it ships, so the base ran with the OLD round-3 header layout while carrying round-4 shaders; the mismatched struct definitions made newLibraryWithSource fail (shader compile error) and the benchmark line was never emitted. I found it by noticing the base produced empty output while the candidate produced a line, then inspecting ab_r4/include (seeing include/include) and the shader-compile error in stderr. Fix: rebuild the frozen base with a fresh flat copy of include/ and shaders/ next to the binary, and add a sanity check \u2014 never trust an A/B pair whose base does not print a render_ms_best line. That check is now part of my round-5 harness notes (evidence: writer history messages 68-76, and the round5-refs working-memory entry)."
+ },
+ {
+  "arm": "A1",
+  "sample": 3,
+  "draw": 1,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen base copy was malformed, so it failed to compile its shaders at startup and exited before printing anything. When I copied the round-4 snapshot into ab_r4 with `cp -R pt_round_04/include ab_r4/include`, the destination directory already existed, so cp nested it as ab_r4/include/include/*.hpp and left ab_r4/include itself empty. The host reads shaders from the shaders directory next to the binary and compiles them with newLibraryWithSource against the headers it includes; the base binary therefore picked up a stale/round-3 header layout, the Metal source failed to compile, and the run produced no benchmark line \u2014 which at first looked like the base being infinitely slow in the A/B harness. I caught it by checking the directory tree and by running the base manually (it printed a shader-compile/validation failure instead of a render line), then rebuilt the base with a fresh flat copy of include/ and shaders/ next to the binary and verified it printed a normal 'render_ms_best=...' line before trusting any A/B numbers. That check became a standing rule in my notes: always verify the base binary prints a benchmark line before comparing against it."
+ },
+ {
+  "arm": "A1",
+  "sample": 4,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen base had no shaders where the program looks for them, so its Metal shader compile failed and it never got to render a frame \u2014 and the failure was silent, which is why it looked like \"no benchmark line\" instead of an error.\n\nDetail: the host layer compiles its kernels at startup with newLibraryWithSource from the shaders directory next to the binary (Xcode's offline metal compiler isn't installed). When I froze the round-4 binary into the A/B directory I copied include/ and shaders/ with `cp -R` into destinations that already existed, which nests instead of merging \u2014 producing shaders/shaders/*.metal and include/include/*.hpp. The program then found no .metal files, newLibraryWithSource returned nil, pipeline creation failed, and the benchmark loop printed nothing (the harness skipped any invocation without a parsable render_ms_best, so the base just contributed no rows).\n\nHow I know: it's recorded in my working memory entry round5-refs (evidence messages 75-86), where I noted the cp -R nesting bug and the lesson \"always verify the base prints a benchmark line\". Since then I check the flat layout with ls (e.g. ls _p/include showing pt_bvh.hpp directly, not a nested include/) and I confirm the base binary emits a render_ms_best= line before trusting any A/B result."
+ },
+ {
+  "arm": "A1",
+  "sample": 5,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: a directory-nesting bug in how I froze the round-4 baseline, which made its GPU shader compile fail silently at startup, so it never reached the render loop and printed no benchmark line.\n\nDetails. The program has no offline Metal compilation: at startup it reads its kernels from the `shaders/` directory next to the binary and compiles them with MTLDevice newLibraryWithSource. When I copied the round-4 snapshot to make the frozen A/B base (ab_r4/pathtracer plus its include/ and shaders/), I used `cp -R src_dir dst_dir` with a destination that already existed, which nests instead of merging: the files landed in `shaders/shaders/*.metal` (and `include/include/*.hpp`). The host therefore found no shader sources next to the binary, newLibraryWithSource returned nil, pipeline-state creation failed, and the program exited before tracing \u2014 no error surfaced in the benchmark output I was grepping, so the base simply contributed no `render_ms_best=...` line and its side of the A/B looked empty/absurd.\n\nHow I know: it is recorded in my round-5 working memory entry (key round5-refs, evidence messages 75-86), which states exactly this \u2014 \"cp -R nesting bug produced nested include/include and a silent shader-compile failure of the base \u2014 always verify the base prints a benchmark line\". I confirmed it by listing the frozen directory (the nested subdirectory) and by the fact that the same binary rendered normally when run from the intact snapshot directory. Since then I always (a) copy flat into the destination and (b) sanity-check that the baseline binary prints a benchmark line before trusting any A/B numbers."
+ },
+ {
+  "arm": "A1",
+  "sample": 6,
+  "draw": 2,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen round-4 binary had no shaders where it looks for them, so its Metal library failed to compile at startup and the run produced no benchmark line. The program compiles its .metal sources at launch with newLibraryWithSource from the shaders/ directory next to the binary, and a failed pipeline creation makes it bail before rendering \u2014 silently, with no timing line.\n\nWhy the directory was wrong: when I froze the round-4 binary into the A/B base directory I copied the support folders with `cp -R pathtracer/include ab_r4/` (and likewise for shaders). Because the destination already contained a directory of that name, cp -R nested it as include/include and shaders/shaders, leaving the frozen binary with no shaders/*.metal at the path it reads. The fix was to copy the contents flat (cp -R pathtracer/shaders/. ab_r4/shaders/ or cp pathtracer/shaders/*.metal ab_r4/shaders/), after which the base printed its benchmark line normally.\n\nHow I know: this is recorded in my round-5 working memory entry 'round5-refs' (evidence messages 75-86), which notes the cp -R nesting bug producing nested include/include and a silent shader-compile failure of the base, and the standing rule I derived from it \u2014 always verify the A/B base actually prints a benchmark line before trusting a comparison, since a base that renders nothing otherwise looks like a huge win for the candidate."
+ },
+ {
+  "arm": "A1",
+  "sample": 7,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen baseline directory ab_r4 was malformed by a `cp -R` nesting bug. I copied round-4's include/ and shaders/ into ab_r4 when those subdirectories already existed, so cp -R created ab_r4/include/include and ab_r4/shaders/shaders instead of overwriting the files. The program reads its Metal sources from a `shaders` directory next to the binary at startup, so it found the stale round-3 headers/files at the top level and failed to compile its shader library \u2014 the run aborted during setup and printed no benchmark line at all. Because my A/B harness discards invocations that produce no parsable line, the base side of the comparison silently came back empty, which is what made it look like the baseline had stopped working.\n\nHow I know: I checked ab_r4/include and ab_r4/shaders and saw the doubled include/include and shaders/shaders layout (history entries #68-72), rebuilt ab_r4 flat from pt_round_04 (same binary md5), and confirmed it then printed a normal 'render_ms_best=... gpu_ms_best=...' line. The lesson is recorded in my working memory: after freezing a baseline, always verify it actually prints a benchmark line before using it as an A/B base."
+ },
+ {
+  "arm": "A1",
+  "sample": 8,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the frozen baseline's shader directory was malformed, so the base binary failed at startup (Metal shader compile) and never reached a frame, hence no benchmark line.\n\nDetail: when I created the round-4 reference copy at ab_r4/, I used `cp -R pathtracer/include ab_r4/` while ab_r4/include already existed, which silently nested it as ab_r4/include/include. The result was a directory holding a stale round-3 header set at the top level plus the round-4 kernels, and the host reads its .metal sources from the shaders/include layout next to the binary \u2014 so newLibraryWithSource failed and the program aborted before printing anything. I only noticed because the base side of the A/B produced empty output lines instead of timings; after rebuilding ab_r4 flat from pt_round_04 and confirming it prints a benchmark line, I re-ran the comparison (base min 43.315 / mean 45.632 vs candidate 45.025 / 46.563, which is how the glass micro-optimization got rejected).\n\nHow I know: it is recorded in my round-5 history (messages #68-76) and in my working-memory entry \"round5-refs\", which states the rule I derived from it \u2014 always verify the base binary prints a benchmark line before trusting an A/B, and beware `cp -R` nesting when the destination directory already exists."
+ },
+ {
+  "arm": "A1",
+  "sample": 9,
+  "draw": 3,
+  "steps": 1,
+  "memory_reads": 0,
+  "answer": "Cause: the A/B baseline directory ab_r4 was not actually a clean copy of round 4. I created it with `cp -R pt_round_04 ab_r4` while ab_r4 already existed, and on macOS that nests the source inside the destination, producing ab_r4/include/include (and ab_r4/shaders/shaders). The host reads its Metal sources from `shaders/` next to the binary, so it found the stale round-3 headers in ab_r4/include while the shaders in ab_r4/shaders were the round-4 ones; the mismatch made MTLDevice newLibraryWithSource fail at startup, so the program aborted before rendering and printed nothing \u2014 my harness silently dropped those runs (it skips rounds whose output line is empty), which is why the base looked like it produced \"no benchmark line\".\n\nHow I know: I diagnosed it by running the base binary directly and seeing the shader-compile failure, then listing ab_r4 and finding the doubled include/include, shaders/shaders directories [#68-76]. The fix was to rebuild ab_r4 flat from pt_round_04 (copying the contents, not the directory) and to add a guard so the harness only accepts a base that actually prints a benchmark line; I recorded this as a standing rule in my working memory: always verify the A/B base prints a benchmark line before trusting a comparison [#76, round5-refs entry, evidence 75-86]."
+ }
+]

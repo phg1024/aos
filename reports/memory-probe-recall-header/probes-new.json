@@ -1,0 +1,218 @@
+[
+  {
+    "id": "h-414-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "Early in round 2 you tried to save a round-1 reference render by copying the round-1 binary into the out/ folder and running it from there. Did that run produce the reference image? If not, what error did it print?",
+    "topic": "(?i)(reference|round.?1|cop(y|ied)|out/|pathtracer_r1|r1_default|shader|header|error)",
+    "expect": "(?i)(shared (shader )?header|(cannot|could ?n[o']t|can'?t|unable to|failed to) (read|find|load|open)[^.]{0,30}header|header[^.]{0,40}(not found|missing|unreadable|not readable|could ?n[o']t be (read|found))|metal init error)",
+    "reject": "(?i)^\\W*yes\\b",
+    "note": "Truth: #56 'metal init error: cannot read shared shader header' (and 'shasum: out/r1_default.pfm: No such file'). Not in the checkpoint's working memory (art-000643) or live history (checked: 'shared shader header', 'shader header', 'cannot read', 'init error', pathtracer_r1, r1_default)."
+  },
+  {
+    "id": "h-414-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "At the start of round 2 you read the round-1 writer log. It recorded a caustic check on the 64 spp default render. How bright was the caustic compared with the floor?",
+    "topic": "(?i)(caustic|luminance|floor|bright)",
+    "expect": "(?i)(9\\.05|\\b16 ?(x|×|times)|sixteen|1185|1,185)",
+    "note": "Truth: #31 (round-1 writer log) 'floor median luminance 0.56, pixels >= 3x median 1185 ... with mean luminance 9.05, i.e. ~16x the floor'. Not in the checkpoint's working memory (art-000643) or live history (checked: 9.05, 1185, 0.56, luminance, 3.66, 3499; '16x' occurs only as threadgroup shapes such as 16x8). The writer log is on disk, so the probed agent can also re-read it."
+  },
+  {
+    "id": "h-507-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "During round-2 attempt 1 (binned SAH build with the packed triangle table), once the sources compiled, did the build link? If not, what failed?",
+    "topic": "(?i)(link|build|symbol|transform_mesh|compile)",
+    "expect": "(?i)(transform_mesh|undefined symbol|symbols? not found|linker (error|fail|command failed))",
+    "reject": "(?i)(^\\W*yes\\b|linked (cleanly|fine|successfully))",
+    "note": "Truth: #83 'Undefined symbols for architecture arm64: \"pt::transform_mesh(pt::Mesh&, float, float const*)\" ... linker command failed with exit code 1'. Not in the checkpoint's working memory (art-000643) or live history (checked: transform_mesh, 'Undefined symbol', linker, 'ld:', 'link error')."
+  },
+  {
+    "id": "h-507-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round-2 attempt 1 (binned SAH, 32-byte nodes, packed triangle soup), did the very first build after the host-side rewrite compile? If not, what was the compiler error?",
+    "topic": "(?i)(compile|build|error|undeclared|type|vertex)",
+    "expect": "(?i)(PtVertex|vertex (struct|type)[^.]{0,40}(undeclared|unknown|missing|removed|dropped|not declared)|(removed|dropped|deleted)[^.]{0,40}vertex)",
+    "reject": "(?i)^\\W*yes\\b",
+    "note": "Truth: #79 \"include/pt_mesh.hpp:14:17: error: use of undeclared identifier 'PtVertex'\" plus 'unknown type name PtVertex' in pt_bvh.cpp and pt_mesh.cpp. Not in the checkpoint's working memory (art-000643) or live history (checked: PtVertex, undeclared, 'unknown type', pt_mesh.hpp)."
+  },
+  {
+    "id": "h-646-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2 your first stackless-traversal build hung the GPU because the host binary was stale: the host build had failed. What was the compiler error in that failed build?",
+    "topic": "(?i)(compile|error|build|escape|private|stale)",
+    "expect": "(?i)(link_escapes|\\bprivate\\b|access (control|specifier)|not (public|accessible))",
+    "note": "Truth: #208 \"src/pt_bvh.cpp:216:13: error: 'link_escapes' is a private member of 'pt::(anonymous namespace)::BvhBuilder'\". The checkpoint's working memory (art-000643, round2-progress2 (h)) says only that 'a failed compile left a stale ./pathtracer binary', not why it failed. Not in live history (checked: link_escapes, 'private member', private)."
+  },
+  {
+    "id": "h-1608-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "At the start of round 5, your first attempt to render the round-4 reference images (default, alt-view, caustic-closeup) produced no files. Why?",
+    "topic": "(?i)(reference|render|r4|round.?4|mesh|path|file)",
+    "expect": "(?i)((mesh|obj|bunny)[^.]{0,60}(path|cannot open|could ?n[o']t (open|find|load)|not found|missing|wrong)|wrong[^.]{0,30}(mesh|obj|path)|cannot open mesh|aos/reports)",
+    "note": "Truth: #24 'mesh error: cannot open mesh: /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj' three times, 'ls: out/r4_*: No such file' (the path lacks aos/reports/; #27 reran with the right path). Not in the checkpoint's working memory (art-001763, which holds only the correct mesh path) or live history (checked: 'cannot open mesh', 'mesh error', 'Code/rasterizer-bunny', 'mesh path')."
+  },
+  {
+    "id": "h-1608-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+    "topic": "(?i)(round.?4|benchmark|render_ms|ms\\b|millisecond)",
+    "expect": "(?i)45\\.6(?:35|4|3)?(?:\\D|$)",
+    "reject": "(?i)45\\.(607|35)\\b",
+    "note": "Truth: #5 (writer log tail) 'round 4 (pt_round_04): render_ms_best=45.635 render_ms_avg=46.957 gpu_ms_best=45.349 ... round 3 (ab_r3): render_ms_best=47.828 ... 8/8 interleaved pairs favoured round 4 ... Speedup 1.074x over round 3's verified 49.020ms'. Not in the checkpoint's working memory (art-001763) or live history (checked: 45.635, 47.828, 1.074, 2.403, 8/8, 'round 4 ('; '45.6' occurs only as 45.607, the entered-stack mean). The writer log is on disk, so the probed agent can also re-read it."
+  },
+  {
+    "id": "h-1661-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "In round 5, when you first ran the PT_PROF cost-share sweep with the scratch profiling build in _prof/, it printed no timings. What was wrong?",
+    "topic": "(?i)(prof|profil|compile|shader|error|params)",
+    "expect": "(?i)(undeclared|params(\\.pad)?[^.]{0,40}(not (declared|defined|in scope)|unknown|no local)|scene\\.params|shader (compile|compilation)[^.]{0,30}(error|fail)|compil(e|ation) (error|fail)|fail(ed|s)? to compile)",
+    "note": "Truth: #54 \"metal init error: shader compile failed: program_source:615:10: error: use of undeclared identifier 'params'\" (the PT_PROF bit-2 guard in pt_intersect_scene; #55 changed it to scene.params->pad). Not in the checkpoint's working memory (art-001763, round5-cost-shares gives only the results) or live history (checked: undeclared, program_source, 'shader compile failed'; 'params.pad' occurs once, in the memory's description of the bitmask)."
+  },
+  {
+    "id": "h-1766-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "In round 5, when you first built the child-pair 32-byte block layout, did it compile? If not, what was the error?",
+    "topic": "(?i)(compile|build|error|type|child|pair|node)",
+    "expect": "(?i)(PtBvhNodeQ|PtBvhNode\\b|GpuMeshData|metal_host|pt_main|unknown type|cannot initialize|type mismatch|(old|previous|16.byte|quantized) (node )?type|still (typed|used|expected|referenced))",
+    "reject": "(?i)(^\\W*yes\\b|compiled (cleanly|fine|first time))",
+    "note": "Truth: #153 \"pt_main.cpp:165:37: error: cannot initialize a member subobject of type 'const PtBvhNode *' with an rvalue of type ... 'PtBvhChild *'\" and \"pt_metal_host.hpp:18:11: error: unknown type name 'PtBvhNodeQ'\". Not in the checkpoint's working memory (art-001763) or live history (checked: 'cannot initialize', 'unknown type', 'did you mean'; PtBvhNodeQ and GpuMeshData appear in live history only as the current reverted code)."
+  },
+  {
+    "id": "h-1766-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "During the round-5 child-pair experiment, one byte-identity check of the default scene against out/r4_default.pfm reported a difference. What caused it?",
+    "topic": "(?i)(scene|path|pfm|identi|diff|config)",
+    "expect": "(?i)(scenes/|scene[^.]{0,40}(path|cannot open|could ?n[o']t (open|find)|not found|missing|wrong)|wrong[^.]{0,30}(scene|path|config)|no (pfm|image|output)|cannot open scene)",
+    "reject": "(?i)(layout|child.pair|tie.?break)[^.]{0,40}(changed|altered|broke) the (image|pfm|output)",
+    "note": "Truth: #159 'scene error: cannot open scene config: scenes/scene-default.json' and 'cmp: out/cp_default.pfm: No such file or directory' -> DIFF_DEFAULT; the rerun with the right path (#163) was IDENTICAL_DEFAULT. Not in the checkpoint's working memory (art-001763) or live history (checked: 'scenes/', 'cannot open scene', 'scene error', DIFF_DEFAULT)."
+  },
+  {
+    "id": "h-3062-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-003135",
+    "question": "In the round-7 section of the writer log you read at the start of round 8, what happened when the BVH's maximum depth was raised from 16 to 20, and what did the round-7 writer conclude about changing the tree's shape?",
+    "topic": "(?i)(depth|tree|bvh|topolog|estimator|identical|image|pfm)",
+    "expect": "(?i)(1022129|(pfm|image|output|alt.?view)[^.]{0,40}(chang|differ|not (bit|byte).identical)|(chang|differ)[^.]{0,30}(pfm|image|output|alt.?view)|tie.?break|test order|topolog|part of the (frozen )?estimator)",
+    "reject": "(?i)(no (effect|change) (on|to) the (image|pfm|output)|stayed (bit|byte).identical|(was|is|remained) (bit|byte).identical)",
+    "note": "Truth: #9 (writer log, Round 7) 'CRITICAL FINDING - the BVH TOPOLOGY IS PART OF THE FROZEN ESTIMATOR. Raising PT_BVH_MAX_DEPTH from 16 to 20 (nodes 81521 -> 123159 ...) changes the scene-alt-view PFM at byte 1022129 ... the cause is the tie-break ... rules out the whole class of tree-quality ideas'. Not in the checkpoint's working memory (art-003130) or live history (checked: 1022129, 123159, topology, MAX_DEPTH, tie-break, 'test order', 'tree quality', 'leaf size', 'deeper tree'). The writer log is on disk, so the probed agent can also re-read it."
+  },
+  {
+    "id": "h-414-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "At the start of round 2 you benchmarked the rebuilt round-1 code with its image outputs pointed at /tmp (base.ppm / base.pfm). Did that run write its image? If not, what did it report?",
+    "topic": "(?i)(/tmp|image|output|write|ppm|pfm|sandbox|error)",
+    "expect": "(?i)(cannot open output|ppm error|(could ?n[o']t|cannot|can'?t|unable to|failed to|not (allowed|permitted) to) (write|open|create)[^.]{0,40}(/tmp|output|ppm|image|file)|(/tmp|output)[^.]{0,40}(not writable|denied|not permitted|blocked|sandbox))",
+    "reject": "(?i)^\\W*yes\\b",
+    "note": "Truth: #43 'ppm error: cannot open output: /tmp/base.ppm' (exit 1; the benchmark line itself printed). Second pass, secondary fact (the primary, render_ms_best=105.947, is in working memory). Not in the checkpoint's working memory (art-000643) or live history (checked: /tmp, 'cannot open output', 'ppm error', base.ppm)."
+  },
+  {
+    "id": "h-557-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+    "topic": "(?i)(avg|average|stack|depth|ms\\b)",
+    "expect": "(?i)126\\.(3|4)",
+    "reject": "(?i)126\\.0\\b",
+    "note": "Truth: #125 'render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359'. Second pass, secondary fact (the best time, 119.9, is in working memory round2-progress (b)). Not in the checkpoint's working memory (art-000643) or live history (checked: 126.379, 126.4, 119.359; '126.' occurs only as the root-exit 'avg 126.0')."
+  },
+  {
+    "id": "h-557-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+    "topic": "(?i)(gpu|fast.?math|ms\\b)",
+    "expect": "(?i)100\\.(887|89|9)(?:\\D|$)",
+    "note": "Truth: #133 'render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887'. Second pass, secondary fact (render_ms_best 101.15 is in working memory round2-progress (c)). Not in the checkpoint's working memory (art-000643) or live history (checked: 100.887, 116.465, 116.5)."
+  },
+  {
+    "id": "h-557-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+    "topic": "(?i)(8x8|threadgroup|shape|ms\\b)",
+    "expect": "(?i)101\\.0(26|3)?(?:\\D|$)|\\b101 ?ms",
+    "note": "Truth: #167 'TG=8x8 render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761'. Second pass, secondary fact (the sweep's winner 16x8 and the other shapes are in working memory round2-progress (e); 8x8 is not). Not in the checkpoint's working memory (art-000643) or live history (checked: 8x8, 101.026, '101.0', 100.761)."
+  },
+  {
+    "id": "h-646-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+    "topic": "(?i)(avg|average|stack|snapshot|ms\\b)",
+    "expect": "(?i)(103\\.(183|18|2)(?:\\D|$)|100\\.(692|69|7)(?:\\D|$))",
+    "note": "Truth: #216 run 1 'render_ms_best=93.366 render_ms_avg=103.183', run 2 'render_ms_best=96.614 render_ms_avg=100.692'. Second pass, secondary fact (the best times 93.4/96.6 and gpu 92.9 are in working memory round2-progress2 (f)). Not in the checkpoint's working memory (art-000643) or live history (checked: 103.183, 100.692, 103.2, 100.7)."
+  },
+  {
+    "id": "h-646-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-000648",
+    "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+    "topic": "(?i)(setup|smoke|merged|ms\\b)",
+    "expect": "(?i)180\\.8|\\b181 ?ms",
+    "note": "Truth: #245 'setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597'. Second pass, secondary fact (the run passing is implied by working memory round2-final). Not in the checkpoint's working memory (art-000643) or live history (checked: 180.8, 1048576, merged.ppm)."
+  },
+  {
+    "id": "h-1608-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+    "topic": "(?i)(setup|reference|default|ms\\b)",
+    "expect": "(?i)318(\\.0)?(?:\\D|$)",
+    "note": "Truth: #27 'setup_ms=318.0 ... bvh_nodes=81521' for the default scene (alt-view 269.6, caustic-closeup 272.2). Second pass, secondary fact. Not in the checkpoint's working memory (art-001763) or live history (checked: 318.0, 'setup_ms=318', 269.6, 272.2; setup_ms occurs in live history only with other values)."
+  },
+  {
+    "id": "h-1661-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "In round 5's PT_PROF cost-share sweep, what did the combined setting PT_PROF=3 (no shadow walk and no mesh closest-hit) measure?",
+    "topic": "(?i)(prof|shadow|mesh|ms\\b|gpu|render)",
+    "expect": "(?i)(0\\.4[56]|0\\.62)",
+    "note": "Truth: #58 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Second pass, secondary fact (settings 0, 1, 2, 4, 8 are in working memory round5-cost-shares; 3 is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 0.458, 0.623, 'PT_PROF=3')."
+  },
+  {
+    "id": "h-1661-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+    "topic": "(?i)(gpu|min|refract|glass|candidate|ms\\b)",
+    "expect": "(?i)44\\.7(57|6)?(?:\\D|$)",
+    "note": "Truth: #78 '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' (base gpu_min 43.026). Second pass, secondary fact (render_min/mean of both sides are in working memory round5-glass-and-stack; gpu_min is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 44.757, 44.76, 43.026)."
+  },
+  {
+    "id": "h-1766-3",
+    "kind": "unrecorded",
+    "checkpoint": "art-001768",
+    "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+    "topic": "(?i)(setup|child|pair|default|ms\\b)",
+    "expect": "(?i)245\\.7|\\b246 ?ms",
+    "note": "Truth: #163 'setup_ms=245.7 samples=16777216 ... threads_used=4 ... bvh_nodes=81521' then IDENTICAL_DEFAULT. Second pass, secondary fact (the identity result is in working memory round5-childpair). Not in the checkpoint's working memory (art-001763) or live history (checked: 245.7; setup_ms occurs in live history only with other values)."
+  },
+  {
+    "id": "h-3062-2",
+    "kind": "unrecorded",
+    "checkpoint": "art-003135",
+    "question": "In the round-7 benchmark record (pathtracer_benchmark.json) you read at the start of round 8, how did round 7 do against round 6 when the two were run interleaved on the same quiet machine?",
+    "topic": "(?i)(round.?6|interleav|pair|faster|win|ratio)",
+    "expect": "(?i)(10 ?/ ?10|10 of (the )?10|ten of (the )?ten|31\\.00|31\\.26|1\\.008|0\\.9[0-9]? ?%|0\\.8[0-9]? ?%|0\\.29)",
+    "note": "Truth: #7 'candidate_wins: 10/10', 'mean_delta_render_ms: -0.2925', verdict '31.003 ms vs 31.264 ms best-of-50-frames (1.008x, 10/10 pair wins)'. Second pass, secondary fact (the verified 30.984 / 3.539x is in working memory r8-baseline-and-harness). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.003, 31.264, 1.008, 10/10, 0.2925, 36.283, 1.171)."
+  },
+  {
+    "id": "h-3133-1",
+    "kind": "unrecorded",
+    "checkpoint": "art-003135",
+    "question": "In the round-8 E0 profile (scratch _r8p/ build with PT_SPLIT=1), what render_ms_best (wall time) did the default configuration, with no diagnostic flags, print?",
+    "topic": "(?i)(render|wall|split|profile|ms\\b)",
+    "expect": "(?i)31\\.2(36|4)?(?:\\D|$)",
+    "note": "Truth: #38 cfg='' '[split] trace_gpu_ms=30.329' then 'render_ms_best=31.236 render_ms_avg=35.855 gpu_ms_best=0.425'. Second pass, secondary fact (trace 30.30 and the depth sweep are in working memory r8-cost-split; the wall time is not). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.236, 35.855, 27.593, 7.204)."
+  }
+]

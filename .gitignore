@@ -70,3 +70,10 @@ reports/terminal-bench/*.log
 # Probe work copies (kernel and artifact index of a probed run)
 reports/memory-probe-*/work/
 reports/memory-probe-*/*/work*/
+
+# Python bytecode
+__pycache__/
+
+# Memory-probe work directories: copies of a run's state, too large to commit
+reports/memory-probe-*/work*/
+reports/memory-probe-*/**/work*/

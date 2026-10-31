@@ -1,0 +1,310 @@
+{
+ "g0004": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0084": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0094": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0114": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0139": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0164": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0191": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0204": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0205": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0229": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0234": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0238": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0239": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0262": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0376": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0065": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Core fact and exact error/fix are right, but it says it 'added a pad field to PtParams'; params.pad already existed in the shipping code (set to 0 in pt_scene.cpp, #36/#40; #35 'unused in shipping code') and the PT_PROF edit only read the env var into it (#41). Bits 2/3 were also in pt_integrator.metal, not pt_trace.metal (#47/#49)."
+ },
+ "g0024": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0033": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0045": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0047": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0078": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0104": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0155": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0170": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0207": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0246": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0250": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0259": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0265": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0271": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0301": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0322": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0001": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0005": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0048": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0143": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0194": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0195": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0307": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0315": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0319": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0344": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0382": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims PT_PROF=3 was never run/measured/recorded; #57 looped over 0 1 2 4 8 3 and #58 printed 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Its estimate (if any) is inference, not the 0.458 ms value."
+ },
+ "g0160": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Correctly says the sweep (#57) included 3, but states its number was never recorded and that no archived message quotes it; #58 prints 'PT_PROF=3 ... gpu_ms_best=0.458' (render_ms_best 0.623). Its 3.5-4.5 ms estimate is wrong."
+ }
+}

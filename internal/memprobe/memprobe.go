@@ -15,10 +15,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"aos/internal/agentflow"
@@ -48,7 +50,9 @@ type Probe struct {
 	Expect string `json:"expect"`
 	Reject string `json:"reject,omitempty"`
 	// WorkingMemory, if set, is given to the agent as its working memory
-	// at the checkpoint, unless Config.NoWorkingMemory. It is written by
+	// at the checkpoint, in place of any it had, unless
+	// Config.NoWorkingMemory. Without it the agent keeps the checkpoint's
+	// own working memory, if any. It is written by
 	// whoever wrote the probe, not by the agent.
 	WorkingMemory []ProbeMemoryEntry `json:"working_memory,omitempty"`
 }
@@ -75,12 +79,43 @@ type Sample struct {
 	MemoryReads int    `json:"memory_reads"`
 	Searches    int    `json:"searches,omitempty"`
 	Updates     int    `json:"memory_updates,omitempty"`
-	// Condition is what the agent was given: working memory or not, and
-	// the rule to check it before deciding or not.
-	Condition  string `json:"condition,omitempty"`
-	BytesRead  int    `json:"bytes_read"`
-	ToolErrors int    `json:"tool_errors"`
-	Error      string `json:"error,omitempty"`
+	// Condition is what the agent was given: the probe's working memory
+	// ("memory"), the checkpoint's own ("own-memory") or none
+	// ("no-memory"), and the rule to check it before deciding or not.
+	Condition string `json:"condition,omitempty"`
+	// WorkingMemory is the working_memory version the agent resumed with,
+	// empty if none.
+	WorkingMemory string `json:"working_memory,omitempty"`
+	BytesRead     int    `json:"bytes_read"`
+	ToolErrors    int    `json:"tool_errors"`
+	// BackendErrors counts model calls that failed. Steps counts every
+	// call, so with BackendRetry set it includes the retried ones.
+	BackendErrors int `json:"backend_errors,omitempty"`
+	// AgentIndexSegments and AgentIndexBytes are how many agent-written
+	// segment indexes, and how many bytes of them, the first prompt's
+	// header showed; zero unless a1 is on.
+	AgentIndexSegments int `json:"agent_index_segments,omitempty"`
+	AgentIndexBytes    int `json:"agent_index_bytes,omitempty"`
+	// AgentIndexShown and AgentIndexHidden are, by memory_segment ID, how
+	// many lines of each agent index that header showed and hid; the
+	// header shows an index's first lines.
+	AgentIndexShown  map[string]int `json:"agent_index_shown,omitempty"`
+	AgentIndexHidden map[string]int `json:"agent_index_hidden,omitempty"`
+	// AgentIndexBudget is the header's total for agent indexes it was
+	// shown under; zero unless a1 is on.
+	AgentIndexBudget int `json:"agent_index_budget,omitempty"`
+	// AgentIndexPartialNote and AgentIndexShortenedNote say whether that
+	// header said the agent index is partial, and how to read a shortened
+	// index; false unless a1 and a1p are on.
+	AgentIndexPartialNote   bool `json:"agent_index_partial_note,omitempty"`
+	AgentIndexShortenedNote bool `json:"agent_index_shortened_note,omitempty"`
+	// Tokens is what the answer's model calls used, as the backend
+	// reported it; zero if it reports none.
+	Tokens int `json:"tokens,omitempty"`
+	// Reads lists each memory read and search with its arguments, in
+	// order, as "read_memory artifact_id=art-1 page=2".
+	Reads []string `json:"reads,omitempty"`
+	Error string   `json:"error,omitempty"`
 }
 
 // Config is where probes run and with what model.
@@ -98,23 +133,98 @@ type Config struct {
 	Samples    int
 	// MaxSteps bounds one answer (default 12).
 	MaxSteps int
-	// NoWorkingMemory leaves out the probes' working memory, and
-	// NoCheckRule the prompt's rule to check it before deciding: the
-	// conditions phase 3 is measured under.
+	// NoWorkingMemory leaves out every working memory, the probes' and
+	// the checkpoint's own, and NoCheckRule the prompt's rule to check it
+	// before deciding: the conditions phase 3 is measured under.
 	NoWorkingMemory bool
 	NoCheckRule     bool
+	// Recall names the recall aids turned on: "w1" (overwrite warning),
+	// "w2" (pointer wording), "w4" (handoff renotice), "a1" (agent
+	// index) and "a1p" (the header's note that the agent index is
+	// partial; it shows only with a1). Every aid not named is off, so a Config that names none
+	// runs with the prompts from before the aids existed. The runtime's
+	// zero RecallPolicy turns every aid on, so it is never passed as is.
+	Recall []string
+	// BackendRetry, if set, retries a failed model call within its step;
+	// nil turns retrying off, so a failure takes a step as before.
+	BackendRetry *runtime.BackendRetryPolicy
+	// AgentIndexes, by memory_segment ID, are agent-written indexes shown
+	// with those segments wherever a probe's checkpoint holds them, as if
+	// the agent had written them at the segment's handoff. The header
+	// shows them only with a1 on. They are set on the checkpoint's
+	// segment references; the segments themselves are unchanged, so
+	// read_memory does not repeat them.
+	AgentIndexes map[string][]runtime.IndexLine
+	// HeaderIndexBytes is the header's total for agent indexes
+	// (runtime.RecallPolicy.HeaderIndexBytes); zero is the runtime's
+	// default.
+	HeaderIndexBytes int
 }
 
-// condition names the conditions a sample ran under.
-func (c Config) condition(probe Probe) string {
-	memory := "memory"
-	if c.NoWorkingMemory || len(probe.WorkingMemory) == 0 {
-		memory = "no-memory"
+// RecallAids are the names Config.Recall takes, in the order a condition
+// lists them.
+var RecallAids = []string{"w1", "w2", "w4", "a1", "a1p"}
+
+// RecallPolicy is the runtime policy that turns on exactly the named aids.
+func RecallPolicy(aids []string) (runtime.RecallPolicy, error) {
+	policy := runtime.RecallOff()
+	for _, aid := range aids {
+		switch aid {
+		case "w1":
+			policy.NoOverwriteWarning = false
+		case "w2":
+			policy.NoPointerPrompt = false
+		case "w4":
+			policy.NoHandoffRenotice = false
+		case "a1":
+			policy.NoAgentIndex = false
+		case "a1p":
+			policy.NoPartialIndexNote = false
+		default:
+			return runtime.RecallPolicy{}, fmt.Errorf("unknown recall aid %q (want %s)", aid, strings.Join(RecallAids, ", "))
+		}
+	}
+	return policy, nil
+}
+
+// retryPolicy is the runtime's retry policy for cfg: off unless set.
+func (c Config) retryPolicy() runtime.BackendRetryPolicy {
+	if c.BackendRetry == nil {
+		return runtime.BackendRetryPolicy{Attempts: -1}
+	}
+	return *c.BackendRetry
+}
+
+// recallCondition lists the aids turned on, as "recall=w1+a1", or "" for
+// none, so conditions from before the aids read as they did.
+func (c Config) recallCondition() string {
+	var on []string
+	for _, aid := range RecallAids {
+		if slices.Contains(c.Recall, aid) {
+			on = append(on, aid)
+		}
+	}
+	if len(on) == 0 {
+		return ""
+	}
+	return ",recall=" + strings.Join(on, "+")
+}
+
+// condition names the conditions a sample ran under, given the working
+// memory version it resumes with.
+func (c Config) condition(probe Probe, workingMemory string) string {
+	memory := "no-memory"
+	switch {
+	case workingMemory == "":
+	case len(probe.WorkingMemory) > 0:
+		memory = "memory"
+	default:
+		memory = "own-memory"
 	}
 	if c.NoCheckRule {
-		return memory + ",no-check-rule"
+		return memory + ",no-check-rule" + c.recallCondition()
 	}
-	return memory + ",check-rule"
+	return memory + ",check-rule" + c.recallCondition()
 }
 
 // questionPrompt frames a probe as an operator's question that should be
@@ -164,22 +274,10 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 	if cfg.MaxSteps <= 0 {
 		cfg.MaxSteps = 12
 	}
-	work := cfg.WorkDir
-	if work == "" {
-		dir, err := os.MkdirTemp("", "aos-memprobe-*")
-		if err != nil {
-			return nil, err
-		}
-		work = dir
-	}
-	if err := copyState(cfg.StateDir, work); err != nil {
+	if _, err := RecallPolicy(cfg.Recall); err != nil {
 		return nil, err
 	}
-	k, err := kernel.New(filepath.Join(work, "kernel"))
-	if err != nil {
-		return nil, err
-	}
-	store, err := artifact.New(filepath.Join(work, "artifacts"))
+	k, store, err := openCopy(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -195,21 +293,59 @@ func Run(ctx context.Context, cfg Config, probes []Probe) ([]Sample, error) {
 			return nil, err
 		}
 		checkpoint := probe.Checkpoint
-		if len(probe.WorkingMemory) > 0 && !cfg.NoWorkingMemory {
-			if checkpoint, err = giveWorkingMemory(store, owner, probe); err != nil {
+		switch {
+		case cfg.NoWorkingMemory:
+			checkpoint, err = stripWorkingMemory(store, owner, probe)
+		case len(probe.WorkingMemory) > 0:
+			checkpoint, err = giveWorkingMemory(store, owner, probe)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
+		}
+		if len(cfg.AgentIndexes) > 0 {
+			if checkpoint, err = giveAgentIndexes(store, owner, probe, checkpoint, cfg.AgentIndexes); err != nil {
 				return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
 			}
+		}
+		var session runtime.Session
+		if err := store.ReadJSON(checkpoint, &session); err != nil {
+			return nil, fmt.Errorf("probe %s: %w", probe.ID, err)
 		}
 		for n := 1; n <= cfg.Samples; n++ {
 			if ctx.Err() != nil {
 				return samples, ctx.Err()
 			}
-			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe, checkpoint)
+			sample := ask(ctx, cfg, k, store, owner, agent, loaded, probe, checkpoint, session.WorkingMemory)
 			sample.Sample = n
 			samples = append(samples, sample)
 		}
 	}
 	return samples, nil
+}
+
+// openCopy copies the run's state into cfg.WorkDir, or a temporary
+// directory, and opens the copy's kernel and artifact index.
+func openCopy(cfg Config) (*kernel.Kernel, *artifact.Store, error) {
+	work := cfg.WorkDir
+	if work == "" {
+		dir, err := os.MkdirTemp("", "aos-memprobe-*")
+		if err != nil {
+			return nil, nil, err
+		}
+		work = dir
+	}
+	if err := copyState(cfg.StateDir, work); err != nil {
+		return nil, nil, err
+	}
+	k, err := kernel.New(filepath.Join(work, "kernel"))
+	if err != nil {
+		return nil, nil, err
+	}
+	store, err := artifact.New(filepath.Join(work, "artifacts"))
+	if err != nil {
+		return nil, nil, err
+	}
+	return k, store, nil
 }
 
 // probeAgent finds the process that wrote the probe's checkpoint and its
@@ -274,35 +410,142 @@ func giveWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe)
 	return checkpoint.ID, nil
 }
 
-// countingBackend counts model calls, one per step.
+// giveAgentIndexes writes a checkpoint like the given one whose segment
+// references carry the indexes for their segments, in the copy probes run
+// in. Each line must lie in its segment and each index must fit the
+// runtime's cap. It returns the given checkpoint when no index applies.
+func giveAgentIndexes(store *artifact.Store, owner kernel.Process, probe Probe, checkpoint string, indexes map[string][]runtime.IndexLine) (string, error) {
+	var session runtime.Session
+	if err := store.ReadJSON(checkpoint, &session); err != nil {
+		return "", err
+	}
+	given := 0
+	for i, ref := range session.MemoryRefs {
+		lines, ok := indexes[ref.ArtifactID]
+		if !ok {
+			continue
+		}
+		for _, line := range lines {
+			if line.From < ref.FromSeq || line.To > ref.ToSeq || line.From > line.To {
+				return "", fmt.Errorf("index line %q lies outside segment %s (%d-%d)", line, ref.ArtifactID, ref.FromSeq, ref.ToSeq)
+			}
+		}
+		if size := len(runtime.RenderIndex(lines)); size > runtime.MaxSegmentIndexBytes {
+			return "", fmt.Errorf("index of %s is %d bytes, over the runtime's %d", ref.ArtifactID, size, runtime.MaxSegmentIndexBytes)
+		}
+		session.MemoryRefs[i].Index = lines
+		given++
+	}
+	if given == 0 {
+		return checkpoint, nil
+	}
+	record, err := store.CreateJSON("checkpoint", owner.PID, session, []string{checkpoint}, map[string]string{"kind": "intermediate", "memprobe": probe.ID, "agent_indexes": strconv.Itoa(given)})
+	if err != nil {
+		return "", err
+	}
+	return record.ID, nil
+}
+
+// stripWorkingMemory writes a checkpoint like the probe's without its
+// working memory, so neither the header nor search_memory shows it; the
+// history and archive, update_memory calls included, are unchanged. It
+// returns the probe's checkpoint when there is nothing to strip.
+func stripWorkingMemory(store *artifact.Store, owner kernel.Process, probe Probe) (string, error) {
+	var session runtime.Session
+	if err := store.ReadJSON(probe.Checkpoint, &session); err != nil {
+		return "", err
+	}
+	if session.WorkingMemory == "" && session.MemorySnapshot == "" {
+		return probe.Checkpoint, nil
+	}
+	session.WorkingMemory, session.MemorySnapshot = "", ""
+	checkpoint, err := store.CreateJSON("checkpoint", owner.PID, session, []string{probe.Checkpoint}, map[string]string{"kind": "intermediate", "memprobe": probe.ID, "working_memory": "stripped"})
+	if err != nil {
+		return "", err
+	}
+	return checkpoint.ID, nil
+}
+
+// countingBackend counts model calls, one per step unless retried, and
+// keeps the header sizes of the first prompt.
 type countingBackend struct {
 	runtime.Backend
-	calls int
+	calls  int
+	errors int
+	header map[string]int
 }
 
 func (b *countingBackend) Generate(ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 	b.calls++
-	return b.Backend.Generate(ctx, request)
+	if b.header == nil {
+		b.header = b.HeaderSizes(request)
+	}
+	result, err := b.Backend.Generate(ctx, request)
+	if err != nil {
+		b.errors++
+	}
+	return result, err
 }
 
-// ask runs one sample: a fresh process resumed from the checkpoint as if
-// recovered from its owner, so its own compacted memory is readable.
-func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint string) Sample {
-	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe)}
-	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": probe.ID}
+// headerLines collects the header sizes under prefix by the rest of their
+// key, or nil if there are none.
+func headerLines(sizes map[string]int, prefix string) map[string]int {
+	var lines map[string]int
+	for key, n := range sizes {
+		if id, ok := strings.CutPrefix(key, prefix); ok {
+			if lines == nil {
+				lines = map[string]int{}
+			}
+			lines[id] = n
+		}
+	}
+	return lines
+}
+
+// HeaderSizes passes the wrapped backend's header sizes on, so the
+// runtime logs them as it would without the wrapper.
+func (b *countingBackend) HeaderSizes(request runtime.GenerateRequest) map[string]int {
+	if sizer, ok := b.Backend.(runtime.HeaderSizer); ok {
+		return sizer.HeaderSizes(request)
+	}
+	return map[string]int{}
+}
+
+// probeRuntime is the backend and runtime one probe process runs with:
+// the aids cfg turns on, set on both, and its retry policy.
+func probeRuntime(cfg Config, k *kernel.Kernel, store *artifact.Store, agent agentflow.AgentSpec, loaded []skills.Document) (*countingBackend, *runtime.AgentRuntime) {
+	recall, _ := RecallPolicy(cfg.Recall) // checked when the run starts
+	recall.HeaderIndexBytes = cfg.HeaderIndexBytes
+	backend := &countingBackend{Backend: agentflow.PromptBackend{Completer: cfg.Completer, Workflow: cfg.Workflow, Agent: agent, Skills: loaded, NoCheckRule: cfg.NoCheckRule, Recall: recall}}
+	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: cfg.MaxSteps, Compaction: cfg.Compaction,
+		Recall: recall, BackendRetry: cfg.retryPolicy()}
+	return backend, agentRuntime
+}
+
+// spawnProbe spawns a process resumed from owner, marked as a probe
+// without naming the probe: an ID such as "leaf2-readopted" in the
+// header would hint at the answer.
+func spawnProbe(k *kernel.Kernel, owner kernel.Process) (kernel.Process, error) {
+	metadata := map[string]string{"resumed_from": owner.PID, "memprobe": "true"}
 	for key, value := range owner.Metadata {
 		if _, set := metadata[key]; !set {
 			metadata[key] = value
 		}
 	}
-	process, err := k.Spawn(kernel.ProcessSpec{Role: owner.Role, Metadata: metadata})
+	return k.Spawn(kernel.ProcessSpec{Role: owner.Role, Metadata: metadata})
+}
+
+// ask runs one sample: a fresh process resumed from the checkpoint as if
+// recovered from its owner, so its own compacted memory is readable.
+func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, probe Probe, checkpoint, workingMemory string) Sample {
+	sample := Sample{Probe: probe.ID, Kind: probe.Kind, Condition: cfg.condition(probe, workingMemory), WorkingMemory: workingMemory}
+	process, err := spawnProbe(k, owner)
 	if err != nil {
 		sample.Error = err.Error()
 		return sample
 	}
 	sample.PID = process.PID
-	backend := &countingBackend{Backend: agentflow.PromptBackend{Completer: cfg.Completer, Workflow: cfg.Workflow, Agent: agent, Skills: loaded, NoCheckRule: cfg.NoCheckRule}}
-	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: cfg.MaxSteps, Compaction: cfg.Compaction}
+	backend, agentRuntime := probeRuntime(cfg, k, store, agent, loaded)
 	options := runtime.RunOptions{
 		NewTurn:                true,
 		StopOnAssistantMessage: true,
@@ -317,6 +560,9 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 			case "update_memory":
 				sample.Updates++
 			}
+			if call.Name == "read_memory" || call.Name == "search_memory" {
+				sample.Reads = append(sample.Reads, describeCall(call))
+			}
 		},
 		OnToolResult: func(result tools.Result) {
 			switch result.Tool {
@@ -328,9 +574,20 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 		},
 		OnToolError: func(runtime.ToolCall, error) { sample.ToolErrors++ },
 	}
+	var start runtime.Session
+	if err := store.ReadJSON(checkpoint, &start); err != nil {
+		sample.Error = err.Error()
+		return sample
+	}
 	question := []runtime.Message{{Role: "user", Content: fmt.Sprintf(questionPrompt, probe.Question)}}
 	result, err := agentRuntime.Resume(ctx, process.PID, checkpoint, question, options)
-	sample.Steps = backend.calls
+	sample.Steps, sample.BackendErrors = backend.calls, backend.errors
+	// Usage carries over from the checkpoint; a failed run returns none.
+	sample.Tokens = max(0, result.Session.Usage.Tokens-start.Usage.Tokens)
+	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
+	sample.AgentIndexShown, sample.AgentIndexHidden = headerLines(backend.header, "agent_index_shown."), headerLines(backend.header, "agent_index_hidden.")
+	sample.AgentIndexBudget = backend.header["agent_index_budget"]
+	sample.AgentIndexPartialNote, sample.AgentIndexShortenedNote = backend.header["agent_index_partial_note"] == 1, backend.header["agent_index_shortened_note"] == 1
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()
 	}
@@ -339,6 +596,133 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 	}
 	score(&sample, probe)
 	return sample
+}
+
+// Handoff is one handoff run on a checkpoint: the agent that wrote it is
+// asked, as at a compaction, to update its working memory and, with a1
+// on, to index what is archived.
+type Handoff struct {
+	// Checkpoint is the input; it is only read.
+	Checkpoint string `json:"checkpoint"`
+	Sample     int    `json:"sample"`
+	PID        string `json:"pid"`
+	Condition  string `json:"condition"`
+	// Result is the checkpoint the handoff parked at, and Segment the
+	// memory_segment it archived, in the copy the run worked in.
+	Result  string              `json:"result_checkpoint,omitempty"`
+	Segment string              `json:"segment,omitempty"`
+	FromSeq int                 `json:"from_seq,omitempty"`
+	ToSeq   int                 `json:"to_seq,omitempty"`
+	Index   []runtime.IndexLine `json:"agent_index,omitempty"`
+	// WorkingMemory is the working_memory version the handoff left.
+	WorkingMemory string   `json:"working_memory,omitempty"`
+	Steps         int      `json:"steps"`
+	Tokens        int      `json:"tokens,omitempty"`
+	BackendErrors int      `json:"backend_errors,omitempty"`
+	Tools         []string `json:"tools,omitempty"`
+	ToolErrors    int      `json:"tool_errors"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// RunHandoffs runs a handoff on each checkpoint cfg.Samples times, each in
+// a fresh process resumed from the checkpoint's owner with only the memory
+// tools. The results live in the copy under cfg.WorkDir, which a later Run
+// can take as its StateDir; the run's own state is never written.
+// Probe-given and stripped working memory do not apply: the agent hands
+// off from the checkpoint as it is.
+func RunHandoffs(ctx context.Context, cfg Config, checkpoints []string) ([]Handoff, error) {
+	if cfg.Samples <= 0 {
+		cfg.Samples = 1
+	}
+	if cfg.MaxSteps <= 0 {
+		cfg.MaxSteps = 12
+	}
+	if cfg.NoWorkingMemory {
+		return nil, errors.New("a handoff runs on the checkpoint's own working memory; NoWorkingMemory does not apply")
+	}
+	if _, err := RecallPolicy(cfg.Recall); err != nil {
+		return nil, err
+	}
+	k, store, err := openCopy(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var handoffs []Handoff
+	for _, checkpoint := range checkpoints {
+		owner, agent, err := probeAgent(k, store, cfg.Workflow, Probe{Checkpoint: checkpoint})
+		if err != nil {
+			return nil, fmt.Errorf("checkpoint %s: %w", checkpoint, err)
+		}
+		loaded, err := cfg.Skills.LoadMany(agent.Skills)
+		if err != nil {
+			return nil, err
+		}
+		for n := 1; n <= cfg.Samples; n++ {
+			if ctx.Err() != nil {
+				return handoffs, ctx.Err()
+			}
+			handoff := handOff(ctx, cfg, k, store, owner, agent, loaded, checkpoint)
+			handoff.Sample = n
+			handoffs = append(handoffs, handoff)
+		}
+	}
+	return handoffs, nil
+}
+
+// handOff runs one handoff and reads back what it archived.
+func handOff(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Store, owner kernel.Process, agent agentflow.AgentSpec, loaded []skills.Document, checkpoint string) Handoff {
+	handoff := Handoff{Checkpoint: checkpoint, Condition: "handoff" + cfg.recallCondition()}
+	var before runtime.Session
+	if err := store.ReadJSON(checkpoint, &before); err != nil {
+		handoff.Error = err.Error()
+		return handoff
+	}
+	process, err := spawnProbe(k, owner)
+	if err != nil {
+		handoff.Error = err.Error()
+		return handoff
+	}
+	handoff.PID = process.PID
+	backend, agentRuntime := probeRuntime(cfg, k, store, agent, loaded)
+	// A fresh step allowance: the checkpoint's own steps would otherwise
+	// count against MaxSteps.
+	options := runtime.RunOptions{
+		NewTurn:             true,
+		HandoffOnly:         true,
+		ContinueOnToolError: true,
+		OnToolCall:          func(call runtime.ToolCall) { handoff.Tools = append(handoff.Tools, call.Name) },
+		OnToolError:         func(runtime.ToolCall, error) { handoff.ToolErrors++ },
+	}
+	result, err := agentRuntime.Resume(ctx, process.PID, checkpoint, nil, options)
+	handoff.Steps, handoff.BackendErrors = backend.calls, backend.errors
+	handoff.Tokens = max(0, result.Session.Usage.Tokens-before.Usage.Tokens)
+	if err != nil {
+		handoff.Error = err.Error()
+		return handoff
+	}
+	handoff.Result = result.CheckpointID
+	if len(result.Session.MemoryRefs) <= len(before.MemoryRefs) {
+		handoff.Error = "the handoff parked without archiving a segment"
+		return handoff
+	}
+	ref := result.Session.MemoryRefs[len(result.Session.MemoryRefs)-1]
+	handoff.Segment, handoff.FromSeq, handoff.ToSeq = ref.ArtifactID, ref.FromSeq, ref.ToSeq
+	handoff.WorkingMemory = result.Session.WorkingMemory
+	if handoff.Index, err = runtime.SegmentIndex(store, ref.ArtifactID); err != nil {
+		handoff.Error = err.Error()
+	}
+	return handoff
+}
+
+// describeCall is a tool call as one line: its name and its arguments in
+// key order.
+func describeCall(call runtime.ToolCall) string {
+	keys := slices.Sorted(maps.Keys(call.Args))
+	parts := []string{call.Name}
+	for _, key := range keys {
+		parts = append(parts, key+"="+call.Args[key])
+	}
+	return strings.Join(parts, " ")
 }
 
 // Rescore scores recorded samples again against probes, without model

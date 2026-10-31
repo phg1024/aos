@@ -1,0 +1,14 @@
+{
+  "n-1608-1": {
+    "main": "Yes: the unchanged round-4 sources rebuilt successfully.",
+    "exact": "Yes: at the start of round 5 the live pathtracer/ rebuild succeeded (BUILD_OK) with one warning only, 'fastMathEnabled' is deprecated (use mathMode) at pt_metal_host.mm:120."
+  },
+  "n-1661-1": {
+    "main": "Yes: the grep found nothing in pt_main.cpp.",
+    "exact": "Yes: grepping _prof/src/pt_main.cpp for params.pad, 'params.seed =' and getenv returned no matches; params.pad is set in pt_scene.cpp (line 206, params.pad = 0), where the PT_PROF read was then added."
+  },
+  "n-1766-1": {
+    "main": "Yes: kInvalidNode was used but not defined anywhere.",
+    "exact": "Yes: the only hit was its use in src/pt_bvh.cpp:399 (the block vector initialiser) and the only constexpr in the file was kInfinity, so kInvalidNode was undefined and was then added as 0xFFFFFFFFu next to kInfinity."
+  }
+}

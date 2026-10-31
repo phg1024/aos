@@ -1,0 +1,58 @@
+started 2026-10-30T17:28:32Z handoffs, binary d66bd30 (7c15b1d07f48), probes e5e11d8560f5
+art-000410 #1 handoff,recall=a1: segment art-003305 (1-61), 0 index lines, 4 steps
+art-000410 #2 handoff,recall=a1: segment art-003312 (1-59), 0 index lines, 2 steps
+art-000410 #3 handoff,recall=a1: segment art-003319 (1-59), 0 index lines, 2 steps
+art-000503 #1 handoff,recall=a1: segment art-003326 (58-109), 16 index lines, 3 steps
+art-000503 #2 handoff,recall=a1: segment art-003336 (58-109), 15 index lines, 4 steps
+art-000503 #3 handoff,recall=a1: segment art-003343 (58-109), 19 index lines, 3 steps
+art-000553 #1 handoff,recall=a1: segment art-003350 (106-198), 0 index lines, 2 steps
+art-000553 #2 handoff,recall=a1: segment art-003360 (106-198), 0 index lines, 3 steps
+art-000553 #3 handoff,recall=a1: segment art-003367 (106-198), 0 index lines, 2 steps
+art-000642 #1 handoff,recall=a1: segment art-003374 (195-253), 0 index lines, 2 steps
+art-000642 #2 handoff,recall=a1: segment art-003381 (195-253), 0 index lines, 2 steps
+art-000642 #3 handoff,recall=a1: segment art-003388 (195-253), 9 index lines, 3 steps
+art-001605 #1 handoff,recall=a1: segment art-003396 (1-29), 0 index lines, 3 steps
+art-001605 #2 handoff,recall=a1: segment art-003400 (1-29), 0 index lines, 1 steps
+art-001605 #3 handoff,recall=a1: segment art-003410 (1-29), 0 index lines, 3 steps
+art-001657 #1 handoff,recall=a1: segment art-003417 (30-120), 0 index lines, 2 steps
+art-001657 #2 handoff,recall=a1: segment art-003424 (30-120), 0 index lines, 2 steps
+art-001657 #3 handoff,recall=a1: segment art-003431 (30-120), 0 index lines, 2 steps
+art-001762 #1 handoff,recall=a1: segment art-003441 (121-171), 0 index lines, 3 steps
+art-001762 #2 handoff,recall=a1: segment art-003451 (121-173), 13 index lines, 4 steps
+art-001762 #3 handoff,recall=a1: segment art-003456 (121-167), 0 index lines, 2 steps
+art-003059 #1 handoff,recall=a1: segment art-003470 (1-17), 0 index lines, 4 steps
+art-003059 #2 handoff,recall=a1: segment art-003483 (1-17), 0 index lines, 4 steps
+art-003059 #3 handoff,recall=a1: segment art-003490 (1-17), 0 index lines, 2 steps
+art-003129 #1 handoff,recall=a1: segment art-003500 (18-76), 0 index lines, 3 steps
+art-003129 #2 handoff,recall=a1: segment art-003504 (18-72), 0 index lines, 1 steps
+art-003129 #3 handoff,recall=a1: segment art-003511 (18-74), 0 index lines, 2 steps
+exit 0 handoffs
+d1 art-000414 (1-57): handoff archived 1-61, 0 lines, kept 0, dropped 0
+d1 art-000507 (58-105): handoff archived 58-109, 16 lines, kept 16, dropped 0
+d1 art-000557 (106-194): handoff archived 106-198, 0 lines, kept 0, dropped 0
+d1 art-000646 (195-249): handoff archived 195-253, 0 lines, kept 0, dropped 0
+d1 art-001608 (1-29): handoff archived 1-29, 0 lines, kept 0, dropped 0
+d1 art-001661 (30-120): handoff archived 30-120, 0 lines, kept 0, dropped 0
+d1 art-001766 (121-167): handoff archived 121-171, 0 lines, kept 0, dropped 0
+d1 art-003062 (1-17): handoff archived 1-17, 0 lines, kept 0, dropped 0
+d1 art-003133 (18-72): handoff archived 18-76, 0 lines, kept 0, dropped 0
+d2 art-000414 (1-57): handoff archived 1-59, 0 lines, kept 0, dropped 0
+d2 art-000507 (58-105): handoff archived 58-109, 15 lines, kept 15, dropped 0
+d2 art-000557 (106-194): handoff archived 106-198, 0 lines, kept 0, dropped 0
+d2 art-000646 (195-249): handoff archived 195-253, 0 lines, kept 0, dropped 0
+d2 art-001608 (1-29): handoff archived 1-29, 0 lines, kept 0, dropped 0
+d2 art-001661 (30-120): handoff archived 30-120, 0 lines, kept 0, dropped 0
+d2 art-001766 (121-167): handoff archived 121-173, 13 lines, kept 13, dropped 0
+d2 art-003062 (1-17): handoff archived 1-17, 0 lines, kept 0, dropped 0
+d2 art-003133 (18-72): handoff archived 18-72, 0 lines, kept 0, dropped 0
+d3 art-000414 (1-57): handoff archived 1-59, 0 lines, kept 0, dropped 0
+d3 art-000507 (58-105): handoff archived 58-109, 19 lines, kept 19, dropped 0
+d3 art-000557 (106-194): handoff archived 106-198, 0 lines, kept 0, dropped 0
+d3 art-000646 (195-249): handoff archived 195-253, 9 lines, kept 9, dropped 0
+d3 art-001608 (1-29): handoff archived 1-29, 0 lines, kept 0, dropped 0
+d3 art-001661 (30-120): handoff archived 30-120, 0 lines, kept 0, dropped 0
+d3 art-001766 (121-167): handoff archived 121-167, 0 lines, kept 0, dropped 0
+d3 art-003062 (1-17): handoff archived 1-17, 0 lines, kept 0, dropped 0
+d3 art-003133 (18-72): handoff archived 18-74, 0 lines, kept 0, dropped 0
+started 2026-10-30T17:52:03Z condition C, binary d66bd30 (7c15b1d07f48), probes e5e11d8560f5
+gate 2026-10-30T17:52:05Z: FAIL: 5 of 27 draws kept an index; art-000414 0 of 3, art-001661 0 of 3; stopped run.sh before the probe phase

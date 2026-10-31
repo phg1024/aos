@@ -1,0 +1,66 @@
+[
+ {
+  "id": "h-1608-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "topic": "(?i)(setup|reference|default|ms\\b)",
+  "expect": "(?i)318(\\.0)?(?:\\D|$)",
+  "note": "Truth: #27 'setup_ms=318.0 ... bvh_nodes=81521' for the default scene (alt-view 269.6, caustic-closeup 272.2). Second pass, secondary fact. Not in the checkpoint's working memory (art-001763) or live history (checked: 318.0, 'setup_ms=318', 269.6, 272.2; setup_ms occurs in live history only with other values)."
+ },
+ {
+  "id": "h-1661-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5, when you first ran the PT_PROF cost-share sweep with the scratch profiling build in _prof/, it printed no timings. What was wrong?",
+  "topic": "(?i)(prof|profil|compile|shader|error|params)",
+  "expect": "(?i)(undeclared|params(\\.pad)?[^.]{0,40}(not (declared|defined|in scope)|unknown|no local)|scene\\.params|shader (compile|compilation)[^.]{0,30}(error|fail)|compil(e|ation) (error|fail)|fail(ed|s)? to compile)",
+  "note": "Truth: #54 \"metal init error: shader compile failed: program_source:615:10: error: use of undeclared identifier 'params'\" (the PT_PROF bit-2 guard in pt_intersect_scene; #55 changed it to scene.params->pad). Not in the checkpoint's working memory (art-001763, round5-cost-shares gives only the results) or live history (checked: undeclared, program_source, 'shader compile failed'; 'params.pad' occurs once, in the memory's description of the bitmask)."
+ },
+ {
+  "id": "h-1766-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "topic": "(?i)(setup|child|pair|default|ms\\b)",
+  "expect": "(?i)245\\.7|\\b246 ?ms",
+  "note": "Truth: #163 'setup_ms=245.7 samples=16777216 ... threads_used=4 ... bvh_nodes=81521' then IDENTICAL_DEFAULT. Second pass, secondary fact (the identity result is in working memory round5-childpair). Not in the checkpoint's working memory (art-001763) or live history (checked: 245.7; setup_ms occurs in live history only with other values)."
+ },
+ {
+  "id": "h-414-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "At the start of round 2 you read the round-1 writer log. It recorded a caustic check on the 64 spp default render. How bright was the caustic compared with the floor?",
+  "topic": "(?i)(caustic|luminance|floor|bright)",
+  "expect": "(?i)(9\\.05|\\b16 ?(x|×|times)|sixteen|1185|1,185)",
+  "note": "Truth: #31 (round-1 writer log) 'floor median luminance 0.56, pixels >= 3x median 1185 ... with mean luminance 9.05, i.e. ~16x the floor'. Not in the checkpoint's working memory (art-000643) or live history (checked: 9.05, 1185, 0.56, luminance, 3.66, 3499; '16x' occurs only as threadgroup shapes such as 16x8). The writer log is on disk, so the probed agent can also re-read it."
+ },
+ {
+  "id": "h-414-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "At the start of round 2 you benchmarked the rebuilt round-1 code with its image outputs pointed at /tmp (base.ppm / base.pfm). Did that run write its image? If not, what did it report?",
+  "topic": "(?i)(/tmp|image|output|write|ppm|pfm|sandbox|error)",
+  "expect": "(?i)(cannot open output|ppm error|(could ?n[o']t|cannot|can'?t|unable to|failed to|not (allowed|permitted) to) (write|open|create)[^.]{0,40}(/tmp|output|ppm|image|file)|(/tmp|output)[^.]{0,40}(not writable|denied|not permitted|blocked|sandbox))",
+  "reject": "(?i)^\\W*yes\\b",
+  "note": "Truth: #43 'ppm error: cannot open output: /tmp/base.ppm' (exit 1; the benchmark line itself printed). Second pass, secondary fact (the primary, render_ms_best=105.947, is in working memory). Not in the checkpoint's working memory (art-000643) or live history (checked: /tmp, 'cannot open output', 'ppm error', base.ppm)."
+ },
+ {
+  "id": "h-557-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+  "topic": "(?i)(gpu|fast.?math|ms\\b)",
+  "expect": "(?i)100\\.(887|89|9)(?:\\D|$)",
+  "note": "Truth: #133 'render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887'. Second pass, secondary fact (render_ms_best 101.15 is in working memory round2-progress (c)). Not in the checkpoint's working memory (art-000643) or live history (checked: 100.887, 116.465, 116.5)."
+ },
+ {
+  "id": "h-646-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "topic": "(?i)(setup|smoke|merged|ms\\b)",
+  "expect": "(?i)180\\.8|\\b181 ?ms",
+  "note": "Truth: #245 'setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597'. Second pass, secondary fact (the run passing is implied by working memory round2-final). Not in the checkpoint's working memory (art-000643) or live history (checked: 180.8, 1048576, merged.ppm)."
+ }
+]

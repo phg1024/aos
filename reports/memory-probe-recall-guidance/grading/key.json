@@ -1,0 +1,2676 @@
+{
+ "g0001": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0002": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0003": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0004": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0005": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0006": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0007": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0008": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0009": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0010": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0011": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0012": {
+  "probe": "h-557-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0013": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0014": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0015": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0016": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0017": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0018": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0019": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0020": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0021": {
+  "probe": "h-646-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0022": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0023": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0024": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0025": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0026": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0027": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0028": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0029": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0030": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0031": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0032": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0033": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0034": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0035": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0036": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0037": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0038": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0039": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0040": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0041": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0042": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0043": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0044": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0045": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0046": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0047": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0048": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0049": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0050": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0051": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0052": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0053": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0054": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0055": {
+  "probe": "h-557-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0056": {
+  "probe": "h-557-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0057": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0058": {
+  "probe": "h-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0059": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0060": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0061": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0062": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0063": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0064": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0065": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0066": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0067": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0068": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0069": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0070": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0071": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0072": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0073": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0074": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0075": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0076": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0077": {
+  "probe": "h-3062-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0078": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0079": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0080": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0081": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0082": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0083": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0084": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0085": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0086": {
+  "probe": "h-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0087": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0088": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0089": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0090": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0091": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0092": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0093": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0094": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0095": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0096": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0097": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0098": {
+  "probe": "h-507-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0099": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0100": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0101": {
+  "probe": "h-557-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0102": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0103": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0104": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0105": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0106": {
+  "probe": "h-646-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0107": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0108": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0109": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0110": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0111": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0112": {
+  "probe": "h-557-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0113": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0114": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0115": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0116": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0117": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0118": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0119": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0120": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0121": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0122": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0123": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0124": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0125": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0126": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0127": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0128": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0129": {
+  "probe": "h-557-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0130": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0131": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0132": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0133": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0134": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0135": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0136": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0137": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0138": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0139": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0140": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0141": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0142": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0143": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0144": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0145": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0146": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0147": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0148": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0149": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0150": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0151": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0152": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0153": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0154": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0155": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0156": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0157": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0158": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0159": {
+  "probe": "h-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0160": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0161": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0162": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0163": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0164": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0165": {
+  "probe": "h-507-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0166": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0167": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0168": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0169": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0170": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0171": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0172": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0173": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0174": {
+  "probe": "h-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0175": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0176": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0177": {
+  "probe": "h-1766-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0178": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0179": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0180": {
+  "probe": "h-3062-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0181": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0182": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0183": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0184": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0185": {
+  "probe": "h-1766-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0186": {
+  "probe": "h-557-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0187": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0188": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0189": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0190": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0191": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0192": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0193": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0194": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0195": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0196": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0197": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0198": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0199": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0200": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0201": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0202": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0203": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0204": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0205": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0206": {
+  "probe": "h-557-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0207": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0208": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0209": {
+  "probe": "h-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0210": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0211": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0212": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0213": {
+  "probe": "h-646-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0214": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0215": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0216": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0217": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0218": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0219": {
+  "probe": "h-507-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0220": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0221": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0222": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0223": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0224": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0225": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0226": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0227": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0228": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0229": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0230": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0231": {
+  "probe": "h-507-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0232": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0233": {
+  "probe": "h-507-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0234": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0235": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0236": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0237": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0238": {
+  "probe": "h-1661-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0239": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0240": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0241": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0242": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0243": {
+  "probe": "h-646-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0244": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0245": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0246": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0247": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0248": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0249": {
+  "probe": "h-1661-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0250": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0251": {
+  "probe": "h-1766-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0252": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0253": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0254": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0255": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0256": {
+  "probe": "h-1766-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0257": {
+  "probe": "h-646-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0258": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0259": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0260": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0261": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0262": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0263": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0264": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0265": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0266": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0267": {
+  "probe": "h-3062-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0268": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0269": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0270": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0271": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0272": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0273": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0274": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0275": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0276": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0277": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0278": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0279": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0280": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0281": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0282": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0283": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0284": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0285": {
+  "probe": "n-1608-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n3.jsonl"
+ },
+ "g0286": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0287": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0288": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0289": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0290": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0291": {
+  "probe": "h-1766-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0292": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0293": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0294": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0295": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n4.jsonl"
+ },
+ "g0296": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0297": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0298": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0299": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0300": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0301": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0302": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0303": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0304": {
+  "probe": "h-557-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0305": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0306": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0307": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0308": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0309": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0310": {
+  "probe": "h-414-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0311": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0312": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 5,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0313": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0314": {
+  "probe": "h-414-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0315": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 5,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0316": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0317": {
+  "probe": "h-646-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0318": {
+  "probe": "h-557-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0319": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0320": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0321": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0322": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0323": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0324": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0325": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0326": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0327": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0328": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0329": {
+  "probe": "n-1661-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1-d3-n4.jsonl"
+ },
+ "g0330": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 4,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0331": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n4.jsonl"
+ },
+ "g0332": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0333": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0334": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0335": {
+  "probe": "h-557-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0336": {
+  "probe": "n-1661-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1G-d2-n4.jsonl"
+ },
+ "g0337": {
+  "probe": "h-1608-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n2.jsonl"
+ },
+ "g0338": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 4,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0339": {
+  "probe": "h-557-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0340": {
+  "probe": "h-1766-2",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n3.jsonl"
+ },
+ "g0341": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0342": {
+  "probe": "h-3062-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0343": {
+  "probe": "h-646-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0344": {
+  "probe": "h-1661-2",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0345": {
+  "probe": "h-3133-1",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0346": {
+  "probe": "h-557-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0347": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n2.jsonl"
+ },
+ "g0348": {
+  "probe": "h-414-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0349": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 1,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0350": {
+  "probe": "h-414-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0351": {
+  "probe": "n-1608-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n3.jsonl"
+ },
+ "g0352": {
+  "probe": "h-414-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0353": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0354": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0355": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0356": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1-d3-n6.jsonl"
+ },
+ "g0357": {
+  "probe": "n-1766-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n4.jsonl"
+ },
+ "g0358": {
+  "probe": "h-1661-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0359": {
+  "probe": "n-1766-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1-d2-n4.jsonl"
+ },
+ "g0360": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 3,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0361": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0362": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0363": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0364": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0365": {
+  "probe": "h-557-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n2.jsonl"
+ },
+ "g0366": {
+  "probe": "h-646-3",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 1,
+  "file": "samples-A1-d1-n2.jsonl"
+ },
+ "g0367": {
+  "probe": "h-3062-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0368": {
+  "probe": "h-1608-2",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1G-d2-n6.jsonl"
+ },
+ "g0369": {
+  "probe": "h-414-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0370": {
+  "probe": "h-507-1",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 2,
+  "file": "samples-A1-d2-n3.jsonl"
+ },
+ "g0371": {
+  "probe": "h-1766-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1G-d3-n2.jsonl"
+ },
+ "g0372": {
+  "probe": "h-3062-2",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 5,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0373": {
+  "probe": "h-3133-1",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 6,
+  "file": "samples-A1G-d1-n6.jsonl"
+ },
+ "g0374": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 6,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0375": {
+  "probe": "h-1766-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 4,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0376": {
+  "probe": "h-1661-1",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n3.jsonl"
+ },
+ "g0377": {
+  "probe": "h-1608-1",
+  "arm": "A1G",
+  "draw": 2,
+  "sample": 1,
+  "file": "samples-A1G-d2-n3.jsonl"
+ },
+ "g0378": {
+  "probe": "h-1608-2",
+  "arm": "A1",
+  "draw": 1,
+  "sample": 3,
+  "file": "samples-A1-d1-n6.jsonl"
+ },
+ "g0379": {
+  "probe": "h-1608-3",
+  "arm": "A1G",
+  "draw": 1,
+  "sample": 2,
+  "file": "samples-A1G-d1-n2.jsonl"
+ },
+ "g0380": {
+  "probe": "h-557-3",
+  "arm": "A1G",
+  "draw": 3,
+  "sample": 6,
+  "file": "samples-A1G-d3-n6.jsonl"
+ },
+ "g0381": {
+  "probe": "h-557-3",
+  "arm": "A1",
+  "draw": 2,
+  "sample": 3,
+  "file": "samples-A1-d2-n6.jsonl"
+ },
+ "g0382": {
+  "probe": "h-1661-2",
+  "arm": "A1",
+  "draw": 3,
+  "sample": 2,
+  "file": "samples-A1-d3-n6.jsonl"
+ }
+}

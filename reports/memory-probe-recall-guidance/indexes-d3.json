@@ -1,0 +1,635 @@
+{
+ "art-000414": [
+  {
+   "from": 1,
+   "to": 1,
+   "text": "round-2 goal text (gates: RMSE<=1.1x baseline 0.848/0.755/2.058, caustic mean in [0.8,1.25]x 2.224/2.252/3.043, samples==w*h*spp, 4x-spp RMSE ratio<=0.6, bit-identical PFM, no forbidden APIs, host<=8 threads, target beat 109.656/109.397ms)."
+  },
+  {
+   "from": 3,
+   "to": 11,
+   "text": "dir listings: phase3 has pathtracer/, pt_round_01/, scene-default/alt-view/caustic-closeup.json, logs, out/; pathtracer has include/{pt_bvh,pt_gpu_types,pt_image,pt_math,pt_mesh,pt_metal_host,pt_parallel,pt_scene}.hpp, src/{pt_bvh,pt_image,pt_main,pt_mesh,pt_parallel,pt_scene}.cpp+pt_metal_host.mm, shaders/{pt_trace,pt_integrator,pt_tonemap}.metal."
+  },
+  {
+   "from": 13,
+   "to": 13,
+   "text": "pt_trace.metal round-1: PCG-XSH rng (pt_pcg_next/pt_random/pt_seed_pixel), slab AABB test, Moller-Trumbore, 64-entry stack traversal, floor plane + one-sided light rect + mesh intersect, pt_occluded via full intersect with test_light=false."
+  },
+  {
+   "from": 15,
+   "to": 15,
+   "text": "pt_integrator.metal round-1: Schlick fresnel, pt_refract, pt_sample_light (2 randoms), pt_sample_cosine (2 randoms), path loop w/ NEE on floor only, emission on depth0||last_specular, RR depth>=4 survival=clamp(max throughput,0.05,0.95), trace_kernel 1 thread/pixel spp loop, atomic per sample."
+  },
+  {
+   "from": 17,
+   "to": 17,
+   "text": "round-1 pt_gpu_types.hpp: PtVertex(pos+normal), PtBvhNode 40B (bmin,bmax,start,count,left,right), PtParams field list (unchanged in my rewrite)."
+  },
+  {
+   "from": 23,
+   "to": 23,
+   "text": "round-1 pt_metal_host.mm: shader concat order trace->integrator->tonemap after prepending metal_stdlib + pt_gpu_types.hpp; buffers params/verts/tris/bvh/order/radiance/image/counter; dispatchThreads with maxTotalThreadsPerThreadgroup (1024-wide groups); one command buffer trace+tonemap, waitUntilCompleted, GPUStartTime/EndTime."
+  },
+  {
+   "from": 25,
+   "to": 25,
+   "text": "pt_main.cpp: timed region = render_frame only; setup (OBJ parse, transform_mesh, build_bvh, metal init, upload, allocate) outside; prints benchmark line; writes PPM+PFM."
+  },
+  {
+   "from": 27,
+   "to": 27,
+   "text": "pathtracer_benchmark.json round-1: render_ms_best=109.656 gpu_ms_best=109.397 (4 trials), 153M samples/s, determinism sha1 87c956f..., samples check pass."
+  },
+  {
+   "from": 29,
+   "to": 29,
+   "text": "scene-default.json: 512x512/64spp/max_depth 12, camera (0,0.28,0.95)->(0,0.13,0), fov 38, bunny scale 2.0 translate (0.0337,0,0.0031), floor y=0 albedo 0.8, env 0.02, light center (0.12,0.80,-0.30) size 0.08x0.08 normal (0,-1,0) radiance (650,590,510)."
+  },
+  {
+   "from": 31,
+   "to": 31,
+   "text": "round-1 writer log: design notes, fixed bugs (self-occluding shadow ray, refract sign, inside_glass, correlated cosine angles, fresnel eta), light placement rationale, known next targets (SAH, compact nodes, short stack, per-sample atomics)."
+  },
+  {
+   "from": 35,
+   "to": 37,
+   "text": "run tool needs {\"command\":...}; verification dir /Users/.../pathtracer-bunny-phase3-verification is NOT readable (Operation not permitted) so RMSE must be judged indirectly."
+  },
+  {
+   "from": 46,
+   "to": 46,
+   "text": "created out/ dir."
+  },
+  {
+   "from": 48,
+   "to": 52,
+   "text": "update_memory evidence must be a range like \"43-45\"; stored measurements/baseline-timing and decisions/round2-plan."
+  },
+  {
+   "from": 54,
+   "to": 54,
+   "text": "pt_tonemap.metal: Reinhard + gamma 2.2, NaN/Inf guard, uchar4 out."
+  },
+  {
+   "from": 56,
+   "to": 57,
+   "text": "copying binary to out/ fails to find shaders (needs include/ + shaders/ next to binary) -> do not run a copied binary from out/."
+  }
+ ],
+ "art-000507": [
+  {
+   "from": 58,
+   "to": 58,
+   "text": "wrote new pt_gpu_types.hpp (32B node, PtTri, PtTriNormals, PtParams)"
+  },
+  {
+   "from": 59,
+   "to": 61,
+   "text": "added PT_BVH_LEAF_BIT 0x80000000 macro to shared header"
+  },
+  {
+   "from": 62,
+   "to": 63,
+   "text": "pt_bvh.hpp: Bvh{nodes,triangles,normals} in leaf order"
+  },
+  {
+   "from": 64,
+   "to": 67,
+   "text": "pt_bvh.cpp binned-SAH build (later replaced)"
+  },
+  {
+   "from": 68,
+   "to": 71,
+   "text": "pt_metal_host.mm new buffers nodes/triangles/normals, params constant, 16x16 groups"
+  },
+  {
+   "from": 72,
+   "to": 75,
+   "text": "pt_trace.metal (32B pre-order nodes, packed soup, any-hit shadow) + pt_integrator.metal (per-thread atomic sample count)"
+  },
+  {
+   "from": 76,
+   "to": 77,
+   "text": "pt_main.cpp GpuMeshData updated"
+  },
+  {
+   "from": 79,
+   "to": 81,
+   "text": "build error PtVertex missing -> re-added PtVertex to shared header"
+  },
+  {
+   "from": 83,
+   "to": 87,
+   "text": "link error transform_mesh dropped -> restored"
+  },
+  {
+   "from": 89,
+   "to": 89,
+   "text": "build OK"
+  },
+  {
+   "from": 91,
+   "to": 91,
+   "text": "smoke spp8 samples=2097152 OK, bvh_nodes=7107 (BAD)"
+  },
+  {
+   "from": 93,
+   "to": 93,
+   "text": "benchmark render_ms_best=4416.317 gpu_ms_best=4413.659 (40x REGRESSION)"
+  },
+  {
+   "from": 95,
+   "to": 96,
+   "text": "wrote out/bvh_stats.cpp scratch tool"
+  },
+  {
+   "from": 102,
+   "to": 102,
+   "text": "bvh_stats: nodes=4565 max_leaf=5398 mean_leaf=30.42 max_depth=16 (SAH unbalanced, depth cap binding)"
+  }
+ ],
+ "art-000557": [
+  {
+   "from": 107,
+   "to": 107,
+   "text": "ls of phase3 dir shows pt_round_01 snapshot exists with src/*.cpp,*.mm"
+  },
+  {
+   "from": 109,
+   "to": 109,
+   "text": "full round-1 pt_bvh.cpp source (median-centroid split on widest axis, kLeafSize 4, nth_element, pre-order-ish push of 2 nodes, node.count/start for leaf)"
+  },
+  {
+   "from": 111,
+   "to": 111,
+   "text": "replaced binned-SAH partition() in live src/pt_bvh.cpp with median split (kept 32B pre-order layout + packed triangle soup)"
+  },
+  {
+   "from": 113,
+   "to": 113,
+   "text": "FIX shadow-ray bug: pt_shadow_hit now requires t < t_limit before returning true"
+  },
+  {
+   "from": 115,
+   "to": 115,
+   "text": "read of live pt_bvh.cpp showing leftover dead SAH helpers"
+  },
+  {
+   "from": 117,
+   "to": 117,
+   "text": "rewrote pt_bvh.cpp clean: median split, BvhBuilder class, emit_leaf a=triangle start b=LEAF_BIT|count, append_triangle stores origin/e1/e2 + separate normals table, out.nodes.reserve(2*tri_count)"
+  },
+  {
+   "from": 119,
+   "to": 119,
+   "text": "bvh_stats output for median split: nodes=40597 internal=20298 leaves=20299 tris_packed=69451 max_leaf=4 mean_leaf=3.42, leaf-size hist 2:3915 3:3915 4:12469, max_depth=15"
+  },
+  {
+   "from": 121,
+   "to": 121,
+   "text": "benchmark after median-split fix: render_ms_best=103.290 avg=113.313 gpu_ms_best=102.951, samples=16777216"
+  },
+  {
+   "from": 123,
+   "to": 123,
+   "text": "tried PT_BVH_STACK_SIZE 20->16 and PT_BVH_MAX_DEPTH 16->15"
+  },
+  {
+   "from": 125,
+   "to": 125,
+   "text": "that REGRESSED: 119.866/126.379, gpu 119.359"
+  },
+  {
+   "from": 127,
+   "to": 127,
+   "text": "reverted to stack 20 / cap 16"
+  },
+  {
+   "from": 129,
+   "to": 129,
+   "text": "rebuild confirms 101.771/114.621, gpu 101.237"
+  },
+  {
+   "from": 131,
+   "to": 131,
+   "text": "added MTLCompileOptions fastMathEnabled = YES in pt_metal_host.mm"
+  },
+  {
+   "from": 133,
+   "to": 133,
+   "text": "fastMath result 101.150/116.465 gpu 100.887 (neutral) + deprecation warning macOS 15 (use mathMode)"
+  },
+  {
+   "from": 135,
+   "to": 141,
+   "text": "added pt_ray_aabb_exit helper and root-exit pruning in pt_intersect_mesh and pt_shadow_hit"
+  },
+  {
+   "from": 143,
+   "to": 143,
+   "text": "root-exit pruning REGRESSED: 107.004/125.973 gpu 106.738"
+  },
+  {
+   "from": 145,
+   "to": 149,
+   "text": "reverted root-exit pruning in both traversals"
+  },
+  {
+   "from": 151,
+   "to": 151,
+   "text": "back to 103.410/109.625 gpu 103.098"
+  },
+  {
+   "from": 153,
+   "to": 165,
+   "text": "added PT_TG env knob for threadgroup shape in render_frame + PT_DEBUG print of maxTotalThreadsPerThreadgroup; added <algorithm>/<cstdio>, std::min/max guards"
+  },
+  {
+   "from": 167,
+   "to": 167,
+   "text": "shape sweep best-of-3: 8x8=101.026, 16x8=96.408(gpu 93.635), 16x16=100.467, 32x8=104.591, 16x32=110.010, 32x16=118.828"
+  },
+  {
+   "from": 169,
+   "to": 169,
+   "text": "sweep2: 8x16=94.380, 32x4=101.325, 16x4=91.395, 4x32=93.342, 16x8=90.498 then 96.584 (noise +-5ms)"
+  },
+  {
+   "from": 171,
+   "to": 171,
+   "text": "default group shape set to 16x8"
+  },
+  {
+   "from": 173,
+   "to": 173,
+   "text": "snapshot of working state copied to out/pt_snapshot_pre_stackless"
+  },
+  {
+   "from": 175,
+   "to": 187,
+   "text": "began stackless Wald traversal: node.b = LEAF_BIT|(count<<20)|escape, node.a = right child or leaf triangle start, PT_BVH_ESCAPE_BITS/MASK/LEAF_COUNT_MASK, assign_escapes/link_escapes second pass in builder"
+  },
+  {
+   "from": 192,
+   "to": 192,
+   "text": "full pt_gpu_types.hpp text with the new node encoding defines"
+  }
+ ],
+ "art-000646": [
+  {
+   "from": 195,
+   "to": 200,
+   "text": "made link_escapes public and rewrote pt_trace.metal with stackless Wald traversal (escape links in node.b low 20 bits, leaf count bits 25..20)"
+  },
+  {
+   "from": 202,
+   "to": 212,
+   "text": "stackless build FAILED to compile ('link_escapes is private') leaving a stale ./pathtracer -> GPU infinite loop and 60s tool timeouts; fix = rm -f pathtracer and grep for error before benchmarking; smoke at spp 2 then wrote PPM"
+  },
+  {
+   "from": 214,
+   "to": 218,
+   "text": "stackless measured 102.08 best/114.59 avg vs stack-based 93.37/96.61 (gpu 92.9) in the same A/B -> REGRESSION, reverted to out/pt_snapshot_pre_stackless; stackless copy kept at pathtracer_backup_stackless"
+  },
+  {
+   "from": 220,
+   "to": 220,
+   "text": "read pt_integrator.metal - pt_refract and pt_sample_cosine end with a normalize() on analytically unit vectors; pt_fresnel and pt_refract each compute sin2_t"
+  },
+  {
+   "from": 222,
+   "to": 222,
+   "text": "read pt_metal_host.mm - two encoders (trace + tone), PT_TG env knob, threadgroup_size helper"
+  },
+  {
+   "from": 224,
+   "to": 241,
+   "text": "merged tone mapping into trace_kernel: pt_tonemap.metal became inline pt_tone_map(), host concat order pt_trace,pt_tonemap,pt_integrator, image buffer bound at index 6, tone pipeline/encoder/member deleted"
+  }
+ ],
+ "art-001608": [
+  {
+   "from": 1,
+   "to": 1,
+   "text": "task goal round 5, best 45.220/44.907 round4, rejected/kept lists, constraints"
+  },
+  {
+   "from": 3,
+   "to": 3,
+   "text": "phase3 dir listing (ab harnesses, pt_round_01..04, scenes)"
+  },
+  {
+   "from": 5,
+   "to": 5,
+   "text": "writer log full history rounds1-4: per-change timings, rejected ideas, round4 final 45.635 vs r3 47.828, 2.403x"
+  },
+  {
+   "from": 7,
+   "to": 7,
+   "text": "file layout: pt_trace.metal 506L, pt_integrator.metal 258L, pt_gpu_types.hpp shared"
+  },
+  {
+   "from": 8,
+   "to": 8,
+   "text": "notice run non-zero exit (wc glob)"
+  },
+  {
+   "from": 10,
+   "to": 10,
+   "text": "pt_trace.metal full text: quantized 16B nodes, payload carry, near-first both-child walk, shadow walk pop skips slab"
+  },
+  {
+   "from": 12,
+   "to": 12,
+   "text": "pt_gpu_types.hpp: PtTri 48B padded, PtTriNormals 36B separate, PtBvhNodeQ 16B, PtParams fields incl pad"
+  },
+  {
+   "from": 14,
+   "to": 14,
+   "text": "pt_integrator.metal: PCG rng, fresnel asymmetry note, NEE, glass branch, morton tile 32, trace_kernel"
+  },
+  {
+   "from": 16,
+   "to": 16,
+   "text": "_ab.sh/_abenv.sh harness + benchmark.json round4 (45.220/44.907, md5 of default pfm 53600ca3..)"
+  },
+  {
+   "from": 18,
+   "to": 18,
+   "text": "ab_r3 layout; live build OK (fastMath deprecation warning only)"
+  },
+  {
+   "from": 20,
+   "to": 20,
+   "text": "ab_r4 frozen base binary md5 == pt_round_04 binary"
+  },
+  {
+   "from": 22,
+   "to": 22,
+   "text": "live sources == pt_round_04 sources (diff clean)"
+  },
+  {
+   "from": 24,
+   "to": 24,
+   "text": "failed ref render: wrong mesh path typo"
+  },
+  {
+   "from": 25,
+   "to": 25,
+   "text": "notice non-zero exit"
+  },
+  {
+   "from": 27,
+   "to": 27,
+   "text": "round-4 ref PFMs saved out/r4_*.pfm md5s default 53600ca347f0b76ab1a0ff894f6a8f4e alt 1f0de145.. caustic 0e38e718.."
+  }
+ ],
+ "art-001661": [
+  {
+   "from": 30,
+   "to": 33,
+   "text": "no offline metal compiler (xcrun metal missing Metal Toolchain); occupancy proxy max_threads_per_group trace=1024"
+  },
+  {
+   "from": 36,
+   "to": 50,
+   "text": "scratch profiling copy _prof/: params.pad carries PT_PROF env; 4 biased shortcuts (1 skip shadow, 2 skip mesh, 4 skip NEE, 8 glass always-reflect)"
+  },
+  {
+   "from": 44,
+   "to": 44,
+   "text": "pt_intersect_scene has no local 'params' - use scene.params->pad"
+  },
+  {
+   "from": 58,
+   "to": 58,
+   "text": "PT_PROF cost shares gpu_ms_best 512x512/64spp: full 45.35, no shadow 44.05, no NEE 43.17, no mesh 4.77 (closest-hit walk ~89% of frame), glass always-reflect 35.76"
+  },
+  {
+   "from": 60,
+   "to": 64,
+   "text": "glass refract-skip had 2 RNG-stream bugs: original `if (!refracted || pt_random(state) < reflectance)` short-circuits (TIR consumes no draw); reflectance>=1 case must consume exactly one draw"
+  },
+  {
+   "from": 66,
+   "to": 66,
+   "text": "glass micro-opt bit-identical on 3 scenes (out/c1_*.pfm vs out/r4_*.pfm)"
+  },
+  {
+   "from": 68,
+   "to": 76,
+   "text": "A/B base printed nothing: cp -R nested include/include so ab_r4 used round-3 header (float[3] PtTri) with round-4 shaders -> shader compile error; fixed with rm -rf + flat copies; always verify base prints a benchmark line"
+  },
+  {
+   "from": 78,
+   "to": 78,
+   "text": "glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; ior 1.5 means Fresnel TIR guard never fires (sin2_t<=0.444) - dead code"
+  },
+  {
+   "from": 80,
+   "to": 80,
+   "text": "pt_integrator.metal reverted to round-4 text"
+  },
+  {
+   "from": 82,
+   "to": 84,
+   "text": "entered-distance stack rewrite; bug caught: prune path continued with stale node_index/node_tested=false -> fixed with inner pop loop setting node_tested=true"
+  },
+  {
+   "from": 86,
+   "to": 88,
+   "text": "entered-stack bit-identical 3 scenes; A/B base 44.493/46.042 vs cand 44.425/45.607, 6/8 pairs -> KEPT"
+  },
+  {
+   "from": 90,
+   "to": 96,
+   "text": "stack_payload added (push child payload; pop does no global load); bit-identical 3 scenes"
+  },
+  {
+   "from": 98,
+   "to": 98,
+   "text": "_e/ = entered-only variant built as isolation base"
+  },
+  {
+   "from": 110,
+   "to": 110,
+   "text": "stack_payload WIN: base(_e) 43.875/45.583 vs cand 43.226/44.906, 5/8 pairs, mean -0.68ms -> KEPT"
+  },
+  {
+   "from": 112,
+   "to": 118,
+   "text": "read code: PtBvhNodeQ 16B quantized node, pre-order left=index+1, payload=right child, leaf bit31|start<<8|(count-1); quantize_bvh in src/pt_bvh.cpp; node buffer upload in pt_metal_host.mm; both walks in pt_trace.metal; _b/ snapshot = kept state (entered-stack + stack_payload), A/B base and revert point"
+  }
+ ],
+ "art-001766": [
+  {
+   "from": 122,
+   "to": 126,
+   "text": "host plumbing read - node_buffer creation, upload_mesh, render_frame threadgroup 32x4 + PT_TG env, quantize_bvh call site in pt_main.cpp"
+  },
+  {
+   "from": 128,
+   "to": 134,
+   "text": "pt_gpu_types.hpp now has PtBvhChild (16B: lo0/hi0/lo1/hi1/lo2/hi2 + payload); PtBvhNodeQ deleted by python line-splice (edit_file mismatched on whitespace)"
+  },
+  {
+   "from": 136,
+   "to": 142,
+   "text": "quantize_bvh rewritten to emit 32B child-pair blocks (two PtBvhChild per internal node, pre-order block index, payload = leaf range or child block index); kInvalidNode added next to kInfinity in pt_bvh.cpp"
+  },
+  {
+   "from": 144,
+   "to": 146,
+   "text": "API switched everywhere (pt_bvh.hpp signature, pt_main.cpp vector type, pt_metal_host.mm sizeof); both GPU walks rewritten - nodes indexed payload*2 / payload*2+1, stack = (payload, entered), ROOT BOX TEST DROPPED (monotone outward quantization => quantized root contains every child box)"
+  },
+  {
+   "from": 148,
+   "to": 151,
+   "text": "update_memory wrote decisions/round5-stack-payload and decisions/round5-childpair (in-flight child-pair description, A/B base = _b/pathtracer)"
+  },
+  {
+   "from": 153,
+   "to": 157,
+   "text": "build failed - pt_metal_host.hpp GpuMeshData::nodes still PtBvhNodeQ*; fixed to PtBvhChild*; build clean after"
+  },
+  {
+   "from": 159,
+   "to": 161,
+   "text": "scene configs live at TOP level (scene-default.json, scene-alt-view.json, scene-caustic-closeup.json), not in scenes/; wrong path gives 'cannot open scene config'"
+  }
+ ],
+ "art-003062": [
+  {
+   "from": 1,
+   "to": 1,
+   "text": "round-8 task: 4 ranked experiments, bit-identity gate, paired A/B n>=15, snapshot pt_round_08, stop rule; r7 best 30.984/30.706ms 3.539x"
+  },
+  {
+   "from": 3,
+   "to": 3,
+   "text": "dir listing: pt_round_01..07, _r7b frozen r7 A/B base, scene-*.json, many _ab scratch dirs"
+  },
+  {
+   "from": 5,
+   "to": 5,
+   "text": "run tool needs {command}"
+  },
+  {
+   "from": 7,
+   "to": 7,
+   "text": "benchmark.json: r7 vs r6 10/10 wins mean -0.2925ms, 99.1% GPU, wall-gpu 0.278ms, speedup 3.539"
+  },
+  {
+   "from": 7,
+   "to": 7,
+   "text": "coordinator ledger: rounds 4-7 results, sub-5% counter=1, round-8 plan = the 4 experiments"
+  },
+  {
+   "from": 9,
+   "to": 9,
+   "text": "writer log r7: kept f32 node -0.44%, shadow payload -0.49%, 12B sample buffer -0.19%; rejected stk16 +27%, spt2 +1.08%, leaf2 +0.9%; BVH TOPOLOGY FROZEN (MAX_DEPTH 16->20 changes alt-view PFM)"
+  },
+  {
+   "from": 9,
+   "to": 9,
+   "text": "file sizes: pt_trace.metal 552, pt_integrator.metal 367, pt_metal_host.mm 309, pt_bvh.cpp 435"
+  },
+  {
+   "from": 11,
+   "to": 11,
+   "text": "pt_integrator.metal text: pt_morton_decode 5 bits/axis tile 32, pt_tiled_pixel, trace_kernel, trace_samples_kernel sample-major store, combine_kernel ordered sum"
+  },
+  {
+   "from": 13,
+   "to": 13,
+   "text": "pt_gpu_types.hpp: PtBvhNodeQ = lo[4]+hi[4] = 32 BYTES (stale 16B comment), PtTri 48B, PtTriNormals 36B, PtSample3 12B, STACK 20, MAX_DEPTH 16"
+  },
+  {
+   "from": 13,
+   "to": 13,
+   "text": "pt_metal_host.mm: env knobs PT_TG (default 32x4), PT_CLASSIC, PT_DEBUG; grid rounds to 32; sample buffer cap 1.5GB; fastMath YES"
+  },
+  {
+   "from": 15,
+   "to": 15,
+   "text": "pt_trace.metal 1-200: PCG rng, pt_seed_pixel, PtQRay origin_times_inv fma slab test, pt_load_node = two float4 loads"
+  }
+ ],
+ "art-003133": [
+  {
+   "from": 19,
+   "to": 19,
+   "text": "_r8b frozen round-7 A/B tree built OK (only fastMathEnabled deprecation warning)"
+  },
+  {
+   "from": 24,
+   "to": 25,
+   "text": "_r8p profiler patch \u2014 PT_SPLIT commits the trace CB separately and prints trace_gpu_ms"
+  },
+  {
+   "from": 26,
+   "to": 26,
+   "text": "split measured trace_gpu_ms=30.30 vs combine gpu_ms_best=0.42 (trace = 98.6% of GPU)"
+  },
+  {
+   "from": 27,
+   "to": 27,
+   "text": "full pt_trace.metal text \u2014 pt_intersect_mesh child handling, pt_shadow_hit, pt_intersect_scene, pt_occluded"
+  },
+  {
+   "from": 30,
+   "to": 30,
+   "text": "writer-log grep results; line 163 = sibling 32-byte node pairs already measured a wash (n=41, +0.104ms); line 167 simdgroup-cooperative traversal dropped; line 171 suggests node compression"
+  },
+  {
+   "from": 33,
+   "to": 33,
+   "text": "E5 idea \u2014 nodes are actually 32 bytes (PtBvhNodeQ lo[4]+hi[4]), stale 16-byte comment"
+  },
+  {
+   "from": 35,
+   "to": 39,
+   "text": "cost split \u2014 PT_DEFINE/PT_DIAG_DEPTH hooks in _r8p; d1=5.82 d2=10.96 d3=17.10 d12=30.28ms; PT_DIAG_NOSHADOW=26.68 (shadow walks 3.65ms)"
+  },
+  {
+   "from": 40,
+   "to": 41,
+   "text": "pt_bvh.cpp quantize_bvh \u2014 integers clamped <=65535, power-of-two scale, origin snapped; safe for u16"
+  },
+  {
+   "from": 43,
+   "to": 46,
+   "text": "E5 implemented: PtBvhNodeQ = 6 u16 + u32 payload aligned 16; pt_bvh.cpp writes shorts; shader pt_load_node reads one uint4 and unpacks with float(x&0xFFFF)/float(x>>16)"
+  },
+  {
+   "from": 49,
+   "to": 50,
+   "text": "E5 build clean and PFM byte-identical on scene-default, alt-view, caustic-closeup at 64spp seed 1"
+  },
+  {
+   "from": 51,
+   "to": 52,
+   "text": "created _r8_ab.sh (cand bin, base bin, pairs, scene, spp) and _r8_pair.pl (wins, mean delta, geo-mean ratio, sd_log, se, t)"
+  },
+  {
+   "from": 53,
+   "to": 54,
+   "text": "E5 REJECTED 0/16 wins +0.90% t=16.25 \u2192 walk is ALU/latency bound; preserved in _r8_node16/; pathtracer/ reverted from _r8b, PFM identical"
+  },
+  {
+   "from": 55,
+   "to": 56,
+   "text": "maxTotalThreadsPerThreadgroup trace=1024 sample_parallel=1 (no occupancy lever); _r8_abenv.sh written"
+  },
+  {
+   "from": 57,
+   "to": 60,
+   "text": "_r8e scratch tree + PT_DEFINE host hook; PT_MORTON_T decode swap; trace_lanes_kernel/combine_lanes_kernel appended (lanes = 32 samples of one pixel)"
+  },
+  {
+   "from": 63,
+   "to": 69,
+   "text": "working-memory entries written: r8-baseline-and-harness, r8-cost-split, r8-rejected-e5-e3-e4"
+  }
+ ]
+}

@@ -1,0 +1,310 @@
+{
+ "g0077": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0180": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0267": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0342": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0028": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the +0.93% paired win but not 10/10 or the 31.003/31.264 figures, and says the r7-vs-r6 paired comparison used ~15+ pairs; #7 records 10 pairs (10/10 wins)."
+ },
+ "g0049": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0096": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives +0.93% paired win only; missing 10/10 pairs, 31.003 vs 31.264 ms (1.008x), mean delta -0.2925 ms (#7)."
+ },
+ "g0107": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0137": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0140": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0208": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives +0.93% paired win only; missing 10/10 pairs, 31.003 vs 31.264 ms (1.008x), mean delta -0.2925 ms (#7)."
+ },
+ "g0260": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives +0.93% win but says the r7-vs-r6 interleaved run was ~15 pairs; #7 records 10 pairs, 10/10 wins, 31.003 vs 31.264 ms."
+ },
+ "g0302": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the 0.93% paired win but not 10/10 or 31.003/31.264 (#7); also claims it re-ran the frozen _r8b binary this round and got 30.984/30.706, but no such run exists in the round-8 history (30.984 only appears in the benchmark record #7)."
+ },
+ "g0308": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0367": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0372": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives +0.93% paired win only; missing 10/10 pairs, 31.003 vs 31.264 ms (1.008x), mean delta -0.2925 ms (#7)."
+ },
+ "g0018": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0030": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0043": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0057": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0083": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0085": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0091": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0110": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0120": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0134": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0147": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0169": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0173": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0192": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0200": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0214": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0255": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0274": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0288": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0297": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0323": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0345": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0362": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0373": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0069": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Answers 31.214 ms, which is the correct first PT_SPLIT=1 default run (#25), but not the #38 cfg='' row (31.236, avg 35.855, trace 30.329)."
+ },
+ "g0203": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Answers 31.214 ms, which is the correct first PT_SPLIT=1 default run (#25), but not the #38 cfg='' row (31.236, avg 35.855, trace 30.329)."
+ },
+ "g0182": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Says it did not record a no-flag wall time for the _r8p build and that the build produced only the GPU split, offering ~30.98 ms instead; #25 printed render_ms_best=31.214 and #38 cfg='' printed 31.236."
+ },
+ "g0306": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Claims the unflagged _r8p default printed render_ms_best=30.984 / gpu 30.706 (no PT_SPLIT); no such run exists, the PT_SPLIT=1 default printed 31.236 (#38) and 31.214 (#25)."
+ }
+}

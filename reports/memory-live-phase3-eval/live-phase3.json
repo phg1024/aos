@@ -1,0 +1,725 @@
+[
+  {
+    "pid": "pid-000001",
+    "agent": "?",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 0,
+    "peak_live_at": null,
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000002",
+    "agent": "coordinator",
+    "state": "exited",
+    "compactions": 1,
+    "smallest_segment": [
+      316,
+      123431,
+      "art-002643"
+    ],
+    "peak_live_chars": 159907,
+    "peak_live_at": "art-002642",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 4,
+    "memory_tool_errors": {},
+    "compacted_events": 1,
+    "oversized": 0,
+    "handoffs": 1,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      1
+    ],
+    "working_memory": {
+      "latest": "art-003287",
+      "version": 4,
+      "with_evidence": {
+        "decisions": 1,
+        "next": 1
+      },
+      "without_evidence": {
+        "next": 2
+      }
+    }
+  },
+  {
+    "pid": "pid-000003",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 1,
+    "smallest_segment": [
+      52,
+      92137,
+      "art-000132"
+    ],
+    "peak_live_chars": 163037,
+    "peak_live_at": "art-000131",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 2,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 1,
+    "oversized": 0,
+    "handoffs": 1,
+    "handoff_ignored": 1,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      0
+    ],
+    "working_memory": {
+      "latest": "art-000180",
+      "version": 2,
+      "with_evidence": {
+        "decisions": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000004",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 23241,
+    "peak_live_at": "art-000211",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000005",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 143932,
+    "peak_live_at": "art-000311",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000006",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 4,
+    "smallest_segment": [
+      48,
+      82580,
+      "art-000507"
+    ],
+    "peak_live_chars": 160760,
+    "peak_live_at": "art-000645",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 8,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 4,
+    "oversized": 0,
+    "handoffs": 4,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-000643",
+      "version": 8,
+      "with_evidence": {
+        "decisions": 2,
+        "measurements": 5,
+        "open": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000007",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 35656,
+    "peak_live_at": "art-000691",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 2,
+    "memory_tool_errors": {
+      "update_memory": 2
+    },
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [],
+    "working_memory": {
+      "latest": "art-000686",
+      "version": 2,
+      "with_evidence": {
+        "measurements": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000008",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 77613,
+    "peak_live_at": "art-000731",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000009",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 4,
+    "smallest_segment": [
+      30,
+      94808,
+      "art-000813"
+    ],
+    "peak_live_chars": 171175,
+    "peak_live_at": "art-000812",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 8,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 4,
+    "oversized": 0,
+    "handoffs": 4,
+    "handoff_ignored": 1,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      0,
+      1,
+      1,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-001132",
+      "version": 8,
+      "with_evidence": {
+        "decisions": 1,
+        "open": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000010",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 37715,
+    "peak_live_at": "art-001165",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000011",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 70071,
+    "peak_live_at": "art-001221",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000012",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 2,
+    "smallest_segment": [
+      49,
+      110534,
+      "art-001336"
+    ],
+    "peak_live_chars": 175993,
+    "peak_live_at": "art-001335",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 8,
+    "memory_tool_errors": {},
+    "compacted_events": 2,
+    "oversized": 0,
+    "handoffs": 2,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      1,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-001434",
+      "version": 8,
+      "with_evidence": {
+        "measurements": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000013",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 29254,
+    "peak_live_at": "art-001463",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000014",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 68225,
+    "peak_live_at": "art-001505",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000015",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 3,
+    "smallest_segment": [
+      29,
+      89415,
+      "art-001608"
+    ],
+    "peak_live_chars": 167852,
+    "peak_live_at": "art-001660",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 7,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 3,
+    "oversized": 0,
+    "handoffs": 3,
+    "handoff_ignored": 1,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      0,
+      1,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-001819",
+      "version": 7,
+      "with_evidence": {
+        "decisions": 5,
+        "measurements": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000016",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 103184,
+    "peak_live_at": "art-001915",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 1,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [],
+    "working_memory": {
+      "latest": "art-001868",
+      "version": 1,
+      "with_evidence": {
+        "decisions": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000017",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 83205,
+    "peak_live_at": "art-001971",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000018",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 1,
+    "smallest_segment": [
+      76,
+      84193,
+      "art-002099"
+    ],
+    "peak_live_chars": 160757,
+    "peak_live_at": "art-002098",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 2,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 1,
+    "oversized": 0,
+    "handoffs": 1,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      1
+    ],
+    "working_memory": {
+      "latest": "art-002096",
+      "version": 2,
+      "with_evidence": {
+        "decisions": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000019",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 43799,
+    "peak_live_at": "art-002150",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000020",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 71990,
+    "peak_live_at": "art-002328",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000021",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 75049,
+    "peak_live_at": "art-002632",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000022",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 3,
+    "smallest_segment": [
+      38,
+      95968,
+      "art-002746"
+    ],
+    "peak_live_chars": 160987,
+    "peak_live_at": "art-002890",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 6,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 3,
+    "oversized": 0,
+    "handoffs": 3,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      1,
+      1,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-002906",
+      "version": 6,
+      "with_evidence": {
+        "decisions": 1,
+        "measurements": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000023",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 59730,
+    "peak_live_at": "art-002955",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 2,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [],
+    "working_memory": {
+      "latest": "art-002950",
+      "version": 2,
+      "with_evidence": {
+        "decisions": 1,
+        "next": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000024",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 64306,
+    "peak_live_at": "art-002991",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  },
+  {
+    "pid": "pid-000025",
+    "agent": "writer",
+    "state": "exited",
+    "compactions": 2,
+    "smallest_segment": [
+      17,
+      86917,
+      "art-003062"
+    ],
+    "peak_live_chars": 161190,
+    "peak_live_at": "art-003132",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 5,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 2,
+    "oversized": 0,
+    "handoffs": 2,
+    "handoff_ignored": 1,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [
+      0,
+      1
+    ],
+    "working_memory": {
+      "latest": "art-003188",
+      "version": 5,
+      "with_evidence": {
+        "decisions": 2,
+        "measurements": 2,
+        "rejected": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000026",
+    "agent": "benchmarker",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 66776,
+    "peak_live_at": "art-003241",
+    "search_memory": 1,
+    "read_memory": 0,
+    "update_memory": 2,
+    "memory_tool_errors": {
+      "update_memory": 1
+    },
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": [],
+    "working_memory": {
+      "latest": "art-003236",
+      "version": 2,
+      "with_evidence": {
+        "decisions": 1,
+        "measurements": 1
+      },
+      "without_evidence": {}
+    }
+  },
+  {
+    "pid": "pid-000027",
+    "agent": "verifier",
+    "state": "exited",
+    "compactions": 0,
+    "smallest_segment": null,
+    "peak_live_chars": 78645,
+    "peak_live_at": "art-003279",
+    "search_memory": 0,
+    "read_memory": 0,
+    "update_memory": 0,
+    "memory_tool_errors": {},
+    "compacted_events": 0,
+    "oversized": 0,
+    "handoffs": 0,
+    "handoff_ignored": 0,
+    "handoff_without_compaction": 0,
+    "handoff_updates": []
+  }
+]

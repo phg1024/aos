@@ -1,0 +1,527 @@
+{
+ "per_probe_target": {
+  "h-1608-2": {
+   "A1": {
+    "main": 0,
+    "exact": 0,
+    "contra": 12,
+    "negative_claim": 0,
+    "n": 12
+   },
+   "A1G": {
+    "main": 0,
+    "exact": 0,
+    "contra": 12,
+    "negative_claim": 0,
+    "n": 12
+   }
+  },
+  "h-1608-3": {
+   "A1": {
+    "main": 6,
+    "exact": 6,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 6
+   },
+   "A1G": {
+    "main": 5,
+    "exact": 4,
+    "contra": 1,
+    "negative_claim": 0,
+    "n": 6
+   }
+  },
+  "h-1661-1": {
+   "A1": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   },
+   "A1G": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   }
+  },
+  "h-1661-2": {
+   "A1": {
+    "main": 6,
+    "exact": 6,
+    "contra": 8,
+    "negative_claim": 8,
+    "n": 14
+   },
+   "A1G": {
+    "main": 10,
+    "exact": 10,
+    "contra": 4,
+    "negative_claim": 4,
+    "n": 14
+   }
+  },
+  "h-1661-3": {
+   "A1": {
+    "main": 8,
+    "exact": 6,
+    "contra": 2,
+    "negative_claim": 0,
+    "n": 10
+   },
+   "A1G": {
+    "main": 10,
+    "exact": 9,
+    "contra": 1,
+    "negative_claim": 0,
+    "n": 10
+   }
+  },
+  "h-1766-3": {
+   "A1": {
+    "main": 10,
+    "exact": 7,
+    "contra": 3,
+    "negative_claim": 0,
+    "n": 10
+   },
+   "A1G": {
+    "main": 10,
+    "exact": 10,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 10
+   }
+  },
+  "h-3062-1": {
+   "A1": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   },
+   "A1G": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   }
+  },
+  "h-3062-2": {
+   "A1": {
+    "main": 6,
+    "exact": 4,
+    "contra": 1,
+    "negative_claim": 0,
+    "n": 6
+   },
+   "A1G": {
+    "main": 6,
+    "exact": 2,
+    "contra": 2,
+    "negative_claim": 0,
+    "n": 6
+   }
+  },
+  "h-3133-1": {
+   "A1": {
+    "main": 12,
+    "exact": 11,
+    "contra": 2,
+    "negative_claim": 1,
+    "n": 14
+   },
+   "A1G": {
+    "main": 14,
+    "exact": 13,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 14
+   }
+  },
+  "h-414-1": {
+   "A1": {
+    "main": 4,
+    "exact": 3,
+    "contra": 15,
+    "negative_claim": 14,
+    "n": 18
+   },
+   "A1G": {
+    "main": 5,
+    "exact": 5,
+    "contra": 13,
+    "negative_claim": 13,
+    "n": 18
+   }
+  },
+  "h-414-2": {
+   "A1": {
+    "main": 4,
+    "exact": 4,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 4
+   },
+   "A1G": {
+    "main": 4,
+    "exact": 4,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 4
+   }
+  },
+  "h-414-3": {
+   "A1": {
+    "main": 4,
+    "exact": 4,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 4
+   },
+   "A1G": {
+    "main": 4,
+    "exact": 3,
+    "contra": 1,
+    "negative_claim": 0,
+    "n": 4
+   }
+  },
+  "h-557-1": {
+   "A1": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   },
+   "A1G": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   }
+  },
+  "h-557-2": {
+   "A1": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   },
+   "A1G": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   }
+  },
+  "h-557-3": {
+   "A1": {
+    "main": 5,
+    "exact": 1,
+    "contra": 11,
+    "negative_claim": 7,
+    "n": 12
+   },
+   "A1G": {
+    "main": 6,
+    "exact": 6,
+    "contra": 6,
+    "negative_claim": 6,
+    "n": 12
+   }
+  },
+  "h-646-1": {
+   "A1": {
+    "main": 2,
+    "exact": 0,
+    "contra": 2,
+    "negative_claim": 0,
+    "n": 2
+   },
+   "A1G": {
+    "main": 2,
+    "exact": 2,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 2
+   }
+  },
+  "h-646-2": {
+   "A1": {
+    "main": 8,
+    "exact": 8,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 8
+   },
+   "A1G": {
+    "main": 8,
+    "exact": 8,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 8
+   }
+  },
+  "h-646-3": {
+   "A1": {
+    "main": 5,
+    "exact": 5,
+    "contra": 1,
+    "negative_claim": 0,
+    "n": 6
+   },
+   "A1G": {
+    "main": 6,
+    "exact": 6,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 6
+   }
+  },
+  "n-1661-1": {
+   "A1": {
+    "main": 0,
+    "exact": 0,
+    "contra": 12,
+    "negative_claim": 12,
+    "n": 12
+   },
+   "A1G": {
+    "main": 6,
+    "exact": 6,
+    "contra": 6,
+    "negative_claim": 6,
+    "n": 12
+   }
+  },
+  "n-1766-1": {
+   "A1": {
+    "main": 11,
+    "exact": 2,
+    "contra": 1,
+    "negative_claim": 1,
+    "n": 12
+   },
+   "A1G": {
+    "main": 12,
+    "exact": 5,
+    "contra": 0,
+    "negative_claim": 0,
+    "n": 12
+   }
+  }
+ },
+ "probe_bootstrap_ci95": [
+  0.03508771929824561,
+  0.18902439024390244
+ ],
+ "group_f": {
+  "A1": {
+   "main": 8,
+   "exact": 6,
+   "contra": 14,
+   "negative_claim": 12,
+   "n": 22
+  },
+  "A1G": {
+   "main": 16,
+   "exact": 15,
+   "contra": 7,
+   "negative_claim": 6,
+   "n": 22
+  }
+ },
+ "primary_without_group_f": {
+  "A1": 91,
+  "A1G": 100,
+  "n": 136,
+  "difference": 9,
+  "permutation_p": 0.10755892441075589
+ },
+ "negative_claims_by_calls": {
+  "A1": {
+   "none": 24,
+   "searched, no read": 16,
+   "read memory": 3
+  },
+  "A1G": {
+   "none": 13,
+   "searched, no read": 14,
+   "read memory": 2
+  }
+ },
+ "target_answers_by_calls": {
+  "A1": {
+   "none": 41,
+   "searched": 110,
+   "main_when_none": 3,
+   "main_when_searched": 89
+  },
+  "A1G": {
+   "none": 28,
+   "searched": 129,
+   "main_when_none": 2,
+   "main_when_searched": 113
+  }
+ },
+ "primary_h3062_2_strict": {
+  "A1": 97,
+  "A1G": 112,
+  "difference": 15,
+  "permutation_p": 0.016649833501664983,
+  "changed": {
+   "A1": 2,
+   "A1G": 4
+  }
+ },
+ "harm_misses_and_contra": [
+  {
+   "gid": "g0065",
+   "probe": "h-1661-1",
+   "draw": 1,
+   "arm": "A1",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Core fact and exact error/fix are right, but it says it 'added a pad field to PtParams'; params.pad already existed in the shipping code (set to 0 in pt_scene.cpp, #36/#40; #35 'unused in shipping code') and the PT_PROF edit only read the env var into it (#41). Bits 2/3 were also in pt_integrator.metal, not pt_trace.metal (#47/#49)."
+  },
+  {
+   "gid": "g0080",
+   "probe": "h-414-2",
+   "draw": 2,
+   "arm": "A1G",
+   "main": 0,
+   "exact": 0,
+   "contra": 1,
+   "note": "Says the caustic was roughly three times brighter than the floor (3x is only the mask threshold); #31 records mean 9.05 vs floor median 0.56, ~16x."
+  },
+  {
+   "gid": "g0098",
+   "probe": "h-507-1",
+   "draw": 2,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Gives the transform_mesh undefined-symbol link failure, but says it was declared in pt_mesh.hpp and restored in src/pt_mesh.cpp; it was declared in pt_bvh.hpp and dropped from/restored in pt_bvh.cpp (#84-#87)."
+  },
+  {
+   "gid": "g0165",
+   "probe": "h-507-1",
+   "draw": 2,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Gives the transform_mesh undefined-symbol link failure, but says it was declared in pt_mesh.hpp and restored in pt_mesh.cpp; the rewrite dropped it from pt_bvh.cpp and it was restored there (#84-#87)."
+  },
+  {
+   "gid": "g0185",
+   "probe": "h-1766-2",
+   "draw": 3,
+   "arm": "A1",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Claims a second attempt failed on a sandbox_extension_issue_file error before any image was produced; those warnings are in #163, the successful rerun that printed IDENTICAL_DEFAULT."
+  },
+  {
+   "gid": "g0219",
+   "probe": "h-507-1",
+   "draw": 2,
+   "arm": "A1",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Gives the transform_mesh undefined-symbol link failure, but attributes the loss to rewriting the OBJ-loading module; pt_mesh.cpp was not rewritten, the definition was dropped from pt_bvh.cpp and restored there (#86-#87)."
+  },
+  {
+   "gid": "g0233",
+   "probe": "h-507-1",
+   "draw": 2,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Gives the transform_mesh undefined-symbol link failure, but says it was still declared in pt_mesh.hpp; it is declared in pt_bvh.hpp and its definition was dropped from pt_bvh.cpp (#86-#87)."
+  },
+  {
+   "gid": "g0252",
+   "probe": "n-1608-1",
+   "draw": 1,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Build success with fastMath warning is right (#18), but it claims the rebuild reproduced 'same binary hash'; #20-#21 show the rebuilt binary md5 02a42502... differed from pt_round_04's 5c318568...."
+  },
+  {
+   "gid": "g0268",
+   "probe": "n-1608-1",
+   "draw": 1,
+   "arm": "A1",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Build success is right (#18), but it calls the warning '-ffast-math-related' (it is the fastMathEnabled API deprecation) and claims the freshly built binary matched the round-4 build; #20-#21 show its md5 differed."
+  },
+  {
+   "gid": "g0327",
+   "probe": "n-1608-1",
+   "draw": 3,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Build success with fastMath warning is right (#18), but it says the environment 'reproduces the round-4 binary exactly'; #20-#21 show the rebuilt binary md5 differed from pt_round_04's."
+  },
+  {
+   "gid": "g0340",
+   "probe": "h-1766-2",
+   "draw": 3,
+   "arm": "A1G",
+   "main": 0,
+   "exact": 0,
+   "contra": 1,
+   "note": "Says no difference was reported; #159 shows DIFF_DEFAULT caused by 'cannot open scene config: scenes/scene-default.json' (cp_default.pfm missing)."
+  },
+  {
+   "gid": "g0377",
+   "probe": "h-1608-1",
+   "draw": 2,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 0,
+   "contra": 1,
+   "note": "Core cause correct (#24), but the aside says the later ab_r4 failure was a missing shaders directory; #75 shows shaders were present and the cause was include/include nesting (round-3 header with round-4 shaders)."
+  }
+ ],
+ "artifact_id_reads": [
+  {
+   "gid": "g0226",
+   "probe": "h-414-1",
+   "draw": 3,
+   "arm": "A1G",
+   "main": 1,
+   "exact": 1,
+   "contra": 0,
+   "reads": [
+    "search_memory limit=10 query=copy round-1 binary out/ reference render Operation not permitted",
+    "search_memory limit=10 query=pt_round_01/pathtracer cp binary reference 1024 spp",
+    "search_memory limit=10 query=shader library failed to compile newLibraryWithSource could not find shaders",
+    "read_memory artifact_id=art-000414",
+    "read_memory from=53 to=57"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,74 @@
+[
+ {
+  "gid": "g0041",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms = 318.0 ms for the default scene (512x512, 64 spp, threads_used=8, triangles=69451, bvh_nodes=81521).\n\nHow I know: archive message #27 is the round-4 reference render loop (`--mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj`, scenes iterated as default, alt-view, caustic-closeup, each printing its last stdout line). The default scene was rendered first, so its line is the first of the three: `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521`. The other two in that same run were 269.6 ms (alt-view) and 272.2 ms (caustic-closeup), and that run produced the reference PFMs still used for byte-identity checks (out/r4_default.pfm md5 53600ca347f0b76ab1a0ff894f6a8f4e). Note this is setup time only — device creation, shader compile, OBJ parse and model-space BVH build, all outside the timed frame region."
+ },
+ {
+  "gid": "g0071",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms = 318.0 ms for the default scene.\n\nHow I know: archived tool result #27 is the round-5 reference-render loop `for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh $M --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 ... | tail -1; done`. It printed three lines in that scene order: 318.0, 269.6, 272.2 ms, so the first (318.0) is scene-default.json. Each line also reported samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521, and the md5s in the same result (out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e) confirm those were the round-4 reference PFMs saved at the start of round 5. Note this was the first invocation of that run, which includes device setup, shader compilation, OBJ parse and BVH build, hence higher than the 157-190 ms seen on the later two scenes and on repeat runs."
+ },
+ {
+  "gid": "g0102",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms=318.0 for the default scene.\n\nHow I know: history message #27 is the command that produced the round-4 reference PFMs — `for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 ...`. Since `default` is first in that loop, its output line is the first one: `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521`. The following two lines (269.6 and 272.2) are alt-view and caustic-closeup, and the md5 list in the same message confirms the files written (out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e)."
+ },
+ {
+  "gid": "g0138",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms=318.0 for the default scene.\n\nHow I know: history message #27 in this session ran the reference render loop `for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh .../stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 | tail -1; done`. Since `default` is the first iteration, the first printed line — `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521` — is the default scene; alt-view and caustic-closeup were 269.6 and 272.2. That run's MD5s (out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e) are the round-4 reference PFMs I have been byte-comparing every round-5 candidate against."
+ },
+ {
+  "gid": "g0278",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms=318.0 for the default scene.\n\nHow I know: archive message #27 is the command that produced the round-4 reference PFMs — a loop `for S in default alt-view caustic-closeup` running `./pathtracer/pathtracer --mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8`. Its stdout printed three lines in loop order: setup_ms=318.0 (default), setup_ms=269.6 (alt-view), setup_ms=272.2 (caustic-closeup), each with samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521, followed by the MD5s that match my stored round-4 references (out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e). This was the run after the earlier mesh-path typo failure (#24/#25), i.e. the one with the correct mesh path. Note the other setup_ms values I have from later in round 5 (189.5, 281.7, 204.1) are from different candidate builds, not this reference render."
+ },
+ {
+  "gid": "g0287",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms=318.0 for the default scene.\n\nHow I know: in round 5 I rendered the three round-4 reference PFMs with one loop, `for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 ... | tail -1; done` (archived message #27). It printed three status lines in that order, and the first — the default scene — was `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521`. The other two were 269.6 (alt-view) and 272.2 (caustic-closeup), and the same call's md5 output confirms out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e, i.e. that first line belongs to the default-scene reference image."
+ },
+ {
+  "gid": "g0313",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms = 318.0 ms for the default scene.\n\nHow I know: at the start of round 5 I rendered the three round-4 reference PFMs with the live (= round-4) binary. My first attempt failed on a typo in the mesh path (#24), so I re-ran it with the correct path /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj (#26). The tool result (#27) printed, in scene order default, alt-view, caustic-closeup:\n\n- setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521   <- default\n- setup_ms=269.6 ... (alt-view)\n- setup_ms=272.2 ... (caustic-closeup)\n\nThe same run's MD5s confirm it was the default scene: out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e, which matches the round-4 value recorded in the benchmark log, so that first line is the default scene's render. (setup_ms is outside the timed region — device/queue creation, shader compile, pipeline states, OBJ parse, BVH build and upload — so it does not affect the 45.220 ms render_ms_best figure.)"
+ },
+ {
+  "gid": "g0334",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms = 318.0 ms. That render was the loop over the three scene configs (default, alt-view, caustic-closeup) with the correct mesh path /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj, --spp 64 --seed 1 --threads 8; the default scene printed first: 'setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521' (alt-view 269.6, caustic-closeup 272.2). I know it is the default scene's line because the loop ordered default first and its output PFM hashed to md5 53600ca347f0b76ab1a0ff894f6a8f4e, which is the round-4 default reference I have been byte-comparing against. Source: archived history message #27."
+ },
+ {
+  "gid": "g0337",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms = 318.0 ms for the default scene.\n\nHow I know: that run is archived as message #27 — the command looped `for S in default alt-view caustic-closeup` over `./pathtracer/pathtracer --mesh .../stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8` and printed three lines in that order: 318.0 (default), 269.6 (alt-view), 272.2 (caustic-closeup), each with samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521. The same message's md5 lines confirm those were the round-4 reference files (out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e), which every later byte-identity check compares against. Note this is setup time only (device, shader compile, OBJ parse, BVH build, upload) — it sits outside the timed render region and so does not affect the 45.220 ms benchmark figure."
+ },
+ {
+  "gid": "g0341",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "setup_ms=318.0 for the default scene.\n\nHow I know: at the start of round 5 I ran one command (history message #27) that looped `for S in default alt-view caustic-closeup` over `./pathtracer/pathtracer --mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8`, printing one summary line per scene. Because `default` is first in that loop, its line is the first one: `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521`. The other two lines were 269.6 (alt-view) and 272.2 (caustic-closeup). The same command's md5 output confirms these were the round-4 reference images: out/r4_default.pfm = 53600ca347f0b76ab1a0ff894f6a8f4e, alt-view = 1f0de1451174e4e7404adf7db1dfa269, caustic-closeup = 0e38e71841ec3185c2a82289a9be488d. (Later single-scene re-renders of the default scene printed setup_ms around 158-282 ms; 318.0 is the value from that first reference run, which also paid the one-time OBJ parse, BVH build and mesh upload with 8 host threads.)"
+ },
+ {
+  "gid": "g0347",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "The default scene printed setup_ms=318.0 (that run: `--spp 64 --seed 1 --threads 8`, output line `setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521`).\n\nHow I know: history entry #27 shows the reference-render loop `for S in default alt-view caustic-closeup`, which printed three setup lines in that order — 318.0, 269.6, 272.2 — so the first, 318.0 ms, belongs to scene-default.json. The same entry's md5 list confirms it produced out/r4_default.pfm (53600ca347f0b76ab1a0ff894f6a8f4e), the round-4 reference I have been byte-comparing against all round. The other two lines are alt-view (269.6) and caustic-closeup (272.2); all three used the correct mesh path /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj."
+ },
+ {
+  "gid": "g0379",
+  "probe": "h-1608-3",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "answer": "I don't have that number in my retained notes. At the start of round 5, after fixing the mesh path to /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj, I rendered the three round-4 reference images and what I recorded from that step was the md5 of each PFM (out/r4_default.pfm 53600ca..., out/r4_alt-view.pfm 1f0de1..., out/r4_caustic-closeup.pfm 0e38e7...), not the printed setup_ms. The exact value is in the archived tool output for that step (around message 27 of my history) and I would have to read_memory it to quote it, which would be new work rather than recall.\n\nFor context, the setup_ms figures I can cite from later runs of the same default scene with the correct mesh path are 204.1, 189.5, 157.8, 160.5, 174.5, 165.8 and 281.7 ms — they swing widely because setup includes OBJ parsing and the model-space BVH build and the machine has been under heavy contention this round. Setup is outside the timed region, so it does not affect render_ms_best/gpu_ms_best."
+ }
+]

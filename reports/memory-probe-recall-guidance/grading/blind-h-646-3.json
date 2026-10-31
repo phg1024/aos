@@ -1,0 +1,74 @@
+[
+ {
+  "gid": "g0039",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8. That number comes from my own archived tool output for message #245, the run that rebuilt the binary and then executed `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm` (the spp-4 smoke test right after tone mapping was merged into trace_kernel). Its full status line was: `setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597`, with PROG_EXIT=0 and merged.pfm 3145744 bytes / merged.ppm 786447 bytes. Note bvh_nodes=40597 there, i.e. that was still the kLeafSize=4 tree; the current live build (kLeafSize=1) prints bvh_nodes=131071 with setup_ms around 148-182."
+ },
+ {
+  "gid": "g0044",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "That run printed setup_ms=180.8 (samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597, PROG_EXIT=0).\n\nHow I know: the smoke test was message #244/#245 — after merging tone mapping into trace_kernel I rebuilt, then ran `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm >../out/smoke.log` and tailed the log. The archived tool result (#245) shows the full stdout line quoted above, with 786447-byte merged.ppm and 3145744-byte merged.pfm written. For context, the bvh_nodes=40597 there reflects the then-current kLeafSize=4; after later switching to kLeafSize=1 the same setup line reports bvh_nodes=131071 and setup_ms around 148-182ms, which is all outside the timed region."
+ },
+ {
+  "gid": "g0059",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8. I know this from the archived tool result of that exact run (message #245): it rebuilt the binary with the tone map merged into trace_kernel, then ran `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm`, whose stdout line was `setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597` (PROG_EXIT=0, merged.ppm 786447 bytes, merged.pfm 3145744 bytes). Note that was before the later BVH changes, so bvh_nodes was still 40597 (kLeafSize 4) at that point."
+ },
+ {
+  "gid": "g0067",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "That run printed setup_ms=180.8. I know because I just re-read the archived tool result (#245): the 4-spp smoke test after the tone-map merge ran `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm`, exited 0, and printed 'setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597' (merged.ppm 786447 bytes, merged.pfm 3145744 bytes). Note the bvh_nodes=40597 there is the old kLeafSize=4 tree; the current live build with kLeafSize=1 reports 131071 nodes."
+ },
+ {
+  "gid": "g0089",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8.\n\nHow I know: that run is message #245 in my history — the smoke test I ran right after merging tone mapping into the trace kernel: `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm >../out/smoke.log`, whose captured stdout line reads `setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597` (PROG_EXIT=0, merged.ppm 786447 bytes, merged.pfm 3145744 bytes). Note the bvh_nodes=40597 there is the kLeafSize=4 tree; the current tree with kLeafSize=1 reports 131071 nodes."
+ },
+ {
+  "gid": "g0097",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "That run printed setup_ms=180.8.\n\nHow I know: message #245 in my own session history is the command that rebuilt the merged tone-map binary and ran the 4-spp smoke test writing ../out/merged.ppm / ../out/merged.pfm (stdout redirected to ../out/smoke.log, PROG_EXIT=0). Its captured stdout line reads:\n\n  setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597\n\nwith file sizes 786447 bytes for merged.ppm and 3145744 for merged.pfm. I re-read that message just now via search_memory + read_memory from=245 to=247 rather than guessing. For context, that was still the median-split BVH with kLeafSize=4 (hence bvh_nodes=40597), and the following 5-frame benchmark of the same build gave render_ms_best=93.464 / gpu_ms_best=93.202 (#247); the current live build is at 59.1-66.3 ms best with bvh_nodes=131071 after the near-first traversal and kLeafSize=1 changes."
+ },
+ {
+  "gid": "g0154",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8. That run is message #245 in my history: right after merging tone mapping into trace_kernel I rebuilt, then ran `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm` with stdout redirected to ../out/smoke.log; the printed line was `setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597` with PROG_EXIT=0 (the bvh_nodes=40597 confirms it predates my later kLeafSize 4->1 change, which now reports 131071 nodes)."
+ },
+ {
+  "gid": "g0224",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "That run printed setup_ms=180.8 (the full line was: setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597, with PROG_EXIT=0 and outputs merged.ppm 786447 bytes / merged.pfm 3145744 bytes).\n\nHow I know: I just re-read the archived tool result for that exact command (history message #245) — the 4-spp smoke test run right after merging tone mapping into trace_kernel, writing ../out/merged.ppm and ../out/merged.pfm. Note bvh_nodes=40597 there because kLeafSize was still 4 at that point; the current build (kLeafSize=1) reports 131071 nodes and setup_ms around 148-182ms, which is outside the timed region either way."
+ },
+ {
+  "gid": "g0257",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8.\n\nHow I know: that run is archived as history message #245 — the command was `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm` (stdout redirected to ../out/smoke.log), and the log line it printed was:\n\n  setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597\n\nwith PROG_EXIT=0 and outputs 786447 bytes for merged.ppm / 3145744 bytes for merged.pfm. That was right after merging tone mapping into trace_kernel, when the BVH was still the kLeafSize=4 median-split tree (40597 nodes). For context, the current round-2 build (kLeafSize=1, 131071 nodes) prints setup_ms around 148-182 in the same outside-the-timed-region setup phase."
+ },
+ {
+  "gid": "g0264",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=180.8.\n\nHow I know: that smoke test is history entry #245. The command rebuilt the binary, deleted ../out/smoke.ppm, then ran ./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm with stdout+stderr redirected to ../out/smoke.log (tail -3 shown), because the tool had been truncating long program output. The log line it printed was:\n\n  setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597\n\nwith PROG_EXIT=0 and the artifacts written (merged.pfm 3145744 bytes, merged.ppm 786447 bytes). Two corroborating details: 1048576 samples = 512*512*4 confirms it was the 4-spp run, and bvh_nodes=40597 matches the kLeafSize=4 median-split tree that was live at that point (today's leaf-size-1 tree reports 131071 nodes, so this cannot be a different, later run). For context, that same merged-tone-map build measured render_ms_best=93.464 in the following benchmark (#247); the current live round-2 state is ~59-66 ms best at 512x512/64spp."
+ },
+ {
+  "gid": "g0290",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "That run printed setup_ms=180.8.\n\nHow I know: the command is in my history at message #245 — after rebuilding with the tone map merged into trace_kernel I ran `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm >../out/smoke.log`, and the log tail it printed was `PROG_EXIT=0` followed by `setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597`, then the file sizes (merged.pfm 3145744 bytes, merged.ppm 786447 bytes). Note the bvh_nodes=40597 there is the kLeafSize=4 tree; the current build with kLeafSize=1 reports 131071 nodes."
+ },
+ {
+  "gid": "g0366",
+  "probe": "h-646-3",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "answer": "setup_ms=158.6. That run was the smoke test right after the tone-map merge (history message #244): `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 4 --spp 4 --out ../out/merged.ppm --out-pfm ../out/merged.pfm`, whose full status line read `setup_ms=158.6 samples=1048576 width=512 height=512 spp=4 threads_used=4 triangles=69451 bvh_nodes=40597`. Note the BVH there was still the kLeafSize=4 tree (40597 nodes); the current live build with kLeafSize=1 reports 131071 nodes and setup_ms ~148-182."
+ }
+]

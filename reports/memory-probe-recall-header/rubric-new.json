@@ -1,0 +1,94 @@
+{
+  "h-414-1": {
+    "main": "No: the copied binary failed at Metal init because it could not read the shared shader header, so no reference image was written.",
+    "exact": "No: running the copied binary from out/ failed with 'metal init error: cannot read shared shader header', so no r1_default.pfm was written."
+  },
+  "h-414-2": {
+    "main": "The caustic was about 16 times as bright as the floor.",
+    "exact": "Caustic pixels (1185 of them, >= 3x the floor median) had mean luminance 9.05 against a floor median of 0.56, about 16x the floor."
+  },
+  "h-507-1": {
+    "main": "No: the link failed with an undefined symbol.",
+    "exact": "No: the linker failed with an undefined symbol for pt::transform_mesh, which the BVH rewrite had dropped from pt_bvh.cpp."
+  },
+  "h-507-2": {
+    "main": "No: it failed because the mesh vertex type was undeclared.",
+    "exact": "No: compile errors 'use of undeclared identifier PtVertex' / 'unknown type name PtVertex' in pt_mesh.hpp, pt_bvh.cpp and pt_mesh.cpp, because PtVertex had been removed from the shared header."
+  },
+  "h-646-1": {
+    "main": "The build failed because the escape-link function was private in the BVH builder class.",
+    "exact": "Error: 'link_escapes' is a private member of BvhBuilder (pt_bvh.cpp:216), so the host build failed and the old binary stayed in place."
+  },
+  "h-1608-1": {
+    "main": "The mesh file could not be opened: the bunny OBJ path was wrong.",
+    "exact": "'mesh error: cannot open mesh' for /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj, a wrong path missing aos/reports/."
+  },
+  "h-1608-2": {
+    "main": "Round 4 recorded about 45.6 ms render_ms_best.",
+    "exact": "Round 4 recorded render_ms_best=45.635 ms (gpu 45.349), 1.074x over round 3's verified 49.020 ms, 8/8 interleaved pairs vs round 3's 47.828."
+  },
+  "h-1661-1": {
+    "main": "The profiling build's shader failed to compile at runtime.",
+    "exact": "Shader compile failed: 'use of undeclared identifier params' in the PT_PROF guard inside pt_intersect_scene (it needed scene.params->pad)."
+  },
+  "h-1766-1": {
+    "main": "No: the host side still used the old node type, so the build failed with type errors.",
+    "exact": "No: GpuMeshData in pt_metal_host.hpp still declared nodes as PtBvhNodeQ (unknown type name) and pt_main.cpp could not pass PtBvhChild* where a node pointer was expected."
+  },
+  "h-1766-2": {
+    "main": "A wrong scene-config path: nothing was rendered, so the comparison failed; it was not a real image difference.",
+    "exact": "The command used scenes/scene-default.json, which does not exist ('cannot open scene config'), so no cp_default.pfm was written and cmp reported a difference; with the right path the image was byte-identical."
+  },
+  "h-3062-1": {
+    "main": "The image changed (not byte-identical), so the tree shape is part of the frozen estimator and tree changes are ruled out.",
+    "exact": "Depth 16->20 changed the scene-alt-view PFM (at byte 1022129) because equal-t ties resolve by tree test order; so tree topology (depth, leaf size, bins, split order) is part of the frozen estimator and tree-quality ideas are ruled out."
+  },
+  "h-414-3": {
+    "main": "No: it could not write the image to /tmp (cannot open output).",
+    "exact": "No: it printed the benchmark line but then 'ppm error: cannot open output: /tmp/base.ppm' and exited 1, so no image was written to /tmp."
+  },
+  "h-557-1": {
+    "main": "The average was about 126.4 ms.",
+    "exact": "render_ms_avg=126.379 ms (best 119.866, gpu best 119.359)."
+  },
+  "h-557-2": {
+    "main": "About 100.9 ms.",
+    "exact": "gpu_ms_best=100.887 ms (render_ms_best 101.150, avg 116.465)."
+  },
+  "h-557-3": {
+    "main": "About 101 ms.",
+    "exact": "8x8: render_ms_best=101.026 ms (avg 106.438, gpu 100.761)."
+  },
+  "h-646-2": {
+    "main": "About 103.2 ms and 100.7 ms.",
+    "exact": "render_ms_avg=103.183 ms (run 1, best 93.366) and 100.692 ms (run 2, best 96.614)."
+  },
+  "h-646-3": {
+    "main": "About 180.8 ms.",
+    "exact": "setup_ms=180.8 (samples=1048576 = 512*512*4, bvh_nodes=40597)."
+  },
+  "h-1608-3": {
+    "main": "About 318 ms.",
+    "exact": "setup_ms=318.0 for the default scene (alt-view 269.6, caustic-closeup 272.2)."
+  },
+  "h-1661-2": {
+    "main": "Under a millisecond: about 0.46 ms on the GPU.",
+    "exact": "gpu_ms_best=0.458 ms (render_ms_best 0.623)."
+  },
+  "h-1661-3": {
+    "main": "About 44.76 ms.",
+    "exact": "Candidate gpu_min=44.757 ms (base gpu_min 43.026)."
+  },
+  "h-1766-3": {
+    "main": "About 245.7 ms.",
+    "exact": "setup_ms=245.7 (samples=16777216, bvh_nodes=81521), followed by IDENTICAL_DEFAULT."
+  },
+  "h-3062-2": {
+    "main": "Round 7 won every interleaved pair (10/10), about 0.9% faster.",
+    "exact": "Round 7 was faster in 10/10 interleaved pairs: 31.003 vs 31.264 ms best-of-50 (1.008x), mean delta -0.29 ms (0.83-1.05%)."
+  },
+  "h-3133-1": {
+    "main": "About 31.2 ms.",
+    "exact": "render_ms_best=31.236 ms (avg 35.855) while the split trace dispatch took 30.329 ms."
+  }
+}

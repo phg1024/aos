@@ -1,0 +1,17 @@
+{
+ "n-1608-1": {
+  "1": {"grade": "states", "note": "18-18: 'live build OK w/ fastMath warning'", "shown": true},
+  "2": {"grade": "states", "note": "18-18: 'build cmd OK' (no warning named)", "shown": true},
+  "3": {"grade": "states", "note": "18-18: 'live build OK (fastMath deprecation warning only)'", "shown": true}
+ },
+ "n-1661-1": {
+  "1": {"grade": "no", "note": "no line covers #38 (31-36 ends before it)", "shown": false},
+  "2": {"grade": "points", "note": "36-40: 'params.pad set in pt_scene.cpp:206'; does not say the pt_main.cpp grep found nothing", "shown": true},
+  "3": {"grade": "points", "note": "36-50: scratch _prof/ copy, params.pad carries PT_PROF; no grep result", "shown": true}
+ },
+ "n-1766-1": {
+  "1": {"grade": "points", "note": "136-144: 'kInvalidNode added'; does not say the grep found it used but undefined (inferable)", "shown": true},
+  "2": {"grade": "points", "note": "136-144: 'kInvalidNode added'; same", "shown": true},
+  "3": {"grade": "points", "note": "136-142: 'kInvalidNode added next to kInfinity'; same", "shown": true}
+ }
+}

@@ -1,0 +1,984 @@
+{
+ "g3": {
+  "pass": true,
+  "samples": 382,
+  "mismatches": []
+ },
+ "primary": {
+  "cells": 43,
+  "A1": {
+   "n": 158,
+   "main": 99,
+   "exact": 75,
+   "contra": 70,
+   "negative_claim": 43,
+   "mean_tokens": 106492.49,
+   "mean_steps": 2.73,
+   "mean_searches": 1.04,
+   "mean_memory_reads": 0.64,
+   "mean_memory_calls": 1.68,
+   "mean_bytes_read": 4274.65,
+   "answers_with_a_memory_call": 117,
+   "artifact_id_reads": 0
+  },
+  "A1G": {
+   "n": 158,
+   "main": 116,
+   "exact": 101,
+   "contra": 46,
+   "negative_claim": 29,
+   "mean_tokens": 114595.96,
+   "mean_steps": 2.94,
+   "mean_searches": 1.19,
+   "mean_memory_reads": 0.72,
+   "mean_memory_calls": 1.91,
+   "mean_bytes_read": 4540.52,
+   "answers_with_a_memory_call": 130,
+   "artifact_id_reads": 1
+  },
+  "difference": 17,
+  "permutation_p": 0.004059959400405996,
+  "rate_difference_ci95": [
+   0.044303797468354444,
+   0.16455696202531656
+  ]
+ },
+ "negative_claim_errors": {
+  "A1": 43,
+  "A1G": 29,
+  "n": 158,
+  "fisher_p": 0.08080574589303016
+ },
+ "target_splits": {
+  "retest_probes": {
+   "A1": {
+    "n": 134,
+    "main": 88,
+    "exact": 73,
+    "contra": 57,
+    "negative_claim": 30,
+    "mean_tokens": 111035.46,
+    "mean_steps": 2.85,
+    "mean_searches": 1.12,
+    "mean_memory_reads": 0.67,
+    "mean_memory_calls": 1.79,
+    "mean_bytes_read": 4541.66,
+    "answers_with_a_memory_call": 104,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 134,
+    "main": 98,
+    "exact": 90,
+    "contra": 40,
+    "negative_claim": 23,
+    "mean_tokens": 119186.82,
+    "mean_steps": 3.04,
+    "mean_searches": 1.27,
+    "mean_memory_reads": 0.74,
+    "mean_memory_calls": 2.01,
+    "mean_bytes_read": 4726.79,
+    "answers_with_a_memory_call": 112,
+    "artifact_id_reads": 1
+   }
+  },
+  "negative_claim_probes": {
+   "A1": {
+    "n": 24,
+    "main": 11,
+    "exact": 2,
+    "contra": 13,
+    "negative_claim": 13,
+    "mean_tokens": 81127.58,
+    "mean_steps": 2.08,
+    "mean_searches": 0.62,
+    "mean_memory_reads": 0.46,
+    "mean_memory_calls": 1.08,
+    "mean_bytes_read": 2783.79,
+    "answers_with_a_memory_call": 13,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 24,
+    "main": 18,
+    "exact": 11,
+    "contra": 6,
+    "negative_claim": 6,
+    "mean_tokens": 88963.62,
+    "mean_steps": 2.33,
+    "mean_searches": 0.75,
+    "mean_memory_reads": 0.58,
+    "mean_memory_calls": 1.33,
+    "mean_bytes_read": 3500.5,
+    "answers_with_a_memory_call": 18,
+    "artifact_id_reads": 0
+   }
+  },
+  "art-000648 (S2 shown)": {
+   "A1": {
+    "n": 58,
+    "main": 36,
+    "exact": 29,
+    "contra": 29,
+    "negative_claim": 21,
+    "mean_tokens": 122477.72,
+    "mean_steps": 3.09,
+    "mean_searches": 1.38,
+    "mean_memory_reads": 0.67,
+    "mean_memory_calls": 2.05,
+    "mean_bytes_read": 5185.47,
+    "answers_with_a_memory_call": 51,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 58,
+    "main": 39,
+    "exact": 38,
+    "contra": 20,
+    "negative_claim": 19,
+    "mean_tokens": 132133.1,
+    "mean_steps": 3.28,
+    "mean_searches": 1.53,
+    "mean_memory_reads": 0.69,
+    "mean_memory_calls": 2.22,
+    "mean_bytes_read": 5895.93,
+    "answers_with_a_memory_call": 54,
+    "artifact_id_reads": 1
+   }
+  },
+  "other checkpoints": {
+   "A1": {
+    "n": 100,
+    "main": 63,
+    "exact": 46,
+    "contra": 41,
+    "negative_claim": 22,
+    "mean_tokens": 97221.05,
+    "mean_steps": 2.53,
+    "mean_searches": 0.85,
+    "mean_memory_reads": 0.62,
+    "mean_memory_calls": 1.47,
+    "mean_bytes_read": 3746.37,
+    "answers_with_a_memory_call": 66,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 100,
+    "main": 77,
+    "exact": 63,
+    "contra": 26,
+    "negative_claim": 10,
+    "mean_tokens": 104424.41,
+    "mean_steps": 2.74,
+    "mean_searches": 0.99,
+    "mean_memory_reads": 0.73,
+    "mean_memory_calls": 1.72,
+    "mean_bytes_read": 3754.38,
+    "answers_with_a_memory_call": 76,
+    "artifact_id_reads": 0
+   }
+  },
+  "points, shown": {
+   "A1": {
+    "n": 104,
+    "main": 71,
+    "exact": 56,
+    "contra": 35,
+    "negative_claim": 18,
+    "mean_tokens": 99551.46,
+    "mean_steps": 2.58,
+    "mean_searches": 0.85,
+    "mean_memory_reads": 0.67,
+    "mean_memory_calls": 1.52,
+    "mean_bytes_read": 4224.48,
+    "answers_with_a_memory_call": 73,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 104,
+    "main": 84,
+    "exact": 70,
+    "contra": 23,
+    "negative_claim": 7,
+    "mean_tokens": 107932.38,
+    "mean_steps": 2.81,
+    "mean_searches": 1.02,
+    "mean_memory_reads": 0.76,
+    "mean_memory_calls": 1.78,
+    "mean_bytes_read": 3882.32,
+    "answers_with_a_memory_call": 83,
+    "artifact_id_reads": 0
+   }
+  },
+  "points or states, hidden": {
+   "A1": {
+    "n": 36,
+    "main": 15,
+    "exact": 10,
+    "contra": 26,
+    "negative_claim": 21,
+    "mean_tokens": 124485.36,
+    "mean_steps": 3.14,
+    "mean_searches": 1.56,
+    "mean_memory_reads": 0.53,
+    "mean_memory_calls": 2.08,
+    "mean_bytes_read": 3376.36,
+    "answers_with_a_memory_call": 30,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 36,
+    "main": 17,
+    "exact": 16,
+    "contra": 20,
+    "negative_claim": 19,
+    "mean_tokens": 132396.14,
+    "mean_steps": 3.28,
+    "mean_searches": 1.67,
+    "mean_memory_reads": 0.56,
+    "mean_memory_calls": 2.22,
+    "mean_bytes_read": 5322.81,
+    "answers_with_a_memory_call": 32,
+    "artifact_id_reads": 1
+   }
+  },
+  "no covering line": {
+   "A1": {
+    "n": 18,
+    "main": 13,
+    "exact": 9,
+    "contra": 9,
+    "negative_claim": 4,
+    "mean_tokens": 110610.44,
+    "mean_steps": 2.83,
+    "mean_searches": 1.17,
+    "mean_memory_reads": 0.67,
+    "mean_memory_calls": 1.83,
+    "mean_bytes_read": 6361.06,
+    "answers_with_a_memory_call": 14,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 18,
+    "main": 15,
+    "exact": 15,
+    "contra": 3,
+    "negative_claim": 3,
+    "mean_tokens": 117496.22,
+    "mean_steps": 3,
+    "mean_searches": 1.22,
+    "mean_memory_reads": 0.78,
+    "mean_memory_calls": 2,
+    "mean_bytes_read": 6778.89,
+    "answers_with_a_memory_call": 15,
+    "artifact_id_reads": 0
+   }
+  },
+  "draw 1": {
+   "A1": {
+    "n": 50,
+    "main": 29,
+    "exact": 23,
+    "contra": 24,
+    "negative_claim": 14,
+    "mean_tokens": 101440.24,
+    "mean_steps": 2.62,
+    "mean_searches": 1,
+    "mean_memory_reads": 0.6,
+    "mean_memory_calls": 1.6,
+    "mean_bytes_read": 4344.76,
+    "answers_with_a_memory_call": 34,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 50,
+    "main": 34,
+    "exact": 33,
+    "contra": 15,
+    "negative_claim": 9,
+    "mean_tokens": 108474.62,
+    "mean_steps": 2.8,
+    "mean_searches": 1.1,
+    "mean_memory_reads": 0.7,
+    "mean_memory_calls": 1.8,
+    "mean_bytes_read": 4348.98,
+    "answers_with_a_memory_call": 36,
+    "artifact_id_reads": 0
+   }
+  },
+  "draw 2": {
+   "A1": {
+    "n": 50,
+    "main": 33,
+    "exact": 23,
+    "contra": 22,
+    "negative_claim": 11,
+    "mean_tokens": 108166.9,
+    "mean_steps": 2.78,
+    "mean_searches": 1.06,
+    "mean_memory_reads": 0.66,
+    "mean_memory_calls": 1.72,
+    "mean_bytes_read": 4108.9,
+    "answers_with_a_memory_call": 37,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 50,
+    "main": 35,
+    "exact": 26,
+    "contra": 18,
+    "negative_claim": 9,
+    "mean_tokens": 107000.52,
+    "mean_steps": 2.78,
+    "mean_searches": 1.14,
+    "mean_memory_reads": 0.6,
+    "mean_memory_calls": 1.74,
+    "mean_bytes_read": 3491.18,
+    "answers_with_a_memory_call": 40,
+    "artifact_id_reads": 0
+   }
+  },
+  "draw 3": {
+   "A1": {
+    "n": 58,
+    "main": 37,
+    "exact": 29,
+    "contra": 24,
+    "negative_claim": 18,
+    "mean_tokens": 109404.41,
+    "mean_steps": 2.79,
+    "mean_searches": 1.07,
+    "mean_memory_reads": 0.66,
+    "mean_memory_calls": 1.72,
+    "mean_bytes_read": 4357.09,
+    "answers_with_a_memory_call": 46,
+    "artifact_id_reads": 0
+   },
+   "A1G": {
+    "n": 58,
+    "main": 47,
+    "exact": 42,
+    "contra": 13,
+    "negative_claim": 11,
+    "mean_tokens": 126420.76,
+    "mean_steps": 3.19,
+    "mean_searches": 1.31,
+    "mean_memory_reads": 0.83,
+    "mean_memory_calls": 2.14,
+    "mean_bytes_read": 5610.24,
+    "answers_with_a_memory_call": 54,
+    "artifact_id_reads": 1
+   }
+  }
+ },
+ "target_cells": {
+  "h-1608-2 d1": {
+   "A1": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "h-1608-2 d2": {
+   "A1": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "h-1608-3 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    0
+   ]
+  },
+  "h-1608-3 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1608-3 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1661-1 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1661-2 d1": {
+   "A1": [
+    0,
+    1,
+    1,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    1,
+    0,
+    1,
+    1,
+    1,
+    0
+   ]
+  },
+  "h-1661-2 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1661-2 d3": {
+   "A1": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    0
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    0,
+    0
+   ]
+  },
+  "h-1661-3 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1661-3 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1661-3 d3": {
+   "A1": [
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-1766-3 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-1766-3 d2": {
+   "A1": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-1766-3 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-3062-1 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-3062-2 d2": {
+   "A1": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-3133-1 d1": {
+   "A1": [
+    1,
+    1,
+    1,
+    1,
+    0,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-3133-1 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-3133-1 d3": {
+   "A1": [
+    1,
+    1,
+    1,
+    1,
+    0,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-414-1 d1": {
+   "A1": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    1
+   ]
+  },
+  "h-414-1 d2": {
+   "A1": [
+    1,
+    1,
+    0,
+    0,
+    0,
+    1
+   ],
+   "A1G": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0
+   ]
+  },
+  "h-414-1 d3": {
+   "A1": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    1,
+    0,
+    0,
+    1,
+    0,
+    0
+   ]
+  },
+  "h-414-2 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-414-2 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-414-3 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-414-3 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-557-1 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-557-2 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-557-3 d2": {
+   "A1": [
+    0,
+    1,
+    0,
+    1,
+    1,
+    0
+   ],
+   "A1G": [
+    0,
+    1,
+    0,
+    0,
+    1,
+    1
+   ]
+  },
+  "h-557-3 d3": {
+   "A1": [
+    1,
+    0,
+    1,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    1,
+    0,
+    0,
+    1,
+    1,
+    0
+   ]
+  },
+  "h-646-1 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-646-2 d1": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-646-2 d3": {
+   "A1": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "h-646-3 d1": {
+   "A1": [
+    1,
+    0
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-646-3 d2": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "h-646-3 d3": {
+   "A1": [
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1
+   ]
+  },
+  "n-1661-1 d1": {
+   "A1": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    1,
+    0,
+    0,
+    0
+   ]
+  },
+  "n-1661-1 d2": {
+   "A1": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    0
+   ]
+  },
+  "n-1661-1 d3": {
+   "A1": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "A1G": [
+    0,
+    1,
+    1,
+    0
+   ]
+  },
+  "n-1766-1 d1": {
+   "A1": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "n-1766-1 d2": {
+   "A1": [
+    1,
+    1,
+    1,
+    0
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1
+   ]
+  },
+  "n-1766-1 d3": {
+   "A1": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "A1G": [
+    1,
+    1,
+    1,
+    1
+   ]
+  }
+ },
+ "harm": {
+  "A1": {
+   "n": 33,
+   "main": 33,
+   "exact": 24,
+   "contra": 4,
+   "negative_claim": 0,
+   "mean_tokens": 74975.15,
+   "mean_steps": 1.88,
+   "mean_searches": 0.36,
+   "mean_memory_reads": 0.48,
+   "mean_memory_calls": 0.85,
+   "mean_bytes_read": 3891.7,
+   "answers_with_a_memory_call": 18,
+   "artifact_id_reads": 0
+  },
+  "A1G": {
+   "n": 33,
+   "main": 31,
+   "exact": 19,
+   "contra": 8,
+   "negative_claim": 1,
+   "mean_tokens": 79361.55,
+   "mean_steps": 2.06,
+   "mean_searches": 0.55,
+   "mean_memory_reads": 0.45,
+   "mean_memory_calls": 1,
+   "mean_bytes_read": 3554.42,
+   "answers_with_a_memory_call": 17,
+   "artifact_id_reads": 0
+  },
+  "main_fisher_p": 0.49230769230769234,
+  "flagged_cells": []
+ }
+}

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Memory Evaluation: Agent-Written Archive Index (A1), Handoff Phase</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Evaluation: Agent-Written Archive Index (A1), Handoff Phase</h1>
+    <p>A1 asks the agent, at each handoff, to index the messages about to be archived; the header then shows that index next to the segment. This evaluation was to test whether the index lets the agent recover facts it archived but did not record in working memory, which it never did in the own-memory evaluation (0/18 per arm on the two unrecorded probes).</p>
+    <p><b>Result: the probe phase was not run.</b> The handoffs that were to write the indexes produced one in <span class="bad">5 of 27</span>. Neither segment that holds a primary probe's answer got an index in any of its 3 draws. The stop rule (added at aos book's request after 2 handoffs, before the rest were seen) stopped the run before any probe answer. So this report says nothing yet about whether an index helps; it says the handoff, as built in <code>d65b94f</code>, rarely leaves one with this model.</p>
+    <p><b>Why no index, 22 handoffs:</b>
+      <ul>
+        <li><b>8</b>: the index was refused for being over the 1536-byte cap (1566 to 2684 bytes).</li>
+        <li><b>7</b>: the index was refused because one line cited messages past the range the notice named. The agent indexed up to where its history then ended.</li>
+        <li><b>7</b>: the agent never called <code>index_memory</code>; it spent its handoff steps on working memory or stopped.</li>
+      </ul>
+      <span class="bad">None of the 15 refused handoffs got a step to retry</span>: in each, the refused call was the agent's last action before compaction.</p>
+    <p><b>Cost:</b> 27 handoffs, 2.6 model calls and about 154,000 tokens each (4.16 million in all), 23.5 minutes on phg-gpu.</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Plan:</b> <code>reports/memory-probe-recall/PLAN.md</code>, frozen in <code>d66bd30</code> before any model call. The stop rule was added in <code>7068f60</code> (see below).</li>
+    <li><b>Binary:</b> <code>.cache/bin/aos-eval-d66bd30</code> (sha <code>7c15b1d07f48</code>), built by this session. Runtime <code>d65b94f</code>.</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> on phg-gpu (vLLM), context 65536, compaction ratio 0.8, temperature 0.6, top_p 0.95, thinking budget 16384.</li>
+    <li class="note"><b>Correction (2026-10-31):</b> "(vLLM)" above was not verified. The runs used the OpenAI-compatible endpoint <code>phg-gpu.local:8080</code>; the server behind it was not recorded.</li>
+    <li><b>Handoffs:</b> the three own-memory probe checkpoints hold 9 archived segments. Each segment's handoff was re-run with <code>--recall a1</code> (the other aids off) from the last checkpoint before the live run's own handoff notice for it, 3 draws each: 27 handoffs, 2026-10-30 17:28:32Z to 17:52:03Z. Each ran in a probe process with only the memory tools, in a copy of the run's state.</li>
+    <li><b>Probes:</b> not run. Arm C had started at 17:52:03Z; the stop rule ended it 2 seconds later, before it wrote any sample.</li>
+  </ul>
+
+  <h2>Outcome per Handoff</h2>
+  <p>Index lines kept per draw, or why there were none. "Notice" is the range the handoff notice asked to index; "archived" is what compaction then moved.</p>
+  <table>
+    <tr><th>segment (run)</th><th>notice</th><th>draw 1</th><th>draw 2</th><th>draw 3</th></tr>
+    <tr><td>art-000414, r2 #1–57<br><span class="note">r2-verify-dir truth #37–38</span></td><td>1–57</td><td class="bad">cap (2061 B)</td><td class="bad">cap (1625 B)</td><td class="bad">cap (2260 B)</td></tr>
+    <tr><td>art-000507, r2 #58–105<br><span class="note">r2-first-sah truth #93, #94, #103</span></td><td>58–102</td><td class="good">16 lines</td><td class="good">15 lines</td><td class="good">19 lines</td></tr>
+    <tr><td>art-000557, r2 #106–194</td><td>106–192</td><td class="bad">cap (2684 B)</td><td class="bad">cap (1817 B)</td><td class="bad">range ("174-196")</td></tr>
+    <tr><td>art-000646, r2 #195–249</td><td>195–245</td><td class="bad">cap (1636 B)</td><td class="bad">range (line "247")</td><td class="good">9 lines</td></tr>
+    <tr><td>art-001608, r5 #1–29</td><td>1–29</td><td>not called</td><td>not called</td><td class="bad">cap (1566 B)</td></tr>
+    <tr><td>art-001661, r5 #30–120<br><span class="note">r5-register-counts truth #31–35</span></td><td>30–118</td><td class="bad">range ("112-124")</td><td class="bad">cap (1573 B)</td><td class="bad">range ("112-122")</td></tr>
+    <tr><td>art-001766, r5 #121–167</td><td>121–163</td><td class="bad">range ("157-165")</td><td class="good">13 lines</td><td>not called</td></tr>
+    <tr><td>art-003062, r8 #1–17</td><td>1–15</td><td>not called</td><td>not called</td><td>not called</td></tr>
+    <tr><td>art-003133, r8 #18–72<br><span class="note">r8-sibling-pairs truth #29, #31</span></td><td>18–72</td><td class="bad">range ("71-76")</td><td>not called</td><td class="bad">range ("58-80")</td></tr>
+  </table>
+  <p class="note">The byte sizes and refused lines are from the runtime's refusal messages; per-handoff detail (tools called, steps, tokens, archived range) is in <code>handoff_summary.json</code>. "cap": refused for size; "range": refused for the quoted line.</p>
+
+  <h2>Why the Handoffs Left No Index</h2>
+  <ul>
+    <li><b>Working memory first, then one index attempt.</b> The notice asks for working memory, then the index. In 25 of the 27 handoffs the agent's first action was <code>update_memory</code> (1 to 4 calls in all), and the index came last, if at all.</li>
+    <li><b>No retry after a refusal.</b> In all 15 refused handoffs the refused <code>index_memory</code> call was the agent's last action. 14 of the 15 ended at 2 or 3 handoff steps, under the runtime's limit of 4, so something other than the step limit ended them. The likely cause is the bound on later handoff steps (they are given only while the history is within 16 KB of the trigger), but this was not verified.</li>
+    <li><b>The cap is not in the notice.</b> The notice asks for "one line per thing you might need to find again" and gives no size. Refused indexes were 1566 to 2684 bytes against a 1536-byte cap. A refusal discards the whole index, as the runtime's design says (refused, not truncated).</li>
+    <li><b>The notice's range is shorter than what is archived.</b> In 23 of 27 handoffs, compaction archived messages past the range the notice named (for example notice 30–118, archived 30–120). Lines that cited the extra messages, or messages written during the handoff, were refused, and with them the whole index.</li>
+    <li><b>Never called.</b> 7 handoffs. In two (art-003059, draws 1 and 2) all 4 steps went to <code>update_memory</code>; in the other five the handoff ended after 1 or 2 steps, with working memory only (three) or no tool call (two).</li>
+  </ul>
+  <p>aos code was told after the first handoff and is changing the notice: the cap and the range in the notice, the index asked for first, and one retry after a size refusal.</p>
+
+  <h2>The Indexes That Were Kept</h2>
+  <p>Five indexes, 9 to 19 lines, 1097 to 1478 bytes; no line was dropped by the plan's range rule. The round-2 segment art-000507 was indexed in all three draws, and each draw has a line for #93, the probe <code>r2-first-sah</code>'s truth: "benchmark regression render_ms_best=4416.3 gpu_ms_best=4413.7" (draw 1). Message #93 holds <code>render_ms_best=4416.317 ... gpu_ms_best=4413.659</code>, so that line holds. This is one spot check, not the planned index-quality grading, which belongs to the probe phase and was not done.</p>
+
+  <h2>The Stop Rule</h2>
+  <p>After the first 2 handoffs had finished, both without an index, aos book asked that the probe phase not be spent on an A1 arm that would differ little from C, and that the threshold be written down before more handoffs were seen. This session stopped its progress watch and committed the rule in <code>7068f60</code>, while the handoff phase was still running:</p>
+  <ul>
+    <li>The probe phase runs only if at least 14 of the 27 draws kept an index line, and each primary truth segment (art-000414 for <code>r2-verify-dir</code>, art-001661 for <code>r5-register-counts</code>) kept one in at least 2 of its 3 draws.</li>
+    <li><code>gate.py</code> applies it; <code>gate_watch.sh</code> ran it when the handoff phase wrote its indexes and stopped <code>run.sh</code> on FAIL.</li>
+  </ul>
+  <p><b>Gate result</b> (17:52:05Z): <span class="bad">FAIL: 5 of 27 draws kept an index; art-000414 0 of 3, art-001661 0 of 3.</span></p>
+
+  <h2>An Observation Outside the Plan</h2>
+  <p>The plan discards the working memory each handoff writes, so it is not scored. In one of the three re-runs of the first round-2 segment (art-000410, draw 1), that working memory records the fact the probe <code>r2-verify-dir</code> asks for: the verification directory is not readable from the sandbox. The live run's own working memory did not hold it. None of the three re-runs of the round-5 segment (art-001657) recorded the occupancy figure that <code>r5-register-counts</code> asks for.</p>
+
+  <h2>Next</h2>
+  <p>A follow-up is frozen on aos code's fix commit: the same 9 segments, 3 draws each, the same probes, arms, scoring and stop rule, with the binary built from that commit. Nothing on phg-gpu runs until it is frozen.</p>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li><b>Re-run handoffs, not live ones.</b> The handoff process had only the memory tools, and the earlier segments it saw had no index. In a live run with a1 on, the agent would have its tools and its earlier indexes.</li>
+    <li><b>Rule added mid-run.</b> The stop rule was not in the frozen plan. It was added after 2 of 27 handoffs had been seen (both empty), at aos book's request, and before the rest were looked at.</li>
+    <li><b>One model, one run.</b> These are 27 handoffs of one model on 9 segments of one live run.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/memory-probe-recall/PLAN.md</code>: the frozen plan and the stop rule.</li>
+    <li><code>run.sh</code>, <code>run.log</code>: the run and its log. <code>gate.py</code>, <code>gate_watch.sh</code>, <code>gate.log</code>: the stop rule and its result.</li>
+    <li><code>handoffs.jsonl</code>: the 27 handoffs. <code>make_indexes.py</code>, <code>indexes-d1..3.json</code>, <code>indexes.log</code>: the kept indexes per draw.</li>
+    <li><code>handoff_summary.py</code>, <code>handoff_summary.json</code>: the outcome per handoff and the counts above.</li>
+    <li><code>collect.py</code>: written for the probe phase; not used.</li>
+    <li><code>work-*/</code>: state copies. They are not committed (ignored by .gitignore).</li>
+  </ul>
+</body>
+</html>

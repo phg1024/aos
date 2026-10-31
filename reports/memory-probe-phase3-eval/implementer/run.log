@@ -1,0 +1,28 @@
+started 2026-10-29T18:14:57Z condition memory, probes frozen at 74510b7
+probe                    kind        correct superseded off-topic errors       steps searches  reads      bytes
+tridata-order            archive       6/6            0         0      0   1.0  1-1       0.0    0.0          0
+tg-sweep                 summary       6/6            0         0      0   1.8  1-4       0.5    0.2       3704
+leaf2-speedup            superseded    6/6            0         0      0   1.0  1-1       0.0    0.0          0
+leaf2-readopted          superseded    5/6            1         0      0   1.3  1-3       0.0    0.0          0
+decide-leaf2-wide        decision      6/6            0         0      0   1.0  1-1       0.0    0.0          0
+-----------------------------------------------------------------------------------------------------------------
+exit 0
+started 2026-10-29T18:49:34Z condition no-check-rule, probes frozen at 74510b7
+probe                    kind        correct superseded off-topic errors       steps searches  reads      bytes
+tridata-order            archive       4/6            0         0      0   1.0  1-1       0.0    0.0          0
+tg-sweep                 summary       6/6            0         0      0   1.8  1-4       0.5    0.3       3457
+leaf2-speedup            superseded    6/6            0         0      0   1.0  1-1       0.0    0.0          0
+leaf2-readopted          superseded    3/6            3         0      0   1.0  1-1       0.0    0.0          0
+decide-leaf2-wide        decision      6/6            0         0      0   1.0  1-1       0.0    0.0          0
+-----------------------------------------------------------------------------------------------------------------
+exit 0
+started 2026-10-29T19:13:29Z condition no-memory, probes frozen at 74510b7
+probe                    kind        correct superseded off-topic errors       steps searches  reads      bytes
+tridata-order            archive       2/6            0         1      0   6.2  4-12      1.7    2.7      52469
+tg-sweep                 summary       6/6            0         0      0   5.2  3-9       2.7    1.3      21048
+leaf2-speedup            superseded    5/6            0         0      0   2.2  2-3       1.2    0.0       3966
+leaf2-readopted          superseded    0/6            4         0      0   1.0  1-1       0.0    0.0          0
+decide-leaf2-wide        decision      5/6            1         0      0   2.3  2-3       1.3    0.0       2805
+-----------------------------------------------------------------------------------------------------------------
+exit 0
+finished 2026-10-29T20:34:00Z

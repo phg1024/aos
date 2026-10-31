@@ -1,0 +1,57 @@
+[
+ {
+  "id": "h-1661-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's PT_PROF cost-share sweep, what did the combined setting PT_PROF=3 (no shadow walk and no mesh closest-hit) measure?",
+  "topic": "(?i)(prof|shadow|mesh|ms\\b|gpu|render)",
+  "expect": "(?i)(0\\.4[56]|0\\.62)",
+  "note": "Truth: #58 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Second pass, secondary fact (settings 0, 1, 2, 4, 8 are in working memory round5-cost-shares; 3 is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 0.458, 0.623, 'PT_PROF=3')."
+ },
+ {
+  "id": "h-1661-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "topic": "(?i)(gpu|min|refract|glass|candidate|ms\\b)",
+  "expect": "(?i)44\\.7(57|6)?(?:\\D|$)",
+  "note": "Truth: #78 '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' (base gpu_min 43.026). Second pass, secondary fact (render_min/mean of both sides are in working memory round5-glass-and-stack; gpu_min is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 44.757, 44.76, 43.026)."
+ },
+ {
+  "id": "h-3133-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-003135",
+  "question": "In the round-8 E0 profile (scratch _r8p/ build with PT_SPLIT=1), what render_ms_best (wall time) did the default configuration, with no diagnostic flags, print?",
+  "topic": "(?i)(render|wall|split|profile|ms\\b)",
+  "expect": "(?i)31\\.2(36|4)?(?:\\D|$)",
+  "note": "Truth: #38 cfg='' '[split] trace_gpu_ms=30.329' then 'render_ms_best=31.236 render_ms_avg=35.855 gpu_ms_best=0.425'. Second pass, secondary fact (trace 30.30 and the depth sweep are in working memory r8-cost-split; the wall time is not). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.236, 35.855, 27.593, 7.204)."
+ },
+ {
+  "id": "h-414-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "Early in round 2 you tried to save a round-1 reference render by copying the round-1 binary into the out/ folder and running it from there. Did that run produce the reference image? If not, what error did it print?",
+  "topic": "(?i)(reference|round.?1|cop(y|ied)|out/|pathtracer_r1|r1_default|shader|header|error)",
+  "expect": "(?i)(shared (shader )?header|(cannot|could ?n[o']t|can'?t|unable to|failed to) (read|find|load|open)[^.]{0,30}header|header[^.]{0,40}(not found|missing|unreadable|not readable|could ?n[o']t be (read|found))|metal init error)",
+  "reject": "(?i)^\\W*yes\\b",
+  "note": "Truth: #56 'metal init error: cannot read shared shader header' (and 'shasum: out/r1_default.pfm: No such file'). Not in the checkpoint's working memory (art-000643) or live history (checked: 'shared shader header', 'shader header', 'cannot read', 'init error', pathtracer_r1, r1_default)."
+ },
+ {
+  "id": "h-557-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "topic": "(?i)(8x8|threadgroup|shape|ms\\b)",
+  "expect": "(?i)101\\.0(26|3)?(?:\\D|$)|\\b101 ?ms",
+  "note": "Truth: #167 'TG=8x8 render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761'. Second pass, secondary fact (the sweep's winner 16x8 and the other shapes are in working memory round2-progress (e); 8x8 is not). Not in the checkpoint's working memory (art-000643) or live history (checked: 8x8, 101.026, '101.0', 100.761)."
+ },
+ {
+  "id": "h-646-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "topic": "(?i)(avg|average|stack|snapshot|ms\\b)",
+  "expect": "(?i)(103\\.(183|18|2)(?:\\D|$)|100\\.(692|69|7)(?:\\D|$))",
+  "note": "Truth: #216 run 1 'render_ms_best=93.366 render_ms_avg=103.183', run 2 'render_ms_best=96.614 render_ms_avg=100.692'. Second pass, secondary fact (the best times 93.4/96.6 and gpu 92.9 are in working memory round2-progress2 (f)). Not in the checkpoint's working memory (art-000643) or live history (checked: 103.183, 100.692, 103.2, 100.7)."
+ }
+]

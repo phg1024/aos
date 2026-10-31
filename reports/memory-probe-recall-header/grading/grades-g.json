@@ -1,0 +1,434 @@
+{
+ "g0030": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0059": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0067": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0167": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0189": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0213": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0261": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0294": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0331": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0346": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0379": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0390": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0444": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0463": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0467": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0482": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0518": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0583": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0073": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0082": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0099": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0103": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0226": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0491": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0563": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0595": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0165": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": "Full exact detail; calls the benchmarker's conclusion line 'the verifier's own summary' (it is the benchmark record, #7), a harmless misattribution."
+ },
+ "g0066": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Main fact right (gives 10/10 and mean -0.2925 ms) but omits the 31.003 vs 31.264 ms best-of-50 (1.008x) figures from #7."
+ },
+ "g0096": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Main fact right (gives 10/10 and mean -0.2925 ms) but omits the 31.003 vs 31.264 ms best-of-50 (1.008x) figures from #7."
+ },
+ "g0136": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Main fact right (gives 10/10 and mean -0.2925 ms) but omits the 31.003 vs 31.264 ms best-of-50 (1.008x) figures from #7."
+ },
+ "g0245": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Main fact right (gives 10/10 and mean -0.2925 ms) but omits the 31.003 vs 31.264 ms best-of-50 (1.008x) figures from #7."
+ },
+ "g0139": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Main fact right (gives 10/10, -0.2925 ms, ~0.9%) but omits the 31.003 vs 31.264 ms best-of-50 (1.008x) figures from #7."
+ },
+ "g0385": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Gives ~0.93% faster in the paired run but omits the 10/10 pair wins and 31.003 vs 31.264 ms (1.008x) from #7."
+ },
+ "g0112": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "No answer ('step limit exceeded'); #7 records 10/10 pair wins, 31.003 vs 31.264 ms (1.008x)."
+ },
+ "g0428": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says it does not have the result; #7 records 10/10 pair wins, mean -0.2925 ms, 31.003 vs 31.264 ms (1.008x)."
+ },
+ "g0507": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "Declines to give the figure; #7 records 10/10 pair wins, mean -0.2925 ms, 31.003 vs 31.264 ms (1.008x)."
+ },
+ "g0002": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0121": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0124": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0129": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0218": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0263": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0349": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0351": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0497": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0513": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0523": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0529": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0061": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives 31.236 correctly but says it is ~0.5 ms above round 7's 30.984 ms; the gap is 0.25 ms (#38, #7)."
+ },
+ "g0533": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Quotes 31.214 from the first split run (#25, --benchmark 3), a true reading, but the cfg='' row of the E0 sweep printed 31.236 (avg 35.855, trace 30.329) (#38)."
+ },
+ "g0050": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "No answer ('step limit exceeded'); #38 cfg='' printed render_ms_best=31.236."
+ },
+ "g0156": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Hedged ~31.0 ms and asserts the unflagged run (no PT_SPLIT) printed round 7's 30.984; all E0 runs used PT_SPLIT=1 and cfg='' printed 31.236 (#38)."
+ },
+ "g0286": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Hedged ~31 ms and asserts the unflagged _r8p run printed ~30.98 ms (indistinguishable from round 7); #38 shows 31.236."
+ },
+ "g0376": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Declines to give a value and claims the E0 profile recorded no wall-time line; #25 and #38 both printed render_ms_best (31.236 for cfg='', #38)."
+ },
+ "g0057": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0105": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0133": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0211": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0224": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0283": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0350": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0396": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0407": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0418": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0424": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0449": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0528": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0549": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0552": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0566": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0577": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0610": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ }
+}

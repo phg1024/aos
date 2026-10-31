@@ -1,0 +1,630 @@
+{
+ "graded": [
+  {
+   "draw": 1,
+   "segment": "art-000414",
+   "from": 37,
+   "to": 37,
+   "text": "verification dir NOT readable (Operation not permitted) -> cannot compute RMSE locally",
+   "id": 1,
+   "why": [
+    "sample",
+    "r2-verify-dir"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-000414",
+   "from": 56,
+   "to": 57,
+   "text": "copying binary to out/pathtracer_r1 fails (needs include/+shaders/ next to binary); out/ already has round1_default.pfm/ppm reference images",
+   "id": 2,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-000507",
+   "from": 75,
+   "to": 75,
+   "text": "rewrote pt_integrator.metal (constant params, per-thread atomic sample count).",
+   "id": 3,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "detail is in the agent's write call #74, not the tool result #75"
+  },
+  {
+   "draw": 1,
+   "segment": "art-000557",
+   "from": 107,
+   "to": 107,
+   "text": "phase3 dir listing (pt_round_01, scene-*.json, out, logs)",
+   "id": 4,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-000557",
+   "from": 115,
+   "to": 115,
+   "text": "read of live pt_bvh.cpp showing leftover SAH helpers",
+   "id": 5,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-000557",
+   "from": 171,
+   "to": 171,
+   "text": "edit - default group shape set to 16x8",
+   "id": 6,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "group shape is in the edit call #170, not the result #171"
+  },
+  {
+   "draw": 1,
+   "segment": "art-000646",
+   "from": 196,
+   "to": 200,
+   "text": "made link_escapes public fix attempt and rewrote pt_trace.metal with stackless Wald traversal (escape links node.b low 20 bits, leaf count bits 25..20)",
+   "id": 7,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-000646",
+   "from": 210,
+   "to": 210,
+   "text": "made link_escapes public in src/pt_bvh.cpp",
+   "id": 8,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "detail is in the edit call #209, not the result #210"
+  },
+  {
+   "draw": 1,
+   "segment": "art-000646",
+   "from": 224,
+   "to": 224,
+   "text": "read pt_tonemap.metal (Reinhard + pow 1/2.2, NaN guard)",
+   "id": 9,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-001661",
+   "from": 31,
+   "to": 31,
+   "text": "no offline metal compiler (missing Metal Toolchain); max_threads_per_group trace=1024",
+   "id": 10,
+   "why": [
+    "r5-register-counts"
+   ],
+   "grade": "partly",
+   "note": "'missing Metal Toolchain' and 1024 are at #33; #31 only shows xcrun finding a metal path"
+  },
+  {
+   "draw": 1,
+   "segment": "art-001661",
+   "from": 80,
+   "to": 80,
+   "text": "integrator reverted to round-4 text",
+   "id": 11,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "detail is in the edit call #79, not the result #80"
+  },
+  {
+   "draw": 1,
+   "segment": "art-001766",
+   "from": 153,
+   "to": 155,
+   "text": "build failure \u2014 pt_metal_host.hpp GpuMeshData::nodes still typed PtBvhNodeQ*; fixed to PtBvhChild*",
+   "id": 12,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-003133",
+   "from": 24,
+   "to": 25,
+   "text": "_r8p/ profiler \u2014 PT_SPLIT=1 splits trace vs combine into two command buffers, prints trace_gpu_ms; first numbers trace=30.30ms, combine=0.42ms.",
+   "id": 13,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 1,
+   "segment": "art-003133",
+   "from": 56,
+   "to": 56,
+   "text": "_r8_abenv.sh created; PT_DEBUG prints max_threads_per_group trace=1024 sample_parallel=1 (no occupancy lever).",
+   "id": 14,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000414",
+   "from": 1,
+   "to": 1,
+   "text": "task goal (round-2 optimize pathtracer; gates RMSE 0.848/0.755/2.058, caustic 2.224/2.252/3.043, must beat 109.656ms, keep RNG/determinism, forbidden APIs)",
+   "id": 15,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000414",
+   "from": 27,
+   "to": 27,
+   "text": "benchmark json round1: best 109.656ms/gpu 109.397, 153M samples/s, samples check pass, det sha1 87c956f...",
+   "id": 16,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000414",
+   "from": 31,
+   "to": 31,
+   "text": "writer log round1: design notes, bug history, caustic mask mean 9.05/1185px, next-round targets (SAH, compact nodes, short stack, per-sample atomics, no spp tiling)",
+   "id": 17,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000414",
+   "from": 35,
+   "to": 37,
+   "text": "verification dir unreadable (Operation not permitted) -> cannot compute RMSE locally",
+   "id": 18,
+   "why": [
+    "r2-verify-dir"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000507",
+   "from": 69,
+   "to": 77,
+   "text": "rewrote pt_metal_host.hpp/.mm for new buffers (nodes/triangles/normals), constant params, 2D 16x16 threadgroups, per-thread atomic sample counter; updated pt_main.cpp GpuMeshData call.",
+   "id": 19,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000557",
+   "from": 119,
+   "to": 119,
+   "text": "bvh_stats after median split: nodes=40597 internal=20298 leaves=20299 max_leaf=4 mean_leaf=3.42 max_depth=15 (cap 16 not binding)",
+   "id": 20,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000557",
+   "from": 135,
+   "to": 143,
+   "text": "root-AABB exit pruning (pt_ray_aabb_exit, t_limit=min(best_t,root_exit)) in nearest + shadow traversals REGRESSED: 107.004 best, avg 125.973",
+   "id": 21,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000557",
+   "from": 153,
+   "to": 165,
+   "text": "added PT_TG env knob for threadgroup shape in pt_metal_host.mm (sscanf \"%lux%lu\", clamped by maxTotalThreadsPerThreadgroup, PT_DEBUG prints the limit)",
+   "id": 22,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000557",
+   "from": 167,
+   "to": 167,
+   "text": "shape sweep best-of-3: 8x8=101.026, 16x8=96.408 (gpu 93.635), 16x16=100.467, 32x8=104.591, 16x32=110.010, 32x16=118.828",
+   "id": 23,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-000646",
+   "from": 196,
+   "to": 199,
+   "text": "made link_escapes public fix attempt; rewrote pt_trace.metal stackless (escape links in node.b low 20 bits, leaf count bits 25..20)",
+   "id": 24,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-001608",
+   "from": 3,
+   "to": 3,
+   "text": "phase3 dir listing (snapshots pt_round_01..04, ab_r3, _ab.sh, scene-*.json, out/).",
+   "id": 25,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-001766",
+   "from": 122,
+   "to": 126,
+   "text": "host plumbing read \u2014 node_buffer upload at pt_metal_host.mm:145, buffers bound at indices 0..6, quantize_bvh call site pt_main.cpp:151, GpuMeshData pt_metal_host.hpp:17-24.",
+   "id": 26,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-003062",
+   "from": 7,
+   "to": 7,
+   "text": "ledger r4 45.220 / r5 ~44.0 / r6 36.283 / r7 30.984; stop if r7 AND r8 both <5%; r7 was 0.93% so counter=1",
+   "id": 27,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-003062",
+   "from": 9,
+   "to": 9,
+   "text": "BVH TOPOLOGY is part of the frozen estimator (MAX_DEPTH 16->20 changed alt-view PFM): leaf/depth/axis/bin changes forbidden",
+   "id": 28,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 2,
+   "segment": "art-003062",
+   "from": 9,
+   "to": 9,
+   "text": "writer log r7: kept f32 node -0.44%, shadow stack payload -0.49%, 12B sample buffer -0.19%; rejected stk16 +27%, stk24 0, 2spp/thread +1.08%, leaf2 +0.9%, leaf1-spec +0.4%, combine TG sweep noise",
+   "id": 29,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "-0.44%, -0.49%, +27%, +1.08%, leaf +0.9% are in #9; -0.19% and 'leaf1-spec +0.4%' are not"
+  },
+  {
+   "draw": 2,
+   "segment": "art-003133",
+   "from": 50,
+   "to": 50,
+   "text": "E5 PFM byte-identical to _r8b on all three scenes at 64spp seed 1, samples=16777216.",
+   "id": 30,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-000414",
+   "from": 35,
+   "to": 37,
+   "text": "verification dir unreadable (Operation not permitted) -> cannot compute RMSE locally.",
+   "id": 31,
+   "why": [
+    "r2-verify-dir"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-000557",
+   "from": 109,
+   "to": 109,
+   "text": "full round-1 pt_bvh.cpp (median centroid split on widest axis, kLeafSize 4, nth_element, 40-byte nodes) - builder that gave 105ms",
+   "id": 32,
+   "why": [
+    "sample"
+   ],
+   "grade": "partly",
+   "note": "median split on the widest axis, kLeafSize 4, nth_element hold; '40-byte nodes' and 'gave 105ms' are not in #109"
+  },
+  {
+   "draw": 3,
+   "segment": "art-000557",
+   "from": 121,
+   "to": 121,
+   "text": "bench after median split: render_ms_best=103.290 avg=113.313 gpu_ms_best=102.951 (512x512/64spp seed1 5 frames)",
+   "id": 33,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-000557",
+   "from": 151,
+   "to": 151,
+   "text": "back to 103.410/109.625 gpu 103.098",
+   "id": 34,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-000646",
+   "from": 220,
+   "to": 220,
+   "text": "full read of pt_integrator.metal (fresnel/refract/cosine sampler/NEE/trace_kernel).",
+   "id": 35,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-000646",
+   "from": 226,
+   "to": 243,
+   "text": "merged tone map into trace_kernel: pt_tonemap.metal -> inline pt_tone_map(), host concat order pt_trace,pt_tonemap,pt_integrator, image buffer index 6, tone pipeline/encoder/helper deleted.",
+   "id": 36,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001608",
+   "from": 7,
+   "to": 7,
+   "text": "source layout + line counts (pt_trace.metal 506, pt_integrator.metal 258, pt_bvh.cpp 430)",
+   "id": 37,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001608",
+   "from": 12,
+   "to": 12,
+   "text": "pt_gpu_types.hpp (PtTri 48B padded, PtTriNormals 36B, PtBvhNodeQ 16B, PtParams incl pad field)",
+   "id": 38,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001661",
+   "from": 31,
+   "to": 31,
+   "text": "no offline metal compiler; xcrun metal missing Metal Toolchain (no register counts)",
+   "id": 39,
+   "why": [
+    "r5-register-counts"
+   ],
+   "grade": "partly",
+   "note": "'missing Metal Toolchain' is at #33; #31 only shows xcrun finding a metal path"
+  },
+  {
+   "draw": 3,
+   "segment": "art-001661",
+   "from": 33,
+   "to": 33,
+   "text": "PT_DEBUG max_threads_per_group trace=1024",
+   "id": 40,
+   "why": [
+    "r5-register-counts"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001661",
+   "from": 82,
+   "to": 84,
+   "text": "entered-distance stack; caught control-flow bug (prune continue left node_tested=false with stale node_index) -> pop became inner while + resumed flag",
+   "id": 41,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001766",
+   "from": 124,
+   "to": 124,
+   "text": "full round-4 pt_trace.metal text (both walks, entered-distance + stack_payload stacks, box tests with exited>0).",
+   "id": 42,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-001766",
+   "from": 153,
+   "to": 155,
+   "text": "build error - pt_metal_host.hpp GpuMeshData::nodes still PtBvhNodeQ*; fixed to PtBvhChild*.",
+   "id": 43,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-003133",
+   "from": 19,
+   "to": 20,
+   "text": "_r7_ab.sh/_r7_pair.pl harness contents; full text of scene-default/alt-view/caustic-closeup JSONs",
+   "id": 44,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  },
+  {
+   "draw": 3,
+   "segment": "art-003133",
+   "from": 58,
+   "to": 60,
+   "text": "_r8e scratch tree: PT_DEFINE host hook; PT_MORTON_T in pt_morton_decode; appended trace_lanes_kernel/combine_lanes_kernel (lanes=samples)",
+   "id": 45,
+   "why": [
+    "sample"
+   ],
+   "grade": "holds",
+   "note": ""
+  }
+ ],
+ "extra": [
+  {
+   "draw": 1,
+   "segment": "art-003133",
+   "from": 30,
+   "to": 30,
+   "why": [
+    "outside the plan: cites #30, the grep output the r8-sibling-pairs truth #31 rests on"
+   ],
+   "grade": "holds",
+   "note": "#30 shows writer log line 163: n=41 +0.104 +- 0.218 ms, a wash"
+  },
+  {
+   "draw": 2,
+   "segment": "art-003133",
+   "from": 30,
+   "to": 30,
+   "why": [
+    "outside the plan: cites #30, the grep output the r8-sibling-pairs truth #31 rests on"
+   ],
+   "grade": "holds",
+   "note": "#30 shows writer log line 163: n=41 +0.104 +- 0.218 ms, a wash"
+  },
+  {
+   "draw": 3,
+   "segment": "art-003133",
+   "from": 30,
+   "to": 30,
+   "why": [
+    "outside the plan: cites #30, the grep output the r8-sibling-pairs truth #31 rests on"
+   ],
+   "grade": "holds",
+   "note": "#30 shows writer log line 163: n=41 +0.104 +- 0.218 ms, a wash"
+  }
+ ],
+ "counts": {
+  "holds": 37,
+  "partly": 8,
+  "wrong": 0
+ }
+}
