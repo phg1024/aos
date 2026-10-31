@@ -1,0 +1,26 @@
+[
+ {
+  "gid": "g0012",
+  "probe": "h-557-2",
+  "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+  "answer": "gpu_ms_best = 100.887 ms.\n\nHow I know: that run's full output line is preserved in my archived history (message #133), from the 5-frame benchmark of the default scene at 512x512 / 64 spp, seed 1, --threads 8, after rebuilding with options.fastMathEnabled = YES (the build emitted only the macOS 15 deprecation warning for that property):\n\n  render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nContext: the immediately preceding run without fastMath printed render_ms_best=101.771 (gpu_ms_best=101.237), so the difference was within the ~5 ms run-to-run noise on this machine — I logged fastMath as neutral and kept it enabled, noting the property is deprecated in favour of mathMode. For reference, the round-2 work later took the same scene down to gpu_ms_best=58.839 ms."
+ },
+ {
+  "gid": "g0055",
+  "probe": "h-557-2",
+  "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+  "answer": "gpu_ms_best = 100.887 ms.\n\nHow I know: the fastMathEnabled run was the 5-frame default-scene benchmark (512x512, 64 spp, seed 1, 8 host threads) right after I re-enabled `options.fastMathEnabled = YES` in src/pt_metal_host.mm (message #133). The program's printed line was:\n\n  render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nFor context, the run immediately before it (same median-split BVH, fastMath off) printed render_ms_best=101.771 / gpu_ms_best=101.237 (#129), so fastMath was effectively neutral (~0.3-0.6%, inside the ±5 ms noise on this machine); I left it enabled but it is deprecated in favour of mathMode. The big round-2 wins came later and elsewhere: near-first child ordering in the closest-hit traversal (93.5 -> 64.9 ms, #283) and kLeafSize 4 -> 1 (-> 59.1 ms best / 58.839 gpu_ms_best, #316)."
+ },
+ {
+  "gid": "g0335",
+  "probe": "h-557-2",
+  "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+  "answer": "gpu_ms_best=100.887.\n\nHow I know: that run's full benchmark line was printed in the tool result at message #133 (I re-read #130-#136 to quote it exactly). The command was the exact build with `options.fastMathEnabled = YES` added to the MTLCompileOptions in src/pt_metal_host.mm (only a deprecation warning), then `./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5`, and stdout was:\n\nrender_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nSo render_ms_best=101.150 with gpu_ms_best=100.887, versus 101.771 / gpu 101.237 for the same build without fast math (#129) - a difference inside the +/-5 ms noise on this machine, which is why fast math was recorded as neutral (it is still enabled, though deprecated in favour of mathMode). For context, the round-2 work afterwards (near-first child ordering in the closest-hit traversal, kLeafSize 4->1, merged tone mapping, two dropped normalize() calls) brought the same scene down to render_ms_best=59.114 / gpu_ms_best=58.839 (#316)."
+ },
+ {
+  "gid": "g0365",
+  "probe": "h-557-2",
+  "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
+  "answer": "gpu_ms_best=100.887.\n\nThat is the exact value printed by the fastMathEnabled 5-frame benchmark on the default scene (512x512, 64 spp, seed 1, 8 threads): the full line was\n\n  render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nHow I know: it is archived tool result message #133 (I just re-read it to quote it verbatim). That run was the rebuild with `options.fastMathEnabled = YES;` in src/pt_metal_host.mm (it emitted the macOS 15 deprecation warning for fastMathEnabled), and the prior line-by-line comparison was #129's 101.771 best / gpu 101.237 without fast math — hence my logged conclusion that fast math was neutral (about 0.6 ms, inside the ±5 ms run-to-run noise), though I left it enabled. For context, later round-2 work (near-first BVH child ordering plus kLeafSize 1) brought the same benchmark down to gpu_ms_best 58.8-66.1."
+ }
+]

@@ -1,0 +1,146 @@
+[
+ {
+  "gid": "g0015",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — that is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: the round-4 number is the figure this round was told to beat, and I confirmed it directly at the start of round 5 when I read pathtracer_benchmark.json (round-4 entry render_ms_best=45.220 / gpu_ms_best=44.907) alongside the tail of pathtracer_writer_log.txt, which ends with the round-4 summary and its kept/rejected optimization lists. I also froze that round-4 build as the A/B reference binary (ab_r4/pathtracer, md5 matching pt_round_04) and its three seed-1 reference PFMs, so every round-5 measurement is quoted against 45.220 ms."
+ },
+ {
+  "gid": "g0053",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default scene at 512x512, 64 spp, seed 1 — that is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of round 5 I read /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer_benchmark.json (history message #16), which holds those round-4 numbers along with the exact compile command, and the same figures appear in the round-4 writer-log tail I read (message #5) and in the round-5 goal as the best verified result. My own A/B runs of that same binary on a quiet machine reproduce it closely (43.2-44.9 ms best-of-N), which is consistent with 45.220 ms being the recorded benchmark figure."
+ },
+ {
+  "gid": "g0063",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: that number is the \"BEST VERIFIED\" figure carried into my round-5 goal, and it matches the artifacts I read at the start of this round — the tail of pathtracer_writer_log.txt (my round-4 entry) and the round-4 best line in pathtracer_benchmark.json (45.220 / 44.907), which I read before making any changes (history items 5 and 16). It is also the number my round-5 A/B baselines reproduce when the machine is quiet (the round-4-derived _b binary bottoms out at ~43.2–44.9 ms under the interleaved harness, whose contention inflates the mean but not the floor)."
+ },
+ {
+  "gid": "g0075",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms, render_ms_avg = 52.390 ms) at 512x512 / 64 spp, seed 1.\n\nHow I know: at the start of round 5 I read the tail of pathtracer_writer_log.txt, which states round 4 was verified at 45.220/44.907 (my note in message #6: \"round 4 kept B+C+D+E+F+H, verified 45.220/44.907\"), and I cross-read pathtracer_benchmark.json, whose round-4 best_trial_line is \"render_ms_best=45.220 render_ms_avg=52.390 gpu_ms_best=44.907 spp=64 width=512 height=512 samples=16777216 threads_used=8\" from 6 trials of 5 frames each (message #16). That is 2.4249x over the frozen baseline's 109.656 ms."
+ },
+ {
+  "gid": "g0100",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting of 512x512 at 64 spp, seed 1 — that is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt (rounds 1-4 history and the kept/rejected lists) and the round-4 line in pathtracer_benchmark.json, which shows render_ms_best=45.220 / gpu_ms_best=44.907; the round-5 task goal quotes the same figure as the best verified result, and it matches what I measure myself when the machine is quiet — my A/B base built from the round-4 code (snapshot _b, with the two kept round-5 stack changes) bottoms out at 43.2-44.8 ms per-invocation render_ms_best, and degrades to 60-96 ms only during the heavy shared-machine contention seen later in this session."
+ },
+ {
+  "gid": "g0123",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms for itself (with gpu_ms_best = 44.907 ms) at the benchmark setting: default scene, 512x512, 64 spp, seed 1. I know this from two places read early in round 5: the tail of pathtracer_writer_log.txt, which closes the round-4 entry with that number, and pathtracer_benchmark.json, whose round-4 record shows render_ms_best=45.220 / gpu_ms_best=44.907 (my working-memory entry 'round5-refs' cites messages 16 and 5 for these reads). That 45.220 ms is also the figure the round-5 goal quotes as the best verified result — 2.4249x over the frozen baseline's 109.656 ms — and the frozen round-4 binary used as my A/B base reproduces it when the machine is quiet (its per-invocation bests land at 43.2-44.8 ms in my cleanest A/B rounds; the machine has since been contended, with both binaries measured at 60-96 ms)."
+ },
+ {
+  "gid": "g0125",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512 / 64 spp, seed 1 — that is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt (my message #5), which lists the round-by-round history including round 4's final numbers, and I cross-checked pathtracer_benchmark.json (message #16), whose round-4 best line reads render_ms_best=45.220 / gpu_ms_best=44.907. The same figure is the target quoted in my round-5 goal and is stored in my working memory as the best verified result (snapshot pt_round_04, also the frozen A/B base in ab_r4/pathtracer and _b/pathtracer)."
+ },
+ {
+  "gid": "g0130",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms for itself (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — i.e. 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt (rounds 1-4 history with the kept/rejected lists) and pathtracer_benchmark.json, whose round-4 best line reads render_ms_best=45.220 / gpu_ms_best=44.907; that same figure is the target quoted in my round-5 goal, and it is the number the round-4 snapshot pt_round_04 was verified against. For context, my own measurements of that same binary in this session's quiet windows land at 43.3-44.9 ms, so the machine currently oscillates well above that floor under load."
+ },
+ {
+  "gid": "g0142",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for itself, measured at the benchmark setting 512x512, 64 spp, seed 1 — 2.4249x faster than the frozen baseline's 109.656 ms. I know this from two artifacts I read at the start of round 5: the tail of pathtracer_writer_log.txt (the round-4 entry describing the kept optimizations and that measured result) and pathtracer_benchmark.json, which carries the same round-4 pair 45.220 / 44.907 alongside the exact build command. It is also the number the round-5 goal quotes as the best verified time, and the live source tree I started from was byte-for-byte identical to the pt_round_04 snapshot that produced it."
+ },
+ {
+  "gid": "g0150",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark configuration: 512x512 at 64 spp, seed 1, --threads 8.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt and pathtracer_benchmark.json, and the round-4 record there is render_ms_best=45.220 / gpu_ms_best=44.907 (my working-memory entry 'round5-refs' and the archived index entry for message 16 both record those numbers, and the round-5 task context quotes the same values as the best verified result, 2.4249x over the frozen baseline's 109.656 ms).\n\nFor context on this round so far: the round-4 snapshot code is the frozen A/B base, and on a quiet machine both the base and my current candidate measure in the 43-45 ms range; the machine is currently contended (load ~4, single runs near 96 ms), which is why I am holding further timing until it settles. Two round-5 candidates were rejected as non-wins (child-pair 32B BVH blocks: statistically a wash; per-triangle plane pre-filter: ~109% of base, i.e. slower), and one provably-fewer-ops change (dropping the redundant `exited > 0` compare in the BVH box test) is kept and is bit-identical to round 4 on all three scenes."
+ },
+ {
+  "gid": "g0168",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting of 512x512 at 64 spp, seed 1 — that is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt (history entry #5) and pathtracer_benchmark.json (#16), and the round-4 record there is render_ms_best=45.220 / gpu_ms_best=44.907; the same figure is carried in my working-memory entry for round-5 references and in the round-5 goal text. I also rebuilt and re-verified that round-4 code (snapshot pt_round_04, frozen A/B base in _b/ and ab_r4/) this round — it is bit-identical to the reference PFMs for all three scenes — but the timings I can measure right now are unusable because the machine is heavily contended (the same binary reports ~96 ms instead of its 43-45 ms quiet-machine floor, load average ~4), so 45.220 ms remains the recorded round-4 best."
+ },
+ {
+  "gid": "g0187",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark configuration — 512x512 at 64 spp, seed 1 — which is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: that figure is stated in my round-5 task goal as the best verified result (snapshot pt_round_04), and I confirmed it myself at the start of round 5 when I read /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer_benchmark.json, whose round-4 entry lists render_ms_best=45.220 and gpu_ms_best=44.907 alongside the exact compile command. It is also the number I have carried in working memory as the target to beat this round (my A/B baselines this round were measured against the round-4 binary, whose quiet-machine floor I reproduced at ~43-45 ms)."
+ },
+ {
+  "gid": "g0188",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark configuration — 512x512 at 64 spp, seed 1, measured with the exact build command and DEVELOPER_DIR=/Library/Developer/CommandLineTools. That is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt and pathtracer_benchmark.json, whose round-4 entry holds those two numbers (45.220 / 44.907), and the round-4 snapshot pt_round_04 is what I froze as the A/B base binary (md5 matched the pt_round_04 build). Note that today's machine is heavily contended — the same round-4 binary now measures 60-96 ms in short runs instead of ~43-45 ms — so those recorded figures were taken on a quiet machine, which is also why my interleaved A/B comparisons this round have had to rely on paired statistics (min/p10 and paired log-ratios) rather than raw timings."
+ },
+ {
+  "gid": "g0189",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting: 512x512, 64 spp, seed 1, 8 host threads. How I know: at the start of this round I read the tail of pathtracer_writer_log.txt, whose round-4 entry states that result, and I then read pathtracer_benchmark.json, whose latest round-4 record carries the same pair (45.220 / 44.907) — that is also the number the round-5 goal quotes as the best verified time (2.4249x over the frozen baseline's 109.656 ms). For context, all of this round's A/B runs have been against a binary reproducing that state (the _b snapshot: round-4 plus the entered-distance stack and stack payload), and the machine's quiet floor today matches it at roughly 43-45 ms."
+ },
+ {
+  "gid": "g0253",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting, 512x512 at 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms. I know this from three consistent sources read at the start of this round: the round-4 entry at the tail of pathtracer_writer_log.txt that I read before making any changes, the round-4 best line in pathtracer_benchmark.json (45.220 / 44.907, noted in my early history at message #16), and the round-5 task goal quoting the same verified figure. My own A/B re-measurements of that round-4 binary this round reproduce it as the quiet-machine floor (min 43.2-44.8 ms when the machine is idle, higher under the load spikes we've had)."
+ },
+ {
+  "gid": "g0284",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512 / 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of round 5 I read the tail of pathtracer_writer_log.txt (rounds 1-4 history with the kept/rejected lists) and the round-4 best line in pathtracer_benchmark.json, which reads render_ms_best=45.220 gpu_ms_best=44.907; the same figures are in the round-5 task goal and in my working memory, and the round-4 code is frozen as the A/B reference binary in ab_r4/ plus the snapshot pt_round_04/."
+ },
+ {
+  "gid": "g0305",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: it is the number in my round-5 goal, and I confirmed it at the start of this round by reading the tail of pathtracer_writer_log.txt (rounds 1-4 history with the kept/rejected lists) and the round-4 best line in pathtracer_benchmark.json, which printed render_ms_best=45.220 / gpu_ms_best=44.907. Everything I have measured this round is consistent with that floor: my interleaved A/B runs against the round-4 code (snapshot _b) bottom out at ~43-45 ms when the machine is quiet, and only inflate to 60-96 ms during the contention spells I have been fighting."
+ },
+ {
+  "gid": "g0320",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for itself, at the benchmark setting 512x512 / 64 spp, seed 1 — i.e. 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt and then pathtracer_benchmark.json, whose round-4 line reads render_ms_best=45.220 render_ms_avg=... gpu_ms_best=44.907 spp=64 width=512 height=512 samples=16777216 (history entries #5 and #16). The round-5 task context quotes the same figure as the best verified result, and the round-4 snapshot pt_round_04 is what I copied into the A/B reference binary (ab_r4/_b) that all of this round's comparisons are made against. For scale, my own quiet-machine re-measurements of that same binary today bottom out around 43.2-44.8 ms, and the machine is currently contended (load ~4, the same binary measuring 68-96 ms), which is why I have been using paired interleaved A/B statistics rather than absolute times."
+ },
+ {
+  "gid": "g0324",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for itself at the benchmark setting — 512x512, 64 spp, seed 1 — which is 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of this round I read the tail of pathtracer_writer_log.txt (rounds 1-4 history with the kept/rejected lists) and the round-4 line in pathtracer_benchmark.json, both of which carry that 45.220 / 44.907 result, and it matches the BEST VERIFIED figure in my round-5 task context. I have also been using it as the reference point for every A/B measurement this round; the machine's current floor under contention is ~43-46 ms for the same binary, consistent with that number."
+ },
+ {
+  "gid": "g0330",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting — 512x512 at 64 spp, seed 1, --benchmark runs, 8 host threads. That is 2.4249x faster than the frozen baseline's 109.656 ms.\n\nHow I know: I read those numbers at the start of round 5 from the round-4 records in the phase3 directory (pathtracer_benchmark.json holds render_ms_best=45.220 / gpu_ms_best=44.907, noted in my history entry #16, alongside the writer-log tail summarizing rounds 1-4), and I used them as the target for this round. The round-4 code was frozen as the A/B reference binary in ab_r4/pathtracer (md5 matching the pt_round_04 snapshot), and its measured behaviour in my interleaved A/B runs this round is consistent with that figure: on a quiet machine both the round-4 base and my candidates land at a ~43-45 ms floor, while under the current background load (load average 4-5) both inflate together to 60-96 ms."
+ },
+ {
+  "gid": "g0361",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting of 512x512 at 64 spp, seed 1. I know this from the round-5 startup reads: the tail of pathtracer_writer_log.txt summarizing rounds 1-4, and the round-4 best line in pathtracer_benchmark.json (45.220 / 44.907), which the task goal also quotes as the best verified time — 2.4249x over the frozen baseline's 109.656 ms. That 45.220 ms figure is the target round 5 must beat; my measurements this round have been against the same live build, whose quiet-machine floor I measured at about 43.2-44.8 ms per frame before the machine became heavily contended (load average 4-5, frames inflating to 68-96 ms), which is why the A/B comparisons this round were mostly statistical washes."
+ },
+ {
+  "gid": "g0363",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — i.e. 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of round 5 I read the tail of pathtracer_writer_log.txt (history entry #5), which ends with round 4's result, and then read pathtracer_benchmark.json (entry #16), whose round-4 record lists render_ms_best=45.220 / gpu_ms_best=44.907 alongside the exact build command. That is also why the round-5 baseline binary I froze for A/B (ab_r4/pathtracer, md5 matching pt_round_04) is the reference I compare every candidate against."
+ },
+ {
+  "gid": "g0368",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) at the benchmark setting 512x512, 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: at the start of round 5 I read the tail of pathtracer_writer_log.txt (rounds 1-4 history with the kept/rejected lists, message #5) and the round-4 best line in pathtracer_benchmark.json (message #16), which is the 45.220/44.907 line; the same figure is carried in the round-5 task goal as the best verified result and in my working memory, and my round-5 A/B baselines against the round-4 binary reproduced a ~43-45 ms floor on a quiet machine, consistent with it."
+ },
+ {
+  "gid": "g0378",
+  "probe": "h-1608-2",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "answer": "Round 4 recorded render_ms_best = 45.220 ms (with gpu_ms_best = 44.907 ms) for the default benchmark setting, i.e. 512x512 at 64 spp, seed 1 — 2.4249x over the frozen baseline's 109.656 ms.\n\nHow I know: I read it twice at the start of this round — once from the round-4 entry in pathtracer_benchmark.json (indexed as message 16: \"benchmark.json round-4 numbers 45.220/44.907, exact compile cmd\") alongside the tail of pathtracer_writer_log.txt, and it is also the figure carried in my working memory (round5-refs) and in the round-5 goal as the BEST VERIFIED result. The round-4 code is snapshotted at pt_round_04 and frozen for A/B as ab_r4/pathtracer (binary md5 5c318568, identical to pt_round_04)."
+ }
+]

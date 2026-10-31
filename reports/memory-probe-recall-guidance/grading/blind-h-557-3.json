@@ -1,0 +1,146 @@
+[
+ {
+  "gid": "g0007",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured — there is no render_ms_best number for it, and I do not want to invent one.\n\nHow I know: my working-memory entry for the first PT_TG sweep (512x512/64spp, best of 3-4 frames, evidence messages #167 and #169) lists exactly eight shapes and their results: 16x8 = 90.5 (avg 96.6), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. 8x8 is not among them, and the later re-sweep on the optimized kernel (#300) also used only 16x8, 16x16, 16x4, 8x16 and 4x32. 16x8 (128 threads/group) won both times and is the compiled-in default; the current best on it is render_ms_best = 59.114 / gpu_ms_best = 58.839 (repeats 60.4-66.3, noise about ±5ms) versus the 109.656 ms gate.\n\nIf you want an 8x8 data point, I can add it to the sweep in a future round."
+ },
+ {
+  "gid": "g0029",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first threadgroup-shape sweep (the PT_TG environment knob, 512x512 at 64 spp, seed 1, --benchmark 3, 8 host threads), the 8x8 shape measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761, samples=16777216). I know this from my own logged tool result for that sweep (archive message #167), which ran the loop `for tg in 8x8 16x8 16x16 32x8 16x32 32x16` and printed each line: 8x8 101.026, 16x8 96.408, 16x16 100.467, 32x8 104.591, 16x32 110.010, 32x16 118.828. That is why 16x8 (128 threads per group) became the default; a follow-up sweep (#169) confirmed it at 90.5-96.6 ms with 4 frames per shape, and 16x8 is still the best shape on the current near-first-traversal kernel (62.9 ms vs 16x16 76.7, 8x16 67.3, 16x4 73.9, #300). Note the measurement noise on this machine is about +/-5 ms, so single-run differences under ~5 ms are not meaningful."
+ },
+ {
+  "gid": "g0038",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured, so there is no render_ms_best for it. The round-2 PT_TG sweep (first sweep, ~3 frames per shape, 512x512/64spp, recorded in my working-memory entry \"round2-progress\" resting on history messages 167-169) covered exactly these shapes: 16x8 = 90.5 (best, made the default), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8 ms. The later re-sweep after the near-first traversal win (message #300) tested 16x8 = 62.9, 8x16 = 67.3, 16x4 = 73.9, 4x32 = 74.0, 16x16 = 76.7 — again no 8x8. I also just searched my compacted archive for \"PT_TG threadgroup sweep 8x8 render_ms_best\" and it returned zero matches, so I would be fabricating a number if I gave one. If you want the 8x8 datapoint, I can measure it with PT_TG=8x8 in one run."
+ },
+ {
+  "gid": "g0076",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured, so there is no render_ms_best for it to report. The first PT_TG sweep (512x512, 64 spp, best of 3-4 frames, recorded in my working-memory entry 'round2-progress' with evidence #167/#169) covered exactly these shapes: 16x8 = 90.5 (repeat 96.6, the winner and current default), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8 ms. The second sweep after the near-first traversal optimization (#300) also only tested 16x8 (62.9), 16x16 (76.7), 16x4 (73.9), 8x16 (67.3) and 4x32 (74.0) — again no 8x8. If you want the number, I would need to run PT_TG=8x8; the nearest neighbours (8x16 and 16x4) bracketed roughly 91-94 ms in the first sweep."
+ },
+ {
+  "gid": "g0082",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first PT_TG threadgroup-shape sweep (512x512, 64 spp, seed 1, 3 frames per shape), the 8x8 shape measured render_ms_best=101.026 ms (render_ms_avg=106.438 ms, gpu_ms_best=100.761 ms). I know this because the sweep output is recorded verbatim in my earlier tool result (archived message #167), which listed TG=8x8 first, followed by 16x8=96.408, 16x16=100.467, 32x8=104.591, 16x32=110.010, 32x16=118.828; the follow-up sweep (#169) then confirmed 16x8 as the winner, which remains the default."
+ },
+ {
+  "gid": "g0109",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured, so there is no render_ms_best for it. Round 2's first PT_TG sweep (512x512/64spp, best of 3-4 frames, evidence #167/#169) covered only these shapes: 16x8 = 90.5 (render_ms_best; gpu 96.6), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. The winner 16x8 became the default. I know this from my working-memory entry 'round2-progress' (item e) which lists the sweep verbatim, and I confirmed by searching my archived history for 'PT_TG=8x8' — zero matches, so 8x8 was not among the tested shapes. If you want an 8x8 number I would have to run it (the PT_TG env knob is still in the host, so it is a one-command measurement), but I have not done that and am not starting new work."
+ },
+ {
+  "gid": "g0118",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured — there is no render_ms_best for it. In round 2's first PT_TG sweep (512x512/64spp, best of 3-4 frames) the shapes I actually ran were 16x8 = 90.5/96.6 (the winner, made the default), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8 ms (working-memory entry 'round2-progress', evidence #167/#169). The later re-sweep after the near-first traversal change (#300) covered only 16x8 (62.9), 16x16 (76.7), 16x4 (73.9), 8x16 (67.3) and 4x32 (74.0) — again no 8x8. So any 8x8 number would have to be measured; I have not run it."
+ },
+ {
+  "gid": "g0163",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In that sweep the 8x8 threadgroup measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761) at 512x512/64spp, seed 1, 3 frames per shape. That run is archived tool message #167, which swept 8x8, 16x8, 16x16, 32x8, 16x32 and 32x16; 16x8 won it at 96.408 ms best (93.635 gpu), and 8x8 was the second-worst of the six — which is why 16x8 (128 threads/group) became the default and is still the best shape on the round-2 kernel (62.9 ms vs 16x16 76.7, 8x16 67.3, 16x4 73.9 in the later re-sweep, message #300)."
+ },
+ {
+  "gid": "g0196",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first PT_TG threadgroup-shape sweep (512x512, 64 spp, seed 1, 3 frames per shape), the 8x8 shape measured render_ms_best=101.026ms (render_ms_avg=106.438ms, gpu_ms_best=100.761ms).\n\nHow I know: that sweep's raw output is message #167 in my session history, which I just re-read from the archive (I had planned the 8x8/16x8/16x16/32x8/16x32/32x16 sweep in #166). For context, 8x8 was the second-worst in that first pass after 16x16's 100.467ms; 16x8 won it at 96.408ms (gpu 93.635) and went on to win the follow-up neighbor sweep too (90.498ms in #169), so 16x8 (128 threads per group) is the committed default — it still wins on the optimized round-2 kernel (62.9ms vs 16x16 76.7, 8x16 67.3, 16x4 73.9, #300)."
+ },
+ {
+  "gid": "g0212",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "There is no 8x8 number to report — that shape was never measured in round 2.\n\nHow I know: my working-memory entry for the first PT_TG sweep (recorded from messages #167/#169, 512x512 at 64 spp, best of 3-4 frames) lists the shapes I actually ran and their render_ms_best/gpu_ms_best: 16x8 = 90.5/96.6 (chosen as the default), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. The later re-sweep on the optimized kernel (#300) also omitted 8x8: 16x8 = 62.9, 8x16 = 67.3, 16x4 = 73.9, 4x32 = 74.0, 16x16 = 76.7.\n\nSo 16x8 (128 threads per group) was the winner in both sweeps and remains the default; 8x8 would be a 64-thread group, which I never tested. If you want it, it is a one-line run with PT_TG=8x8 and takes about a minute."
+ },
+ {
+  "gid": "g0222",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured, so there is no render_ms_best to report for it.\n\nHow I know: the round-2 PT_TG sweep (512x512/64spp, best of 3-4 frames, recorded in my working memory with evidence messages 167 and 169) covered exactly eight shapes and their render_ms_best / render_ms_avg values were: 16x8 = 90.5/96.6, 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. That is why 16x8 (128 threads per group) became the default. The later re-sweep after the near-first traversal and tone-map merge (message 300) tested only 16x8, 16x16, 16x4, 8x16 and 4x32, and again did not include 8x8, so it remains unmeasured. The nearest measured neighbours were 8x16 at 94.4ms and 16x8 at 90.5ms in that first sweep.\n\nIf you want the 8x8 number, I can add it to the sweep in a later round; note the measurement noise on this machine is about +/-5ms, so shapes should be compared over at least 5 frames."
+ },
+ {
+  "gid": "g0237",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first threadgroup-shape sweep (PT_TG knob, 512x512 / 64 spp, seed 1, 3 frames per shape), the 8x8 shape measured render_ms_best=101.026 ms (render_ms_avg=106.438 ms, gpu_ms_best=100.761 ms, samples=16777216).\n\nHow I know: that sweep was run in a single shell loop over shapes 8x8, 16x8, 16x16, 32x8, 16x32, 32x16, and its raw stdout is preserved in my session history (tool result #167, archived in segment art-000557). I re-read those exact messages rather than re-measuring. For context, 8x8 was the second-worst of that batch behind 16x16 (100.467) and far behind the winner 16x8 (96.408 in that run, 90.498 on a repeat), which is why 16x8 (128 threads/group) became the default. Note the ±5 ms run-to-run noise on this machine, which is why I later used 5+ frames for comparisons."
+ },
+ {
+  "gid": "g0248",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 was never measured in round 2's threadgroup sweep, so there is no render_ms_best for it to report.\n\nHow I know: my working-memory entry \"round2-progress\" (evidence #167, #169) records the first PT_TG sweep at 512x512/64spp as exactly these shapes — 16x8 = 90.5/96.6, 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8 — with 16x8 chosen as the default. A second sweep on the later near-first kernel (#300) also used only 16x8, 16x16, 16x4, 8x16, 4x32. A search of my archived history for an 8x8 PT_TG measurement returns no matches (matched:0), so the premise of the question doesn't hold rather than my having forgotten a number."
+ },
+ {
+  "gid": "g0280",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "There is no 8x8 number to report — that shape was never measured. The round-2 PT_TG sweep (512x512/64spp, best of 3-4 frames, measured against the ~90-100ms pre-near-first kernel) covered exactly these shapes: 16x8 = 90.5 render_ms_best (avg 96.6, the winner), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. 8x8 was not in the list, and the later re-sweep on the new near-first kernel (#300) also only tested 16x8 (62.9), 16x16 (76.7), 16x4 (73.9), 8x16 (67.3) and 4x32 (74.0). So 16x8 threadgroups (128 threads/group) is the current default; if you want an 8x8 data point I can add it, but note the sweep noise is about +/-5ms so a 3-frame run of a single shape is not a reliable comparison."
+ },
+ {
+  "gid": "g0316",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "No number exists for 8x8 — that shape was never measured, so I cannot report a render_ms_best for it without inventing one.\n\nHow I know: my round-2 working-memory entry for the first PT_TG sweep (512x512, 64 spp, best of 3-4 frames, evidence messages #167/#169) lists exactly these shapes and results: 16x8 = 90.5 (repeat 96.6), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. 8x8 is absent from that list, which is why 16x8 (128 threads/group) was made the default. The later re-sweep after the tone-map merge and the near-first traversal change (#300) also skipped 8x8: 16x8 = 62.9, 8x16 = 67.3, 16x4 = 73.9, 16x16 = 76.7, 4x32 = 74.0.\n\nIf you want 8x8 (64 threads/group) filled in, I can run the PT_TG=8x8 benchmark on the current kernel in one call."
+ },
+ {
+  "gid": "g0326",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first threadgroup-shape sweep (PT_TG knob, 512x512 / 64 spp, seed 1, --benchmark 3), the 8x8 shape measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761). I know this because that sweep's raw output is still in my history: the run looped over shapes 8x8, 16x8, 16x16, 32x8, 16x32, 32x16 and printed one benchmark line each; 8x8 was the first entry at 101.026/106.438/100.761, versus 16x8 at 96.408/102.595/93.635 (the winner, later confirmed at 90.5 in a follow-up sweep and kept as the default 128-thread group)."
+ },
+ {
+  "gid": "g0349",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first threadgroup-shape sweep (PT_TG knob, 512x512 at 64 spp, seed 1, 3 frames per shape) the 8x8 shape measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761). I know this from the archived tool result of that sweep run — the loop iterated over `8x8 16x8 16x16 32x8 16x32 32x16` and printed `TG=8x8 render_ms_best=101.026 ...` (archive message #167, which I just re-read to confirm the exact number). For context, 8x8 lost that sweep to 16x8, which measured 96.408 in the same run (and 90.498 on a later repeat), so 16x8 (128 threads per group) became the default and is still the best shape on the current kernel (62.9 ms vs 16x16 76.7, 8x16 67.3, 16x4 73.9)."
+ },
+ {
+  "gid": "g0354",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "The 8x8 threadgroup shape measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761) in round 2's first PT_TG sweep, at 512x512 / 64 spp, seed 1, 3 benchmark frames, 8 host threads.\n\nHow I know: that sweep is archived tool result message #167, which ran `for tg in 8x8 16x8 16x16 32x8 16x32 32x16` with the PT_TG knob and printed one render_ms_best line per shape. In that same run 16x8 was the winner at 96.408 ms (gpu 93.635), with 16x16 at 100.467, 32x8 at 104.591, 16x32 at 110.010 and 32x16 at 118.828 — so 8x8 was the second-worst of that batch. A follow-up sweep (#169) confirmed 16x8 as the best shape (90.5/96.6), and it remains the default; on the current near-first-traversal kernel 16x8 still wins too (62.9 ms vs 16x16 76.7, 8x16 67.3, 16x4 73.9, #300)."
+ },
+ {
+  "gid": "g0355",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first PT_TG threadgroup-shape sweep (512x512, 64 spp, seed 1, 3 frames per shape), the 8x8 shape (64 threads per group) measured render_ms_best=101.026ms (render_ms_avg=106.438ms, gpu_ms_best=100.761ms).\n\nHow I know: it is the first line of that sweep's tool output (archived message #167), which printed TG=8x8 render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761 samples=16777216. For context, the same sweep gave 16x8=96.408, 16x16=100.467, 32x8=104.591, 16x32=110.010, 32x16=118.828, and a follow-up sweep (#169) confirmed 16x8 as the best shape (90.5-96.6ms, noise about +/-5ms), which is why 16x8 became the default."
+ },
+ {
+  "gid": "g0356",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "There is no 8x8 measurement to report — that shape was never swept, so I cannot give a number for it without inventing one.\n\nHow I know: my working-memory entry 'round2-progress' (evidence messages 167, 169) records the first PT_TG sweep on the pre-near-first kernel at 512x512/64spp as exactly these shapes and best values: 16x8 = 90.5 (avg 96.6), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8. 8x8 is not among them, and the second, post-near-first sweep (message 300) also only covered 16x8 (62.9), 16x16 (76.7), 16x4 (73.9), 8x16 (67.3) and 4x32 (74.0). The closest shapes actually measured were 16x8 (best in both sweeps, kept as the default 128-thread groups) and 8x16 (94.4 in the first sweep). If you want an 8x8 figure, that would require a new PT_TG=8x8 run."
+ },
+ {
+  "gid": "g0360",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "In round 2's first threadgroup-shape sweep, the 8x8 shape measured render_ms_best=101.026 (render_ms_avg=106.438, gpu_ms_best=100.761) at 512x512/64spp, seed 1, 8 host threads, 3 benchmark frames.\n\nHow I know: that sweep was launched in my own earlier action (history #166, shapes 8x8, 16x8, 16x16, 32x8, 16x32, 32x16) and the tool result #167 lists the per-shape lines verbatim, with TG=8x8 the first entry. In that same sweep 16x8 was the winner at 96.408 (gpu 93.635) and 32x16 the worst at 118.828; a follow-up sweep (#169) confirmed 16x8 at 90.5-96.6 with a repeat, which is why 16x8 (128 threads/group) became the default. Note the ±5ms run-to-run noise I recorded, so 8x8 vs 16x16 (100.467) is within noise, but both are clearly worse than 16x8."
+ },
+ {
+  "gid": "g0374",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "8x8 measured render_ms_best=101.026 ms (render_ms_avg=106.438, gpu_ms_best=100.761) in that first PT_TG sweep — 512x512 at 64 spp, seed 1, --benchmark 3, threads 8.\n\nHow I know: the sweep command was `for tg in 8x8 16x8 16x16 32x8 16x32 32x16; do ... PT_TG=$tg ./pathtracer --scene-config ../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 3 ...`, and its tool result (my history message #167, since archived) prints `TG=8x8 render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761 ... samples=16777216`. In that same sweep 16x8 was the winner at 96.408 ms and 32x16 the worst at 118.828 ms; I noted there that measurement noise is about ±5 ms, which is why I re-ran 16x8 (96.584) and then swept its neighbours (#169), where 16x8 again came out best (90.5) and became the default."
+ },
+ {
+  "gid": "g0380",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "There is no 8x8 number to report: that shape was never measured in round 2's PT_TG sweep, so I would be guessing if I quoted one.\n\nWhat the first sweep actually measured (512x512, 64 spp, best of 3-4 frames, recorded in my working memory as measurements/round2-progress, evidence messages #167 and #169):\n- 16x8 = 90.5 ms (also 96.6 avg) -> chosen as the default, 128 threads/group\n- 16x4 = 91.4 ms\n- 4x32 = 93.3 ms\n- 8x16 = 94.4 ms\n- 16x16 = 100.5 ms\n- 32x8 = 104.6 ms\n- 16x32 = 110.0 ms\n- 32x16 = 118.8 ms\n\nThe nearest neighbours to 8x8 that were measured are 8x16 (94.4 ms) and 16x4 (91.4 ms), and I noted at the time that the sweep noise is about +/-5 ms, which is why I used >=5 frames for later comparisons.\n\nFor context on where round 2 ended: after the near-first child-ordering change in the closest-hit traversal plus kLeafSize 4->1, the live build measures render_ms_best 59.1-66.3 ms / gpu_ms_best 58.8-66.1 ms at 512x512/64 spp seed 1 (best run 59.114/58.839, message #316), against the official gate of 109.656/109.397 ms, with bit-identical PFMs for a given seed. I re-swept the threadgroup shapes on that new kernel (16x8, 16x16, 16x4, 8x16, 4x32; message #300) and 16x8 remained best at 62.9 ms; 8x8 was again not part of that set. If you want an 8x8 datapoint, I can add it to the sweep in one run."
+ },
+ {
+  "gid": "g0381",
+  "probe": "h-557-3",
+  "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
+  "answer": "There is no measured value for an 8x8 threadgroup — I never benchmarked that shape. The first PT_TG sweep (512x512/64spp, best of 3-4 frames, recorded in my working memory as round2-progress, evidence #167/#169) covered exactly these shapes: 16x8 = 90.5 (and 96.6 on the repeat), 16x4 = 91.4, 4x32 = 93.3, 8x16 = 94.4, 16x16 = 100.5, 32x8 = 104.6, 16x32 = 110.0, 32x16 = 118.8 ms render_ms_best. The later re-sweep after the near-first traversal change (#300) covered only 16x8 (62.9), 8x16 (67.3), 16x4 (73.9), 4x32 (74.0) and 16x16 (76.7). So 8x8 was not in either sweep and I have no number for it; the sweep winner both times was 16x8 (128 threads per group), which is the compiled default."
+ }
+]
