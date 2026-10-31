@@ -60,6 +60,19 @@ of `ce01aa3` is reported as a disclosed side result, not as a result of
 the re-test. Freeze commit: the commit that adds this paragraph; the
 binaries are named after it and `run.log` stamps their hash.
 
+**Harness fix before any probe call (2026-10-31).** The run of `d9e653e`
+finished the 27 handoffs and passed G0 (26 of 27 draws indexed), G2
+(budget 6144) and G3 (21 of 23), then stopped before any probe was asked,
+on two harness bugs: 7 new probes' `expect` patterns used `(?!\d)`, which
+Go's regexp rejects, so the probe file did not load; and the stop-rule
+check had a Python 3.10 syntax error. Fixed without touching the design:
+each `(?!\d)` became `(?:\D|$)`, which matches the same texts (only
+`expect` changed; probe file `5af3f5b442bb` became `e894f218de67`, and
+the regex score is secondary to the hand grade); the check was rewritten.
+No Go code changed, so the binaries of `d9e653e` run on; `run.sh probes`
+resumes at the probe phase only if the earlier gates passed, without
+re-running the handoffs.
+
 **Header budget, pinned:** `RecallPolicy.HeaderIndexBytes = 6144` (the
 runtime's default, now set explicitly): `run.sh` passes
 `--header-index-bytes 6144` to every handoff and probe run and `-budget

@@ -1,2 +1,96 @@
 started 2026-10-31T00:26:50Z handoffs, binary 6d49bf7 (386eeeba1f58), new 5af3f5b442bb, frozen e5e11d8560f5
 stopped 2026-10-31T00:27:25Z: by hand during the handoffs, before any handoff finished; aos book asked to stop before any model call if the old draws parse differently under 6c55bdb
+started 2026-10-31T00:32:29Z handoffs, binary d9e653e (6e5368ca719e), new 5af3f5b442bb, frozen e5e11d8560f5
+art-000410 #1 handoff,recall=a1: segment art-003299 (1-57), 18 index lines, 3 steps
+art-000410 #2 handoff,recall=a1: segment art-003309 (1-57), 18 index lines, 4 steps
+art-000410 #3 handoff,recall=a1: segment art-003316 (1-57), 15 index lines, 3 steps
+art-000503 #1 handoff,recall=a1: segment art-003323 (58-102), 16 index lines, 3 steps
+art-000503 #2 handoff,recall=a1: segment art-003330 (58-102), 14 index lines, 3 steps
+art-000503 #3 handoff,recall=a1: segment art-003337 (58-102), 14 index lines, 3 steps
+art-000553 #1 handoff,recall=a1: segment art-003347 (106-192), 15 index lines, 4 steps
+art-000553 #2 handoff,recall=a1: segment art-003357 (106-192), 20 index lines, 4 steps
+art-000553 #3 handoff,recall=a1: segment art-003364 (106-192), 25 index lines, 3 steps
+art-000642 #1 handoff,recall=a1: segment art-003368 (195-245), 0 index lines, 1 steps
+art-000642 #2 handoff,recall=a1: segment art-003375 (195-245), 21 index lines, 3 steps
+art-000642 #3 handoff,recall=a1: segment art-003379 (195-245), 6 index lines, 2 steps
+art-001605 #1 handoff,recall=a1: segment art-003386 (1-29), 14 index lines, 3 steps
+art-001605 #2 handoff,recall=a1: segment art-003393 (1-29), 13 index lines, 3 steps
+art-001605 #3 handoff,recall=a1: segment art-003406 (1-29), 15 index lines, 4 steps
+art-001657 #1 handoff,recall=a1: segment art-003412 (30-118), 18 index lines, 2 steps
+art-001657 #2 handoff,recall=a1: segment art-003419 (30-118), 26 index lines, 2 steps
+art-001657 #3 handoff,recall=a1: segment art-003425 (30-118), 15 index lines, 2 steps
+art-001762 #1 handoff,recall=a1: segment art-003435 (121-163), 10 index lines, 4 steps
+art-001762 #2 handoff,recall=a1: segment art-003444 (121-163), 6 index lines, 4 steps
+art-001762 #3 handoff,recall=a1: segment art-003454 (121-163), 7 index lines, 4 steps
+art-003059 #1 handoff,recall=a1: segment art-003461 (1-15), 6 index lines, 3 steps
+art-003059 #2 handoff,recall=a1: segment art-003470 (1-15), 6 index lines, 4 steps
+art-003059 #3 handoff,recall=a1: segment art-003481 (1-15), 11 index lines, 4 steps
+art-003129 #1 handoff,recall=a1: segment art-003488 (18-72), 12 index lines, 3 steps
+art-003129 #2 handoff,recall=a1: segment art-003495 (18-72), 18 index lines, 3 steps
+art-003129 #3 handoff,recall=a1: segment art-003502 (18-72), 15 index lines, 3 steps
+exit 0 handoffs
+d1 art-000414 (1-57): handoff archived 1-57, 18 lines, kept 18, dropped 0
+d1 art-000507 (58-105): handoff archived 58-102, 16 lines, kept 16, dropped 0
+d1 art-000557 (106-194): handoff archived 106-192, 15 lines, kept 15, dropped 0
+d1 art-000646 (195-249): handoff archived 195-245, 0 lines, kept 0, dropped 0
+d1 art-001608 (1-29): handoff archived 1-29, 14 lines, kept 14, dropped 0
+d1 art-001661 (30-120): handoff archived 30-118, 18 lines, kept 18, dropped 0
+d1 art-001766 (121-167): handoff archived 121-163, 10 lines, kept 10, dropped 0
+d1 art-003062 (1-17): handoff archived 1-15, 6 lines, kept 6, dropped 0
+d1 art-003133 (18-72): handoff archived 18-72, 12 lines, kept 12, dropped 0
+d2 art-000414 (1-57): handoff archived 1-57, 18 lines, kept 18, dropped 0
+d2 art-000507 (58-105): handoff archived 58-102, 14 lines, kept 14, dropped 0
+d2 art-000557 (106-194): handoff archived 106-192, 20 lines, kept 20, dropped 0
+d2 art-000646 (195-249): handoff archived 195-245, 21 lines, kept 21, dropped 0
+d2 art-001608 (1-29): handoff archived 1-29, 13 lines, kept 13, dropped 0
+d2 art-001661 (30-120): handoff archived 30-118, 26 lines, kept 26, dropped 0
+d2 art-001766 (121-167): handoff archived 121-163, 6 lines, kept 6, dropped 0
+d2 art-003062 (1-17): handoff archived 1-15, 6 lines, kept 6, dropped 0
+d2 art-003133 (18-72): handoff archived 18-72, 18 lines, kept 18, dropped 0
+d3 art-000414 (1-57): handoff archived 1-57, 15 lines, kept 15, dropped 0
+d3 art-000507 (58-105): handoff archived 58-102, 14 lines, kept 14, dropped 0
+d3 art-000557 (106-194): handoff archived 106-192, 25 lines, kept 25, dropped 0
+d3 art-000646 (195-249): handoff archived 195-245, 6 lines, kept 6, dropped 0
+d3 art-001608 (1-29): handoff archived 1-29, 15 lines, kept 15, dropped 0
+d3 art-001661 (30-120): handoff archived 30-118, 15 lines, kept 15, dropped 0
+d3 art-001766 (121-167): handoff archived 121-163, 7 lines, kept 7, dropped 0
+d3 art-003062 (1-17): handoff archived 1-15, 11 lines, kept 11, dropped 0
+d3 art-003133 (18-72): handoff archived 18-72, 15 lines, kept 15, dropped 0
+{
+ "outcomes": {
+  "indexed": 26,
+  "never called index_memory": 1
+ },
+ "handoff_end": {
+  "other_action": 21,
+  "no_write": 1,
+  "step_limit": 2,
+  "overrun": 3
+ },
+ "retried": 17,
+ "with_rejected_lines": 17,
+ "rejected_lines": {
+  "format": 6,
+  "range": 36,
+  "unlisted": 24,
+  "cap": 8
+ },
+ "first_tool": {
+  "index_memory": 26,
+  "run": 1
+ },
+ "archive_matches_notice": 27,
+ "tokens_total": 4940444,
+ "tokens_mean": 182979.40740740742,
+ "model_calls_mean": 3.111111111111111
+}
+G0 2026-10-31T01:03:02Z: PASS: 26 of 27 draws kept an index; art-000414 3 of 3, art-001661 3 of 3
+gates 2026-10-31T01:03:02Z: G2 PASS: 0 indexed segments show nothing [], header budget [6144] (pinned 6144) G3 PASS: 21 of 23 new probes range-covered by a shown line (need 5) 
+started 2026-10-31T01:03:02Z C-new, binary d9e653e (6e5368ca719e), new 5af3f5b442bb, frozen e5e11d8560f5
+probe h-1608-2 expect: error parsing regexp: invalid or unsupported Perl syntax: `(?!`
+exit 1 C-new
+  File "<string>", line 5
+    print(f"{sys.argv[1].rsplit(\"/\", 1)[1]}: {len(s)} answers, {bad} with an error")
+                                                                                     ^
+SyntaxError: f-string expression part cannot include a backslash
+stopped 2026-10-31T01:03:02Z: over 10 of C-new answers ended in an error

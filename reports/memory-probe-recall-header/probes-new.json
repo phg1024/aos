@@ -62,7 +62,7 @@
     "checkpoint": "art-001768",
     "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
     "topic": "(?i)(round.?4|benchmark|render_ms|ms\\b|millisecond)",
-    "expect": "(?i)45\\.6(?:35|4|3)?(?!\\d)",
+    "expect": "(?i)45\\.6(?:35|4|3)?(?:\\D|$)",
     "reject": "(?i)45\\.(607|35)\\b",
     "note": "Truth: #5 (writer log tail) 'round 4 (pt_round_04): render_ms_best=45.635 render_ms_avg=46.957 gpu_ms_best=45.349 ... round 3 (ab_r3): render_ms_best=47.828 ... 8/8 interleaved pairs favoured round 4 ... Speedup 1.074x over round 3's verified 49.020ms'. Not in the checkpoint's working memory (art-001763) or live history (checked: 45.635, 47.828, 1.074, 2.403, 8/8, 'round 4 ('; '45.6' occurs only as 45.607, the entered-stack mean). The writer log is on disk, so the probed agent can also re-read it."
   },
@@ -131,7 +131,7 @@
     "checkpoint": "art-000648",
     "question": "In round 2, when you rebuilt with Metal fastMathEnabled turned on and ran the 5-frame benchmark, what gpu_ms_best did it print?",
     "topic": "(?i)(gpu|fast.?math|ms\\b)",
-    "expect": "(?i)100\\.(887|89|9)(?!\\d)",
+    "expect": "(?i)100\\.(887|89|9)(?:\\D|$)",
     "note": "Truth: #133 'render_ms_best=101.150 render_ms_avg=116.465 gpu_ms_best=100.887'. Second pass, secondary fact (render_ms_best 101.15 is in working memory round2-progress (c)). Not in the checkpoint's working memory (art-000643) or live history (checked: 100.887, 116.465, 116.5)."
   },
   {
@@ -140,7 +140,7 @@
     "checkpoint": "art-000648",
     "question": "In round 2's first threadgroup-shape sweep (the PT_TG knob, 3 frames per shape), what render_ms_best did the 8x8 shape measure?",
     "topic": "(?i)(8x8|threadgroup|shape|ms\\b)",
-    "expect": "(?i)101\\.0(26|3)?(?!\\d)|\\b101 ?ms",
+    "expect": "(?i)101\\.0(26|3)?(?:\\D|$)|\\b101 ?ms",
     "note": "Truth: #167 'TG=8x8 render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761'. Second pass, secondary fact (the sweep's winner 16x8 and the other shapes are in working memory round2-progress (e); 8x8 is not). Not in the checkpoint's working memory (art-000643) or live history (checked: 8x8, 101.026, '101.0', 100.761)."
   },
   {
@@ -149,7 +149,7 @@
     "checkpoint": "art-000648",
     "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
     "topic": "(?i)(avg|average|stack|snapshot|ms\\b)",
-    "expect": "(?i)(103\\.(183|18|2)(?!\\d)|100\\.(692|69|7)(?!\\d))",
+    "expect": "(?i)(103\\.(183|18|2)(?:\\D|$)|100\\.(692|69|7)(?:\\D|$))",
     "note": "Truth: #216 run 1 'render_ms_best=93.366 render_ms_avg=103.183', run 2 'render_ms_best=96.614 render_ms_avg=100.692'. Second pass, secondary fact (the best times 93.4/96.6 and gpu 92.9 are in working memory round2-progress2 (f)). Not in the checkpoint's working memory (art-000643) or live history (checked: 103.183, 100.692, 103.2, 100.7)."
   },
   {
@@ -167,7 +167,7 @@
     "checkpoint": "art-001768",
     "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
     "topic": "(?i)(setup|reference|default|ms\\b)",
-    "expect": "(?i)318(\\.0)?(?!\\d)",
+    "expect": "(?i)318(\\.0)?(?:\\D|$)",
     "note": "Truth: #27 'setup_ms=318.0 ... bvh_nodes=81521' for the default scene (alt-view 269.6, caustic-closeup 272.2). Second pass, secondary fact. Not in the checkpoint's working memory (art-001763) or live history (checked: 318.0, 'setup_ms=318', 269.6, 272.2; setup_ms occurs in live history only with other values)."
   },
   {
@@ -185,7 +185,7 @@
     "checkpoint": "art-001768",
     "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
     "topic": "(?i)(gpu|min|refract|glass|candidate|ms\\b)",
-    "expect": "(?i)44\\.7(57|6)?(?!\\d)",
+    "expect": "(?i)44\\.7(57|6)?(?:\\D|$)",
     "note": "Truth: #78 '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' (base gpu_min 43.026). Second pass, secondary fact (render_min/mean of both sides are in working memory round5-glass-and-stack; gpu_min is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 44.757, 44.76, 43.026)."
   },
   {
@@ -212,7 +212,7 @@
     "checkpoint": "art-003135",
     "question": "In the round-8 E0 profile (scratch _r8p/ build with PT_SPLIT=1), what render_ms_best (wall time) did the default configuration, with no diagnostic flags, print?",
     "topic": "(?i)(render|wall|split|profile|ms\\b)",
-    "expect": "(?i)31\\.2(36|4)?(?!\\d)",
+    "expect": "(?i)31\\.2(36|4)?(?:\\D|$)",
     "note": "Truth: #38 cfg='' '[split] trace_gpu_ms=30.329' then 'render_ms_best=31.236 render_ms_avg=35.855 gpu_ms_best=0.425'. Second pass, secondary fact (trace 30.30 and the depth sweep are in working memory r8-cost-split; the wall time is not). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.236, 35.855, 27.593, 7.204)."
   }
 ]

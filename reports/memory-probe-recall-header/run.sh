@@ -6,7 +6,9 @@
 # probes (9 per arm): arm C (RecallOff), then arm A1 with each draw's
 # indexes. The backend-error stop rule is applied after each probe run.
 # Run from the directory the live run started in (/Users/peihongguo/Code/aos):
-#   zsh <worktree>/reports/memory-probe-recall-header/run.sh <worktree> <commit>
+#   zsh <worktree>/reports/memory-probe-recall-header/run.sh <worktree> <commit> [probes]
+# With "probes", step 1 and the gates are not run again: the probe phase
+# starts only if the earlier run's gate.log and gates.json passed.
 # where <commit> is the plan commit the binaries were built from. The
 # header's agent-index budget is pinned to 6144 bytes in every run.
 set -u
@@ -29,6 +31,15 @@ export AOS_LLM_BACKEND=openai-compatible AOS_LLM_BASE_URL=http://phg-gpu.local:8
 stamp() { date -u +"$1 %Y-%m-%dT%H:%M:%SZ $2, binary $COMMIT ($(shasum -a 256 $BIN | cut -c1-12)), new $(shasum -a 256 $NEW | cut -c1-12), frozen $(shasum -a 256 $OLD | cut -c1-12)" >> $D/run.log }
 stopped() { date -u +"stopped %Y-%m-%dT%H:%M:%SZ: $1" >> $D/run.log; exit 1 }
 
+if [[ ${3:-} == probes ]]; then
+  python3 -I -c '
+import json, sys
+g = json.load(open(sys.argv[2]))
+ok = open(sys.argv[1]).read().startswith("PASS") and g["G2"]["pass"] and g["G3"]["pass"]
+sys.exit(0 if ok else 1)
+' $D/gate.log $D/gates.json || stopped "resumed without passed gates"
+  date -u +"resumed %Y-%m-%dT%H:%M:%SZ at the probe phase: handoffs and gates of the earlier run passed" >> $D/run.log
+else
 # Step 1: handoffs, three draws per segment, as in the follow-up.
 stamp started "handoffs"
 $BIN probe-memory --handoff $CHECKPOINTS --recall a1 --header-index-bytes $BUDGET --samples 3 --max-steps 12 --workflow $WF \
@@ -71,6 +82,7 @@ if (cd $D && python3 -I coverage.py . header.json) > $D/coverage.log 2>&1; then
 else
   stopped "$(grep -E '^G[23]' $D/coverage.log | tr '\n' ' '); before the probe phase"
 fi
+fi
 
 # Step 2: probes. Stop rule: more than 10% of a run's answers ending in an error.
 errors_ok() {
@@ -78,7 +90,8 @@ errors_ok() {
 import json, sys
 s = [json.loads(l) for l in open(sys.argv[1])]
 bad = sum(1 for x in s if x.get("error"))
-print(f"{sys.argv[1].rsplit(\"/\", 1)[1]}: {len(s)} answers, {bad} with an error")
+name = sys.argv[1].rsplit("/", 1)[1]
+print(f"{name}: {len(s)} answers, {bad} with an error")
 sys.exit(0 if len(s) and bad <= 0.1 * len(s) else 1)
 ' $1 >> $D/run.log 2>&1
 }
@@ -88,7 +101,7 @@ probe() {  # name, probes file, samples, extra flags...
   $BIN probe-memory --workflow $WF --probes $FILE --samples $N --max-steps 12 --header-index-bytes $BUDGET "$@" \
     --work-dir $D/work-$NAME --out $D/samples-$NAME.jsonl $STATE >> $D/run.log 2>&1
   echo "exit $? $NAME" >> $D/run.log
-  errors_ok $D/samples-$NAME.jsonl || stopped "over 10% of $NAME answers ended in an error"
+  errors_ok $D/samples-$NAME.jsonl || stopped "over 10%% of $NAME answers ended in an error, or none were written"
 }
 
 probe C-new $NEW 9

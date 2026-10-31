@@ -1,0 +1,26 @@
+range-covered in at least one draw: 23 of 23
+h-414-1 art-000414 #56 d1:1/18 shown 0 d2:1/18 shown 0 d3:1/15 shown 0
+h-414-2 art-000414 #31 d1:1/18 shown 1 d2:1/18 shown 1 d3:1/15 shown 1
+h-507-1 art-000507 #83 d1:1/16 shown 1 d2:1/14 shown 1 d3:1/14 shown 1
+h-507-2 art-000507 #79 d1:1/16 shown 1 d2:1/14 shown 1 d3:1/14 shown 1
+h-646-1 art-000646 #208 d1:0/0 shown 0 d2:1/21 shown 1 d3:1/6 shown 1
+h-1608-1 art-001608 #24 d1:1/14 shown 1 d2:1/13 shown 1 d3:1/15 shown 1
+h-1608-2 art-001608 #5 d1:1/14 shown 1 d2:1/13 shown 1 d3:1/15 shown 1
+h-1661-1 art-001661 #54 d1:1/18 shown 1 d2:1/26 shown 1 d3:0/15 shown 0
+h-1766-1 art-001766 #153 d1:1/10 shown 1 d2:1/6 shown 1 d3:1/7 shown 1
+h-1766-2 art-001766 #159 d1:1/10 shown 1 d2:1/6 shown 1 d3:1/7 shown 1
+h-3062-1 art-003062 #9 d1:1/6 shown 1 d2:1/6 shown 1 d3:2/11 shown 2
+h-414-3 art-000414 #43 d1:1/18 shown 1 d2:1/18 shown 0 d3:0/15 shown 0
+h-557-1 art-000557 #125 d1:1/15 shown 1 d2:1/20 shown 1 d3:1/25 shown 1
+h-557-2 art-000557 #133 d1:1/15 shown 1 d2:1/20 shown 1 d3:1/25 shown 0
+h-557-3 art-000557 #167 d1:1/15 shown 1 d2:1/20 shown 0 d3:1/25 shown 0
+h-646-2 art-000646 #216 d1:0/0 shown 0 d2:1/21 shown 1 d3:1/6 shown 1
+h-646-3 art-000646 #245 d1:0/0 shown 0 d2:1/21 shown 0 d3:0/6 shown 0
+h-1608-3 art-001608 #27 d1:1/14 shown 1 d2:1/13 shown 1 d3:1/15 shown 1
+h-1661-2 art-001661 #58 d1:1/18 shown 1 d2:1/26 shown 1 d3:1/15 shown 1
+h-1661-3 art-001661 #78 d1:1/18 shown 1 d2:1/26 shown 1 d3:1/15 shown 1
+h-1766-3 art-001766 #163 d1:1/10 shown 1 d2:1/6 shown 1 d3:0/7 shown 0
+h-3062-2 art-003062 #7 d1:1/6 shown 1 d2:1/6 shown 1 d3:2/11 shown 2
+h-3133-1 art-003133 #38 d1:1/12 shown 1 d2:1/18 shown 1 d3:1/15 shown 1
+G2 PASS: 0 indexed segments show nothing [], header budget [6144] (pinned 6144)
+G3 PASS: 21 of 23 new probes range-covered by a shown line (need 5)
