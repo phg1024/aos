@@ -104,6 +104,11 @@ type Sample struct {
 	// AgentIndexBudget is the header's total for agent indexes it was
 	// shown under; zero unless a1 is on.
 	AgentIndexBudget int `json:"agent_index_budget,omitempty"`
+	// AgentIndexPartialNote and AgentIndexShortenedNote say whether that
+	// header said the agent index is partial, and how to read a shortened
+	// index; false unless a1 and a1p are on.
+	AgentIndexPartialNote   bool `json:"agent_index_partial_note,omitempty"`
+	AgentIndexShortenedNote bool `json:"agent_index_shortened_note,omitempty"`
 	// Tokens is what the answer's model calls used, as the backend
 	// reported it; zero if it reports none.
 	Tokens int `json:"tokens,omitempty"`
@@ -134,8 +139,9 @@ type Config struct {
 	NoWorkingMemory bool
 	NoCheckRule     bool
 	// Recall names the recall aids turned on: "w1" (overwrite warning),
-	// "w2" (pointer wording), "w4" (handoff renotice) and "a1" (agent
-	// index). Every aid not named is off, so a Config that names none
+	// "w2" (pointer wording), "w4" (handoff renotice), "a1" (agent
+	// index) and "a1p" (the header's note that the agent index is
+	// partial; it shows only with a1). Every aid not named is off, so a Config that names none
 	// runs with the prompts from before the aids existed. The runtime's
 	// zero RecallPolicy turns every aid on, so it is never passed as is.
 	Recall []string
@@ -157,7 +163,7 @@ type Config struct {
 
 // RecallAids are the names Config.Recall takes, in the order a condition
 // lists them.
-var RecallAids = []string{"w1", "w2", "w4", "a1"}
+var RecallAids = []string{"w1", "w2", "w4", "a1", "a1p"}
 
 // RecallPolicy is the runtime policy that turns on exactly the named aids.
 func RecallPolicy(aids []string) (runtime.RecallPolicy, error) {
@@ -172,6 +178,8 @@ func RecallPolicy(aids []string) (runtime.RecallPolicy, error) {
 			policy.NoHandoffRenotice = false
 		case "a1":
 			policy.NoAgentIndex = false
+		case "a1p":
+			policy.NoPartialIndexNote = false
 		default:
 			return runtime.RecallPolicy{}, fmt.Errorf("unknown recall aid %q (want %s)", aid, strings.Join(RecallAids, ", "))
 		}
@@ -579,6 +587,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
 	sample.AgentIndexShown, sample.AgentIndexHidden = headerLines(backend.header, "agent_index_shown."), headerLines(backend.header, "agent_index_hidden.")
 	sample.AgentIndexBudget = backend.header["agent_index_budget"]
+	sample.AgentIndexPartialNote, sample.AgentIndexShortenedNote = backend.header["agent_index_partial_note"] == 1, backend.header["agent_index_shortened_note"] == 1
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()
 	}

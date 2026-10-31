@@ -299,3 +299,49 @@ func TestProbesShowGivenAgentIndexes(t *testing.T) {
 		t.Fatal("a line outside its segment should be refused")
 	}
 }
+
+// a1p adds the header's note that the agent index is partial, and, when
+// an index is shortened, the note on reading the rest; each sample records
+// which it was shown. read_memory of the segment returns the given index,
+// so the note's pointer holds in probes too.
+func TestProbesNoteThatTheIndexIsPartial(t *testing.T) {
+	stateDir, checkpoint, segment := indexedRun(t)
+	probes := []memprobe.Probe{{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `TG4`}}
+	given := []runtime.IndexLine{{From: 1, To: 1, Text: "threadgroup sweep: TG4 kept over TG2"}, {From: 1, To: 1, Text: "TG8 never ran: out of registers, so the sweep stopped at TG4 and was not extended"}}
+	run := func(recall []string, budget int) (*scriptedCompleter, memprobe.Sample) {
+		t.Helper()
+		completer := &scriptedCompleter{actions: []map[string]any{memoryTool("read_memory", map[string]string{"artifact_id": segment})}}
+		samples, err := memprobe.Run(context.Background(), memprobe.Config{
+			StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer, Recall: recall,
+			AgentIndexes: map[string][]runtime.IndexLine{segment: given}, HeaderIndexBytes: budget,
+		}, probes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return completer, samples[0]
+	}
+	const partial, shortened = "This index is partial: a fact missing from it may still be in the archive.", "Some segments show only their first lines"
+
+	off, sample := run([]string{"a1"}, 0)
+	if strings.Contains(off.users[0], partial) || sample.AgentIndexPartialNote || sample.Condition != "no-memory,check-rule,recall=a1" {
+		t.Fatalf("a1 alone should not add the note: %+v\n%s", sample, off.users[0])
+	}
+	on, sample := run([]string{"a1", "a1p"}, 0)
+	if !strings.Contains(on.users[0], partial) || strings.Contains(on.users[0], shortened) || !sample.AgentIndexPartialNote || sample.AgentIndexShortenedNote ||
+		sample.Condition != "no-memory,check-rule,recall=a1+a1p" {
+		t.Fatalf("a1p should add the note, without the shortened part when nothing is hidden: %+v\n%s", sample, on.users[0])
+	}
+	if strings.Count(on.users[1], given[1].Text) != 2 {
+		t.Fatalf("read_memory should return the given index after the header's:\n%s", on.users[1])
+	}
+	short, sample := run([]string{"a1", "a1p"}, 120)
+	if !strings.Contains(short.users[0], shortened) || !sample.AgentIndexShortenedNote || sample.AgentIndexHidden[segment] != 1 {
+		t.Fatalf("a shortened index should add the note on reading the rest: %+v\n%s", sample, short.users[0])
+	}
+	if !strings.Contains(short.users[1], given[1].Text) {
+		t.Fatalf("read_memory should return the line the header hid:\n%s", short.users[1])
+	}
+	if _, err := memprobe.RecallPolicy([]string{"a1p"}); err != nil {
+		t.Fatal(err)
+	}
+}
