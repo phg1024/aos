@@ -1,4 +1,4 @@
-# Guidance test: does "the index is partial" make A1 look things up? (DRAFT)
+# Guidance test: does "the index is partial" make A1 look things up? (frozen)
 
 Requested by aos book on 2026-10-31 (the user, in the aos-book session:
 "去试一下", go try it). In the header re-test (`../memory-probe-recall-header/`,
@@ -18,8 +18,11 @@ Nothing else changes: the index write path and the line selection are
 those of `6c55bdb`.
 
 This plan, the probes and the scripts are committed before any model call
-and do not change after. Frozen on aos code's commit **(hash at freeze)**,
-merged into this branch; the binaries (`.cache/bin/aos-eval-<plan
+and do not change after. Frozen on aos code's commit **`283a92e`** (local
+main: `6c55bdb` plus the note), merged into this branch (`3871346`), with
+aos code's probe patch applied unchanged (`865a7ff`: recall aid `a1p`;
+samples record `agent_index_partial_note` and
+`agent_index_shortened_note`); the binaries (`.cache/bin/aos-eval-<plan
 commit>`, `.cache/bin/aos-headercheck-<plan commit>`) are built from the
 plan commit, and `run.log` stamps their hash.
 
@@ -31,8 +34,28 @@ Both arms run the same binary, recall a1, header budget 6144 bytes
 550cd905, 90649d21, ce992dd4), the same checkpoints and the same probe
 question template.
 
-- **A1:** guidance off (the `6c55bdb` header).
-- **A1+G:** guidance on (S1, and S2 where lines are hidden).
+- **A1:** `--recall a1`, guidance off (`NoPartialIndexNote` set; the
+  `6c55bdb` header).
+- **A1+G:** `--recall a1,a1p`, guidance on. The note follows the header's
+  sentence on the agent index:
+  - S1 (whenever an index is shown): "This index is partial: a fact
+    missing from it may still be in the archive. Before you answer that
+    something was never done, measured or seen, search_memory for it."
+  - S2 (when some segment shows only its first lines): "Some segments show
+    only their first lines; \"(+K more lines ...)\" marks the rest, and
+    read_memory artifact_id=<segment> returns the whole index."
+  In this test S2 appears at checkpoint art-000648 in all three draws and
+  nowhere else (the other checkpoints show every line).
+
+**One runtime change reaches both arms.** In `283a92e`,
+`read_memory artifact_id=<segment>` returns the index from the segment's
+ref, falling back to the stored one. Before, indexes given with
+`--agent-indexes` were shown in the header but not returned by that read,
+so the "+K more" pointer led to a page without the index (in the re-test,
+one answer made such a read). Both arms run the new binary, so the
+comparison is fair, but the A1 arm is not the re-test's runtime in this
+one respect, and its answers are not comparable one-for-one with
+`c0c3471`'s when they make that read.
 
 A fresh A1 control runs in this run; the re-test's answers are not reused.
 The two arms run as two concurrent sequences over the same probe subsets
@@ -166,12 +189,15 @@ is not extended to chase significance.
   branch at `7d055e8`, whose `internal/agentflow` and `internal/runtime`
   equal `6c55bdb`'s), and the same index lines are shown and hidden.
 - **G2 (no model call):** with the guidance on, the same lines are shown
-  and hidden, the header differs from the guidance-off one only by
-  inserted text, S1 is in every header and S2 exactly in those with
-  hidden lines (`gate.py`).
+  and hidden, S1 is in every header and S2 exactly in those with hidden
+  lines, and taking them out gives back the guidance-off header byte for
+  byte (`gate.py`). A dry run before freezing passed G1 and G2; the first
+  dry run failed G2 only because the gate looked for S2 in a character
+  diff that split it, so the check was made exact before freezing.
 - **G3 (live):** every A1 and A1+G sample records the shown/hidden counts
-  G1 predicts and `agent_index_budget` 6144; checked after the run, before
-  grading.
+  G1 predicts, `agent_index_budget` 6144, and the note its arm should show
+  (A1 none; A1+G S1 always and S2 exactly at art-000648); checked after
+  the run, before grading (`analyze.py --g3`).
 - **Stop rule:** a run with more than 10% of its answers ending in a
   backend error stops both arms.
 

@@ -17,11 +17,9 @@ HEADERCHECK=.cache/bin/aos-headercheck-$COMMIT
 STATE=reports/pathtracer-bunny-phase3/.aos-state
 WF=.cache/workflows/pathtracer-bunny-phase3.json
 BUDGET=6144
-# The guidance switch, as aos code's commit names it (PLAN.md, "Arms").
-GUIDE_OFF=(__GUIDE_OFF__)
-GUIDE_ON=(__GUIDE_ON__)
-HC_OFF=(__HC_OFF__)
-HC_ON=(__HC_ON__)
+# The guidance switch (283a92e): recall aid a1p, the partial-index note.
+RECALL_OFF=a1
+RECALL_ON=a1,a1p
 K=$(awk '/^  strata-phg-gpu:/{f=1;next} f&&/^  [a-z]/{exit} f&&/api_key:/{print $2; exit}' ~/.hermes/config.yaml | tr -d "\"'")
 export AOS_LLM_BACKEND=openai-compatible AOS_LLM_BASE_URL=http://phg-gpu.local:8080 \
   AOS_LLM_MODEL=qwen3.8-flash-next-nvfp4-nvfp4 AOS_LLM_API_KEY="$K" \
@@ -36,9 +34,9 @@ stopped() { date -u +"stopped %Y-%m-%dT%H:%M:%SZ: $1" >> $D/run.log; exit 1 }
 # differs from the guidance-off one only by the guidance text (gate.py).
 IDX=($D/indexes-d1.json $D/indexes-d2.json $D/indexes-d3.json)
 mkdir -p $D/headers-off $D/headers-on
-$HEADERCHECK -budget $BUDGET "${HC_OFF[@]}" -dump $D/headers-off $STATE $IDX > $D/headers-off/header.json 2>> $D/run.log \
+$HEADERCHECK -budget $BUDGET -recall $RECALL_OFF -dump $D/headers-off $STATE $IDX > $D/headers-off/header.json 2>> $D/run.log \
   || stopped "headercheck (guidance off) failed"
-$HEADERCHECK -budget $BUDGET "${HC_ON[@]}" -dump $D/headers-on $STATE $IDX > $D/headers-on/header.json 2>> $D/run.log \
+$HEADERCHECK -budget $BUDGET -recall $RECALL_ON -dump $D/headers-on $STATE $IDX > $D/headers-on/header.json 2>> $D/run.log \
   || stopped "headercheck (guidance on) failed"
 if (cd $D && python3 -I gate.py) > $D/gate.log 2>&1; then
   date -u +"gates %Y-%m-%dT%H:%M:%SZ: $(head -1 $D/gate.log)" >> $D/run.log
@@ -57,8 +55,8 @@ print(f"{name}: {len(s)} answers, {bad} with an error")
 sys.exit(0 if len(s) and bad <= 0.1 * len(s) else 1)
 ' $1 >> $D/run.log 2>&1
 }
-arm() {  # name, guidance flags...
-  local ARM=$1; shift
+arm() {  # name, recall aids
+  local ARM=$1 RECALL=$2
   local START=$SECONDS
   date -u +"started $ARM %Y-%m-%dT%H:%M:%SZ" >> $D/run.log
   for F in $D/probes-d*-n*.json; do
@@ -67,7 +65,7 @@ arm() {  # name, guidance flags...
     local NAME=$ARM-d$DRAW-n$N
     stamp started "$NAME"
     $BIN probe-memory --workflow $WF --probes $F --samples $N --max-steps 12 --header-index-bytes $BUDGET \
-      --recall a1 --agent-indexes $D/indexes-d$DRAW.json "$@" \
+      --recall $RECALL --agent-indexes $D/indexes-d$DRAW.json \
       --work-dir $D/work-$NAME --out $D/samples-$NAME.jsonl $STATE >> $D/run-$ARM.log 2>&1
     echo "exit $? $NAME" >> $D/run.log
     errors_ok $D/samples-$NAME.jsonl || { touch $D/STOP; stopped "over 10%% of $NAME answers ended in an error, or none were written"; }
@@ -77,7 +75,7 @@ arm() {  # name, guidance flags...
 }
 
 rm -f $D/STOP
-arm A1 "${GUIDE_OFF[@]}" &
-arm A1G "${GUIDE_ON[@]}" &
+arm A1 $RECALL_OFF &
+arm A1G $RECALL_ON &
 wait
 date -u +"finished %Y-%m-%dT%H:%M:%SZ" >> $D/run.log

@@ -42,14 +42,20 @@ def samples():
 
 
 def g3(recs):
-    """Every sample shows the lines G1 predicts for its draw and checkpoint."""
+    """Every sample shows the lines G1 predicts for its draw and checkpoint,
+    and the note its arm should show."""
     ref = json.load(open(os.path.join(HERE, "reference-6c55bdb", "header.json")))
     bad = []
     for (name, probe, sample), s in recs.items():
         draw = name.split("-")[2][1:]   # samples-A1G-d2-n6.jsonl
         want = ref[f"indexes-d{draw}.json"][CHECKPOINT[probe]]["by_segment"]
         got = {k: (s.get("agent_index_shown", {}).get(k, 0), s.get("agent_index_hidden", {}).get(k, 0)) for k in want}
-        if got != {k: (v["shown"], v["hidden"]) for k, v in want.items()} or s.get("agent_index_budget") != 6144:
+        # The note: none in A1; in A1+G S1 always, S2 where some lines are hidden.
+        guided = name.split("-")[1] == "A1G"
+        hidden = any(v["hidden"] > 0 for v in want.values())
+        note = (bool(s.get("agent_index_partial_note")), bool(s.get("agent_index_shortened_note")))
+        if (got != {k: (v["shown"], v["hidden"]) for k, v in want.items()} or s.get("agent_index_budget") != 6144
+                or note != ((True, hidden) if guided else (False, False))):
             bad.append(f"{name} {probe} s{sample}")
     return {"pass": not bad, "samples": len(recs), "mismatches": bad[:20]}
 

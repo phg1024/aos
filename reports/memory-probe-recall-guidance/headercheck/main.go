@@ -9,7 +9,7 @@
 //
 // Usage, from the repository root:
 //
-//	go run ./reports/memory-probe-recall-guidance/headercheck [-budget N] [-dump dir] <state-dir> <indexes-d1.json> ...
+//	go run ./reports/memory-probe-recall-guidance/headercheck [-budget N] [-recall aids] [-dump dir] <state-dir> <indexes-d1.json> ...
 //
 // It prints JSON: for each indexes file, checkpoint and segment, the lines
 // shown and hidden (the header shows an index's first lines), and the
@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"aos/internal/agentflow"
 	"aos/internal/memprobe"
@@ -46,14 +47,15 @@ type header struct {
 
 func main() {
 	budget := flag.Int("budget", 0, "the header's total for agent indexes (RecallPolicy.HeaderIndexBytes); 0 takes the runtime's default")
+	recall := flag.String("recall", "a1", "the recall aids, comma-separated, as probe-memory's --recall takes them")
 	dump := flag.String("dump", "", "if set, write each header's system prompt and task header to <dir>/<indexes file>.<checkpoint>.txt")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: headercheck [-budget N] [-dump dir] <state-dir> <indexes.json> ...")
+		fmt.Fprintln(os.Stderr, "usage: headercheck [-budget N] [-recall aids] [-dump dir] <state-dir> <indexes.json> ...")
 		os.Exit(2)
 	}
-	policy, err := memprobe.RecallPolicy([]string{"a1"})
+	policy, err := memprobe.RecallPolicy(strings.Split(*recall, ","))
 	if err != nil {
 		fail(err)
 	}
