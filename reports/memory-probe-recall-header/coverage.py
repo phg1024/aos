@@ -8,7 +8,7 @@ covering line next to the probe's truth) for the hand grade of
 fact-covered, and gates<suffix>.json.
 
 G2: every segment with an index in a draw shows at least one line at every
-probe checkpoint that holds it. G3: at least 5 new probes are
+probe checkpoint that holds it, under the pinned budget (BUDGET bytes). G3: at least 5 new probes are
 range-covered by a shown line in at least one draw. Exit status 0 if both
 hold (or if no header file is given), 1 otherwise.
 
@@ -33,6 +33,7 @@ CHECKPOINT = {"art-000648": ["art-000414", "art-000507", "art-000557", "art-0006
               "art-001768": ["art-001608", "art-001661", "art-001766"],
               "art-003135": ["art-003062", "art-003133"]}
 G3_MIN = 5
+BUDGET = 6144
 
 
 def truth_segment(probe):
@@ -92,11 +93,13 @@ def main():
               if indexes.get(segment) and shown_counts(header, d, checkpoint).get(segment, 0) == 0]
     shown_covered = [r["probe"] for r in rows
                      if any(l["shown"] for v in r["draws"].values() for l in v["range_covered"])]
-    gates = {"G2": {"pass": not silent, "segments_showing_nothing": silent},
+    budgets = sorted({h["budget"] for by_checkpoint in header.values() for h in by_checkpoint.values()})
+    gates = {"G2": {"pass": not silent and budgets == [BUDGET], "segments_showing_nothing": silent, "budgets": budgets},
              "G3": {"pass": len(shown_covered) >= G3_MIN, "probes_covered_by_a_shown_line": shown_covered,
                     "need": G3_MIN}}
     json.dump(gates, open(os.path.join(HERE, f"gates{suffix}.json"), "w"), indent=1)
-    print(f"G2 {'PASS' if gates['G2']['pass'] else 'FAIL'}: {len(silent)} indexed segments show nothing {silent}")
+    print(f"G2 {'PASS' if gates['G2']['pass'] else 'FAIL'}: {len(silent)} indexed segments show nothing {silent}, "
+          f"header budget {budgets} (pinned {BUDGET})")
     print(f"G3 {'PASS' if gates['G3']['pass'] else 'FAIL'}: {len(shown_covered)} of {len(rows)} new probes "
           f"range-covered by a shown line (need {G3_MIN})")
     sys.exit(0 if gates["G2"]["pass"] and gates["G3"]["pass"] else 1)

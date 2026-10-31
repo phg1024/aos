@@ -49,8 +49,22 @@ and 2 differ (d1 art-001608: 1 line into 12; d3 art-000507: 1 line into
 18), with the same rejections and refusals in all 34 calls. Index recall
 (fact stated by a covering line in some draw): 16 of 23 under both
 parses; per draw 13, 12, 8 (old) and 13, 12, 10 (new); with a shown line
-under 6c55bdb's header, 10, 11, 7 and 10, 11, 9. Which draws the re-test
-uses waits for aos book.
+under 6c55bdb's header, 10, 11, 7 and 10, 11, 9.
+
+**Decision (aos book, 2026-10-31): option (b), the rule as written.** All
+27 handoffs are re-run on the frozen binary, and the plan of `6d49bf7`
+runs unchanged but for two additions: the header's agent-index budget is
+pinned (below), and index recall on the new draws is graded as states /
+points / no and as stated by a shown line. The old-against-new parse table
+of `ce01aa3` is reported as a disclosed side result, not as a result of
+the re-test. Freeze commit: the commit that adds this paragraph; the
+binaries are named after it and `run.log` stamps their hash.
+
+**Header budget, pinned:** `RecallPolicy.HeaderIndexBytes = 6144` (the
+runtime's default, now set explicitly): `run.sh` passes
+`--header-index-bytes 6144` to every handoff and probe run and `-budget
+6144` to `headercheck`; G2 also fails unless every rendered header's
+budget is 6144; each A1 sample records `agent_index_budget`.
 
 Consequences: the new probes were written before these indexes exist, so
 no index can have influenced them; the index-recall grades of the old
@@ -138,7 +152,8 @@ For each new probe and draw, from the new indexes:
   index's first lines, so a fact late in a long segment's index can be
   hidden; before any probe call);
 - **fact-covered:** some covering line states the fact (graded by hand:
-  states it / points at it without the value / no). Graded from
+  states it / points at it without the value / no), and **stated by a
+  shown line** (a covering line the header shows states it). Graded from
   `coverage.md` after the run but before `blind.py` runs and before any
   answer is opened, and committed then.
 

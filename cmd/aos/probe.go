@@ -34,6 +34,7 @@ func probeMemory(args []string) {
 	recall := fs.String("recall", "", "comma-separated recall aids to turn on (w1, w2, w4, a1); every other aid is off")
 	retry := fs.Int("backend-retry", -1, "attempts per failed model call within a step; -1 turns retrying off, 0 takes the runtime's defaults")
 	agentIndexes := fs.String("agent-indexes", "", "JSON object of agent-written indexes by memory_segment ID, shown with those segments (with --recall a1)")
+	headerIndexBytes := fs.Int("header-index-bytes", 0, "the header's total for agent indexes with --recall a1; 0 takes the runtime's default")
 	handoff := fs.String("handoff", "", "comma-separated checkpoints to run a handoff on, instead of asking probes; results go to --out")
 	positional := parseInterspersed(fs, args)
 	if *rescore != "" && *probesPath != "" {
@@ -53,7 +54,7 @@ func probeMemory(args []string) {
 	}
 	llmConfig := inference.LoadBackendConfig(120 * time.Second)
 	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{})
-	conditions := memprobe.Config{NoWorkingMemory: *noMemory, NoCheckRule: *noCheckRule, Recall: splitList(*recall)}
+	conditions := memprobe.Config{NoWorkingMemory: *noMemory, NoCheckRule: *noCheckRule, Recall: splitList(*recall), HeaderIndexBytes: *headerIndexBytes}
 	if *retry != -1 {
 		conditions.BackendRetry = &runtime.BackendRetryPolicy{Attempts: *retry}
 	}
@@ -105,6 +106,8 @@ func probeConfig(completer agentflow.JSONCompleter, compaction runtime.Compactio
 		Recall:          conditions.Recall,
 		BackendRetry:    conditions.BackendRetry,
 		AgentIndexes:    conditions.AgentIndexes,
+
+		HeaderIndexBytes: conditions.HeaderIndexBytes,
 	}, nil
 }
 

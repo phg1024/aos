@@ -101,6 +101,9 @@ type Sample struct {
 	// header shows an index's first lines.
 	AgentIndexShown  map[string]int `json:"agent_index_shown,omitempty"`
 	AgentIndexHidden map[string]int `json:"agent_index_hidden,omitempty"`
+	// AgentIndexBudget is the header's total for agent indexes it was
+	// shown under; zero unless a1 is on.
+	AgentIndexBudget int `json:"agent_index_budget,omitempty"`
 	// Tokens is what the answer's model calls used, as the backend
 	// reported it; zero if it reports none.
 	Tokens int `json:"tokens,omitempty"`
@@ -146,6 +149,10 @@ type Config struct {
 	// segment references; the segments themselves are unchanged, so
 	// read_memory does not repeat them.
 	AgentIndexes map[string][]runtime.IndexLine
+	// HeaderIndexBytes is the header's total for agent indexes
+	// (runtime.RecallPolicy.HeaderIndexBytes); zero is the runtime's
+	// default.
+	HeaderIndexBytes int
 }
 
 // RecallAids are the names Config.Recall takes, in the order a condition
@@ -500,6 +507,7 @@ func (b *countingBackend) HeaderSizes(request runtime.GenerateRequest) map[strin
 // the aids cfg turns on, set on both, and its retry policy.
 func probeRuntime(cfg Config, k *kernel.Kernel, store *artifact.Store, agent agentflow.AgentSpec, loaded []skills.Document) (*countingBackend, *runtime.AgentRuntime) {
 	recall, _ := RecallPolicy(cfg.Recall) // checked when the run starts
+	recall.HeaderIndexBytes = cfg.HeaderIndexBytes
 	backend := &countingBackend{Backend: agentflow.PromptBackend{Completer: cfg.Completer, Workflow: cfg.Workflow, Agent: agent, Skills: loaded, NoCheckRule: cfg.NoCheckRule, Recall: recall}}
 	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: cfg.MaxSteps, Compaction: cfg.Compaction,
 		Recall: recall, BackendRetry: cfg.retryPolicy()}
@@ -570,6 +578,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 	sample.Tokens = max(0, result.Session.Usage.Tokens-start.Usage.Tokens)
 	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
 	sample.AgentIndexShown, sample.AgentIndexHidden = headerLines(backend.header, "agent_index_shown."), headerLines(backend.header, "agent_index_hidden.")
+	sample.AgentIndexBudget = backend.header["agent_index_budget"]
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()
 	}

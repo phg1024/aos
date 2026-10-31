@@ -258,11 +258,13 @@ func TestProbesShowGivenAgentIndexes(t *testing.T) {
 	stateDir, checkpoint, segment := indexedRun(t)
 	probes := []memprobe.Probe{{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `TG4`}}
 	indexes := map[string][]runtime.IndexLine{segment: {{From: 1, To: 1, Text: "threadgroup sweep: TG4 kept over TG2"}}}
+	budget := 6144
 	run := func(recall []string, indexes map[string][]runtime.IndexLine) (*scriptedCompleter, memprobe.Sample, error) {
 		t.Helper()
 		completer := &scriptedCompleter{actions: []map[string]any{memoryTool("read_memory", map[string]string{"artifact_id": segment})}}
 		samples, err := memprobe.Run(context.Background(), memprobe.Config{
 			StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer, Recall: recall, AgentIndexes: indexes,
+			HeaderIndexBytes: budget,
 		}, probes)
 		if err != nil {
 			return completer, memprobe.Sample{}, err
@@ -274,6 +276,15 @@ func TestProbesShowGivenAgentIndexes(t *testing.T) {
 	if err != nil || !strings.Contains(on.users[0], "threadgroup sweep: TG4 kept over TG2") || sample.AgentIndexSegments != 1 || sample.AgentIndexBytes == 0 {
 		t.Fatalf("with a1 the header should show the given index: %+v %v\n%s", sample, err, on.users[0])
 	}
+	if sample.AgentIndexBudget != 6144 {
+		t.Fatalf("the sample should record the header's index budget: %d", sample.AgentIndexBudget)
+	}
+	// A budget too small for even the "+K more" line leaves the index out.
+	budget = 8
+	if _, small, err := run([]string{"a1"}, indexes); err != nil || small.AgentIndexBudget != 8 || small.AgentIndexShown[segment] != 0 || small.AgentIndexSegments != 0 {
+		t.Fatalf("a budget of 8 bytes should show no line: %+v %v", small, err)
+	}
+	budget = 6144
 	if sample.AgentIndexShown[segment] != 1 || len(sample.AgentIndexShown) != 1 || sample.AgentIndexHidden[segment] != 0 || len(sample.AgentIndexHidden) != 1 {
 		t.Fatalf("the sample should record the lines shown and hidden by segment: %v %v", sample.AgentIndexShown, sample.AgentIndexHidden)
 	}

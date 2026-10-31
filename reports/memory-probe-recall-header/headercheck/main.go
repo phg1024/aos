@@ -7,7 +7,7 @@
 //
 // Usage, from the repository root:
 //
-//	go run ./reports/memory-probe-recall-header/headercheck <state-dir> <indexes-d1.json> ...
+//	go run ./reports/memory-probe-recall-header/headercheck [-budget N] <state-dir> <indexes-d1.json> ...
 //
 // It prints JSON: for each indexes file, checkpoint and segment, the lines
 // shown and hidden (the header shows an index's first lines), and the
@@ -16,6 +16,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,17 +43,21 @@ type header struct {
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: headercheck <state-dir> <indexes.json> ...")
+	budget := flag.Int("budget", 0, "the header's total for agent indexes (RecallPolicy.HeaderIndexBytes); 0 takes the runtime's default")
+	flag.Parse()
+	args := flag.Args()
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: headercheck [-budget N] <state-dir> <indexes.json> ...")
 		os.Exit(2)
 	}
 	policy, err := memprobe.RecallPolicy([]string{"a1"})
 	if err != nil {
 		fail(err)
 	}
+	policy.HeaderIndexBytes = *budget
 	backend := agentflow.PromptBackend{Recall: policy}
 	out := map[string]map[string]header{}
-	for _, path := range os.Args[2:] {
+	for _, path := range args[1:] {
 		var indexes map[string][]runtime.IndexLine
 		if err := readJSON(path, &indexes); err != nil {
 			fail(err)
@@ -60,7 +65,7 @@ func main() {
 		byCheckpoint := map[string]header{}
 		for _, checkpoint := range checkpoints {
 			var session runtime.Session
-			if err := readJSON(filepath.Join(os.Args[1], "artifacts", "payloads", checkpoint+".json"), &session); err != nil {
+			if err := readJSON(filepath.Join(args[0], "artifacts", "payloads", checkpoint+".json"), &session); err != nil {
 				fail(err)
 			}
 			h := header{ByS: map[string]segmentShown{}}
