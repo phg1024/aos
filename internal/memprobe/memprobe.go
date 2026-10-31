@@ -96,6 +96,11 @@ type Sample struct {
 	// header showed; zero unless a1 is on.
 	AgentIndexSegments int `json:"agent_index_segments,omitempty"`
 	AgentIndexBytes    int `json:"agent_index_bytes,omitempty"`
+	// AgentIndexShown and AgentIndexHidden are, by memory_segment ID, how
+	// many lines of each agent index that header showed and hid; the
+	// header shows an index's first lines.
+	AgentIndexShown  map[string]int `json:"agent_index_shown,omitempty"`
+	AgentIndexHidden map[string]int `json:"agent_index_hidden,omitempty"`
 	// Tokens is what the answer's model calls used, as the backend
 	// reported it; zero if it reports none.
 	Tokens int `json:"tokens,omitempty"`
@@ -467,6 +472,21 @@ func (b *countingBackend) Generate(ctx context.Context, request runtime.Generate
 	return result, err
 }
 
+// headerLines collects the header sizes under prefix by the rest of their
+// key, or nil if there are none.
+func headerLines(sizes map[string]int, prefix string) map[string]int {
+	var lines map[string]int
+	for key, n := range sizes {
+		if id, ok := strings.CutPrefix(key, prefix); ok {
+			if lines == nil {
+				lines = map[string]int{}
+			}
+			lines[id] = n
+		}
+	}
+	return lines
+}
+
 // HeaderSizes passes the wrapped backend's header sizes on, so the
 // runtime logs them as it would without the wrapper.
 func (b *countingBackend) HeaderSizes(request runtime.GenerateRequest) map[string]int {
@@ -549,6 +569,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
 	// Usage carries over from the checkpoint; a failed run returns none.
 	sample.Tokens = max(0, result.Session.Usage.Tokens-start.Usage.Tokens)
 	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
+	sample.AgentIndexShown, sample.AgentIndexHidden = headerLines(backend.header, "agent_index_shown."), headerLines(backend.header, "agent_index_hidden.")
 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
 		sample.Error = err.Error()
 	}

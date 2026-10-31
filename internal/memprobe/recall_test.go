@@ -274,11 +274,14 @@ func TestProbesShowGivenAgentIndexes(t *testing.T) {
 	if err != nil || !strings.Contains(on.users[0], "threadgroup sweep: TG4 kept over TG2") || sample.AgentIndexSegments != 1 || sample.AgentIndexBytes == 0 {
 		t.Fatalf("with a1 the header should show the given index: %+v %v\n%s", sample, err, on.users[0])
 	}
+	if sample.AgentIndexShown[segment] != 1 || len(sample.AgentIndexShown) != 1 || sample.AgentIndexHidden[segment] != 0 || len(sample.AgentIndexHidden) != 1 {
+		t.Fatalf("the sample should record the lines shown and hidden by segment: %v %v", sample.AgentIndexShown, sample.AgentIndexHidden)
+	}
 	if !slices.Equal(sample.Reads, []string{"read_memory artifact_id=" + segment}) {
 		t.Fatalf("the read should be recorded with its arguments: %v", sample.Reads)
 	}
-	off, _, err := run(nil, indexes)
-	if err != nil || strings.Contains(off.users[0], "threadgroup sweep") {
+	off, offSample, err := run(nil, indexes)
+	if err != nil || strings.Contains(off.users[0], "threadgroup sweep") || offSample.AgentIndexShown != nil {
 		t.Fatalf("without a1 the index should not be shown: %v\n%s", err, off.users[0])
 	}
 	if _, _, err := run([]string{"a1"}, map[string][]runtime.IndexLine{segment: {{From: 1, To: 5, Text: "past the segment"}}}); err == nil {

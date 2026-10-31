@@ -1,17 +1,43 @@
-# A1 re-test with fair-share header rendering (DRAFT, not frozen)
+# A1 re-test with fair-share header rendering (frozen)
 
 Requested by aos book on 2026-10-30, after the A1 follow-up
 (`../memory-probe-recall-fix/`, report `../memory-probe-recall-fix.html`)
 found that the header showed agent indexes newest first within 6 KB, so
 the oldest round-2 segment's index (art-000414, which holds the
 `r2-verify-dir` truth) became a bare pointer in every draw. The user
-approved fixing that and re-testing. aos code is changing the header to a
-fair-share allocation by whole lines, recording per segment how many lines
-were shown and hidden.
+approved fixing that and re-testing. aos code changed the header to a
+fair-share allocation by whole lines in `6c55bdb`: the 6 KB budget is
+shared round by round, oldest segment first within a round, each index
+shows its first lines and ends with "(+K more lines of this index:
+read_memory artifact_id=...)" when shortened.
 
 This plan, the new probes and the scripts are committed before any model
-call; nothing in them changes after. It is frozen on aos code's header
-commit: COMMIT (filled in at freeze).
+call; nothing in them changes after. It is frozen on runtime `6c55bdb`
+(local main, merged into this branch). The binaries
+(`.cache/bin/aos-eval-<plan commit>`, `.cache/bin/aos-headercheck-<plan
+commit>`) are built from the plan commit, which adds to `6c55bdb` only
+memprobe's per-segment shown/hidden counts and this folder; `run.log`
+stamps the binary's hash.
+
+## Amendment at freeze: G1 failed, the draws are re-made
+
+The draft reused the follow-up's 27 index draws, under gate G1: no change
+to how an index is written between `50a7cfe` and the header commit, else
+"stop ... and the plan is re-frozen with new handoffs". `6c55bdb` changes
+`parseIndex`: a line holding several entries ("59: a 61: b 63: c") is now
+split into them. Applying the new rule to the 338 stored lines, 2 would be
+split (draw 1 art-001608: 1 line into 12; draw 3 art-000507: 1 line into
+18), so the stored draws are not what the frozen runtime writes. G1
+failed. As the rule says, the 27 handoffs are re-run on the frozen binary
+(about 30 min and 5.3M tokens on phg-gpu), and gates G0, G2 and G3 are
+checked on the new draws by `run.sh` before any probe call. Re-parsing the
+two lines instead was considered and not done: it would change the gate's
+remedy after the gate failed.
+
+Consequences: the new probes were written before these indexes exist, so
+no index can have influenced them; the index-recall grades of the old
+draws (`coverage-old.*`, `coverage_grades-old.json`: fact stated in some
+draw for 16 of 23) stay as a record and are not used.
 
 ## Questions
 
@@ -26,11 +52,11 @@ commit: COMMIT (filled in at freeze).
 
 ## What is reused
 
-- **The 27 index draws** of the follow-up (`b87b59a`,
-  `../memory-probe-recall-fix/indexes-d1..3.json`), written by handoffs on
-  runtime `50a7cfe`. Only the header rendering changes, so the handoffs
-  are not re-run (about 5.3M tokens saved). Gate G1 checks this in the
-  code before any model call.
+- **The handoff procedure** of the follow-up (`make_indexes.py`,
+  `gate.py`, `handoff_summary.py`, copied unchanged but for paths): 9
+  segment checkpoints x 3 draws, `--handoff --recall a1`, one re-run of a
+  failed draw, lines kept only if inside the original segment. Not the
+  draws themselves (see the amendment).
 - **The 11 frozen probes** (`e5e11d8560f5`): the 3 unrecorded ones as a
   continuity check, the 8 recorded and recorded-wrong ones as the
   regression check.
@@ -84,16 +110,23 @@ Output: `probes-new.json`, `rubric-new.json`, `selection.md`.
 
 ## Index recall (before any model call)
 
-For each new probe and draw, from the reused indexes:
+For each new probe and draw, from the new indexes:
 
 - **range-covered:** some line's message range includes the truth
-  message (mechanical);
-- **fact-covered:** some such line states the fact (graded by hand:
-  states it / points at it without the value / no);
-- **shown:** with the new header, the covering line is among the lines
-  the header shows (from the header commit's renderer).
+  message (mechanical, `coverage.py`, before any probe call);
+- **shown:** the covering line is among the lines the frozen header shows
+  (`headercheck` renders the header of each probe checkpoint with each
+  draw through the prompt backend, no model call; the header shows an
+  index's first lines, so a fact late in a long segment's index can be
+  hidden; before any probe call);
+- **fact-covered:** some covering line states the fact (graded by hand:
+  states it / points at it without the value / no). Graded from
+  `coverage.md` after the run but before `blind.py` runs and before any
+  answer is opened, and committed then.
 
 Reported per probe, per segment and overall. Not used to choose probes.
+Each A1 sample also records the lines its header showed and hid per
+segment (`agent_index_shown`, `agent_index_hidden`).
 
 ## Arms and samples
 
@@ -121,8 +154,10 @@ permutations each):
 The follow-up saw q about 0.67 on the one covered unrecorded probe (4 of
 6). Covered share is unknown and may be low, since many of the new facts
 are minor values; 9 answers keep about 0.7 power at a quarter covered.
-Cost: 23 x 18 + 11 x 18 = 612 answers, about 5 h and 28M tokens on
-phg-gpu.
+(The old draws stated the fact in 13, 12 and 8 of 23 per draw, about
+half; the new draws are not known until they are written.)
+Cost: 27 handoffs (about 30 min, 5.3M tokens) and 23 x 18 + 11 x 18 =
+612 answers (about 5 h, 28M tokens) on phg-gpu.
 
 ## Scoring
 
@@ -144,9 +179,10 @@ pooled rates.
 
 ## Secondary
 
-- The same test restricted to probes whose fact is covered by a shown line
-  in at least one draw, and to the rest (descriptive: the split is fixed
-  before model calls, from the index-recall table).
+- The same test restricted to probes range-covered by a shown line in at
+  least one draw, and to the rest (descriptive: the split is fixed by
+  `coverage.json` before any probe call); also by the hand fact-covered
+  grade.
 - Continuity: the 3 frozen unrecorded probes, main / exact / contra per arm,
   next to the follow-up's numbers.
 - First-pass (11) against second-pass (12) probes.
@@ -171,29 +207,41 @@ pooled rates.
 
 ## Gates and stop rule (all fixed now)
 
-Before any model call:
+- **G1, write path unchanged** (checked at freeze): failed on `6c55bdb`
+  (`parseIndex` splits run-on lines); handled as the amendment above.
 
-- **G1, write path unchanged:** between `50a7cfe` and COMMIT, no change to
-  how an index is written or stored (`indexMemory`, `parseIndex`,
-  `SegmentIndexCap`, the handoff notice and steps, `SegmentIndex`, the
-  memory_segment format). If any changed, stop: the reused draws would not
-  be what the new runtime writes, and the plan is re-frozen with new
-  handoffs.
-- **G2, every index visible:** rendering each probe checkpoint's header
-  with each draw's indexes (no model call) shows at least one line for
-  every segment that has an index, and no segment only as a pointer. If
-  not, stop and report to aos code.
-- **G3, enough coverage to test:** at least 5 new probes are range-covered
-  by a shown line in at least one draw. If not, stop after the index-recall
-  table: A1 could not differ from C on enough facts to test.
+After the handoffs, before any probe call, `run.sh` stops unless:
 
-During the run: if more than 10% of any arm's answers end in a backend
+- **G0, enough indexes** (`gate.py`, the follow-up's rule unchanged): at
+  least 14 of the 27 draws kept a line, and art-000414 and art-001661
+  each kept one in at least 2 of 3 draws.
+- **G2, every index visible** (`headercheck`, `coverage.py`): each probe
+  checkpoint's header, with each draw's indexes, shows at least one line
+  of every segment that has an index. If not, stop and report to aos code.
+- **G3, enough coverage to test** (`coverage.py`): at least 5 new probes
+  are range-covered by a shown line in at least one draw. If not, stop
+  after the index-recall table: A1 could not differ from C on enough
+  facts to test.
+
+During the run: if more than 10% of any probe run's answers end in an
 error, stop and report what ran. No interim look at scores; the primary
 test is run once, after grading.
+
+Checked before freeze on the old draws, as a test of the scripts only:
+`headercheck` shows every indexed segment (art-000414 15 of 20, 12 of 15
+and 15 of 15 lines), and 20 of 23 new probes would be range-covered by a
+shown line. 6 covering lines of 3 probes were hidden, all late in their
+segment's index (h-414-1 at #56 and h-414-3 at #43 in 2 of 3 draws,
+h-557-3 at #167 in 2); h-414-1 is covered only by hidden lines.
 
 ## Files
 
 `select_candidates.py`, `candidates.json`, `context/`, `selection.md`,
-`probes-new.json`, `rubric-new.json`, `coverage.py` and its output,
-`run.sh`, `run.log`, `samples-*.jsonl`, grading files, `summarize.py`,
-`summary.json`; report `reports/memory-probe-recall-header.html`.
+`probes-new.json`, `rubric-new.json`; `make_indexes.py`, `gate.py`,
+`handoff_summary.py`, `headercheck/`, `coverage.py`; `run.sh` and its
+output (`run.log`, `handoffs.jsonl`, `indexes-d1..3.json`, `indexes.log`,
+`gate.log`, `header.json`, `coverage.*`, `gates.json`,
+`handoff_summary.json`, `samples-*.jsonl`); `blind.py`, grading files,
+`primary.py`, `primary.json`; the old draws' records `coverage-old.*`,
+`coverage_grades-old.json`; report
+`reports/memory-probe-recall-header.html`.
