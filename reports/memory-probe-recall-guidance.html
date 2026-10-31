@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AOS Memory Evaluation: Partial-Index Guidance Test</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; background: #fff; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    .wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 0.94em; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; white-space: nowrap; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .note { color: #6b7280; font-size: 0.92em; }
+    blockquote { margin: 8px 0; padding: 8px 14px; border-left: 4px solid #d1d5db; background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Memory Evaluation: Does "The Index Is Partial" Make A1 Look Things Up?</h1>
+    <p>In the header re-test (<code>memory-probe-recall-header.html</code>, <code>c0c3471</code>) A1 was right in 93 of 96 answers whose header showed a line stating the fact, but most of its misses elsewhere claimed something was never done, measured or seen, often with no memory call. aos code added a header note behind a switch (<code>283a92e</code>): <b>S1</b> says the index is partial and to <code>search_memory</code> before answering that something never happened; <b>S2</b>, where some index lines are hidden, points to <code>read_memory artifact_id=&lt;segment&gt;</code>. This test froze a plan on that runtime (<code>e93299d</code>) and compared A1 (note off) with A1+G (note on), with the same 27 index draws, budget, checkpoints and question template, in one concurrent run, graded blind by hand.</p>
+    <p><b>Primary result, significant:</b> on the 43 target cells (no shown index line states the fact), A1+G gave the main fact in <span class="good">116 of 158</span> answers (73.4%) against <b>99 of 158</b> (62.7%) for A1. Difference +17, two-sided stratified permutation test <b>p = 0.004</b>; 95% interval of the rate difference <b>+4.4 to +16.5 points</b> (frozen bootstrap over answers within cells), +3.5 to +18.9 resampling whole probes (post hoc).</p>
+    <ul>
+      <li><b>The gain is concentrated.</b> Three probes carry 12 of the 17: the negative-claim probe <code>n-1661-1</code> (<span class="good">6/12 vs 0/12</span>), <code>h-1661-2</code> (10/14 vs 6/14) and <code>h-1661-3</code> (10/10 vs 8/10); 5 more probes gain 1 or 2, 11 show no change and one (<code>h-1608-3</code>) loses 1. Without the two probes graded by grader f (<code>n-1661-1</code>, <code>h-1661-3</code>; see Grading), the difference is +9 and p = 0.11 (post hoc).</li>
+      <li><b>Fewer "never happened" answers:</b> negative-claim errors 29 vs 43 of 158 (Fisher p = 0.08, not significant); contra 46 vs 70; exact 101 vs 75.</li>
+      <li><b>S1 works, S2 barely does.</b> The gain sits at the checkpoints where every index line is shown (77/100 vs 63/100); at art-000648, where lines are hidden and S2 appears, +3 (39/58 vs 36/58). Only <b>1 of 191</b> A1+G answers called <code>read_memory artifact_id=...</code> (A1: 0 of 191); that one answer was right. <code>h-414-1</code>, whose truth sits in a hidden line, stayed at 5/18 vs 4/18.</li>
+      <li><b>Half of the remaining negative claims followed a search.</b> A1+G cut negative claims made with no memory call from 24 to 13, but those made after a search that did not find the fact stayed (16 vs 14).</li>
+    </ul>
+    <p><b>Harm check, no flagged regression:</b> on the 11 cells where a shown line states the fact, main <b>31/33 vs 33/33</b> (Fisher p = 0.49), no cell flagged; contra 8 vs 4, exact 19 vs 24 (small counts, see Harm).</p>
+    <p><b>Cost:</b> +7.6% tokens per target answer (114.6K vs 106.5K) and +5.8% in the harm set (79.4K vs 75.0K); memory calls per answer 1.91 vs 1.68. Wall clock, both arms running at once: A1+G 12,563 s, A1 12,117 s.</p>
+  </div>
+
+  <h2>What Was Run</h2>
+  <ul>
+    <li><b>Runtime:</b> <code>283a92e</code> (local main: <code>6c55bdb</code> plus the note), merged into this branch (<code>3871346</code>), with aos code's probe patch unchanged (<code>865a7ff</code>: recall aid <code>a1p</code>, sample fields <code>agent_index_partial_note</code> and <code>agent_index_shortened_note</code>). Plan frozen at <b><code>e93299d</code></b>; binaries built from it (<code>run.log</code> stamps hash <code>4a511ac1b66a</code>).</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> via the OpenAI-compatible endpoint <code>phg-gpu.local:8080</code> (server behind it not recorded), temperature 0.6, top-p 0.95, 64K context, as in the earlier runs.</li>
+    <li><b>Arms:</b> A1 = <code>--recall a1</code> (note off, the <code>6c55bdb</code> header); A1+G = <code>--recall a1,a1p</code>. Both with <code>--header-index-bytes 6144</code>, the re-test's 27 index draws (<code>indexes-d1..3.json</code>, copied unchanged from <code>d9e653e</code>), the same checkpoints and the unchanged question template. A fresh A1 control; no re-test answer reused.</li>
+    <li><b>Cells:</b> target set = 37 re-test cells where no shown line states the fact, plus 6 cells of 3 new negative-claim probes (158 answers per arm); harm set = 8 re-test cells drawn with <code>Random("guidance-harm")</code> where a shown line states it, plus 3 negative-claim cells of that kind (33 per arm).</li>
+    <li><b>Run:</b> 382 answers in 24 runs, none with a backend error, stop rule not triggered. Both arms started 2026-10-31T07:20:52Z as two concurrent sequences in the same order; A1 finished 10:42:49Z (12,117 s), A1+G 10:50:15Z (12,563 s).</li>
+    <li><b>Grading:</b> every answer hand-graded main / exact / contra / negative_claim by eight grader agents, blind to arm (shuffled with <code>Random(20261031)</code>; arm, draw, sample, reads and header fields stripped; <code>grading/BRIEF.md</code>). One grader per probe group, grading both arms of its probes together. Grades committed (<code>69fa93d</code>) before the key was opened.</li>
+  </ul>
+
+  <h2>Gates</h2>
+  <ul>
+    <li><b>G1 passed</b> (no model call): with the note off, all 9 system prompts and task headers (3 draws × 3 checkpoints) are byte-identical to <code>6c55bdb</code>'s (<code>reference-6c55bdb/</code>), with the same lines shown and hidden.</li>
+    <li><b>G2 passed</b> (no model call): with the note on, the same lines are shown and hidden, S1 is in all 9 headers, S2 exactly in the 3 at art-000648 (the only checkpoint with hidden lines), and removing them gives back the note-off header byte for byte. S1 adds 164 bytes; S1 + S2 add 308.</li>
+    <li><b>G3 passed</b> (live): all 382 samples record the shown/hidden counts G1 predicts, <code>agent_index_budget = 6144</code>, and the note of their arm (A1: none; A1+G: S1 always, S2 exactly at art-000648).</li>
+  </ul>
+
+  <h2>Primary Result</h2>
+  <p>Main score on the target set, stratified by probe, 100,000 permutations with <code>Random(20261031)</code>.</p>
+  <div class="wrap"><table>
+    <tr><th></th><th class="num">A1</th><th class="num">A1+G</th><th class="num">Difference</th></tr>
+    <tr><td>main</td><td class="num">99/158 (62.7%)</td><td class="num">116/158 (73.4%)</td><td class="num good">+17 (+10.8 points), p = 0.004</td></tr>
+    <tr><td>exact</td><td class="num">75</td><td class="num">101</td><td class="num">+26</td></tr>
+    <tr><td>contra</td><td class="num">70</td><td class="num">46</td><td class="num">−24</td></tr>
+    <tr><td>negative_claim</td><td class="num">43</td><td class="num">29</td><td class="num">−14 (Fisher p = 0.08)</td></tr>
+  </table></div>
+  <p><b>Effect sizes.</b> The frozen 95% interval of the main-rate difference is +4.4 to +16.5 points. It rules out no effect and any harm on the target set. In terms of A1's 59 misses, the note turned about 29% of them into right answers (point estimate), with the interval spanning roughly 12% to 44%; a note that halves the misses (+18.7 points) lies just outside it. That interval resamples answers within cells and treats the 20 target probes as fixed. Because the gain is concentrated in a few probes, a post-hoc interval that resamples whole probes is wider, +3.5 to +18.9 points, and still excludes zero. How the note does on other questions depends on how many of them resemble <code>n-1661-1</code> and <code>h-1661-2</code>, and 20 probes cannot pin that down.</p>
+
+  <h3>Per probe (target cells)</h3>
+  <div class="wrap"><table>
+    <tr><th>Probe</th><th>Checkpoint</th><th>Target cells: index grade</th><th class="num">A1 main</th><th class="num">A1+G main</th><th class="num">Δ</th><th class="num">negative claims A1 / A1+G</th></tr>
+    <tr><td><code>n-1661-1</code></td><td>art-001768</td><td>d1 no line, d2 points, d3 points</td><td class="num">0/12</td><td class="num">6/12</td><td class="num good">+6</td><td class="num">12 / 6</td></tr>
+    <tr><td><code>h-1661-2</code></td><td>art-001768</td><td>d1 points, d2 points, d3 points</td><td class="num">6/14</td><td class="num">10/14</td><td class="num good">+4</td><td class="num">8 / 4</td></tr>
+    <tr><td><code>h-1661-3</code></td><td>art-001768</td><td>d1 points, d2 points, d3 points</td><td class="num">8/10</td><td class="num">10/10</td><td class="num good">+2</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-3133-1</code></td><td>art-003135</td><td>d1 points, d2 points, d3 points</td><td class="num">12/14</td><td class="num">14/14</td><td class="num good">+2</td><td class="num">1 / 0</td></tr>
+    <tr><td><code>h-414-1</code></td><td>art-000648</td><td>d1 states (hidden), d2 points (hidden), d3 points (hidden)</td><td class="num">4/18</td><td class="num">5/18</td><td class="num good">+1</td><td class="num">14 / 13</td></tr>
+    <tr><td><code>h-557-3</code></td><td>art-000648</td><td>d2 states (hidden), d3 states (hidden)</td><td class="num">5/12</td><td class="num">6/12</td><td class="num good">+1</td><td class="num">7 / 6</td></tr>
+    <tr><td><code>h-646-3</code></td><td>art-000648</td><td>d1 no line, d2 points (hidden), d3 no line</td><td class="num">5/6</td><td class="num">6/6</td><td class="num good">+1</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>n-1766-1</code></td><td>art-001768</td><td>d1 points, d2 points, d3 points</td><td class="num">11/12</td><td class="num">12/12</td><td class="num good">+1</td><td class="num">1 / 0</td></tr>
+    <tr><td><code>h-1608-2</code></td><td>art-001768</td><td>d1 points, d2 points</td><td class="num">0/12</td><td class="num">0/12</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-1661-1</code></td><td>art-001768</td><td>d3 no line</td><td class="num">2/2</td><td class="num">2/2</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-1766-3</code></td><td>art-001768</td><td>d1 points, d2 points, d3 no line</td><td class="num">10/10</td><td class="num">10/10</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-3062-1</code></td><td>art-003135</td><td>d1 points</td><td class="num">2/2</td><td class="num">2/2</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-3062-2</code></td><td>art-003135</td><td>d2 points</td><td class="num">6/6</td><td class="num">6/6</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-414-2</code></td><td>art-000648</td><td>d1 points, d3 points</td><td class="num">4/4</td><td class="num">4/4</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-414-3</code></td><td>art-000648</td><td>d2 states (hidden), d3 no line</td><td class="num">4/4</td><td class="num">4/4</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-557-1</code></td><td>art-000648</td><td>d1 points</td><td class="num">2/2</td><td class="num">2/2</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-557-2</code></td><td>art-000648</td><td>d3 states (hidden)</td><td class="num">2/2</td><td class="num">2/2</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-646-1</code></td><td>art-000648</td><td>d1 no line</td><td class="num">2/2</td><td class="num">2/2</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-646-2</code></td><td>art-000648</td><td>d1 no line, d3 points</td><td class="num">8/8</td><td class="num">8/8</td><td class="num">0</td><td class="num">0 / 0</td></tr>
+    <tr><td><code>h-1608-3</code></td><td>art-001768</td><td>d1 points, d2 points, d3 points</td><td class="num">6/6</td><td class="num">5/6</td><td class="num bad">−1</td><td class="num">0 / 0</td></tr>
+  </table></div>
+  <p class="note">Index grades are the re-test's, graded before its answers were opened (negative-claim probes: graded by this session before any model call). "points" = a line covers the truth message without stating the fact. Cells where A1 missed in the re-test got 6 samples per arm, the others 2, negative-claim cells 4.</p>
+  <p><code>h-1608-2</code> is 0 in both arms: every answer gives 45.220 ms, round 4's figure in the round-5 goal and the benchmark JSON, while the question asks for the writer-log tail's 45.635. No answer in either arm reached the writer-log figure.</p>
+
+  <h2>Secondary</h2>
+  <h3>Memory calls and negative claims (target set)</h3>
+  <div class="wrap"><table>
+    <tr><th></th><th class="num">A1</th><th class="num">A1+G</th></tr>
+    <tr><td>Answers with any memory call</td><td class="num">117/158 (74%)</td><td class="num">130/158 (82%)</td></tr>
+    <tr><td>Memory calls per answer (searches + reads)</td><td class="num">1.68 (1.04 + 0.64)</td><td class="num">1.91 (1.19 + 0.72)</td></tr>
+    <tr><td>Answers calling <code>read_memory artifact_id=...</code> (all 191 answers per arm)</td><td class="num">0</td><td class="num">1</td></tr>
+    <tr><td>Negative claims after no memory call</td><td class="num">24</td><td class="num">13</td></tr>
+    <tr><td>Negative claims after a search, no read</td><td class="num">16</td><td class="num">14</td></tr>
+    <tr><td>Negative claims after reading memory</td><td class="num">3</td><td class="num">2</td></tr>
+    <tr><td>Main when the answer made no memory call</td><td class="num">3 of 41</td><td class="num">2 of 28</td></tr>
+    <tr><td>Main when the answer searched</td><td class="num">89 of 110</td><td class="num">113 of 129</td></tr>
+  </table></div>
+  <p>S1 did what it says: fewer answers skipped memory, and negative claims made without any call fell by about half. What it cannot fix is a search that comes back without the fact; those negative claims are about as frequent as before (graders noted several answers citing an empty archive search, for example on <code>h-557-3</code>). The one <code>artifact_id</code> read was <code>h-414-1</code> d3 in A1+G: three searches, then <code>read_memory artifact_id=art-000414</code>, then <code>read_memory from=53 to=57</code>, and an exact answer. That is the path S2 is meant to open; it was taken once in 58 A1+G answers at art-000648.</p>
+
+  <h3>Target set splits</h3>
+  <div class="wrap"><table>
+    <tr><th>Split</th><th class="num">A1 main</th><th class="num">A1+G main</th><th class="num">negative claims A1 / A1+G</th></tr>
+    <tr><td>Re-test probes (37 cells)</td><td class="num">88/134</td><td class="num">98/134</td><td class="num">30 / 23</td></tr>
+    <tr><td>Negative-claim probes (6 cells)</td><td class="num">11/24</td><td class="num">18/24</td><td class="num">13 / 6</td></tr>
+    <tr><td>art-000648 (S2 shown, lines hidden)</td><td class="num">36/58</td><td class="num">39/58</td><td class="num">21 / 19</td></tr>
+    <tr><td>Other checkpoints (S1 only)</td><td class="num">63/100</td><td class="num">77/100</td><td class="num">22 / 10</td></tr>
+    <tr><td>Index grade: points, line shown</td><td class="num">71/104</td><td class="num">84/104</td><td class="num">18 / 7</td></tr>
+    <tr><td>Points or states, line hidden</td><td class="num">15/36</td><td class="num">17/36</td><td class="num">21 / 19</td></tr>
+    <tr><td>No covering line</td><td class="num">13/18</td><td class="num">15/18</td><td class="num">4 / 3</td></tr>
+    <tr><td>Draw 1</td><td class="num">29/50</td><td class="num">34/50</td><td class="num">14 / 9</td></tr>
+    <tr><td>Draw 2</td><td class="num">33/50</td><td class="num">35/50</td><td class="num">11 / 9</td></tr>
+    <tr><td>Draw 3</td><td class="num">37/58</td><td class="num">47/58</td><td class="num">18 / 11</td></tr>
+  </table></div>
+  <p>The note helps most where a shown line <i>points</i> at the range without stating the fact (+13): the agent sees that the segment covers the topic, and S1 tells it to search instead of concluding from the line. Where the stating line is hidden, the gain is +2; there the agent has to act on S2 or find the fact by search, and it rarely did either successfully.</p>
+
+  <h2>Harm Check</h2>
+  <div class="wrap"><table>
+    <tr><th>Harm set (11 cells, 33 answers per arm)</th><th class="num">A1</th><th class="num">A1+G</th></tr>
+    <tr><td>main</td><td class="num">33</td><td class="num">31 (Fisher p = 0.49)</td></tr>
+    <tr><td>exact</td><td class="num">24</td><td class="num">19</td></tr>
+    <tr><td>contra</td><td class="num">4</td><td class="num">8</td></tr>
+    <tr><td>Cells with A1+G main ≥ 2 below A1</td><td class="num" colspan="2">none</td></tr>
+    <tr><td>Answers with any memory call</td><td class="num">18</td><td class="num">17</td></tr>
+    <tr><td>Memory calls per answer</td><td class="num">0.85</td><td class="num">1.00</td></tr>
+    <tr><td>Tokens per answer</td><td class="num">75.0K</td><td class="num">79.4K</td></tr>
+  </table></div>
+  <p>The two A1+G misses: <code>h-414-2</code> d2 (says the caustic was "roughly three times" the floor; 3x is the mask threshold, the record is ~16x) and <code>h-1766-2</code> d3 (says no difference was ever reported; #159 shows DIFF_DEFAULT), the only negative claim in the harm set. Of the 8 A1+G contra answers, 3 are in one cell (<code>h-507-1</code> d2: right link error, wrong file for <code>transform_mesh</code>; A1 had 1 of 3 there) and 2 in <code>n-1608-1</code> (claiming the rebuild reproduced the round-4 binary; A1 had 1). With 33 answers per arm none of these differences is distinguishable from noise, and the test cannot rule out a small cost in the harm set.</p>
+
+  <h2>Cost and Process</h2>
+  <ul>
+    <li><b>Tokens per answer:</b> target 106.5K (A1) vs 114.6K (A1+G), +7.6%; harm 75.0K vs 79.4K, +5.8%. Model calls per answer: target 2.73 vs 2.94, harm 1.88 vs 2.06.</li>
+    <li><b>Header:</b> S1 adds 164 bytes to every header with an index; S2 another 144 where lines are hidden.</li>
+    <li><b>Wall clock</b> (two concurrent sequences on the same endpoint): A1 12,117 s, A1+G 12,563 s (+3.7%).</li>
+  </ul>
+
+  <h2>Grading</h2>
+  <ul>
+    <li><b>Groups:</b> a <code>h-414-*</code>; b <code>h-507-1</code>, <code>h-557-*</code>; c <code>h-646-*</code>; d <code>h-1608-*</code>, <code>n-1608-1</code>; e <code>h-1661-1</code>, <code>h-1661-2</code>; f <code>h-1661-3</code>, <code>n-1661-1</code>; g <code>h-1766-*</code>, <code>n-1766-1</code>; h <code>h-3062-*</code>, <code>h-3133-1</code>. 382 of 382 graded; every grade satisfies exact ⇒ main ∧ ¬contra and negative_claim ⇒ contra.</li>
+    <li><b>Forbidden-file scan.</b> Every grader's tool calls were scanned for the files the brief forbids. One access: grader f ran <code>grep -n '1661-3\|n-1661-1' ../memory-probe-recall-header/*.json | head</code>. It searched JSON only (no <code>coverage*.md</code>, so no "Truth:" line), and printed 10 lines, each a probe id as a key or value: <code>coverage-old.json:638</code>, <code>coverage-oldparse.json:787</code>, <code>coverage-newparse.json:827</code>, <code>coverage.json:836</code> (<code>"probe": "h-1661-3",</code>), <code>coverage_grades.json:325</code>, <code>coverage_grades-old.json:268</code>, <code>coverage_grades-newparse.json:268</code>, <code>primary.json:37</code> (<code>"h-1661-3": {</code>), <code>gates.json:29</code>, <code>gates-oldparse.json:25</code> (<code>"h-1661-3",</code>). No truth text, index text, grade note or per-probe count was printed (<code>primary.json</code>'s counts are on lines 38–40), and nothing names this run's arms. The full list is in <code>grading/NOTES.md</code>.</li>
+    <li><b>Group f separately</b> (both of its probes, all cells): A1 main 8/22, negative claims 12; A1+G main 16/22, negative claims 6. Its probes carry 8 of the 17-point difference. Its <code>n-1661-1</code> grades follow the answers' own words: the 6 right A1+G answers say yes and report the empty grep; the 18 negative claims open with "No" or state there is no record (5 of them hedge first; the grader counted them, the same line in both arms). Without group f's probes the primary difference is +9 of 136 (91 vs 100), p = 0.11.</li>
+    <li><b>Rubric readings the graders flagged</b> (one reading per probe, both arms): <code>h-1608-2</code> all main 0 (45.220 vs the writer log's 45.635; contra 24, or 12 under a looser contra line); <code>h-3062-2</code> main 1 for "about 0.93% faster" without 10/10. Under the strict reading of <code>h-3062-2</code> (2 A1 and 4 A1+G answers become main 0) the primary difference is +15, p = 0.017. <code>n-1766-1</code> exact needs the 0xFFFFFFFFu value (affects exact only). Borderline contra and negative-claim calls are listed in <code>grading/NOTES.md</code>.</li>
+    <li><b>Brief path slip:</b> <code>BRIEF.md</code> lists the negative-claim probe and rubric files next to the header folder's; they are in this folder, and the graders who looked there first used these (the only) copies.</li>
+  </ul>
+
+  <h2>For aos code</h2>
+  <ul>
+    <li>S1 is worth keeping on: it cut "never happened" answers made without looking, at about 8% more tokens, with no flagged regression where the index already states the fact.</li>
+    <li>S2 is almost never acted on (1 of 58 answers at art-000648 read the whole index). The facts behind hidden lines (<code>h-414-1</code>, <code>h-557-3</code>) are still missed at about the old rate. If hidden lines matter, the header probably has to show them or the runtime has to fetch them; a pointer alone does not get followed.</li>
+    <li>About half of the remaining negative claims come after a search that did not surface the fact. That is a search-recall problem, not a guidance problem.</li>
+  </ul>
+
+  <h2>Caveats</h2>
+  <ul>
+    <li><b>Concentration.</b> The result rests on few probes; the <code>h-1661</code>/<code>n-1661</code> segment (art-001661, checkpoint art-001768) contributes most of it. The frozen test is significant; the post-hoc sensitivity without grader f's probes is not (p = 0.11), which is a statement about how much of the effect those two probes carry, not about their grading, which the scan found no reason to doubt.</li>
+    <li><b>Question template.</b> Both arms ask "answered from what you already know ... and, if needed, your compacted memory". That wording invites answering without lookups; it may hold down the effect of S1 in both arms, and the effect under a neutral template is unknown.</li>
+    <li><b>The read_memory change reaches both arms.</b> In <code>283a92e</code>, <code>read_memory artifact_id=&lt;segment&gt;</code> returns the index from the segment's ref. A1 here is therefore not the re-test's runtime in that one respect. A1 made 0 such reads (as in the re-test's 306 A1 answers); A1+G made 1.</li>
+    <li><b>Oversampling.</b> Cells where A1 missed in the re-test have 6 samples per arm, the others 2; the target-set rates are of this sample, not of all cells equally.</li>
+    <li><b>Negative-claim probes are weak facts</b> (a passing build, an empty grep, a missing definition), all at one checkpoint, chosen by a mechanical rule from 47 candidates.</li>
+    <li><b>Post-hoc numbers</b> (probe-level interval, group-f exclusion, h-3062-2 strict reading, call breakdown) come from <code>extra.py</code>, written after unblinding, and are not part of the frozen plan.</li>
+    <li><b>Plan amendments after freeze</b> (no design change, <code>232ef67</code>): the plan's "one answer made such a read" referred to arm C of the re-test, not A1; and a per-arm count of <code>artifact_id</code> reads was added at aos book's request. Before freezing, the first G2 dry run failed only because the gate searched for S2 in a character diff that split it; the check was made exact before the freeze.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <p><code>memory-probe-recall-guidance/</code>: <code>PLAN.md</code> (frozen <code>e93299d</code>, amendments <code>232ef67</code>), <code>cells.py</code> → <code>cells.json</code>, <code>select_negative.py</code>, <code>WRITER.md</code>, <code>probes-negative.json</code>, <code>rubric-negative.json</code>, <code>selection-negative.md</code>, <code>coverage_grades-negative.json</code>, <code>power.py</code>, <code>headercheck/</code>, <code>reference-6c55bdb/</code>, <code>gate.py</code>, <code>gate.log</code>, <code>headers-off/</code>, <code>headers-on/</code>, <code>run.sh</code>, <code>run.log</code>, <code>samples-*.jsonl</code> (run outputs <code>b9db620</code>), <code>blind.py</code>, <code>grading/</code> (brief, blind files, key, grades, <code>NOTES.md</code>; grades <code>69fa93d</code>), <code>analyze.py</code> → <code>results.json</code>, <code>extra.py</code> → <code>extra.json</code> (post hoc).</p>
+</body>
+</html>
