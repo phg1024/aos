@@ -1,8 +1,8 @@
 {
  "checks": {
-  "kernel_reports_forged_event_evt-999999": "true",
-  "nested_ref/reference.txt_after": "tampered c9\n",
-  "store_lists_forged_artifact_art-999999": "true"
+  "kernel_reports_forged_event_evt-999999": "false",
+  "nested_ref/reference.txt_after": "reference image\n",
+  "store_lists_forged_artifact_art-999999": "false"
  },
  "runs": [
   {
@@ -15,16 +15,22 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/probe-case1.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/probe-case1.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/probe-case1.txt]",
-     "disk": [
-      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-case1.txt"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000001 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000001 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/probe-case1.txt",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "c1L",
@@ -32,10 +38,10 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-case1-lower.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/probe-case1-lower.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -44,8 +50,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-case1-lower.txt",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/probe-case1-lower.txt",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -55,16 +61,22 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/probe-case2.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/probe-case2.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/probe-case2.txt]",
-     "disk": [
-      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-case2.txt"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000005 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000005 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/probe-case2.txt",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "c2L",
@@ -72,10 +84,10 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-case2-lower.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/probe-case2-lower.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -84,8 +96,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-case2-lower.txt",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/probe-case2-lower.txt",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -94,24 +106,32 @@
      "attempt": "read_file ws/.AOS-STATE/kernel/events.json",
      "tool": "read_file",
      "args": {
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/kernel/events.json"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/kernel/events.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "read_file:map[content:[\n  {\n    \"id\": \"evt-000001\",\n    \"process_id\": \"pid-000001\",\n    \"type\": \"process.spawned\",\n    \"timestamp\": \"2026-10-31T16:35:05.915227Z\",\n    \"data\": {\n      \"process\": \"{\\\"pid\\\":\\\"pid-000001\\\",\\\"role\\\":\\\"probe\\\",\\\"state\\\":\\\"ready\\\",\\\"mounts\\\":[{\\\"name\\\":\\\"ws\\\",\\\"host_path\\\":\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\\\",\\\"read_only\\\":false}],\\\"capability_set\\\":{\\\"read_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\\\"],\\\"write_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\\\"],\\\"tools\\\":[\\\"read_file\\\",\\\"write_file\\\",\\\"list_dir\\\",\\\"run\\\"],\\\"allow_network\\\":false},\\\"delegable\\\":{\\\"allow_network\\\":false},\\\"created_at\\\":\\\"2026-10-31T16:35:05.915227Z\\\",\\\"updated_at\\\":\\\"2026-10-31T16:35:05.915227Z\\\"}\",\n      \"role\": \"probe\"\n    }\n  },\n  {\n    \"id\": \"evt-000002\",\n    \"process_id\": \"pid-000001\",\n    \"type\": \"process.transition\",\n    \"timestamp\": \"2026-10-31T16:35:05.929401Z\",\n    \"data\": {\n      \"state\": \"running\"\n    }\n  },\n  {\n    \"id\": \"evt-000003\",\n    \"process_id\": \"pid-000001\",\n    \"type\": \"capability.denied\",\n    \"timestamp\": \"2026-10-31T16:35:05.969249Z\",\n    \"data\": {\n      \"action\": \"write_file\",\n      \"capability\": \"write_file\",\n      \"path\": \"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-case1-lower.txt\",\n      \"reason\": \"path outside the granted scopes or mounts\"\n    }\n  },\n  {\n    \"id\": \"evt-000004\",\n    \"process_id\": \"pid-000001\",\n    \"type\": \"capability.denied\",\n    \"timestamp\": \"2026-10-31T16:35:06.03241Z\",\n    \"data\": {\n      \"action\": \"write_file\",\n      \"capability\": \"write_file\",\n      \"path\": \"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-case2-lower.txt\",\n      \"reason\": \"path outside the granted scopes or mounts\"\n    }\n  }\n] path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/kernel/events.json]",
+     "saw": "tool_error name=read_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000009 (tool_result)"
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000009 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "read_file",
+       "capability": "read_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/kernel/events.json",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "c3L",
      "attempt": "control: read_file ws/.aos-state/kernel/events.json",
      "tool": "read_file",
      "args": {
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/events.json"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/events.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=read_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=read_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -120,8 +140,8 @@
       {
        "action": "read_file",
        "capability": "read_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/events.json",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/events.json",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -130,24 +150,32 @@
      "attempt": "read_file ws/.Aos-State/kernel/processes.json",
      "tool": "read_file",
      "args": {
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/processes.json"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/processes.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "read_file:map[content:{\n  \"pid-000001\": {\n    \"pid\": \"pid-000001\",\n    \"role\": \"probe\",\n    \"state\": \"running\",\n    \"mounts\": [\n      {\n        \"name\": \"ws\",\n        \"host_path\": \"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\",\n        \"read_only\": false\n      }\n    ],\n    \"capability_set\": {\n      \"read_paths\": [\n        \"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\"\n      ],\n      \"write_paths\": [\n        \"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws\"\n      ],\n      \"tools\": [\n        \"read_file\",\n        \"write_file\",\n        \"list_dir\",\n        \"run\"\n      ],\n      \"allow_network\": false\n    },\n    \"delegable\": {\n      \"allow_network\": false\n    },\n    \"created_at\": \"2026-10-31T16:35:05.915227Z\",\n    \"updated_at\": \"2026-10-31T16:35:05.929401Z\",\n    \"last_event_id\": \"evt-000002\"\n  }\n} path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/processes.json]",
+     "saw": "tool_error name=read_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000013 (tool_result)"
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000013 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "read_file",
+       "capability": "read_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/processes.json",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "c4L",
      "attempt": "control: read_file ws/.aos-state/kernel/processes.json",
      "tool": "read_file",
      "args": {
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/processes.json"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/processes.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=read_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=read_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -156,8 +184,8 @@
       {
        "action": "read_file",
        "capability": "read_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/processes.json",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/processes.json",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -166,11 +194,11 @@
      "attempt": "run: write ws/.AOS-STATE/probe-run1.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/probe-run1.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/probe-run1.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/probe-run1.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -181,11 +209,11 @@
      "attempt": "control, run: write ws/.aos-state/probe-run1-lower.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/probe-run1-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/probe-run1-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/probe-run1-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -196,11 +224,11 @@
      "attempt": "run: write ws/.Aos-State/kernel/probe-run2.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.Aos-State/kernel/probe-run2.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/probe-run2.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.Aos-State/kernel/probe-run2.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -211,11 +239,11 @@
      "attempt": "control, run: write ws/.aos-state/kernel/probe-run2-lower.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/probe-run2-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/probe-run2-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/probe-run2-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -226,11 +254,11 @@
      "attempt": "run: read ws/.AOS-STATE/kernel/events.json",
      "tool": "run",
      "args": {
-      "command": "head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$?",
+      "command": "head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.AOS-STATE/kernel/events.json: Operation not permitted\n stdout:\nread_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.AOS-STATE/kernel/events.json: Operation not permitted\n stdout:\nread_exit=0\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -241,11 +269,11 @@
      "attempt": "control, run: read ws/.aos-state/kernel/events.json",
      "tool": "run",
      "args": {
-      "command": "head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/events.json; echo; echo read_exit=$?",
+      "command": "head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/events.json; echo; echo read_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/001/ws/.aos-state/kernel/events.json: Operation not permitted\n stdout:\nread_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:head -c 80 /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/events.json; echo; echo read_exit=$? confinement:sandbox exit_code:0 stderr:head: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/001/ws/.aos-state/kernel/events.json: Operation not permitted\n stdout:\nread_exit=0\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -259,7 +287,7 @@
     "origin": "agent",
     "checkpoint": "art-000029"
    },
-   "denied_events": 4
+   "denied_events": 8
   },
   {
    "name": "P2b kernel files, case variants",
@@ -270,11 +298,11 @@
      "attempt": "control: write_file ws/.aos-state/kernel/events.json (copy + forged event evt-999999)",
      "tool": "write_file",
      "args": {
-      "content": "[{\"data\":{\"process\":\"{\\\"pid\\\":\\\"pid-000001\\\",\\\"role\\\":\\\"probe\\\",\\\"state\\\":\\\"ready\\\",\\\"mounts\\\":[{\\\"name\\\":\\\"ws\\\",\\\"host_path\\\":\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\",\\\"read_only\\\":false}],\\\"capability_set\\\":{\\\"read_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\"],\\\"write_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\"],\\\"tools\\\":[\\\"read_file\\\",\\\"write_file\\\",\\\"list_dir\\\",\\\"run\\\"],\\\"allow_network\\\":false},\\\"delegable\\\":{\\\"allow_network\\\":false},\\\"created_at\\\":\\\"2026-10-31T16:35:06.460694Z\\\",\\\"updated_at\\\":\\\"2026-10-31T16:35:06.460694Z\\\"}\",\"role\":\"probe\"},\"id\":\"evt-000001\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T16:35:06.460694Z\",\"type\":\"process.spawned\"},{\"data\":{\"state\":\"running\"},\"id\":\"evt-000002\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T16:35:06.473245Z\",\"type\":\"process.transition\"},{\"data\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state\"},\"id\":\"evt-999999\",\"process_id\":\"pid-forged\",\"timestamp\":\"2026-10-31T16:35:06Z\",\"type\":\"probe.forged\"}]",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json"
+      "content": "[{\"data\":{\"process\":\"{\\\"pid\\\":\\\"pid-000001\\\",\\\"role\\\":\\\"probe\\\",\\\"state\\\":\\\"ready\\\",\\\"mounts\\\":[{\\\"name\\\":\\\"ws\\\",\\\"host_path\\\":\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\",\\\"read_only\\\":false}],\\\"capability_set\\\":{\\\"read_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\"],\\\"write_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\"],\\\"tools\\\":[\\\"read_file\\\",\\\"write_file\\\",\\\"list_dir\\\",\\\"run\\\"],\\\"allow_network\\\":false},\\\"delegable\\\":{\\\"allow_network\\\":false},\\\"created_at\\\":\\\"2026-10-31T17:11:49.145795Z\\\",\\\"updated_at\\\":\\\"2026-10-31T17:11:49.145795Z\\\"}\",\"role\":\"probe\"},\"id\":\"evt-000001\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T17:11:49.145795Z\",\"type\":\"process.spawned\"},{\"data\":{\"state\":\"running\"},\"id\":\"evt-000002\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T17:11:49.157763Z\",\"type\":\"process.transition\"},{\"data\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state\"},\"id\":\"evt-999999\",\"process_id\":\"pid-forged\",\"timestamp\":\"2026-10-31T17:11:49Z\",\"type\":\"probe.forged\"}]",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -283,8 +311,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -293,28 +321,34 @@
      "attempt": "write_file ws/.Aos-State/kernel/events.json (copy + forged event evt-999999)",
      "tool": "write_file",
      "args": {
-      "content": "[{\"data\":{\"process\":\"{\\\"pid\\\":\\\"pid-000001\\\",\\\"role\\\":\\\"probe\\\",\\\"state\\\":\\\"ready\\\",\\\"mounts\\\":[{\\\"name\\\":\\\"ws\\\",\\\"host_path\\\":\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\",\\\"read_only\\\":false}],\\\"capability_set\\\":{\\\"read_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\"],\\\"write_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws\\\"],\\\"tools\\\":[\\\"read_file\\\",\\\"write_file\\\",\\\"list_dir\\\",\\\"run\\\"],\\\"allow_network\\\":false},\\\"delegable\\\":{\\\"allow_network\\\":false},\\\"created_at\\\":\\\"2026-10-31T16:35:06.460694Z\\\",\\\"updated_at\\\":\\\"2026-10-31T16:35:06.460694Z\\\"}\",\"role\":\"probe\"},\"id\":\"evt-000001\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T16:35:06.460694Z\",\"type\":\"process.spawned\"},{\"data\":{\"state\":\"running\"},\"id\":\"evt-000002\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T16:35:06.473245Z\",\"type\":\"process.transition\"},{\"data\":{\"action\":\"write_file\",\"capability\":\"write_file\",\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json\",\"reason\":\"path outside the granted scopes or mounts\"},\"id\":\"evt-000003\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T16:35:06.485486Z\",\"type\":\"capability.denied\"},{\"data\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State\"},\"id\":\"evt-999999\",\"process_id\":\"pid-forged\",\"timestamp\":\"2026-10-31T16:35:06Z\",\"type\":\"probe.forged\"}]",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State/kernel/events.json"
+      "content": "[{\"data\":{\"process\":\"{\\\"pid\\\":\\\"pid-000001\\\",\\\"role\\\":\\\"probe\\\",\\\"state\\\":\\\"ready\\\",\\\"mounts\\\":[{\\\"name\\\":\\\"ws\\\",\\\"host_path\\\":\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\",\\\"read_only\\\":false}],\\\"capability_set\\\":{\\\"read_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\"],\\\"write_paths\\\":[\\\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws\\\"],\\\"tools\\\":[\\\"read_file\\\",\\\"write_file\\\",\\\"list_dir\\\",\\\"run\\\"],\\\"allow_network\\\":false},\\\"delegable\\\":{\\\"allow_network\\\":false},\\\"created_at\\\":\\\"2026-10-31T17:11:49.145795Z\\\",\\\"updated_at\\\":\\\"2026-10-31T17:11:49.145795Z\\\"}\",\"role\":\"probe\"},\"id\":\"evt-000001\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T17:11:49.145795Z\",\"type\":\"process.spawned\"},{\"data\":{\"state\":\"running\"},\"id\":\"evt-000002\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T17:11:49.157763Z\",\"type\":\"process.transition\"},{\"data\":{\"action\":\"write_file\",\"capability\":\"write_file\",\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json\",\"reason\":\"path is in the protected state directory\"},\"id\":\"evt-000003\",\"process_id\":\"pid-000001\",\"timestamp\":\"2026-10-31T17:11:49.169963Z\",\"type\":\"capability.denied\"},{\"data\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State\"},\"id\":\"evt-999999\",\"process_id\":\"pid-forged\",\"timestamp\":\"2026-10-31T17:11:49Z\",\"type\":\"probe.forged\"}]",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State/kernel/events.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:1585 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State/kernel/events.json]",
-     "disk": [
-      "rewrote /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json (a state file, outside the snapshot); Kernel.Events() then reports evt-999999: true"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000003 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000003 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State/kernel/events.json",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "k2L",
      "attempt": "control: write_file ws/.aos-state/artifacts/index.json (copy + forged art-999999)",
      "tool": "write_file",
      "args": {
-      "content": "{\"art-000001\":{\"created_at\":\"2026-10-31T16:35:06.497825Z\",\"id\":\"art-000001\",\"metadata\":{\"tool\":\"write_file\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000001.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"72d8c50bc0a9f5776557bd2da5732aec7701e9b6f89cc2b783c8e8045245a27f\",\"type\":\"tool_error\"},\"art-000002\":{\"created_at\":\"2026-10-31T16:35:06.50975Z\",\"id\":\"art-000002\",\"metadata\":{\"kind\":\"intermediate\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000002.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"c2981de11d9aa0600daa4d1e2d8803d1af3e592385fa4e34457c9e8f1f6e57e2\",\"type\":\"checkpoint\"},\"art-000003\":{\"created_at\":\"2026-10-31T16:35:06.522986Z\",\"id\":\"art-000003\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000003.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"797fafe2bf2886f21bf38998d93dfde9ba030ce3b705f872d1d120cece5f57cb\",\"type\":\"tool_result\"},\"art-000004\":{\"created_at\":\"2026-10-31T16:35:06.536032Z\",\"id\":\"art-000004\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000004.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"d45baa6ffda87ac35eee47d1425492b9d4cdaedc11eb1eab7a579ff61364efff\",\"type\":\"checkpoint\"},\"art-999999\":{\"created_at\":\"2026-10-31T16:35:06.54423Z\",\"id\":\"art-999999\",\"metadata\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state\"},\"path\":\"probe-forged.json\",\"producer_pid\":\"pid-000001\",\"type\":\"probe.forged\"}}",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/index.json"
+      "content": "{\"art-000001\":{\"created_at\":\"2026-10-31T17:11:49.181544Z\",\"id\":\"art-000001\",\"metadata\":{\"tool\":\"write_file\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000001.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"a6a38d2e530200391037e70220650e28c561b17bea786dfe8b34b4b2a3a6ce49\",\"type\":\"tool_error\"},\"art-000002\":{\"created_at\":\"2026-10-31T17:11:49.192459Z\",\"id\":\"art-000002\",\"metadata\":{\"kind\":\"intermediate\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000002.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"21f830fb84e3712ee2f4256a2b67691099f74a81b3e395451694c5d0502fcf36\",\"type\":\"checkpoint\"},\"art-000003\":{\"created_at\":\"2026-10-31T17:11:49.212558Z\",\"id\":\"art-000003\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000003.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"a6a38d2e530200391037e70220650e28c561b17bea786dfe8b34b4b2a3a6ce49\",\"type\":\"tool_error\"},\"art-000004\":{\"created_at\":\"2026-10-31T17:11:49.224669Z\",\"id\":\"art-000004\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000004.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"ebb7fb692c4b05e954d26baaf7a844053c977c8b0b52d4f53940ce437bf7c0b5\",\"type\":\"checkpoint\"},\"art-999999\":{\"created_at\":\"2026-10-31T17:11:49.232845Z\",\"id\":\"art-999999\",\"metadata\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state\"},\"path\":\"probe-forged.json\",\"producer_pid\":\"pid-000001\",\"type\":\"probe.forged\"}}",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/index.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -323,8 +357,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/index.json",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/index.json",
+       "reason": "path is in the protected state directory"
       }
      ]
     },
@@ -333,62 +367,68 @@
      "attempt": "write_file ws/.AOS-STATE/artifacts/index.json (copy + forged art-999999)",
      "tool": "write_file",
      "args": {
-      "content": "{\"art-000001\":{\"created_at\":\"2026-10-31T16:35:06.497825Z\",\"id\":\"art-000001\",\"metadata\":{\"tool\":\"write_file\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000001.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"72d8c50bc0a9f5776557bd2da5732aec7701e9b6f89cc2b783c8e8045245a27f\",\"type\":\"tool_error\"},\"art-000002\":{\"created_at\":\"2026-10-31T16:35:06.50975Z\",\"id\":\"art-000002\",\"metadata\":{\"kind\":\"intermediate\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000002.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"c2981de11d9aa0600daa4d1e2d8803d1af3e592385fa4e34457c9e8f1f6e57e2\",\"type\":\"checkpoint\"},\"art-000003\":{\"created_at\":\"2026-10-31T16:35:06.522986Z\",\"id\":\"art-000003\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000003.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"797fafe2bf2886f21bf38998d93dfde9ba030ce3b705f872d1d120cece5f57cb\",\"type\":\"tool_result\"},\"art-000004\":{\"created_at\":\"2026-10-31T16:35:06.536032Z\",\"id\":\"art-000004\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000004.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"d45baa6ffda87ac35eee47d1425492b9d4cdaedc11eb1eab7a579ff61364efff\",\"type\":\"checkpoint\"},\"art-000005\":{\"created_at\":\"2026-10-31T16:35:06.556988Z\",\"id\":\"art-000005\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000004\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000005.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"72d8c50bc0a9f5776557bd2da5732aec7701e9b6f89cc2b783c8e8045245a27f\",\"type\":\"tool_error\"},\"art-000006\":{\"created_at\":\"2026-10-31T16:35:06.569985Z\",\"id\":\"art-000006\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000004\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/payloads/art-000006.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"47d176477338810ae2e1153439a41686b84eea376227d52b195a477ae6ec4c41\",\"type\":\"checkpoint\"},\"art-999999\":{\"created_at\":\"2026-10-31T16:35:06.578271Z\",\"id\":\"art-999999\",\"metadata\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE\"},\"path\":\"probe-forged.json\",\"producer_pid\":\"pid-000001\",\"type\":\"probe.forged\"}}",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE/artifacts/index.json"
+      "content": "{\"art-000001\":{\"created_at\":\"2026-10-31T17:11:49.181544Z\",\"id\":\"art-000001\",\"metadata\":{\"tool\":\"write_file\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000001.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"a6a38d2e530200391037e70220650e28c561b17bea786dfe8b34b4b2a3a6ce49\",\"type\":\"tool_error\"},\"art-000002\":{\"created_at\":\"2026-10-31T17:11:49.192459Z\",\"id\":\"art-000002\",\"metadata\":{\"kind\":\"intermediate\"},\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000002.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"21f830fb84e3712ee2f4256a2b67691099f74a81b3e395451694c5d0502fcf36\",\"type\":\"checkpoint\"},\"art-000003\":{\"created_at\":\"2026-10-31T17:11:49.212558Z\",\"id\":\"art-000003\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000003.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"a6a38d2e530200391037e70220650e28c561b17bea786dfe8b34b4b2a3a6ce49\",\"type\":\"tool_error\"},\"art-000004\":{\"created_at\":\"2026-10-31T17:11:49.224669Z\",\"id\":\"art-000004\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000002\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000004.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"ebb7fb692c4b05e954d26baaf7a844053c977c8b0b52d4f53940ce437bf7c0b5\",\"type\":\"checkpoint\"},\"art-000005\":{\"created_at\":\"2026-10-31T17:11:49.244495Z\",\"id\":\"art-000005\",\"metadata\":{\"tool\":\"write_file\"},\"parent_ids\":[\"art-000004\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000005.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"a6a38d2e530200391037e70220650e28c561b17bea786dfe8b34b4b2a3a6ce49\",\"type\":\"tool_error\"},\"art-000006\":{\"created_at\":\"2026-10-31T17:11:49.256603Z\",\"id\":\"art-000006\",\"metadata\":{\"kind\":\"intermediate\"},\"parent_ids\":[\"art-000004\"],\"path\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/artifacts/payloads/art-000006.json\",\"producer_pid\":\"pid-000001\",\"sha256\":\"0b273643d7727d6756ec14e0ab145ecf28bae2e6424b7cebec6bf8d2ce4be015\",\"type\":\"checkpoint\"},\"art-999999\":{\"created_at\":\"2026-10-31T17:11:49.26496Z\",\"id\":\"art-999999\",\"metadata\":{\"via\":\"/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE\"},\"path\":\"probe-forged.json\",\"producer_pid\":\"pid-000001\",\"type\":\"probe.forged\"}}",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE/artifacts/index.json"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:2704 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE/artifacts/index.json]",
-     "disk": [
-      "rewrote /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/artifacts/index.json (a state file, outside the snapshot); Store.List() then lists art-999999: true"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-1000000 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000007 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE/artifacts/index.json",
+       "reason": "path is in the protected state directory"
+      }
+     ]
     },
     {
      "id": "k3L",
      "attempt": "control, run: open ws/.aos-state/kernel/events.json for append",
      "tool": "run",
      "args": {
-      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json; echo open_append_exit=$?",
+      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json; echo open_append_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.aos-state/kernel/events.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.aos-state/kernel/events.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
-     "artifact": "art-1000002 (tool_result)"
+     "artifact": "art-000009 (tool_result)"
     },
     {
      "id": "k3",
      "attempt": "run: open ws/.Aos-State/kernel/events.json for append",
      "tool": "run",
      "args": {
-      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State/kernel/events.json; echo open_append_exit=$?",
+      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State/kernel/events.json; echo open_append_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.Aos-State/kernel/events.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State/kernel/events.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.Aos-State/kernel/events.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
-     "artifact": "art-1000004 (tool_result)"
+     "artifact": "art-000011 (tool_result)"
     },
     {
      "id": "k4",
      "attempt": "run: open ws/.AOS-STATE/artifacts/index.json for append",
      "tool": "run",
      "args": {
-      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$?",
+      "command": ": \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/002/ws/.AOS-STATE/artifacts/index.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+     "saw": "run:map[command:: \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE/artifacts/index.json; echo open_append_exit=$? confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/002/ws/.AOS-STATE/artifacts/index.json: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
-     "artifact": "art-1000006 (tool_result)"
+     "artifact": "art-000013 (tool_result)"
     }
    ],
    "exit": {
@@ -396,9 +436,9 @@
     "reason": "script done",
     "retryable": false,
     "origin": "agent",
-    "checkpoint": "art-1000008"
+    "checkpoint": "art-000015"
    },
-   "denied_events": 2
+   "denied_events": 4
   },
   {
    "name": "P2c nested read-only mount, case variants",
@@ -410,16 +450,22 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/REF/probe-ro.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/REF/probe-ro.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/REF/probe-ro.txt]",
-     "disk": [
-      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro.txt"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000001 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000001 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/REF/probe-ro.txt",
+       "reason": "path is in a read-only mount"
+      }
+     ]
     },
     {
      "id": "c8L",
@@ -427,10 +473,10 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro-lower.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/probe-ro-lower.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -439,8 +485,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro-lower.txt",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/probe-ro-lower.txt",
+       "reason": "path is in a read-only mount"
       }
      ]
     },
@@ -450,16 +496,22 @@
      "tool": "write_file",
      "args": {
       "content": "tampered c9\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/Ref/reference.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/Ref/reference.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "write_file:map[bytes:12 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/Ref/reference.txt]",
-     "disk": [
-      "changed /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt"
-     ],
-     "tool_error_artifact": false,
-     "tool_result_artifact": true,
-     "artifact": "art-000005 (tool_result)"
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000005 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/Ref/reference.txt",
+       "reason": "path is in a read-only mount"
+      }
+     ]
     },
     {
      "id": "c9L",
@@ -467,10 +519,10 @@
      "tool": "write_file",
      "args": {
       "content": "tampered c9L\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/reference.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -479,8 +531,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/reference.txt",
+       "reason": "path is in a read-only mount"
       }
      ]
     },
@@ -489,11 +541,11 @@
      "attempt": "run: write ws/REF/probe-ro-run.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/REF/probe-ro-run.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/REF/probe-ro-run.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/REF/probe-ro-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/REF/probe-ro-run.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/REF/probe-ro-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/REF/probe-ro-run.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -504,11 +556,11 @@
      "attempt": "control, run: write ws/ref/probe-ro-run-lower.txt",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro-run-lower.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/probe-ro-run-lower.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro-run-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/probe-ro-run-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/probe-ro-run-lower.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/probe-ro-run-lower.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -519,11 +571,11 @@
      "attempt": "run: overwrite ws/Ref/reference.txt",
      "tool": "run",
      "args": {
-      "command": "echo 'tampered c11' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/Ref/reference.txt; echo write_exit=$?",
+      "command": "echo 'tampered c11' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/Ref/reference.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo 'tampered c11' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/Ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/Ref/reference.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo 'tampered c11' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/Ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/Ref/reference.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -534,11 +586,11 @@
      "attempt": "control, run: overwrite ws/ref/reference.txt",
      "tool": "run",
      "args": {
-      "command": "echo 'tampered c11L' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt; echo write_exit=$?",
+      "command": "echo 'tampered c11L' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/reference.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "refused by the sandbox: nonzero exit, disk unchanged",
-     "saw": "run:map[command:echo 'tampered c11L' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/003/ws/ref/reference.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo 'tampered c11L' \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/reference.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/003/ws/ref/reference.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
      "disk": null,
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -552,7 +604,7 @@
     "origin": "agent",
     "checkpoint": "art-000017"
    },
-   "denied_events": 2
+   "denied_events": 4
   },
   {
    "name": "P2d scripts/tui.sh layout: earlier sessions (extra)",
@@ -564,12 +616,12 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt"
      },
      "expect": "not covered by Protected",
-     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt]",
+     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt]",
      "disk": [
-      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt"
+      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling.txt"
      ],
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -580,13 +632,13 @@
      "attempt": "run: write into the earlier session, lowercase",
      "tool": "run",
      "args": {
-      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$?",
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$?",
       "timeout": "30s"
      },
      "expect": "not hidden from run",
-     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr: stdout:write_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr: stdout:write_exit=0\n timeout:30s timeout_bound:10m0s]",
      "disk": [
-      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt"
+      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt"
      ],
      "tool_error_artifact": false,
      "tool_result_artifact": true,
@@ -598,10 +650,10 @@
      "tool": "write_file",
      "args": {
       "content": "probe\n",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/current/probe-current.txt"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/current/probe-current.txt"
      },
      "expect": "refused: tool_error + capability.denied, disk unchanged",
-     "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
      "disk": null,
      "tool_error_artifact": true,
      "tool_result_artifact": false,
@@ -610,8 +662,8 @@
       {
        "action": "write_file",
        "capability": "write_file",
-       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths890945553/004/ws/.aos-sessions/current/probe-current.txt",
-       "reason": "path outside the granted scopes or mounts"
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/004/ws/.aos-sessions/current/probe-current.txt",
+       "reason": "path is in the protected state directory"
       }
      ]
     }
@@ -622,6 +674,189 @@
     "retryable": false,
     "origin": "agent",
     "checkpoint": "art-000007"
+   },
+   "denied_events": 1
+  },
+  {
+   "name": "P2f scripts/tui.sh layout with aos-tui's protectedPaths (added for b3c53b0)",
+   "grants": "as P2d, with aos-tui's protectedPaths (b3c53b0): protected = current state dir, its lock, and ws/.aos-sessions",
+   "records": [
+    {
+     "id": "x1",
+     "attempt": "write_file into the earlier session (ws/.aos-sessions/earlier/kernel/probe-sibling.txt), lowercase",
+     "tool": "write_file",
+     "args": {
+      "content": "probe\n",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/earlier/kernel/probe-sibling.txt"
+     },
+     "expect": "refused: tool_error + capability.denied, disk unchanged",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000001 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/earlier/kernel/probe-sibling.txt",
+       "reason": "path is in the protected state directory"
+      }
+     ]
+    },
+    {
+     "id": "x2",
+     "attempt": "run: write into the earlier session, lowercase",
+     "tool": "run",
+     "args": {
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox: nonzero exit, disk unchanged",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/earlier/kernel/probe-sibling-run.txt: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000003 (tool_result)"
+    },
+    {
+     "id": "x3",
+     "attempt": "control: write_file into the current session (ws/.aos-sessions/current/probe-current.txt)",
+     "tool": "write_file",
+     "args": {
+      "content": "probe\n",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/current/probe-current.txt"
+     },
+     "expect": "refused: tool_error + capability.denied, disk unchanged",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000005 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.aos-sessions/current/probe-current.txt",
+       "reason": "path is in the protected state directory"
+      }
+     ]
+    },
+    {
+     "id": "x4",
+     "attempt": "write_file into the earlier session through a case variant (ws/.AOS-SESSIONS/earlier/kernel/probe-sibling-case.txt)",
+     "tool": "write_file",
+     "args": {
+      "content": "probe\n",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.AOS-SESSIONS/earlier/kernel/probe-sibling-case.txt"
+     },
+     "expect": "refused: tool_error + capability.denied, disk unchanged",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000007 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/005/ws/.AOS-SESSIONS/earlier/kernel/probe-sibling-case.txt",
+       "reason": "path is in the protected state directory"
+      }
+     ]
+    }
+   ],
+   "exit": {
+    "code": 0,
+    "reason": "script done",
+    "retryable": false,
+    "origin": "agent",
+    "checkpoint": "art-000009"
+   },
+   "denied_events": 3
+  },
+  {
+   "name": "P2e case variant inside the write scope (added for b3c53b0)",
+   "grants": "as P1: mounts ws (rw), ref (ro); read ws, ref; write ws/out; tools read_file, write_file, list_dir, run",
+   "records": [
+    {
+     "id": "i1",
+     "attempt": "write_file ws/OUT/probe-in-scope.txt (case variant inside the write scope)",
+     "tool": "write_file",
+     "args": {
+      "content": "probe\n",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope.txt"
+     },
+     "expect": "allowed: tool_result, file created in ws/out",
+     "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope.txt]",
+     "disk": [
+      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/out/probe-in-scope.txt"
+     ],
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000001 (tool_result)"
+    },
+    {
+     "id": "i2",
+     "attempt": "read_file ws/OUT/probe-in-scope.txt",
+     "tool": "read_file",
+     "args": {
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope.txt"
+     },
+     "expect": "allowed: tool_result",
+     "saw": "read_file:map[content:probe\n path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope.txt]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000003 (tool_result)"
+    },
+    {
+     "id": "i3",
+     "attempt": "run: write ws/OUT/probe-in-scope-run.txt",
+     "tool": "run",
+     "args": {
+      "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope-run.txt; echo write_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "allowed: exit 0, file created in ws/out",
+     "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/OUT/probe-in-scope-run.txt; echo write_exit=$? confinement:sandbox exit_code:0 stderr: stdout:write_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "disk": [
+      "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/out/probe-in-scope-run.txt"
+     ],
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000005 (tool_result)"
+    },
+    {
+     "id": "i4",
+     "attempt": "control: write_file ws/OUTSIDE.txt (outside the write scope)",
+     "tool": "write_file",
+     "args": {
+      "content": "probe\n",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/probe-OUTSIDE.txt"
+     },
+     "expect": "refused: tool_error + capability.denied, disk unchanged",
+     "saw": "tool_error name=write_file error=path access denied by capabilities: path outside the granted scopes or mounts try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000007 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "write_file",
+       "capability": "write_file",
+       "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths3867844139/006/ws/probe-OUTSIDE.txt",
+       "reason": "path outside the granted scopes or mounts"
+      }
+     ]
+    }
+   ],
+   "exit": {
+    "code": 0,
+    "reason": "script done",
+    "retryable": false,
+    "origin": "agent",
+    "checkpoint": "art-000009"
    },
    "denied_events": 1
   }

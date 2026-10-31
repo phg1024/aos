@@ -9,10 +9,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path outside the granted scopes or mounts try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -21,7 +21,7 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope.txt",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope.txt",
       "reason": "path outside the granted scopes or mounts"
      }
     ]
@@ -32,10 +32,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -44,8 +44,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref.txt",
+      "reason": "path is in a read-only mount"
      }
     ]
    },
@@ -55,10 +55,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -67,8 +67,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state.txt",
+      "reason": "path is in the protected state directory"
      }
     ]
    },
@@ -100,12 +100,12 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal.txt"
     },
     "expect": "tool_result, file created",
-    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal.txt]",
+    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal.txt]",
     "disk": [
-     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal.txt"
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal.txt"
     ],
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -131,10 +131,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope-b.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope-b.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path outside the granted scopes or mounts try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -143,7 +143,7 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope-b.txt",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope-b.txt",
       "reason": "path outside the granted scopes or mounts"
      }
     ]
@@ -154,10 +154,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-b.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-b.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -166,8 +166,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-b.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-b.txt",
+      "reason": "path is in a read-only mount"
      }
     ]
    },
@@ -177,10 +177,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-b.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-b.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -189,8 +189,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-b.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-b.txt",
+      "reason": "path is in the protected state directory"
      }
     ]
    },
@@ -199,11 +199,11 @@
     "attempt": "run: write outside the write scope",
     "tool": "run",
     "args": {
-     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope-run.txt",
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope-run.txt",
      "timeout": "30s"
     },
     "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
-    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/probe-outside-scope-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/probe-outside-scope-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -214,11 +214,11 @@
     "attempt": "run: write into the read-only mount",
     "tool": "run",
     "args": {
-     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-run.txt",
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-run.txt",
      "timeout": "30s"
     },
     "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
-    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -229,11 +229,11 @@
     "attempt": "run: write into the state dir",
     "tool": "run",
     "args": {
-     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-run.txt",
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-run.txt",
      "timeout": "30s"
     },
     "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
-    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -244,13 +244,13 @@
     "attempt": "run: legal write (ws/out/probe-legal-run.txt)",
     "tool": "run",
     "args": {
-     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-run.txt",
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-run.txt",
      "timeout": "30s"
     },
     "expect": "tool_result, exit 0, file created",
-    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-run.txt confinement:sandbox exit_code:0 stderr: stdout: timeout:30s timeout_bound:10m0s]",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-run.txt confinement:sandbox exit_code:0 stderr: stdout: timeout:30s timeout_bound:10m0s]",
     "disk": [
-     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-run.txt"
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-run.txt"
     ],
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -262,12 +262,12 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-b.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-b.txt"
     },
     "expect": "tool_result, file created",
-    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-b.txt]",
+    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-b.txt]",
     "disk": [
-     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/out/probe-legal-b.txt"
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/out/probe-legal-b.txt"
     ],
     "tool_error_artifact": false,
     "tool_result_artifact": true,
@@ -293,10 +293,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-c.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-c.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -305,8 +305,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ref/probe-ref-c.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ref/probe-ref-c.txt",
+      "reason": "path is in a read-only mount"
      }
     ]
    },
@@ -316,10 +316,10 @@
     "tool": "write_file",
     "args": {
      "content": "probe\n",
-     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-c.txt"
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-c.txt"
     },
     "expect": "refused: tool_error + capability.denied, disk unchanged",
-    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "saw": "tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true",
     "disk": null,
     "tool_error_artifact": true,
     "tool_result_artifact": false,
@@ -328,8 +328,8 @@
      {
       "action": "write_file",
       "capability": "write_file",
-      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc1574430152/001/ws/.aos-state/kernel/probe-state-c.txt",
-      "reason": "path outside the granted scopes or mounts"
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc725386165/001/ws/.aos-state/kernel/probe-state-c.txt",
+      "reason": "path is in the protected state directory"
      }
     ]
    }

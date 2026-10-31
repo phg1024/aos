@@ -5,9 +5,11 @@ change and the records. Prints the tables to stdout, one block per run,
 each preceded by a line "<!-- run: NAME -->".
 
 Usage, from this folder: python3 -I make_tables.py > tables.html, or
-python3 -I make_tables.py --build, which fills each "<!-- TABLE: NAME -->"
-in report.src.html with that run's table and writes
-../least-privilege-probes.html.
+python3 -I make_tables.py --build, which fills report.src.html and writes
+../least-privilege-probes.html: "<!-- TABLE: NAME -->" with that run's
+table from results-283a92e/ (the first run), "<!-- RETEST: NAME -->" from
+results/ (the b3c53b0 re-test) and "<!-- COMPARE -->" with every attempt's
+outcome in both.
 """
 
 import html
@@ -62,22 +64,71 @@ def table(run):
     return "\n".join(rows)
 
 
-def main():
+def outcome(record):
+    """One line: what the attempt came to."""
+    denied = record.get("capability_denied") or []
+    if record.get("tool_error_artifact"):
+        reason = "; ".join(d.get("reason", "") for d in denied)
+        text = f"refused: tool_error + capability.denied ({reason})" if denied else "refused: tool_error, no capability.denied"
+        return re.sub(r":\d{4,5}/", ":<port>/", text)
+    saw = record.get("saw", "")
+    if record.get("tool") == "run":
+        inner = re.findall(r"\w+_exit=(\d+)", saw)
+        code = re.search(r"exit_code:(\d+)", saw).group(1)
+        blocked = "Operation not permitted" in saw or "Could not resolve" in saw or "bind:" in saw
+        status = f"exit {inner[0] if inner else code}"
+        text = f"run: {'sandbox refused, ' if blocked else ''}{status}"
+    else:
+        text = "tool_result"
+    if record.get("disk"):
+        text += ", disk changed"
+    return re.sub(r":\d{4,5}/", ":<port>/", text + (", capability.denied" if denied else ""))
+
+
+def compare(before_dir, after_dir):
+    """Rows of every attempt in both result sets: before, after."""
+    def load(folder):
+        out = {}
+        for probe in ("P1", "P2", "P3", "P4"):
+            data = json.load(open(os.path.join(HERE, folder, probe + ".json")))
+            for run in (data if isinstance(data, list) else data["runs"]):
+                for r in run["records"]:
+                    out[(run["name"], r["id"])] = r
+        return out
+    before, after = load(before_dir), load(after_dir)
+    rows = ['<div class="wrap"><table><tr><th>Run</th><th>#</th><th>Attempt</th><th>283a92e</th><th>b3c53b0</th></tr>']
+    for key in list(before) + [k for k in after if k not in before]:
+        b, a = before.get(key), after.get(key)
+        ob, oa = (outcome(b) if b else "not run"), (outcome(a) if a else "not run")
+        cls = ' class="changed"' if ob != oa else ""
+        attempt = (a or b)["attempt"]
+        rows.append(f'<tr{cls}><td>{html.escape(key[0])}</td><td>{html.escape(key[1])}</td><td>{html.escape(attempt)}</td>'
+                    f'<td>{html.escape(ob)}</td><td>{html.escape(oa)}</td></tr>')
+    rows.append("</table></div>")
+    return "\n".join(rows)
+
+
+def tables_of(folder):
     tables = {}
     for probe in ("P1", "P2", "P3", "P4"):
-        data = json.load(open(os.path.join(HERE, "results", probe + ".json")))
-        runs = data if isinstance(data, list) else data["runs"]
-        for run in runs:
+        data = json.load(open(os.path.join(HERE, folder, probe + ".json")))
+        for run in (data if isinstance(data, list) else data["runs"]):
             tables[run["name"]] = table(run)
+    return tables
+
+
+def main():
     if "--build" not in sys.argv:
-        print("\n".join(tables.values()))
+        print("\n".join(tables_of("results").values()))
         return
     page = open(os.path.join(HERE, "report.src.html")).read()
-    for name, block in tables.items():
-        marker = f"<!-- TABLE: {name} -->"
-        if marker not in page:
-            raise SystemExit(f"no marker for {name}")
-        page = page.replace(marker, block)
+    for kind, folder in (("TABLE", "results-283a92e"), ("RETEST", "results")):
+        for name, block in tables_of(folder).items():
+            page = page.replace(f"<!-- {kind}: {name} -->", block)
+    page = page.replace("<!-- COMPARE -->", compare("results-283a92e", "results"))
+    left = re.findall(r"<!-- (?:TABLE|RETEST|COMPARE)[^>]*-->", page)
+    if left:
+        raise SystemExit(f"unfilled markers: {left}")
     open(os.path.join(HERE, "..", "least-privilege-probes.html"), "w").write(page)
 
 

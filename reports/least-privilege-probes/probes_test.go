@@ -346,5 +346,41 @@ func TestP2CaseVariantPaths(t *testing.T) {
 	}
 	sSet := capability.Set{ReadPaths: []string{s.ws}, WritePaths: []string{s.ws}, Tools: tools}
 	runs = append(runs, s.run("P2d scripts/tui.sh layout: earlier sessions (extra)", sGrants, sSet, []capability.Mount{{Name: "ws", HostPath: s.ws}}, sSteps, nil))
+	// Added for the b3c53b0 re-test. The same earlier-session writes with
+	// the protection aos-tui sets (a copy of its protectedPaths), plus a
+	// case variant into the earlier session.
+	u := newWorld(t, "", filepath.Join(".aos-sessions", "current"))
+	uSibling := filepath.Join(u.ws, ".aos-sessions", "earlier")
+	must(t, os.MkdirAll(filepath.Join(uSibling, "kernel"), 0o755))
+	must(t, os.WriteFile(filepath.Join(uSibling, "kernel", "events.json"), []byte("[]\n"), 0o644))
+	protected, ok := tuiProtectedPaths(u.state, filepath.Join(u.ws, ".aos-sessions"), u.ws)
+	if !ok {
+		t.Fatal("this layout would take aos-tui's per-session branch, which is not copied")
+	}
+	u.tools.Protected = protected
+	uSet := capability.Set{ReadPaths: []string{u.ws}, WritePaths: []string{u.ws}, Tools: tools}
+	uGrants := "as P2d, with aos-tui's protectedPaths (b3c53b0): protected = current state dir, its lock, and ws/.aos-sessions"
+	uSteps := []step{
+		writeFile("x1", "write_file into the earlier session (ws/.aos-sessions/earlier/kernel/probe-sibling.txt), lowercase", refused, filepath.Join(uSibling, "kernel", "probe-sibling.txt")),
+		runCmd("x2", "run: write into the earlier session, lowercase", viaRun, writeCmd(filepath.Join(uSibling, "kernel", "probe-sibling-run.txt"))),
+		writeFile("x3", "control: write_file into the current session (ws/.aos-sessions/current/probe-current.txt)", refused, filepath.Join(u.state, "probe-current.txt")),
+		writeFile("x4", "write_file into the earlier session through a case variant (ws/.AOS-SESSIONS/earlier/kernel/probe-sibling-case.txt)", refused, filepath.Join(u.ws, ".AOS-SESSIONS", "earlier", "kernel", "probe-sibling-case.txt")),
+	}
+	runs = append(runs, u.run("P2f scripts/tui.sh layout with aos-tui's protectedPaths (added for b3c53b0)", uGrants, uSet, []capability.Mount{{Name: "ws", HostPath: u.ws}}, uSteps, nil))
+
+	// Added for the b3c53b0 re-test: a case variant that stays inside the
+	// write scope must still be allowed.
+	v := newWorld(t, "", "")
+	vMounts := []capability.Mount{{Name: "ws", HostPath: v.ws}, {Name: "ref", HostPath: v.ref, ReadOnly: true}}
+	vSet := capability.Set{ReadPaths: []string{v.ws, v.ref}, WritePaths: []string{filepath.Join(v.ws, "out")}, Tools: tools}
+	vGrants := "as P1: mounts ws (rw), ref (ro); read ws, ref; write ws/out; tools read_file, write_file, list_dir, run"
+	allowed := "allowed: tool_result, file created in ws/out"
+	vSteps := []step{
+		writeFile("i1", "write_file ws/OUT/probe-in-scope.txt (case variant inside the write scope)", allowed, filepath.Join(v.ws, "OUT", "probe-in-scope.txt")),
+		tool("i2", "read_file ws/OUT/probe-in-scope.txt", "allowed: tool_result", "read_file", "path", filepath.Join(v.ws, "OUT", "probe-in-scope.txt")),
+		runCmd("i3", "run: write ws/OUT/probe-in-scope-run.txt", "allowed: exit 0, file created in ws/out", writeCmd(filepath.Join(v.ws, "OUT", "probe-in-scope-run.txt"))),
+		writeFile("i4", "control: write_file ws/OUTSIDE.txt (outside the write scope)", refused, filepath.Join(v.ws, "probe-OUTSIDE.txt")),
+	}
+	runs = append(runs, v.run("P2e case variant inside the write scope (added for b3c53b0)", vGrants, vSet, vMounts, vSteps, nil))
 	write(t, "P2", map[string]any{"runs": runs, "checks": checks})
 }

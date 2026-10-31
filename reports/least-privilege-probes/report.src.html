@@ -16,6 +16,8 @@
     th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
     th { background: #f9fafb; }
     tr.landed td { background: #fef2f2; }
+    tr.changed td { background: #ecfdf5; }
+    .retest { background: #ecfdf5; padding: 16px 20px; border-radius: 12px; margin-top: 16px; }
     .yes { font-weight: 600; }
     .bad { color: #b91c1c; font-weight: 600; }
     .good { color: #047857; font-weight: 600; }
@@ -37,8 +39,39 @@
     </ul>
     <p><b>Not case-related, found on the way (extra):</b> in the <code>scripts/tui.sh</code> layout only the <i>current</i> session's state dir is protected; earlier sessions next to it in <code>.aos-sessions/</code> are writable by <code>write_file</code> and by sandboxed <code>run</code>, in plain lowercase.</p>
     <p><b>P1, P3, P4 behave as the code says:</b> the denied-write arc gives a <code>tool_error</code> plus <code>capability.denied</code> per refusal; a sandbox refusal inside <code>run</code> is an ordinary <code>tool_result</code> with a nonzero exit and no <code>capability.denied</code> (confirmed); hardlink, rename-in, <code>/tmp</code>, <code>../</code>, loopback UDP and DNS are refused with the network off (unconfined controls succeed); <code>web_fetch</code> refuses loopback while <code>run curl</code> reaches it.</p>
-    <p>Nothing was fixed; the fix is aos code's and the decision the user's.</p>
+    <p>Nothing was fixed here; the fix is aos code's and the decision the user's.</p>
+    <div class="retest"><b>Re-test on b3c53b0 (aos code's fix, local main):</b> all four probes re-run unchanged, plus two added cases. Every case-variant <code>write_file</code> and <code>read_file</code> into the state dir, both kernel files and the nested read-only mount is now refused with a <code>tool_error</code> and a <code>capability.denied</code> event carrying a specific reason; sandboxed <code>run</code> and the lowercase controls are still refused; with aos-tui's protection the earlier sessions are refused too; a case variant inside the write scope (<code>ws/OUT/</code>) is still allowed. P1, P3 and P4 are unchanged except for the reasons. See <a href="#retest">Re-test</a>; the sections after it describe the first run, on 283a92e.</div>
   </div>
+
+  <h2 id="retest">Re-test on b3c53b0</h2>
+  <p>Branch merged with local main at <code>b3c53b0</code> ("capability, aos-tui: protect paths however they are spelled, and every saved session", on top of <code>283a92e</code>; merge <code>5c50215</code>). The probe code is unchanged; two runs were added (P2e, P2f). Same commands, same machine. The 283a92e records are kept in <code>results-283a92e/</code>, the new ones in <code>results/</code>.</p>
+  <h3>Against what should hold</h3>
+  <div class="wrap"><table>
+    <tr><th>Expectation</th><th>Result</th><th>Evidence</th></tr>
+    <tr><td>1. P2 case variants into <code>.AOS-STATE</code> / <code>.Aos-State</code>, incl. <code>kernel/events.json</code> and <code>artifacts/index.json</code>, refused with tool_error + capability.denied</td><td class="good">Holds</td><td>c1–c4, k1, k2: tool_error + capability.denied, reason "path is in the protected state directory"; nothing written; afterwards the kernel reports no forged event and the store lists no forged artifact (both <code>false</code>). The append-opens (k3, k4) go through <code>run</code> and stay sandbox refusals.</td></tr>
+    <tr><td>1. Nested read-only mount c8, c9 refused</td><td class="good">Holds</td><td>tool_error + capability.denied, "path is in a read-only mount"; <code>ref/reference.txt</code> still "reference image".</td></tr>
+    <tr><td>1. Sandboxed run still refused; lowercase controls still refused</td><td class="good">Holds</td><td>c5–c7, k3, k4, c10, c11 and their controls: "Operation not permitted". Lowercase file-tool controls now carry the specific reason too.</td></tr>
+    <tr><td>2. Earlier sessions (x1, x2) with aos-tui's protection</td><td class="good">Holds</td><td>P2f: x1 tool_error + capability.denied ("path is in the protected state directory"); x2 "Operation not permitted" (the sessions dir is in the sandbox's hidden roots); added x4, a case variant <code>.AOS-SESSIONS/earlier/...</code>, refused. <b>How:</b> the harness sets <code>Protected</code> from a copy of aos-tui's <code>protectedPaths</code> (<code>tui_test.go</code>) for the <code>scripts/tui.sh</code> layout, where the sessions directory holds neither the workdir nor <code>$TMPDIR</code> and so is protected whole; the copy refuses to run if the layout would take the per-session branch, which it does not copy. The built aos-tui binary was not driven. P2d, the unchanged run with <code>cmd/aos</code>'s protection (state dir and lock only), still lets x1 and x2 land, as expected: <code>cmd/aos</code> has no sessions directory.</td></tr>
+    <tr><td>3. P1, P3, P4 unchanged except P1's reasons</td><td class="good">Holds</td><td>Same outcomes for every attempt (table below); P1's refusals now read as listed next.</td></tr>
+    <tr><td>4. A case variant inside the write scope is allowed</td><td class="good">Holds</td><td>P2e (write scope <code>ws/out</code>): <code>write_file ws/OUT/probe-in-scope.txt</code> → tool_result, created <code>ws/out/probe-in-scope.txt</code>; <code>read_file</code> of it → tool_result; <code>run</code> writing <code>ws/OUT/...</code> → exit 0, created in <code>ws/out</code>; control <code>ws/probe-OUTSIDE.txt</code> refused ("path outside the granted scopes or mounts").</td></tr>
+  </table></div>
+  <h3>P1 refusal strings on b3c53b0 (exact)</h3>
+  <div class="wrap"><table>
+    <tr><th>#</th><th>Agent saw</th><th>capability.denied reason</th></tr>
+    <tr><td>1 (outside the write scope)</td><td><code>tool_error name=write_file error=path access denied by capabilities: path outside the granted scopes or mounts try_different_strategy=true</code></td><td><code>path outside the granted scopes or mounts</code></td></tr>
+    <tr><td>2 (read-only mount)</td><td><code>tool_error name=write_file error=path access denied by capabilities: path is in a read-only mount try_different_strategy=true</code></td><td><code>path is in a read-only mount</code></td></tr>
+    <tr><td>3 (state dir)</td><td><code>tool_error name=write_file error=path access denied by capabilities: path is in the protected state directory try_different_strategy=true</code></td><td><code>path is in the protected state directory</code></td></tr>
+    <tr><td>4 (run not granted)</td><td><code>tool_error name=run error=tool execution denied by capabilities: run needs run try_different_strategy=true</code></td><td><code>capability not granted</code></td></tr>
+  </table></div>
+  <p class="note">Step 3's target is outside the write scope <i>and</i> in the state dir; the protected check runs first, so the reason names the state dir. The same strings appear in P1b and P1c.</p>
+  <h3>Every attempt, before and after</h3>
+  <p>Green rows changed (31; P3 and P4 have none). Server ports are shown as <code>&lt;port&gt;</code>.</p>
+  <!-- COMPARE -->
+  <h3>The added runs</h3>
+  <!-- RETEST: P2f scripts/tui.sh layout with aos-tui's protectedPaths (added for b3c53b0) -->
+  <!-- RETEST: P2e case variant inside the write scope (added for b3c53b0) -->
+
+  <h1>First Run, on 283a92e</h1>
 
   <h2>How It Was Run</h2>
   <ul>
@@ -114,6 +147,6 @@ python3 -I reports/least-privilege-probes/make_tables.py --build</code></pre></l
   </ul>
 
   <h2>Files</h2>
-  <p><code>least-privilege-probes/</code>: <code>harness_test.go</code>, <code>probes_test.go</code>, <code>links_test.go</code> (the probes), <code>results/P1.json</code>–<code>P4.json</code> (records), <code>make_tables.py</code> + <code>report.src.html</code> (this page), <code>FINDINGS.md</code> (the interim note sent when P2 first stopped at c1).</p>
+  <p><code>least-privilege-probes/</code>: <code>harness_test.go</code>, <code>probes_test.go</code>, <code>links_test.go</code>, <code>tui_test.go</code> (the probes), <code>results-283a92e/</code> (first run) and <code>results/</code> (b3c53b0 re-test) (records), <code>make_tables.py</code> + <code>report.src.html</code> (this page), <code>FINDINGS.md</code> (the interim note sent when P2 first stopped at c1).</p>
 </body>
 </html>
