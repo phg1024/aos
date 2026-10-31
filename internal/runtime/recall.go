@@ -35,6 +35,22 @@ type RecallPolicy struct {
 	// NoAgentIndex (a1) stops asking the agent to index what a handoff
 	// archives, and refuses index_memory.
 	NoAgentIndex bool `json:"no_agent_index,omitempty"`
+	// HeaderIndexBytes caps the agent indexes the header shows in all;
+	// zero is DefaultHeaderIndexBytes. PromptBackend shares it among the
+	// segments.
+	HeaderIndexBytes int `json:"header_index_bytes,omitempty"`
+}
+
+// DefaultHeaderIndexBytes is the header's total for agent indexes when
+// RecallPolicy.HeaderIndexBytes is zero.
+const DefaultHeaderIndexBytes = 6 * 1024
+
+// IndexBudget is the header's total for agent indexes.
+func (p RecallPolicy) IndexBudget() int {
+	if p.HeaderIndexBytes > 0 {
+		return p.HeaderIndexBytes
+	}
+	return DefaultHeaderIndexBytes
 }
 
 // RecallOff is the policy with every aid off: the behaviour from before.
@@ -195,11 +211,45 @@ func messageRange(part string) (from, to int, canonical string, ok bool) {
 	return from, to, canonical, true
 }
 
+// runOnEntry finds where a later entry may start inside a line: a number
+// or range after whitespace, followed by ": ".
+var runOnEntry = regexp.MustCompile(`\s(#?\d+(?:\s*-\s*#?\d+)?):\s`)
+
+// splitRunOn splits a line holding several entries ("59: a 61: b") at each
+// later "N:" or "N-M:" that cites messages within from-to, numbered after
+// the entry before it, so a number in an entry's text ("ratio 3: 1") is
+// left alone unless it is in range and above the entry's own; the agent
+// sees the split index in the result.
+func splitRunOn(line string, from, to int) []string {
+	line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "-*"))
+	where, _, found := strings.Cut(line, ":")
+	previous, _, _, ok := messageRange(where)
+	if !found || !ok {
+		return []string{line}
+	}
+	var parts []string
+	start := 0
+	for _, m := range runOnEntry.FindAllStringSubmatchIndex(line, -1) {
+		first, last, _, ok := messageRange(line[m[2]:m[3]])
+		if !ok || first <= previous || first < from || last > to || last < first {
+			continue
+		}
+		parts = append(parts, line[start:m[2]])
+		start, previous = m[2], first
+	}
+	return append(parts, line[start:])
+}
+
 // parseIndex reads an index_memory argument: one "N: text" or "N-M: text"
 // line per entry, numbers in any evidence form, each inside from-to. A line
-// that is not is rejected on its own, with the reason, and the rest kept.
+// that is not is rejected on its own, with the reason, and the rest kept;
+// a line holding several entries is split into them.
 func parseIndex(text string, from, to int) (lines []IndexLine, rejected []string) {
-	for _, raw := range strings.Split(text, "\n") {
+	var raws []string
+	for _, line := range strings.Split(text, "\n") {
+		raws = append(raws, splitRunOn(line, from, to)...)
+	}
+	for _, raw := range raws {
 		raw = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(raw), "-*"))
 		if raw == "" {
 			continue

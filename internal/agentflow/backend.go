@@ -142,12 +142,24 @@ func (b PromptBackend) HeaderSizes(request runtime.GenerateRequest) map[string]i
 		"archive_index_bytes":  len(b.archiveIndex(request.MemoryRefs)),
 	}
 	if !b.Recall.NoAgentIndex {
-		shown, segments := b.shownAgentIndexes(request.MemoryRefs)
-		bytes := 0
+		shown, counts := b.shownAgentIndexes(request.MemoryRefs)
+		bytes, segments, lines, hidden := 0, 0, 0, 0
 		for _, text := range shown {
 			bytes += len(text)
 		}
+		for _, count := range counts {
+			if count.Shown > 0 {
+				segments++
+			}
+			lines += count.Shown
+			hidden += count.Hidden
+			// What the agent saw of each segment's index, for the trace.
+			sizes["agent_index_shown."+count.ArtifactID] = count.Shown
+			sizes["agent_index_hidden."+count.ArtifactID] = count.Hidden
+		}
 		sizes["agent_index_bytes"], sizes["agent_index_segments"] = bytes, segments
+		sizes["agent_index_lines_shown"], sizes["agent_index_lines_hidden"] = lines, hidden
+		sizes["agent_index_budget"] = b.Recall.IndexBudget()
 	}
 	return sizes
 }
@@ -169,37 +181,95 @@ func (b PromptBackend) workingMemorySnapshot(memory *runtime.WorkingMemory) stri
 		memory.Version, memory.Written.UTC().Format("2006-01-02 15:04"), memory.ArtifactID, pointer, memory.Render())
 }
 
-// MaxAgentIndexBytes caps the agent-written indexes the header shows in
-// all. Over it, the oldest segments show only how to read theirs.
-const MaxAgentIndexBytes = 6 * 1024
+// MaxAgentIndexBytes is the default total for the agent-written indexes the
+// header shows; RecallPolicy.HeaderIndexBytes changes it.
+const MaxAgentIndexBytes = runtime.DefaultHeaderIndexBytes
+
+// indexShown is how much of one segment's agent index the header shows.
+type indexShown struct {
+	ArtifactID    string
+	Shown, Hidden int
+}
+
+// indexLineText is one index line as the header shows it.
+func indexLineText(line runtime.IndexLine) string {
+	return "  " + line.String() + "\n"
+}
+
+// moreIndexLines ends an index the header shortened.
+func moreIndexLines(hidden int, id string) string {
+	return fmt.Sprintf("  (+%d more lines of this index: read_memory artifact_id=%s)\n", hidden, id)
+}
 
 // shownAgentIndexes is the agent index text the header shows under each ref
-// (by position; "" for none), newest first within MaxAgentIndexBytes, and
-// how many segments show theirs.
-func (b PromptBackend) shownAgentIndexes(refs []runtime.MemoryRef) (shown []string, segments int) {
+// (by position; "" for none) and how much of each index that is. The
+// budget is shared by whole lines, round by round: every segment gets its
+// next line before any gets the one after, oldest segment first within a
+// round, so a short index leaves its share to the longer ones and no
+// segment shows nothing while another shows more. An index shown in part
+// ends with how many lines it hides and how to read them. Every line
+// counts against the budget, the "+K more" lines included; if even those
+// do not fit, the newest segments show nothing, and that is reported too.
+func (b PromptBackend) shownAgentIndexes(refs []runtime.MemoryRef) (shown []string, counts []indexShown) {
 	shown = make([]string, len(refs))
 	if b.Recall.NoAgentIndex {
-		return shown, 0
+		return shown, nil
 	}
-	left := MaxAgentIndexBytes
-	for i := len(refs) - 1; i >= 0; i-- {
-		if len(refs[i].Index) == 0 {
+	var order []int
+	for i, ref := range refs {
+		if len(ref.Index) > 0 {
+			order = append(order, i)
+		}
+	}
+	lines := make([]int, len(refs))
+	silent := make([]bool, len(refs))
+	cost := func(i, n int) int {
+		size := 0
+		for _, line := range refs[i].Index[:n] {
+			size += len(indexLineText(line))
+		}
+		if n < len(refs[i].Index) {
+			size += len(moreIndexLines(len(refs[i].Index)-n, refs[i].ArtifactID))
+		}
+		return size
+	}
+	budget := b.Recall.IndexBudget()
+	used := 0
+	for _, i := range order {
+		used += cost(i, 0)
+	}
+	for k := len(order) - 1; k >= 0 && used > budget; k-- {
+		silent[order[k]] = true
+		used -= cost(order[k], 0)
+	}
+	for grew := true; grew; {
+		grew = false
+		for _, i := range order {
+			if silent[i] || lines[i] == len(refs[i].Index) {
+				continue
+			}
+			if next := used - cost(i, lines[i]) + cost(i, lines[i]+1); next <= budget {
+				used, grew = next, true
+				lines[i]++
+			}
+		}
+	}
+	for _, i := range order {
+		count := indexShown{ArtifactID: refs[i].ArtifactID, Shown: lines[i], Hidden: len(refs[i].Index) - lines[i]}
+		counts = append(counts, count)
+		if silent[i] {
 			continue
 		}
 		var builder strings.Builder
-		for _, line := range refs[i].Index {
-			builder.WriteString("  " + line.String() + "\n")
+		for _, line := range refs[i].Index[:lines[i]] {
+			builder.WriteString(indexLineText(line))
 		}
-		if text := builder.String(); len(text) <= left {
-			shown[i] = text
-			left -= len(text)
-			segments++
-			continue
+		if count.Hidden > 0 {
+			builder.WriteString(moreIndexLines(count.Hidden, refs[i].ArtifactID))
 		}
-		left = 0
-		shown[i] = fmt.Sprintf("  (your index of this segment is over the header's cap: read_memory artifact_id=%s shows it)\n", refs[i].ArtifactID)
+		shown[i] = builder.String()
 	}
-	return shown, segments
+	return shown, counts
 }
 
 // archiveIndex tells an agent whose older history was compacted which
