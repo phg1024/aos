@@ -1,0 +1,310 @@
+{
+ "g0016": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives no gpu_min (says it is in #78 but does not quote it); #78 records candidate gpu_min=44.757."
+ },
+ "g0017": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Gives no gpu_min (offers only a ~0.3 ms-below-render inference); #78 records candidate gpu_min=44.757."
+ },
+ "g0019": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0027": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0031": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Correct 44.757/43.026, but says candidate was 1.731 ms slower on render_min; #78 gives 45.025-43.315=1.710."
+ },
+ "g0037": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0051": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0062": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0073": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0079": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0081": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0087": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0111": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0116": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0124": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0141": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0146": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0152": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Correct 44.757/43.026, but says the candidate run list ends with the 45.025/44.757 pair; in #78 it ends with 46.901 46.652."
+ },
+ "g0153": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0158": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0161": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Correct 44.757/43.026, but says the candidate was ~0.93 ms slower on render minimum; #78 gives render_min 45.025 vs 43.315 (1.71 ms; 0.93 is the mean gap)."
+ },
+ "g0175": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0176": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0178": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0179": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0184": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0199": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0201": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0220": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0240": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0247": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0249": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0254": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0273": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0279": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0289": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0295": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0309": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0321": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0325": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0328": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0329": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0336": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims the grep of _prof/src/pt_main.cpp was never done/recorded; #37-#38 ran it and it printed nothing (params.pad set at pt_scene.cpp:206 per #36/#40)."
+ },
+ "g0358": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ }
+}

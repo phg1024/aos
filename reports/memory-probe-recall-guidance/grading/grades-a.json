@@ -1,0 +1,450 @@
+{
+ "g0006": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0052": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0105": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0115": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0156": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0226": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0236": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0272": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0364": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Core fact and error correct (#56), but says out/round1_default.pfm came from a later run; the #56 listing shows it at 12:36, before the 13:50 copy, and it is the round-1 benchmark output (#27)."
+ },
+ "g0009": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0023": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0103": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0127": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0151": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0166": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0193": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0211": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0353": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0369": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run and offers the /tmp write failure instead; archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0011": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0093": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0095": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0148": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0172": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0190": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0223": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0245": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0261": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0275": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0276": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0281": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0350": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run ever happened (no record/never copied); archive #55-#56 shows cp to out/pathtracer_r1 failed with 'metal init error: cannot read shared shader header' and no r1_default.pfm."
+ },
+ "g0088": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run happened (only reasons hypothetically that a copied binary would fail at shader load); archive #55-#56 shows it ran and printed 'metal init error: cannot read shared shader header'."
+ },
+ "g0122": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run happened (only reasons hypothetically that a copied binary would fail at shader load); archive #55-#56 shows it ran and printed 'metal init error: cannot read shared shader header'."
+ },
+ "g0157": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run happened (only reasons hypothetically that a copied binary would fail at shader load); archive #55-#56 shows it ran and printed 'metal init error: cannot read shared shader header'."
+ },
+ "g0183": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Denies the copy run happened (only reasons hypothetically that a copied binary would fail at shader load); archive #55-#56 shows it ran and printed 'metal init error: cannot read shared shader header'."
+ },
+ "g0003": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0014": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0034": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0050": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0108": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0225": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0230": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0258": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0270": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0282": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0293": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0310": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0314": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0080": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Says the caustic was roughly three times brighter than the floor (3x is only the mask threshold); #31 records mean 9.05 vs floor median 0.56, ~16x."
+ },
+ "g0035": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0074": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0090": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0171": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0217": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0228": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0242": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0298": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0032": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Says the write to /tmp failed with an error but gives neither the 'ppm error: cannot open output: /tmp/base.ppm' text nor the exit 1 (#43)."
+ },
+ "g0218": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Only 'an image-write error for the /tmp path'; lacks the exact 'ppm error: cannot open output: /tmp/base.ppm' and exit 1 (#43)."
+ },
+ "g0332": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Only 'reported an error when trying to write the PPM/PFM'; lacks the exact error text and exit 1 (#43)."
+ },
+ "g0348": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Only 'printed an error for the PPM output path'; lacks the exact error text and exit 1 (#43)."
+ },
+ "g0352": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": "Paraphrases the error ('could not open /tmp/base.ppm') without the exact 'ppm error: cannot open output' text or the exit 1 (#43)."
+ },
+ "g0241": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Error and exit 1 correct (#43), but claims it then re-ran the baseline with outputs under ../out to get usable images; the only follow-up (#55-#56) was the out/ copy run, which failed with no image."
+ }
+}

@@ -1,0 +1,310 @@
+{
+ "g0098": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the transform_mesh undefined-symbol link failure, but says it was declared in pt_mesh.hpp and restored in src/pt_mesh.cpp; it was declared in pt_bvh.hpp and dropped from/restored in pt_bvh.cpp (#84-#87)."
+ },
+ "g0165": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the transform_mesh undefined-symbol link failure, but says it was declared in pt_mesh.hpp and restored in pt_mesh.cpp; the rewrite dropped it from pt_bvh.cpp and it was restored there (#84-#87)."
+ },
+ "g0219": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the transform_mesh undefined-symbol link failure, but attributes the loss to rewriting the OBJ-loading module; pt_mesh.cpp was not rewritten, the definition was dropped from pt_bvh.cpp and restored there (#86-#87)."
+ },
+ "g0231": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0233": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives the transform_mesh undefined-symbol link failure, but says it was still declared in pt_mesh.hpp; it is declared in pt_bvh.hpp and its definition was dropped from pt_bvh.cpp (#86-#87)."
+ },
+ "g0370": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0056": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0101": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0112": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0129": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0186": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0206": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0304": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0318": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0339": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0346": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0012": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0055": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0335": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0365": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0029": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0082": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0326": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0349": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0355": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0360": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0374": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "negative_claim": 0,
+  "note": ""
+ },
+ "g0163": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 8x8 = 101.026 correctly, but calls 8x8 the second-worst of the sweep; in #167 it ranked third of six (16x8 96.408, 16x16 100.467, 8x8 101.026, then 32x8, 16x32, 32x16)."
+ },
+ "g0196": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 8x8 = 101.026 correctly, but calls 8x8 the second-worst of the sweep; in #167 it ranked third of six (16x8 96.408, 16x16 100.467, 8x8 101.026, then 32x8, 16x32, 32x16)."
+ },
+ "g0237": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 8x8 = 101.026 correctly, but calls 8x8 the second-worst of the sweep; in #167 it ranked third of six (16x8 96.408, 16x16 100.467, 8x8 101.026, then 32x8, 16x32, 32x16)."
+ },
+ "g0354": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 0,
+  "note": "Gives 8x8 = 101.026 correctly, but calls 8x8 the second-worst of the sweep; in #167 it ranked third of six (16x8 96.408, 16x16 100.467, 8x8 101.026, then 32x8, 16x32, 32x16)."
+ },
+ "g0007": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0038": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0076": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0109": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0118": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0212": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0222": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0248": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0280": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0316": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0356": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0380": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ },
+ "g0381": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "negative_claim": 1,
+  "note": "Claims 8x8 was never measured; #167 shows the first PT_TG sweep ran 8x8 first: render_ms_best=101.026 render_ms_avg=106.438 gpu_ms_best=100.761."
+ }
+}
