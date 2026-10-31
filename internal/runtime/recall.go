@@ -86,9 +86,11 @@ func (r *AgentRuntime) noteRecall(pid, item string, data map[string]string) erro
 // Attempts calls in all. Retries are not steps: an outage must not use up
 // the step limit. When they run out, the process exits retryable with a
 // checkpoint, to be recovered once the endpoint is back. The zero value
-// means the defaults (12 attempts, 1s doubling to 2m: about 12 minutes of
-// waiting); Attempts below zero turns retrying off, so every failure takes
-// a step or ends the run as before.
+// means the defaults: 12 attempts, 1s doubling to 2m, so the 11 waits add
+// up to 607s, about 10 minutes, on top of the attempts themselves, each of
+// which may take up to the backend's HTTP timeout. A strict time budget
+// cuts this short. Attempts below zero turns retrying off, so every
+// failure takes a step or ends the run as before.
 type BackendRetryPolicy struct {
 	Attempts int
 	Base     time.Duration

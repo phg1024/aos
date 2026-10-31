@@ -5,6 +5,7 @@
 #   bench/harbor/run-tb.sh -l 10                           # first 10 tasks
 #   TB_DATASET=terminal-bench/terminal-bench@4.0.0 bench/harbor/run-tb.sh -i music-harmony
 #   bench/harbor/run-tb.sh --self-test                     # adapter unit tests
+#   bench/harbor/run-tb.sh -l 10 --ak time_budget=off      # no AOS time budget (also: advisory; default strict)
 #
 # Extra arguments go to `harbor run`. The model endpoint comes from AOS_LLM_*
 # (defaults: the local Strata server; see FORWARDED_ENV in aos_agent.py).

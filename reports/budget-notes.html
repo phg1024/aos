@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Budget Notes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Budget Notes Before the Terminal-Bench Rerun</h1>
+    <p>The Terminal-Bench rerun should measure the budget mechanism as it is now. A read-only survey of <code>76710c0</code> found four gaps, and this commit closes them:</p>
+    <ol>
+      <li>The solver prompt still describes the removed clock notes.</li>
+      <li>The agent is never told its step limit.</li>
+      <li>A comment states the wrong total retry wait.</li>
+      <li>The Harbor adapter cannot run without an AOS time budget.</li>
+    </ol>
+    <p><b>Result:</b> <span class="good"><code>go vet ./...</code>, <code>go test ./...</code> and the Harbor adapter tests (<code>run-tb.sh --self-test</code>, 18 tests) are clean.</span> <span class="warn">Nothing was run against a model.</span></p>
+  </div>
+
+  <h2>1. The Solver Prompt</h2>
+  <p>In <code>workflows/terminal-bench.json</code>, the budget sentence described the old clock notes, which warned at 20%. It now describes what the runtime emits (<code>internal/runtime/budget.go</code>):</p>
+  <table>
+    <tr><th>Before</th><th>Now</th></tr>
+    <tr>
+      <td>Time is limited and you think slowly. When a clock note follows your step, it shows the time used and left: have a complete answer saved by half the budget, and when it warns that less than 20% is left, stop exploring, make sure the saved answer is complete and valid, and exit.</td>
+      <td>Time and steps are limited, and you think slowly. Notes before your step show your budgets: <code>budget time=1800s used=600s left=1200s</code> gives the time, and with <code>(strict: the run is stopped when it runs out)</code> the run is stopped at zero, mid-command; near the step limit, <code>budget steps=300 used=275 left=25</code> gives the steps, this one included. Have a complete answer saved by half the time. When a <code>budget warning</code> comes (less than 10% of the time or steps is left), stop exploring, make sure the saved answer is complete and valid, and exit.</td>
+    </tr>
+  </table>
+  <ul>
+    <li>The rule to commit a complete answer early and then improve it in place (step 2 of "How to work") is unchanged.</li>
+    <li>The prompt does not promise a time note. With <code>time_budget=off</code> there is none, and the sentence still holds.</li>
+    <li>The workflow test now fails if the prompt mentions "clock note" or "20%", or if it stops describing the notes the runtime emits.</li>
+  </ul>
+
+  <h2>2. The Step Limit</h2>
+  <p><b>The note:</b> <code>budget steps=&lt;limit&gt; used=&lt;U&gt; left=&lt;L&gt; (strict: the run is stopped after the last step)</code>.</p>
+  <ul>
+    <li><code>used</code> counts the steps before this one in the turn, and <code>left</code> includes this one.</li>
+    <li><code>left</code> starts at the limit, and the last step reads <code>left=1</code>.</li>
+    <li>The limit includes any operator extension.</li>
+  </ul>
+  <p><b>The warning</b> comes once, with the first note: <code>budget warning: &lt;L&gt; of &lt;limit&gt; steps are left, this one included. Commit your best answer now: write or submit what you have, then exit.</code></p>
+  <ul>
+    <li>It is recorded as <code>steps</code> in <code>BudgetWarned</code>, so it is not repeated.</li>
+    <li>It gives the count rather than "less than 10%" because a limit under ten steps is warned at its last step, which can be more than 10%.</li>
+  </ul>
+
+  <p><b>Choice: the note appears only near the limit,</b> in the last tenth of the steps and at least on the last step, rather than on every step.</p>
+  <ul>
+    <li><b>Every run has a step limit.</b> When the spec sets none, it is 32. Time and token notes appear only in runs that set those budgets. A note on every step would add one message per step to every run. I tried that first, and it failed 20 existing tests.</li>
+    <li><b>It changed the runs themselves, not only their prompts.</b> Notes are messages, so they count toward the compaction window, and segments were cut at different points. Memory probes and least-privilege probes would have measured a different system from their earlier runs.</li>
+    <li><b>The ablation stays clean.</b> The steps information is the same whatever the time-budget mode, so a <code>strict</code>/<code>off</code> comparison varies only the time budget.</li>
+    <li><b>Prompt caching is unaffected</b> either way. Notes are appended, so the prompt prefix stays the same.</li>
+    <li><span class="warn">Cost:</span> the agent learns its step allowance only in the last tenth. With the solver's 300 steps, that is from step 271. The prompt says that notes appear near the limit.</li>
+  </ul>
+  <p><b>A TUI turn</b> (<code>NewTurn</code>) already starts a fresh step allowance at <code>StepBase</code>. It now also clears the <code>steps</code> warning, so each turn is warned at its own end and the note counts only that turn's steps. Time and token warnings stay once per process, as their budgets do.</p>
+  <p>Runs that reach the last tenth of their steps now see the note. For example, a memory-probe answer with <code>MaxSteps</code> 12 sees it on its 12th step. Runs that end earlier see no change.</p>
+
+  <h2>3. The Retry Comment</h2>
+  <p>The defaults are 12 attempts, waiting 1 s and doubling up to 2 min. The 11 waits are 1 + 2 + 4 + 8 + 16 + 32 + 64 + 4 × 120 = <b>607 s, about 10 minutes</b>, not 12. Each attempt also takes up to the backend's HTTP timeout: 120 s for <code>aos</code>, 180 s for <code>aos-tui</code>, or <code>AOS_LLM_TIMEOUT_SECONDS</code>, which the Harbor adapter sets to 3600.</p>
+  <p><b>Fixed the comment, not the numbers.</b> The policy is meant to outlast an endpoint restart, and 12 minutes was a miscount, not a target. Changing the numbers just before the rerun would also change how runs behave during an outage. The comment now also says that a strict time budget cuts the waiting short. The same miscount in <code>reports/memory-recall.html</code> is corrected and marked as corrected.</p>
+
+  <h2>4. The Harbor Time-Budget Switch</h2>
+  <p><code>bench/harbor/aos_agent.py</code> takes a <code>time_budget</code> agent kwarg, which falls back to the <code>AOS_TIME_BUDGET</code> environment variable and then to <code>strict</code>:</p>
+  <table>
+    <tr><th>Mode</th><th>Flags passed to <code>aos run</code></th></tr>
+    <tr><td><code>strict</code> (default, as before)</td><td><code>--time-budget &lt;Harbor timeout − setup − 20 s&gt; --strict-time-budget</code></td></tr>
+    <tr><td><code>advisory</code></td><td><code>--time-budget …</code> only: the agent sees the notes and the warning but is not stopped</td></tr>
+    <tr><td><code>off</code></td><td>none: no time notes, only Harbor's timeout ends the trial (the pilot's condition)</td></tr>
+  </table>
+  <ul>
+    <li>Usage: <code>bench/harbor/run-tb.sh … --ak time_budget=off</code>. Harbor passes <code>off</code> through as a string.</li>
+    <li>An unknown value raises in the agent's constructor, so the job fails before any trial runs.</li>
+    <li>Each trial's metadata records <code>time_budget</code> and the exact <code>time_budget_flag</code> used.</li>
+    <li>The 60 s minimum budget is unchanged. Below it, no budget is passed in any mode.</li>
+  </ul>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>Covers</th></tr>
+    <tr><td><code>TestStepBudgetIsShownNearTheLimit</code> (runtime)</td><td>
+      <ul>
+        <li>With 20 steps: notes on steps 19 and 20, and one warning ("2 of 20").</li>
+        <li>With 5 steps: a note and the warning on the last step only.</li>
+        <li>In both cases, <code>BudgetWarned</code> in the final checkpoint is <code>steps</code>.</li>
+      </ul>
+    </td></tr>
+    <tr><td><code>TestStepWarningCountsAgainstTheTurn</code> (aos-tui, through <code>say</code>/<code>runTurn</code> with <code>NewTurn</code>)</td><td>
+      <ul>
+        <li>Two turns of 6 steps each, with a 6-step limit.</li>
+        <li>Each turn's last step carries <code>used=5 left=1</code> and the warning, and nothing earlier carries them.</li>
+        <li>After both turns, usage is 12 steps and <code>StepBase</code> is 6.</li>
+        <li>Without clearing the warning at a new turn, the second turn is not warned, and the test fails.</li>
+      </ul>
+    </td></tr>
+    <tr><td><code>TestRasterizerVerifiersAreIsolated</code> (agentflow, extended; it also checks <code>terminal-bench.json</code>)</td><td>The solver prompt has no stale clock wording and describes the time, strict, steps and warning notes.</td></tr>
+    <tr><td>Harbor <code>TimeBudgetFlagTest</code>, <code>TimeBudgetModeTest</code></td><td>
+      <ul>
+        <li>Flags for each mode.</li>
+        <li>Precedence: kwarg, then environment, then strict.</li>
+        <li>Unknown values are rejected, from the kwarg or the environment.</li>
+        <li>The constructor takes the kwarg.</li>
+      </ul>
+    </td></tr>
+  </table>
+
+  <h2>For Eval</h2>
+  <ul>
+    <li><code>go test ./...</code> runs <code>reports/least-privilege-probes</code>, which rewrites its committed <code>results/P*.json</code> on every run. The rewrites differed only in ports, PIDs and temporary names. I did not commit them, and they are still modified in the main checkout.</li>
+    <li>The step note changes the last step(s) of any run that reaches them. That includes probe answers that use all their steps.</li>
+  </ul>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>The time and token notes, their warnings and the 10% threshold.</li>
+    <li>The retry numbers.</li>
+    <li>The Harbor adapter's default behaviour (strict).</li>
+    <li>Eval's probes, patterns and memprobe.</li>
+    <li>Nothing pushed, and nothing run on phg-gpu.</li>
+  </ul>
+</body>
+</html>

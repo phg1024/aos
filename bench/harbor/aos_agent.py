@@ -59,21 +59,42 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 TIME_BUDGET_MARGIN_SEC = 20
 MIN_TIME_BUDGET_SEC = 60
 
+# How the AOS time budget is set: the time_budget agent kwarg
+# (--ak time_budget=off), else AOS_TIME_BUDGET, else strict.
+#   strict    the run is stopped when the budget runs out
+#   advisory  the agent sees the budget and is warned, but is not stopped
+#   off       no AOS time budget; only Harbor's timeout ends the trial
+TIME_BUDGET_MODES = ("strict", "advisory", "off")
 
-def time_budget_flag(timeout: float | None, elapsed: float) -> str:
+
+def time_budget_mode(value: str | None) -> str:
+    """The time budget mode from the kwarg, else the environment."""
+    if value is None:
+        value = os.environ.get("AOS_TIME_BUDGET") or "strict"
+    mode = str(value).strip().lower()
+    if mode not in TIME_BUDGET_MODES:
+        raise ValueError(f"time_budget must be one of {', '.join(TIME_BUDGET_MODES)}, not {value!r}")
+    return mode
+
+
+def time_budget_flag(timeout: float | None, elapsed: float, mode: str = "strict") -> str:
     """AOS flags for Harbor's deadline, less what setup used and a margin.
 
-    The budget is strict: AOS cancels the model call or command in flight
-    and exits with a checkpoint when it runs out, so it stops on its own
-    before Harbor kills the trial. Its agents are told to commit an answer
-    with a tenth of it left.
+    A strict budget makes AOS cancel the model call or command in flight
+    and exit with a checkpoint when it runs out, so it stops on its own
+    before Harbor kills the trial; an advisory one only informs the agent.
+    Either way its agents are told to commit an answer with a tenth of it
+    left. Mode off gives no budget.
     """
-    if timeout is None:
+    if timeout is None or mode == "off":
         return ""
     budget = int(timeout - elapsed - TIME_BUDGET_MARGIN_SEC)
     if budget < MIN_TIME_BUDGET_SEC:
         return ""
-    return f"--time-budget {budget}s --strict-time-budget "
+    flag = f"--time-budget {budget}s "
+    if mode == "strict":
+        flag += "--strict-time-budget "
+    return flag
 
 
 def container_base_url(url: str) -> str:
@@ -157,6 +178,11 @@ def parse_run_summary(output: str) -> dict | None:
 
 
 class AOSAgent(BaseInstalledAgent):
+    def __init__(self, *args, time_budget: str | None = None, **kwargs):
+        # Checked here, so a bad value fails the job before any trial runs.
+        self._time_budget = time_budget_mode(time_budget)
+        super().__init__(*args, **kwargs)
+
     @staticmethod
     def name() -> str:
         return "aos"
@@ -205,7 +231,7 @@ class AOSAgent(BaseInstalledAgent):
         # runtime. Turning it off costs nothing for this I/O-bound process.
         env["GODEBUG"] = "asyncpreemptoff=1"
 
-        budget_flag = time_budget_flag(timeout, time.monotonic() - started)
+        budget_flag = time_budget_flag(timeout, time.monotonic() - started, self._time_budget)
 
         # Record the exit code instead of failing the trial: the hidden tests
         # decide the outcome even when the agent stops early.
@@ -219,7 +245,13 @@ class AOSAgent(BaseInstalledAgent):
 
         output = result.stdout or ""
         summary = parse_run_summary(output.rsplit("aos_exit=", 1)[0])
-        metadata: dict = {"workdir": workdir, "model": env["AOS_LLM_MODEL"], "agent_timeout_sec": timeout}
+        metadata: dict = {
+            "workdir": workdir,
+            "model": env["AOS_LLM_MODEL"],
+            "agent_timeout_sec": timeout,
+            "time_budget": self._time_budget,
+            "time_budget_flag": budget_flag.strip(),
+        }
         if "aos_exit=" in output:
             metadata["aos_exit"] = output.rsplit("aos_exit=", 1)[1].strip().splitlines()[0]
         if summary:

@@ -171,6 +171,50 @@ func TestTokenBudgetCapsAndStops(t *testing.T) {
 	}
 }
 
+// The step limit is shown only in its last tenth, every step from there,
+// with one warning at the first; a limit under ten steps shows it, and
+// warns, at the last step.
+func TestStepBudgetIsShownNearTheLimit(t *testing.T) {
+	for _, tc := range []struct {
+		maxSteps int
+		notes    string
+		warning  string
+	}{
+		{20, "budget steps=20 used=18 left=2 | budget steps=20 used=19 left=1", "budget warning: 2 of 20 steps are left"},
+		{5, "budget steps=5 used=4 left=1", "budget warning: 1 of 5 steps are left"},
+	} {
+		k, store, process, _ := budgetFixture(t, capability.Set{})
+		var last []runtime.Message
+		backend := &funcBackend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			last = request.History
+			return messageAction("working"), nil
+		}}
+		result, err := (&runtime.AgentRuntime{Kernel: k, Artifacts: store, Backend: backend, MaxSteps: tc.maxSteps}).Run(context.Background(), process.PID, nil)
+		if err != nil || result.ExitStatus.Reason != "step limit exceeded" {
+			t.Fatalf("%d steps: %+v %v", tc.maxSteps, result.ExitStatus, err)
+		}
+		var notes, warnings []string
+		for _, message := range last {
+			switch {
+			case strings.HasPrefix(message.Content, "budget steps="):
+				notes = append(notes, strings.TrimSuffix(message.Content, " (strict: the run is stopped after the last step)"))
+			case strings.HasPrefix(message.Content, "budget warning:"):
+				warnings = append(warnings, message.Content)
+			}
+		}
+		if strings.Join(notes, " | ") != tc.notes {
+			t.Fatalf("%d steps: notes %q, want %q", tc.maxSteps, notes, tc.notes)
+		}
+		if len(warnings) != 1 || !strings.HasPrefix(warnings[0], tc.warning+", this one included. Commit your best answer now") {
+			t.Fatalf("%d steps: warnings %q", tc.maxSteps, warnings)
+		}
+		session, _ := (&runtime.AgentRuntime{Artifacts: store}).RestoreCheckpoint(result.ExitStatus.Checkpoint)
+		if strings.Join(session.BudgetWarned, ",") != "steps" {
+			t.Fatalf("%d steps: warned %v", tc.maxSteps, session.BudgetWarned)
+		}
+	}
+}
+
 func stringsOf(values []int) string {
 	parts := make([]string, len(values))
 	for i, value := range values {
