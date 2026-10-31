@@ -110,7 +110,8 @@ def summary(rows):
         out[arm] = {"n": len(sel), **{m: sum(r[m] for r in sel) for m in ("main", "exact", "contra", "negative_claim")},
                     **{f"mean_{k}": round(statistics.mean(r[k] for r in sel), 2) if sel else None
                        for k in ("tokens", "steps", "searches", "memory_reads", "memory_calls", "bytes_read")},
-                    "answers_with_a_memory_call": sum(1 for r in sel if r["memory_calls"])}
+                    "answers_with_a_memory_call": sum(1 for r in sel if r["memory_calls"]),
+                    "artifact_id_reads": sum(1 for r in sel if r["artifact_id_reads"])}
     return out
 
 
@@ -138,7 +139,8 @@ def main():
                          checkpoint=CHECKPOINT[k["probe"]],
                          main=g["main"], exact=g["exact"], contra=g["contra"], negative_claim=g.get("negative_claim", 0),
                          **{f: s.get(f, 0) for f in ("tokens", "steps", "searches", "memory_reads", "bytes_read")},
-                         memory_calls=s.get("searches", 0) + s.get("memory_reads", 0)))
+                         memory_calls=s.get("searches", 0) + s.get("memory_reads", 0),
+                         artifact_id_reads=sum(1 for x in s.get("reads") or [] if x.startswith("read_memory artifact_id="))))
     target = [r for r in rows if r["set"] == "target"]
     harm = [r for r in rows if r["set"] == "harm"]
     observed, p = permutation_p(target)

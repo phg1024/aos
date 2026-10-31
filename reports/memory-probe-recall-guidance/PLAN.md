@@ -209,3 +209,14 @@ is not extended to chase significance.
 `coverage_grades-negative.json`; `power.py`; `headercheck/`,
 `reference-6c55bdb/`, `gate.py`; `run.sh`; after the run: `run.log`,
 `headers-off/`, `headers-on/`, `gate.log`, `samples-*.jsonl`, `grading/`.
+
+## Amendments after freeze (no change to the design)
+
+- **2026-10-31, correction:** "in the re-test, one answer made such a
+  read" (Arms) is imprecise. The one `read_memory artifact_id=...` call
+  in the re-test (h-1661-2, sample 8) was in arm C (RecallOff, no agent
+  index); 0 of its 306 A1 answers made it. So the read_memory change is
+  expected to make no practical difference to the A1 control.
+- **2026-10-31, added at aos book's request (secondary only):** the report
+  counts, per arm, the answers that call `read_memory artifact_id=...`
+  (`analyze.py`, `artifact_id_reads`).
