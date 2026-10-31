@@ -1,0 +1,346 @@
+[
+ {
+  "name": "P1a without run",
+  "grants": "mounts ws (rw), ref (ro); read ws, ref; write ws/out; state dir ws/.aos-state protected; tools read_file, write_file, list_dir",
+  "records": [
+   {
+    "id": "1",
+    "attempt": "write_file outside the write scope (ws/probe-outside-scope.txt)",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000001 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "2",
+    "attempt": "write_file into the read-only mount (ref/probe-ref.txt)",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000003 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "3",
+    "attempt": "write_file into the state dir (ws/.aos-state/kernel/probe-state.txt)",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000005 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "4",
+    "attempt": "run (not granted)",
+    "tool": "run",
+    "args": {
+     "command": "echo hi",
+     "timeout": "30s"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=run error=tool execution denied by capabilities: run needs run try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000007 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "run",
+      "capability": "run",
+      "reason": "capability not granted"
+     }
+    ]
+   },
+   {
+    "id": "5",
+    "attempt": "legal write_file (ws/out/probe-legal.txt)",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal.txt"
+    },
+    "expect": "tool_result, file created",
+    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal.txt]",
+    "disk": [
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal.txt"
+    ],
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000009 (tool_result)"
+   }
+  ],
+  "exit": {
+   "code": 0,
+   "reason": "script done",
+   "retryable": false,
+   "origin": "agent",
+   "checkpoint": "art-000011"
+  },
+  "denied_events": 4
+ },
+ {
+  "name": "P1b with run",
+  "grants": "mounts ws (rw), ref (ro); read ws, ref; write ws/out; state dir ws/.aos-state protected; tools read_file, write_file, list_dir, run",
+  "records": [
+   {
+    "id": "1",
+    "attempt": "write_file outside the write scope",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope-b.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000012 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope-b.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "2",
+    "attempt": "write_file into the read-only mount",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-b.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000014 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-b.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "3",
+    "attempt": "write_file into the state dir",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-b.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000016 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-b.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "4r",
+    "attempt": "run: write outside the write scope",
+    "tool": "run",
+    "args": {
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope-run.txt",
+     "timeout": "30s"
+    },
+    "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/probe-outside-scope-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000018 (tool_result)"
+   },
+   {
+    "id": "5r",
+    "attempt": "run: write into the read-only mount",
+    "tool": "run",
+    "args": {
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-run.txt",
+     "timeout": "30s"
+    },
+    "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000020 (tool_result)"
+   },
+   {
+    "id": "6r",
+    "attempt": "run: write into the state dir",
+    "tool": "run",
+    "args": {
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-run.txt",
+     "timeout": "30s"
+    },
+    "expect": "sandbox refuses; expected by the code: tool_result with nonzero exit, no capability.denied",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-run.txt confinement:sandbox exit_code:1 stderr:/bin/sh: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-run.txt: Operation not permitted\n stdout: timeout:30s timeout_bound:10m0s]\ntool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000022 (tool_result)"
+   },
+   {
+    "id": "7r",
+    "attempt": "run: legal write (ws/out/probe-legal-run.txt)",
+    "tool": "run",
+    "args": {
+     "command": "echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-run.txt",
+     "timeout": "30s"
+    },
+    "expect": "tool_result, exit 0, file created",
+    "saw": "run:map[command:echo x \u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-run.txt confinement:sandbox exit_code:0 stderr: stdout: timeout:30s timeout_bound:10m0s]",
+    "disk": [
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-run.txt"
+    ],
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000024 (tool_result)"
+   },
+   {
+    "id": "8",
+    "attempt": "legal write_file (ws/out/probe-legal-b.txt)",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-b.txt"
+    },
+    "expect": "tool_result, file created",
+    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-b.txt]",
+    "disk": [
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/out/probe-legal-b.txt"
+    ],
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000026 (tool_result)"
+   }
+  ],
+  "exit": {
+   "code": 0,
+   "reason": "script done",
+   "retryable": false,
+   "origin": "agent",
+   "checkpoint": "art-000028"
+  },
+  "denied_events": 3
+ },
+ {
+  "name": "P1c refusal by mount and protection alone (extra)",
+  "grants": "mounts ws (rw), ref (ro); read ws, ref; write ws, ref; state dir ws/.aos-state protected; tools read_file, write_file, list_dir",
+  "records": [
+   {
+    "id": "2w",
+    "attempt": "write_file into the read-only mount, write scope covering it",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-c.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000029 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ref/probe-ref-c.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   },
+   {
+    "id": "3w",
+    "attempt": "write_file into the state dir, write scope covering it",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-c.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "tool_error name=write_file error=path access denied by capabilities try_different_strategy=true",
+    "disk": null,
+    "tool_error_artifact": true,
+    "tool_result_artifact": false,
+    "artifact": "art-000031 (tool_error)",
+    "capability_denied": [
+     {
+      "action": "write_file",
+      "capability": "write_file",
+      "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP1DeniedWriteArc3929119401/001/ws/.aos-state/kernel/probe-state-c.txt",
+      "reason": "path outside the granted scopes or mounts"
+     }
+    ]
+   }
+  ],
+  "exit": {
+   "code": 0,
+   "reason": "script done",
+   "retryable": false,
+   "origin": "agent",
+   "checkpoint": "art-000033"
+  },
+  "denied_events": 2
+ }
+]

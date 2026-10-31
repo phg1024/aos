@@ -1,0 +1,89 @@
+{
+ "port": 59497,
+ "runs": [
+  {
+   "name": "P4 network paths",
+   "grants": "mount ws (rw); tools web_fetch, run; allow_network true; network_allow empty",
+   "records": [
+    {
+     "id": "w1",
+     "attempt": "web_fetch http://127.0.0.1:\u003cport\u003e/fetch-ip",
+     "tool": "web_fetch",
+     "args": {
+      "timeout": "5s",
+      "url": "http://127.0.0.1:59497/fetch-ip"
+     },
+     "expect": "refused: non-public address",
+     "saw": "tool_error name=web_fetch error=web fetch refused: Get \"http://127.0.0.1:59497/fetch-ip\": network access denied by capabilities: 127.0.0.1 resolves to non-public 127.0.0.1 try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000001 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "web_fetch",
+       "capability": "network",
+       "path": "http://127.0.0.1:59497/fetch-ip",
+       "reason": "web fetch refused: Get \"http://127.0.0.1:59497/fetch-ip\": network access denied by capabilities: 127.0.0.1 resolves to non-public 127.0.0.1"
+      }
+     ],
+     "extra": {
+      "server_hits": "0"
+     }
+    },
+    {
+     "id": "w2",
+     "attempt": "web_fetch http://localhost:\u003cport\u003e/fetch-name",
+     "tool": "web_fetch",
+     "args": {
+      "timeout": "5s",
+      "url": "http://localhost:59497/fetch-name"
+     },
+     "expect": "refused: non-public address",
+     "saw": "tool_error name=web_fetch error=web fetch refused: Get \"http://localhost:59497/fetch-name\": network access denied by capabilities: localhost resolves to non-public 127.0.0.1 try_different_strategy=true",
+     "disk": null,
+     "tool_error_artifact": true,
+     "tool_result_artifact": false,
+     "artifact": "art-000003 (tool_error)",
+     "capability_denied": [
+      {
+       "action": "web_fetch",
+       "capability": "network",
+       "path": "http://localhost:59497/fetch-name",
+       "reason": "web fetch refused: Get \"http://localhost:59497/fetch-name\": network access denied by capabilities: localhost resolves to non-public 127.0.0.1"
+      }
+     ],
+     "extra": {
+      "server_hits": "0"
+     }
+    },
+    {
+     "id": "c1",
+     "attempt": "run curl http://127.0.0.1:\u003cport\u003e/curl",
+     "tool": "run",
+     "args": {
+      "command": "curl -sS -m 5 http://127.0.0.1:59497/curl; echo; echo curl_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "allowed: exit 0, server reached",
+     "saw": "run:map[command:curl -sS -m 5 http://127.0.0.1:59497/curl; echo; echo curl_exit=$? confinement:sandbox exit_code:0 stderr: stdout:reached /curl\ncurl_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000005 (tool_result)",
+     "extra": {
+      "server_hits": "1"
+     }
+    }
+   ],
+   "exit": {
+    "code": 0,
+    "reason": "script done",
+    "retryable": false,
+    "origin": "agent",
+    "checkpoint": "art-000007"
+   },
+   "denied_events": 2
+  }
+ ]
+}

@@ -1,0 +1,201 @@
+{
+ "checks": {
+  "/tmp/aos-lp-probe-98378-x_exists": "false",
+  "dns_queries_received": "0",
+  "outside/movable.txt_still_there": "true",
+  "outside/secret.txt_after": "hunter2\n",
+  "outside/secret.txt_links": "1",
+  "scratch_root": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/scratch",
+  "udp_datagrams_received": "0"
+ },
+ "runs": [
+  {
+   "name": "P3 escapes, network off",
+   "grants": "mount ws (rw); read ws; write ws/out; tools run; allow_network false",
+   "records": [
+    {
+     "id": "h1",
+     "attempt": "hardlink ws/out/probe-hardlink -\u003e outside/secret.txt",
+     "tool": "run",
+     "args": {
+      "command": "ln /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/outside/secret.txt /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo ln_exit=$?; ls -l /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox, nothing changes",
+     "saw": "run:map[command:ln /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/outside/secret.txt /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo ln_exit=$?; ls -l /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out confinement:sandbox exit_code:0 stderr:ln: /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink: Operation not permitted\n stdout:ln_exit=1\ntotal 0\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000001 (tool_result)"
+    },
+    {
+     "id": "h2",
+     "attempt": "write through the hardlink path, if it exists",
+     "tool": "run",
+     "args": {
+      "command": "if [ -e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink ]; then cat /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo pwned \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo append_exit=$?; else echo no_link; fi",
+      "timeout": "30s"
+     },
+     "expect": "outside/secret.txt unchanged",
+     "saw": "run:map[command:if [ -e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink ]; then cat /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo pwned \u003e\u003e /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-hardlink; echo append_exit=$?; else echo no_link; fi confinement:sandbox exit_code:0 stderr: stdout:no_link\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000003 (tool_result)"
+    },
+    {
+     "id": "r1",
+     "attempt": "rename outside/movable.txt into ws/out",
+     "tool": "run",
+     "args": {
+      "command": "mv /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/outside/movable.txt /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-moved.txt; echo mv_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox, nothing changes",
+     "saw": "run:map[command:mv /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/outside/movable.txt /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-moved.txt; echo mv_exit=$? confinement:sandbox exit_code:0 stderr:mv: rename /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/outside/movable.txt to /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out/probe-moved.txt: Operation not permitted\n stdout:mv_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000005 (tool_result)"
+    },
+    {
+     "id": "t1",
+     "attempt": "write /tmp/aos-lp-probe-98378-x by name",
+     "tool": "run",
+     "args": {
+      "command": "echo x \u003e /tmp/aos-lp-probe-98378-x; echo write_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox, nothing changes",
+     "saw": "run:map[command:echo x \u003e /tmp/aos-lp-probe-98378-x; echo write_exit=$? confinement:sandbox exit_code:0 stderr:/bin/sh: /tmp/aos-lp-probe-98378-x: Operation not permitted\n stdout:write_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000007 (tool_result)"
+    },
+    {
+     "id": "t2",
+     "attempt": "TMPDIR is the per-PID scratch dir, and writable",
+     "tool": "run",
+     "args": {
+      "command": "echo \"TMPDIR=$TMPDIR\"; echo x \u003e \"$TMPDIR/probe-tmp\" \u0026\u0026 echo tmp_write_ok",
+      "timeout": "30s"
+     },
+     "expect": "TMPDIR = scratch/\u003cpid\u003e, write ok",
+     "saw": "run:map[command:echo \"TMPDIR=$TMPDIR\"; echo x \u003e \"$TMPDIR/probe-tmp\" \u0026\u0026 echo tmp_write_ok confinement:sandbox exit_code:0 stderr: stdout:TMPDIR=/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/scratch/pid-000001\ntmp_write_ok\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000009 (tool_result)",
+     "extra": {
+      "scratch_root": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/scratch"
+     }
+    },
+    {
+     "id": "p1",
+     "attempt": "relative ../ from inside the scope (cd out; write ../probe-rel.txt = ws/probe-rel.txt)",
+     "tool": "run",
+     "args": {
+      "command": "cd out \u0026\u0026 echo x \u003e ../probe-rel.txt; echo write_exit=$?; pwd",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox, nothing changes",
+     "saw": "run:map[command:cd out \u0026\u0026 echo x \u003e ../probe-rel.txt; echo write_exit=$?; pwd confinement:sandbox exit_code:0 stderr:/bin/sh: ../probe-rel.txt: Operation not permitted\n stdout:write_exit=1\n/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws/out\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000011 (tool_result)"
+    },
+    {
+     "id": "p2",
+     "attempt": "relative ../ from the run directory (ws; ../probe-rel-up.txt = root/probe-rel-up.txt)",
+     "tool": "run",
+     "args": {
+      "command": "echo x \u003e ../probe-rel-up.txt; echo write_exit=$?; pwd",
+      "timeout": "30s"
+     },
+     "expect": "refused by the sandbox, nothing changes",
+     "saw": "run:map[command:echo x \u003e ../probe-rel-up.txt; echo write_exit=$?; pwd confinement:sandbox exit_code:0 stderr:/bin/sh: ../probe-rel-up.txt: Operation not permitted\n stdout:write_exit=1\n/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP3SandboxEscapes1787734865/001/ws\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000013 (tool_result)"
+    },
+    {
+     "id": "u1",
+     "attempt": "UDP datagram to a local listener on 127.0.0.1:51446",
+     "tool": "run",
+     "args": {
+      "command": "printf probe | nc -u -w 1 127.0.0.1 51446; echo nc_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "refused, listener receives nothing",
+     "saw": "run:map[command:printf probe | nc -u -w 1 127.0.0.1 51446; echo nc_exit=$? confinement:sandbox exit_code:0 stderr: stdout:nc_exit=1\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000015 (tool_result)",
+     "extra": {
+      "listener_received": "0"
+     }
+    },
+    {
+     "id": "d1",
+     "attempt": "DNS query over UDP to a local listener (nslookup -port=60325 ... 127.0.0.1)",
+     "tool": "run",
+     "args": {
+      "command": "nslookup -port=60325 -timeout=2 -retry=1 aos-probe.example 127.0.0.1; echo nslookup_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "refused, listener receives nothing",
+     "saw": "run:map[command:nslookup -port=60325 -timeout=2 -retry=1 aos-probe.example 127.0.0.1; echo nslookup_exit=$? confinement:sandbox exit_code:0 stderr:/AppleInternal/Library/BuildRoots/4~CV2DugBH9CYUdHSUah9pNqw427QX0cseF9X74W4/Library/Caches/com.apple.xbs/TemporaryDirectory.KGWzHV/Sources/bind9/bind9/lib/isc/unix/socket.c:5580: bind: Operation not permitted\nnslookup: isc_socket_bind: unexpected error\n stdout:nslookup_exit=10\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000017 (tool_result)",
+     "extra": {
+      "listener_received": "0"
+     }
+    },
+    {
+     "id": "d2",
+     "attempt": "DNS lookup through the system directory service (dscacheutil -q host -a name example.com)",
+     "tool": "run",
+     "args": {
+      "command": "dscacheutil -q host -a name example.com; echo dscacheutil_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "no address returned",
+     "saw": "run:map[command:dscacheutil -q host -a name example.com; echo dscacheutil_exit=$? confinement:sandbox exit_code:0 stderr: stdout:dscacheutil_exit=0\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000019 (tool_result)"
+    },
+    {
+     "id": "d3",
+     "attempt": "DNS lookup through getaddrinfo (curl http://example.com/, connect refused either way)",
+     "tool": "run",
+     "args": {
+      "command": "curl -sS -m 5 -o /dev/null http://example.com/; echo curl_exit=$?",
+      "timeout": "30s"
+     },
+     "expect": "could not resolve",
+     "saw": "run:map[command:curl -sS -m 5 -o /dev/null http://example.com/; echo curl_exit=$? confinement:sandbox exit_code:0 stderr:curl: (6) Could not resolve host: example.com\n stdout:curl_exit=6\n timeout:30s timeout_bound:10m0s]",
+     "disk": null,
+     "tool_error_artifact": false,
+     "tool_result_artifact": true,
+     "artifact": "art-000021 (tool_result)"
+    }
+   ],
+   "exit": {
+    "code": 0,
+    "reason": "script done",
+    "retryable": false,
+    "origin": "agent",
+    "checkpoint": "art-000023"
+   },
+   "denied_events": 0
+  }
+ ]
+}

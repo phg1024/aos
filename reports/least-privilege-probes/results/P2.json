@@ -1,0 +1,34 @@
+[
+ {
+  "name": "P2a state dir, case variants",
+  "grants": "mount ws (rw); read ws; write ws; state dir ws/.aos-state protected (lexically); tools read_file, write_file, list_dir, run",
+  "records": [
+   {
+    "id": "c1",
+    "attempt": "write_file ws/.AOS-STATE/probe-case1.txt",
+    "tool": "write_file",
+    "args": {
+     "content": "probe\n",
+     "path": "/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths1137108260/001/ws/.AOS-STATE/probe-case1.txt"
+    },
+    "expect": "refused: tool_error + capability.denied, disk unchanged",
+    "saw": "write_file:map[bytes:6 path:/private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths1137108260/001/ws/.AOS-STATE/probe-case1.txt]",
+    "disk": [
+     "created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths1137108260/001/ws/.aos-state/probe-case1.txt"
+    ],
+    "tool_error_artifact": false,
+    "tool_result_artifact": true,
+    "artifact": "art-000001 (tool_result)"
+   }
+  ],
+  "exit": {
+   "code": 0,
+   "reason": "script done",
+   "retryable": false,
+   "origin": "agent",
+   "checkpoint": "art-000003"
+  },
+  "denied_events": 0,
+  "stopped": "c1: created /private/var/folders/s0/qjb9f0qn6y38hx6pclhrwy_w0000gn/T/TestP2CaseVariantPaths1137108260/001/ws/.aos-state/probe-case1.txt"
+ }
+]
