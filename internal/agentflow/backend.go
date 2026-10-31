@@ -160,8 +160,18 @@ func (b PromptBackend) HeaderSizes(request runtime.GenerateRequest) map[string]i
 		sizes["agent_index_bytes"], sizes["agent_index_segments"] = bytes, segments
 		sizes["agent_index_lines_shown"], sizes["agent_index_lines_hidden"] = lines, hidden
 		sizes["agent_index_budget"] = b.Recall.IndexBudget()
+		partial, shortened := b.partialIndexNote(counts)
+		sizes["agent_index_partial_note"], sizes["agent_index_shortened_note"] = boolInt(partial), boolInt(shortened)
 	}
 	return sizes
+}
+
+// boolInt is 1 for true, for the header-size trace.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // workingMemorySnapshot shows the working memory current at the last
@@ -272,6 +282,32 @@ func (b PromptBackend) shownAgentIndexes(refs []runtime.MemoryRef) (shown []stri
 	return shown, counts
 }
 
+// The header's note that the agent index is partial, after the sentence
+// that introduces it: the index leaves facts out, so their absence from it
+// proves nothing; and a shortened index's other lines are one read away.
+const (
+	partialIndexNote = "This index is partial: a fact missing from it may still be in the archive. " +
+		"Before you answer that something was never done, measured or seen, search_memory for it."
+	shortenedIndexNote = "Some segments show only their first lines; \"(+K more lines ...)\" marks the rest, " +
+		"and read_memory artifact_id=<segment> returns the whole index."
+)
+
+// partialIndexNote reports which parts of the note the header shows:
+// that the index is partial, whenever any of it is shown, and how to read
+// a shortened index, when some segment shows only its first lines.
+func (b PromptBackend) partialIndexNote(counts []indexShown) (partial, shortened bool) {
+	if b.Recall.NoAgentIndex || b.Recall.NoPartialIndexNote {
+		return false, false
+	}
+	for _, count := range counts {
+		if count.Shown > 0 {
+			partial = true
+			shortened = shortened || count.Hidden > 0
+		}
+	}
+	return partial, shortened
+}
+
 // archiveIndex tells an agent whose older history was compacted which
 // messages are archived and how to get them back. It lists what the
 // runtime recorded about each segment, never a summary, and says what the
@@ -306,10 +342,18 @@ func (b PromptBackend) archiveIndex(refs []runtime.MemoryRef) string {
 		fmt.Fprintf(&builder, "; paths are under %s", prefix)
 	}
 	builder.WriteString("):\n")
-	shown, _ := b.shownAgentIndexes(refs)
+	shown, counts := b.shownAgentIndexes(refs)
 	if strings.Join(shown, "") != "" {
 		builder.WriteString("Indented lines under a segment are your own index of it, written when it was archived. The runtime checked only that their message numbers are in the segment; " +
-			"they are a map, not the record: read the messages they cite before relying on details.\n")
+			"they are a map, not the record: read the messages they cite before relying on details.")
+		partial, shortened := b.partialIndexNote(counts)
+		if partial {
+			builder.WriteString(" " + partialIndexNote)
+		}
+		if shortened {
+			builder.WriteString(" " + shortenedIndexNote)
+		}
+		builder.WriteString("\n")
 	}
 	for i, ref := range refs {
 		builder.WriteString("- ")

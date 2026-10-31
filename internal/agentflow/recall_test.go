@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -165,6 +166,10 @@ func TestWorkflowRecallReachesPromptAndRuntime(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"recall":{"no_agent_index":true,"no_pointer_prompt":true}}`), &spec); err != nil || spec.Recall != (runtime.RecallPolicy{NoAgentIndex: true, NoPointerPrompt: true}) {
 		t.Fatalf("recall should decode from a workflow file: %+v %v", spec.Recall, err)
 	}
+	spec = WorkflowSpec{}
+	if err := json.Unmarshal([]byte(`{"recall":{"no_partial_index_note":true}}`), &spec); err != nil || spec.Recall != (runtime.RecallPolicy{NoPartialIndexNote: true}) {
+		t.Fatalf("no_partial_index_note should decode from a workflow file: %+v %v", spec.Recall, err)
+	}
 }
 
 // indexRef is a segment whose agent index has lines lines of about width
@@ -291,5 +296,63 @@ func TestHeaderSharesTheIndexBudget(t *testing.T) {
 	}
 	if sizes["agent_index_lines_shown"] != lines || sizes["agent_index_budget"] != MaxAgentIndexBytes || sizes["agent_index_segments"] != 4 {
 		t.Fatalf("header sizes = %v", sizes)
+	}
+}
+
+// The header says the agent index is partial whenever it shows any of it,
+// and, when a segment shows only its first lines, how to read the rest.
+// With the note off, the header is 6c55bdb's byte for byte
+// (testdata/header-6c55bdb, written by that commit's code).
+func TestHeaderSaysTheIndexIsPartial(t *testing.T) {
+	const (
+		intro     = "they are a map, not the record: read the messages they cite before relying on details."
+		partial   = " This index is partial: a fact missing from it may still be in the archive. Before you answer that something was never done, measured or seen, search_memory for it."
+		shortened = " Some segments show only their first lines; \"(+K more lines ...)\" marks the rest, and read_memory artifact_id=<segment> returns the whole index."
+	)
+	golden := func(name string) string {
+		bytes, err := os.ReadFile(filepath.Join("testdata", "header-6c55bdb", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(bytes)
+	}
+	backend := PromptBackend{Agent: AgentSpec{ID: "writer", SystemPrompt: "Write."}}
+	refs := []runtime.MemoryRef{indexRef("art-000101", 1, 2, 40), indexRef("art-000102", 10, 3, 40)}
+	cases := []struct {
+		name   string
+		budget int
+		note   string
+	}{
+		{"whole.txt", 0, partial},
+		{"shortened.txt", 220, partial + shortened},
+	}
+	for _, c := range cases {
+		backend.Recall = runtime.RecallPolicy{HeaderIndexBytes: c.budget}
+		before := golden(c.name)
+		if got, want := backend.archiveIndex(refs), strings.Replace(before, intro+"\n", intro+c.note+"\n", 1); got != want || !strings.Contains(before, intro+"\n") {
+			t.Fatalf("%s: header with the note =\n%s\nwant\n%s", c.name, got, want)
+		}
+		sizes := backend.HeaderSizes(runtime.GenerateRequest{MemoryRefs: refs})
+		if sizes["agent_index_partial_note"] != 1 || sizes["agent_index_shortened_note"] != boolInt(c.budget > 0) {
+			t.Fatalf("%s: the trace should say which notes were shown: %v", c.name, sizes)
+		}
+		backend.Recall.NoPartialIndexNote = true
+		if got := backend.archiveIndex(refs); got != before {
+			t.Fatalf("%s: with the note off the header should be 6c55bdb's:\n%s", c.name, got)
+		}
+		if sizes := backend.HeaderSizes(runtime.GenerateRequest{MemoryRefs: refs}); sizes["agent_index_partial_note"] != 0 || sizes["agent_index_shortened_note"] != 0 {
+			t.Fatalf("%s: the trace should say no note was shown: %v", c.name, sizes)
+		}
+	}
+
+	// No note without an agent index to qualify; none with the index off.
+	backend.Recall = runtime.RecallPolicy{}
+	bare := []runtime.MemoryRef{{ArtifactID: "art-000103", MessageCount: 4, FromSeq: 1, ToSeq: 4}}
+	if header := backend.archiveIndex(bare); strings.Contains(header, "partial") || strings.Contains(header, "first lines") {
+		t.Fatalf("a header with no agent index should have no note:\n%s", header)
+	}
+	backend.Recall = runtime.RecallPolicy{NoAgentIndex: true}
+	if header := backend.archiveIndex(refs); strings.Contains(header, "partial") || strings.Contains(header, "first lines") {
+		t.Fatalf("NoAgentIndex should drop the note:\n%s", header)
 	}
 }
