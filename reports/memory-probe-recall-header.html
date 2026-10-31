@@ -36,7 +36,7 @@
   <h2>What Was Run</h2>
   <ul>
     <li><b>Runtime:</b> <code>6c55bdb</code> (fair-share header), merged into this branch. Binaries built from the freeze commit <code>d9e653e</code> (<code>run.log</code> stamps hash <code>6e5368ca719e</code>). The header's agent-index budget is pinned to 6144 bytes in every handoff, probe and header check (<code>--header-index-bytes 6144</code>); every A1 sample records <code>agent_index_budget = 6144</code>.</li>
-    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> on phg-gpu (vllm), temperature 0.6, top-p 0.95, 64K context, as in the earlier runs.</li>
+    <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> via the OpenAI-compatible endpoint <code>phg-gpu.local:8080</code> (server behind it not recorded), temperature 0.6, top-p 0.95, 64K context, as in the earlier runs.</li>
     <li><b>Arms:</b> C = own memory, RecallOff; A1 = own memory with recall a1 and the agent-written indexes of one draw. 9 answers per arm per probe; A1 takes 3 from each draw.</li>
     <li><b>Probes:</b> 23 new unrecorded facts (11 first pass, 12 second pass; <code>selection.md</code>), written and frozen before any index existed; plus the 11 frozen own-memory probes (3 unrecorded, 6 recorded, 2 recorded-wrong).</li>
     <li><b>Grading:</b> every answer hand-graded main / exact / contra by eight reader agents with the rubric, the archive and the checkpoint's working memory and live history, blind to arm (answers shuffled with <code>Random(20261031)</code>, arm, draw and reads stripped; <code>grading/BRIEF.md</code>). Grades were committed (<code>5f6d7ef</code>) before the key was opened.</li>

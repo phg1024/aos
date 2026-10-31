@@ -37,6 +37,7 @@
     <li><b>Plan:</b> <code>reports/memory-probe-recall/PLAN.md</code>, frozen in <code>d66bd30</code> before any model call. The stop rule was added in <code>7068f60</code> (see below).</li>
     <li><b>Binary:</b> <code>.cache/bin/aos-eval-d66bd30</code> (sha <code>7c15b1d07f48</code>), built by this session. Runtime <code>d65b94f</code>.</li>
     <li><b>Model:</b> <code>qwen3.8-flash-next-nvfp4-nvfp4</code> on phg-gpu (vLLM), context 65536, compaction ratio 0.8, temperature 0.6, top_p 0.95, thinking budget 16384.</li>
+    <li class="note"><b>Correction (2026-10-31):</b> "(vLLM)" above was not verified. The runs used the OpenAI-compatible endpoint <code>phg-gpu.local:8080</code>; the server behind it was not recorded.</li>
     <li><b>Handoffs:</b> the three own-memory probe checkpoints hold 9 archived segments. Each segment's handoff was re-run with <code>--recall a1</code> (the other aids off) from the last checkpoint before the live run's own handoff notice for it, 3 draws each: 27 handoffs, 2026-10-30 17:28:32Z to 17:52:03Z. Each ran in a probe process with only the memory tools, in a copy of the run's state.</li>
     <li><b>Probes:</b> not run. Arm C had started at 17:52:03Z; the stop rule ended it 2 seconds later, before it wrote any sample.</li>
   </ul>
