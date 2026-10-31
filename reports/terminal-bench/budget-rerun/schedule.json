@@ -1,0 +1,525 @@
+{
+ "seed": 20261031,
+ "tasks": [
+  "fix-git",
+  "prove-plus-comm",
+  "cobol-modernization",
+  "openssl-selfsigned-cert",
+  "nginx-request-logging",
+  "polyglot-c-py",
+  "vulnerable-secret",
+  "raman-fitting"
+ ],
+ "arms": [
+  "off",
+  "strict",
+  "advisory"
+ ],
+ "rounds": 3,
+ "trials": [
+  {
+   "seq": 1,
+   "round": 1,
+   "task": "cobol-modernization",
+   "arm": "advisory",
+   "job": "tb2-budget-001-cobol-modernization-advisory"
+  },
+  {
+   "seq": 2,
+   "round": 1,
+   "task": "cobol-modernization",
+   "arm": "off",
+   "job": "tb2-budget-002-cobol-modernization-off"
+  },
+  {
+   "seq": 3,
+   "round": 1,
+   "task": "cobol-modernization",
+   "arm": "strict",
+   "job": "tb2-budget-003-cobol-modernization-strict"
+  },
+  {
+   "seq": 4,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "advisory",
+   "job": "tb2-budget-004-polyglot-c-py-advisory"
+  },
+  {
+   "seq": 5,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "off",
+   "job": "tb2-budget-005-polyglot-c-py-off"
+  },
+  {
+   "seq": 6,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "strict",
+   "job": "tb2-budget-006-polyglot-c-py-strict"
+  },
+  {
+   "seq": 7,
+   "round": 1,
+   "task": "raman-fitting",
+   "arm": "strict",
+   "job": "tb2-budget-007-raman-fitting-strict"
+  },
+  {
+   "seq": 8,
+   "round": 1,
+   "task": "raman-fitting",
+   "arm": "advisory",
+   "job": "tb2-budget-008-raman-fitting-advisory"
+  },
+  {
+   "seq": 9,
+   "round": 1,
+   "task": "raman-fitting",
+   "arm": "off",
+   "job": "tb2-budget-009-raman-fitting-off"
+  },
+  {
+   "seq": 10,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "strict",
+   "job": "tb2-budget-010-prove-plus-comm-strict"
+  },
+  {
+   "seq": 11,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "advisory",
+   "job": "tb2-budget-011-prove-plus-comm-advisory"
+  },
+  {
+   "seq": 12,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "off",
+   "job": "tb2-budget-012-prove-plus-comm-off"
+  },
+  {
+   "seq": 13,
+   "round": 1,
+   "task": "nginx-request-logging",
+   "arm": "strict",
+   "job": "tb2-budget-013-nginx-request-logging-strict"
+  },
+  {
+   "seq": 14,
+   "round": 1,
+   "task": "nginx-request-logging",
+   "arm": "advisory",
+   "job": "tb2-budget-014-nginx-request-logging-advisory"
+  },
+  {
+   "seq": 15,
+   "round": 1,
+   "task": "nginx-request-logging",
+   "arm": "off",
+   "job": "tb2-budget-015-nginx-request-logging-off"
+  },
+  {
+   "seq": 16,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "off",
+   "job": "tb2-budget-016-vulnerable-secret-off"
+  },
+  {
+   "seq": 17,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "strict",
+   "job": "tb2-budget-017-vulnerable-secret-strict"
+  },
+  {
+   "seq": 18,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "advisory",
+   "job": "tb2-budget-018-vulnerable-secret-advisory"
+  },
+  {
+   "seq": 19,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "off",
+   "job": "tb2-budget-019-fix-git-off"
+  },
+  {
+   "seq": 20,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "strict",
+   "job": "tb2-budget-020-fix-git-strict"
+  },
+  {
+   "seq": 21,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "advisory",
+   "job": "tb2-budget-021-fix-git-advisory"
+  },
+  {
+   "seq": 22,
+   "round": 1,
+   "task": "openssl-selfsigned-cert",
+   "arm": "off",
+   "job": "tb2-budget-022-openssl-selfsigned-cert-off"
+  },
+  {
+   "seq": 23,
+   "round": 1,
+   "task": "openssl-selfsigned-cert",
+   "arm": "strict",
+   "job": "tb2-budget-023-openssl-selfsigned-cert-strict"
+  },
+  {
+   "seq": 24,
+   "round": 1,
+   "task": "openssl-selfsigned-cert",
+   "arm": "advisory",
+   "job": "tb2-budget-024-openssl-selfsigned-cert-advisory"
+  },
+  {
+   "seq": 25,
+   "round": 2,
+   "task": "raman-fitting",
+   "arm": "advisory",
+   "job": "tb2-budget-025-raman-fitting-advisory"
+  },
+  {
+   "seq": 26,
+   "round": 2,
+   "task": "raman-fitting",
+   "arm": "off",
+   "job": "tb2-budget-026-raman-fitting-off"
+  },
+  {
+   "seq": 27,
+   "round": 2,
+   "task": "raman-fitting",
+   "arm": "strict",
+   "job": "tb2-budget-027-raman-fitting-strict"
+  },
+  {
+   "seq": 28,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "strict",
+   "job": "tb2-budget-028-vulnerable-secret-strict"
+  },
+  {
+   "seq": 29,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "advisory",
+   "job": "tb2-budget-029-vulnerable-secret-advisory"
+  },
+  {
+   "seq": 30,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "off",
+   "job": "tb2-budget-030-vulnerable-secret-off"
+  },
+  {
+   "seq": 31,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "strict",
+   "job": "tb2-budget-031-fix-git-strict"
+  },
+  {
+   "seq": 32,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "advisory",
+   "job": "tb2-budget-032-fix-git-advisory"
+  },
+  {
+   "seq": 33,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "off",
+   "job": "tb2-budget-033-fix-git-off"
+  },
+  {
+   "seq": 34,
+   "round": 2,
+   "task": "openssl-selfsigned-cert",
+   "arm": "strict",
+   "job": "tb2-budget-034-openssl-selfsigned-cert-strict"
+  },
+  {
+   "seq": 35,
+   "round": 2,
+   "task": "openssl-selfsigned-cert",
+   "arm": "advisory",
+   "job": "tb2-budget-035-openssl-selfsigned-cert-advisory"
+  },
+  {
+   "seq": 36,
+   "round": 2,
+   "task": "openssl-selfsigned-cert",
+   "arm": "off",
+   "job": "tb2-budget-036-openssl-selfsigned-cert-off"
+  },
+  {
+   "seq": 37,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "advisory",
+   "job": "tb2-budget-037-prove-plus-comm-advisory"
+  },
+  {
+   "seq": 38,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "off",
+   "job": "tb2-budget-038-prove-plus-comm-off"
+  },
+  {
+   "seq": 39,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "strict",
+   "job": "tb2-budget-039-prove-plus-comm-strict"
+  },
+  {
+   "seq": 40,
+   "round": 2,
+   "task": "cobol-modernization",
+   "arm": "off",
+   "job": "tb2-budget-040-cobol-modernization-off"
+  },
+  {
+   "seq": 41,
+   "round": 2,
+   "task": "cobol-modernization",
+   "arm": "strict",
+   "job": "tb2-budget-041-cobol-modernization-strict"
+  },
+  {
+   "seq": 42,
+   "round": 2,
+   "task": "cobol-modernization",
+   "arm": "advisory",
+   "job": "tb2-budget-042-cobol-modernization-advisory"
+  },
+  {
+   "seq": 43,
+   "round": 2,
+   "task": "nginx-request-logging",
+   "arm": "advisory",
+   "job": "tb2-budget-043-nginx-request-logging-advisory"
+  },
+  {
+   "seq": 44,
+   "round": 2,
+   "task": "nginx-request-logging",
+   "arm": "off",
+   "job": "tb2-budget-044-nginx-request-logging-off"
+  },
+  {
+   "seq": 45,
+   "round": 2,
+   "task": "nginx-request-logging",
+   "arm": "strict",
+   "job": "tb2-budget-045-nginx-request-logging-strict"
+  },
+  {
+   "seq": 46,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "off",
+   "job": "tb2-budget-046-polyglot-c-py-off"
+  },
+  {
+   "seq": 47,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "strict",
+   "job": "tb2-budget-047-polyglot-c-py-strict"
+  },
+  {
+   "seq": 48,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "advisory",
+   "job": "tb2-budget-048-polyglot-c-py-advisory"
+  },
+  {
+   "seq": 49,
+   "round": 3,
+   "task": "openssl-selfsigned-cert",
+   "arm": "advisory",
+   "job": "tb2-budget-049-openssl-selfsigned-cert-advisory"
+  },
+  {
+   "seq": 50,
+   "round": 3,
+   "task": "openssl-selfsigned-cert",
+   "arm": "off",
+   "job": "tb2-budget-050-openssl-selfsigned-cert-off"
+  },
+  {
+   "seq": 51,
+   "round": 3,
+   "task": "openssl-selfsigned-cert",
+   "arm": "strict",
+   "job": "tb2-budget-051-openssl-selfsigned-cert-strict"
+  },
+  {
+   "seq": 52,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "advisory",
+   "job": "tb2-budget-052-vulnerable-secret-advisory"
+  },
+  {
+   "seq": 53,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "off",
+   "job": "tb2-budget-053-vulnerable-secret-off"
+  },
+  {
+   "seq": 54,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "strict",
+   "job": "tb2-budget-054-vulnerable-secret-strict"
+  },
+  {
+   "seq": 55,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "advisory",
+   "job": "tb2-budget-055-fix-git-advisory"
+  },
+  {
+   "seq": 56,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "off",
+   "job": "tb2-budget-056-fix-git-off"
+  },
+  {
+   "seq": 57,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "strict",
+   "job": "tb2-budget-057-fix-git-strict"
+  },
+  {
+   "seq": 58,
+   "round": 3,
+   "task": "raman-fitting",
+   "arm": "off",
+   "job": "tb2-budget-058-raman-fitting-off"
+  },
+  {
+   "seq": 59,
+   "round": 3,
+   "task": "raman-fitting",
+   "arm": "strict",
+   "job": "tb2-budget-059-raman-fitting-strict"
+  },
+  {
+   "seq": 60,
+   "round": 3,
+   "task": "raman-fitting",
+   "arm": "advisory",
+   "job": "tb2-budget-060-raman-fitting-advisory"
+  },
+  {
+   "seq": 61,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "strict",
+   "job": "tb2-budget-061-polyglot-c-py-strict"
+  },
+  {
+   "seq": 62,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "advisory",
+   "job": "tb2-budget-062-polyglot-c-py-advisory"
+  },
+  {
+   "seq": 63,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "off",
+   "job": "tb2-budget-063-polyglot-c-py-off"
+  },
+  {
+   "seq": 64,
+   "round": 3,
+   "task": "cobol-modernization",
+   "arm": "strict",
+   "job": "tb2-budget-064-cobol-modernization-strict"
+  },
+  {
+   "seq": 65,
+   "round": 3,
+   "task": "cobol-modernization",
+   "arm": "advisory",
+   "job": "tb2-budget-065-cobol-modernization-advisory"
+  },
+  {
+   "seq": 66,
+   "round": 3,
+   "task": "cobol-modernization",
+   "arm": "off",
+   "job": "tb2-budget-066-cobol-modernization-off"
+  },
+  {
+   "seq": 67,
+   "round": 3,
+   "task": "nginx-request-logging",
+   "arm": "off",
+   "job": "tb2-budget-067-nginx-request-logging-off"
+  },
+  {
+   "seq": 68,
+   "round": 3,
+   "task": "nginx-request-logging",
+   "arm": "strict",
+   "job": "tb2-budget-068-nginx-request-logging-strict"
+  },
+  {
+   "seq": 69,
+   "round": 3,
+   "task": "nginx-request-logging",
+   "arm": "advisory",
+   "job": "tb2-budget-069-nginx-request-logging-advisory"
+  },
+  {
+   "seq": 70,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "off",
+   "job": "tb2-budget-070-prove-plus-comm-off"
+  },
+  {
+   "seq": 71,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "strict",
+   "job": "tb2-budget-071-prove-plus-comm-strict"
+  },
+  {
+   "seq": 72,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "advisory",
+   "job": "tb2-budget-072-prove-plus-comm-advisory"
+  }
+ ]
+}
