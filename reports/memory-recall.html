@@ -72,7 +72,7 @@
     <tr><td>Backend retry</td>
       <td>
         <ul>
-          <li>A failed model call is retried within its step: 12 attempts, waiting 1s and doubling up to 2 minutes, about 12 minutes in all. Each retry is a <code>backend.retry</code> kernel event, and retries take no steps.</li>
+          <li>A failed model call is retried within its step: 12 attempts, waiting 1s and doubling up to 2 minutes: 607 s, about 10 minutes, of waiting in all, plus the attempts themselves. (This said about 12 minutes until the budget-notes change corrected it.) Each retry is a <code>backend.retry</code> kernel event, and retries take no steps.</li>
           <li>When the retries run out, the process exits retryable with a checkpoint, as a budget exhaustion does, to be recovered once the endpoint is back.</li>
           <li>This replaces the old behaviour: each failure took a step, with <code>try_different_strategy=true</code>. That behaviour cost verifier pid-000020 146 of its 160 steps.</li>
         </ul>

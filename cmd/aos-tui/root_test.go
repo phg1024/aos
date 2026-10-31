@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -128,6 +129,53 @@ func TestExitedRootContinuesInANewAgent(t *testing.T) {
 	}
 	if _, err := r.Resume(context.Background(), first.PID, ended, nil, runtime.RunOptions{}); !errors.Is(err, runtime.ErrNotRecoverable) {
 		t.Fatalf("Resume of a final exit = %v", err)
+	}
+}
+
+// Each turn has its own step allowance, and the step note and warning
+// count against it: the second turn is warned again at its own last step,
+// not at the first turn's.
+func TestStepWarningCountsAgainstTheTurn(t *testing.T) {
+	f := newRootFixture(t)
+	search := runtime.GenerateResult{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "search_memory", Args: map[string]string{"query": "port"}}}}
+	var steps []runtime.GenerateResult
+	for turn := 1; turn <= 2; turn++ {
+		for range 5 {
+			steps = append(steps, search)
+		}
+		steps = append(steps, message(fmt.Sprintf("turn %d done", turn)))
+	}
+	backend := &runtime.FakeBackend{Steps: steps}
+	r := f.runtime(backend)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	for turn := 1; turn <= 2; turn++ {
+		if _, result, err := f.say(t, r, &root, fmt.Sprintf("turn %d", turn)); err != nil || !result.Yielded {
+			t.Fatalf("turn %d: %+v %v", turn, result.ExitStatus, err)
+		}
+	}
+	if len(backend.Requests) != 12 {
+		t.Fatalf("calls = %d, want 6 per turn", len(backend.Requests))
+	}
+	// Compaction may archive the first turn's notes before the last call,
+	// so they are gathered from every call, once each.
+	var budget []string
+	seen := map[int]bool{}
+	for _, request := range backend.Requests {
+		for _, m := range request.History {
+			if strings.HasPrefix(m.Content, "budget ") && !seen[m.Seq] {
+				seen[m.Seq] = true
+				budget = append(budget, m.Content)
+			}
+		}
+	}
+	note := "budget steps=6 used=5 left=1 (strict: the run is stopped after the last step)"
+	warning := "budget warning: 1 of 6 steps are left, this one included. Commit your best answer now: write or submit what you have, then exit."
+	if strings.Join(budget, "\n") != strings.Join([]string{note, warning, note, warning}, "\n") {
+		t.Fatalf("each turn's last step should carry the note and the warning:\n%s", strings.Join(budget, "\n"))
+	}
+	if root.session.Usage.Steps != 12 || root.session.StepBase != 6 {
+		t.Fatalf("usage %+v, step base %d", root.session.Usage, root.session.StepBase)
 	}
 }
 

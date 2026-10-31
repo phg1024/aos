@@ -86,4 +86,17 @@ func TestRasterizerVerifiersAreIsolated(t *testing.T) {
 	if solver, _ := bench.Agent(bench.EntryAgent); !solver.Capabilities.UnconfinedRun || solver.Capabilities.MaxRunSeconds != 900 {
 		t.Fatalf("terminal-bench runs in a disposable container and opts in to unconfined run: %+v", solver.Capabilities)
 	}
+	// The solver prompt describes the budget notes the runtime gives, not
+	// the clock notes it no longer does.
+	solver, _ := bench.Agent(bench.EntryAgent)
+	for _, stale := range []string{"clock note", "20%"} {
+		if strings.Contains(solver.SystemPrompt, stale) {
+			t.Fatalf("the solver prompt still says %q", stale)
+		}
+	}
+	for _, note := range []string{"budget time=", "(strict: the run is stopped when it runs out)", "budget steps=", "budget warning"} {
+		if !strings.Contains(solver.SystemPrompt, note) {
+			t.Fatalf("the solver prompt does not describe %q", note)
+		}
+	}
 }

@@ -1,11 +1,21 @@
 """Run with Harbor's Python: bench/harbor/run-tb.sh --self-test"""
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from aos_agent import agent_timeout_sec, container_base_url, parse_run_summary, time_budget_flag, usage_from_ledger
+from aos_agent import (
+    AOSAgent,
+    agent_timeout_sec,
+    container_base_url,
+    parse_run_summary,
+    time_budget_flag,
+    time_budget_mode,
+    usage_from_ledger,
+)
 
 
 class ContainerBaseURLTest(unittest.TestCase):
@@ -80,6 +90,39 @@ class TimeBudgetFlagTest(unittest.TestCase):
     def test_no_budget_without_a_timeout_or_room(self):
         self.assertEqual(time_budget_flag(None, 0), "")
         self.assertEqual(time_budget_flag(90, 20), "")
+
+    def test_advisory_budget_is_not_strict(self):
+        self.assertEqual(time_budget_flag(900, 30, "advisory"), "--time-budget 850s ")
+        self.assertEqual(time_budget_flag(None, 0, "advisory"), "")
+
+    def test_off_gives_no_budget(self):
+        self.assertEqual(time_budget_flag(900, 30, "off"), "")
+
+
+class TimeBudgetModeTest(unittest.TestCase):
+    def test_kwarg_then_environment_then_strict(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(time_budget_mode(None), "strict")
+            self.assertEqual(time_budget_mode("Off"), "off")
+        with mock.patch.dict(os.environ, {"AOS_TIME_BUDGET": "advisory"}):
+            self.assertEqual(time_budget_mode(None), "advisory")
+            self.assertEqual(time_budget_mode("strict"), "strict")
+
+    def test_rejects_unknown_modes(self):
+        for value in ("none", "", False):
+            with self.assertRaises(ValueError):
+                time_budget_mode(value)
+        with mock.patch.dict(os.environ, {"AOS_TIME_BUDGET": "loose"}):
+            with self.assertRaises(ValueError):
+                time_budget_mode(None)
+
+    def test_agent_takes_the_kwarg(self):
+        logs = Path(tempfile.mkdtemp())
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(AOSAgent(logs_dir=logs)._time_budget, "strict")
+            self.assertEqual(AOSAgent(logs_dir=logs, time_budget="off")._time_budget, "off")
+            with self.assertRaises(ValueError):
+                AOSAgent(logs_dir=logs, time_budget="sometimes")
 
 
 if __name__ == "__main__":

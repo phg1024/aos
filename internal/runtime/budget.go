@@ -163,10 +163,29 @@ func (m *TokenMeter) Add(tokens int) { m.total.Add(int64(tokens)) }
 func (m *TokenMeter) Total() int     { return int(m.total.Load()) }
 
 // budgetNotes is what the agent is told about its budgets this step: the
-// time and tokens left, and once per budget kind, when less than a tenth
-// is left, to commit its best answer now.
-func budgetNotes(account *Account, session *Session) []string {
+// time and tokens left, the steps left once few are, and once per budget
+// kind, when less than a tenth is left, to commit its best answer now.
+//
+// Time and token notes come every step a budget is set. Every run has a
+// step limit, so a steps note every step would add a message to every run,
+// shifting when compaction cuts and changing every prompt; it comes only in
+// the last tenth of the steps instead, the warning with its first. Steps
+// count from the start of the turn (StepBase) and include this one. The
+// last step is always in that stretch, so a limit under ten steps still
+// gets the warning.
+func budgetNotes(account *Account, session *Session, maxSteps int) []string {
 	var notes []string
+	if maxSteps > 0 {
+		used := session.Usage.Steps - session.StepBase - 1
+		left := maxSteps - used
+		if float64(left) <= max(float64(maxSteps)*budgetWarningFraction, 1) {
+			notes = append(notes, fmt.Sprintf("budget steps=%d used=%d left=%d (strict: the run is stopped after the last step)", maxSteps, used, left))
+			if !session.warned("steps") {
+				session.BudgetWarned = append(session.BudgetWarned, "steps")
+				notes = append(notes, fmt.Sprintf("budget warning: %d of %d steps are left, this one included. Commit your best answer now: write or submit what you have, then exit.", left, maxSteps))
+			}
+		}
+	}
 	time := account.timeLeft(false)
 	if time.ok {
 		left := max(time.Left, 0)

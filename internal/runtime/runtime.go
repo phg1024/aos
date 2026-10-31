@@ -566,7 +566,10 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	// to its delegator's through ctx, continuing from the usage its
 	// checkpoint recorded.
 	if options.NewTurn {
+		// A turn starts a fresh step allowance, and with it a fresh step
+		// warning.
 		session.StepBase = session.Usage.Steps
+		session.BudgetWarned = slices.DeleteFunc(session.BudgetWarned, func(kind string) bool { return kind == "steps" })
 	}
 	session.Extended = session.Extended.add(options.Extend)
 	limit := process.CapabilitySet.Budget
@@ -690,7 +693,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return stop()
 		}
 		session.Usage.Steps++
-		for _, note := range budgetNotes(account, &session) {
+		for _, note := range budgetNotes(account, &session, maxSteps) {
 			session.Messages = append(session.Messages, Message{Role: "tool", Content: note})
 		}
 		if r.Bus != nil {
