@@ -1,0 +1,393 @@
+{
+ "h-414-1": {
+  "1": {
+   "grade": "states",
+   "note": "'cannot read shared shader header'",
+   "shown": false
+  },
+  "2": {
+   "grade": "points",
+   "note": "fails to find shaders, not the header error",
+   "shown": false
+  },
+  "3": {
+   "grade": "points",
+   "note": "fails, needs include/ and shaders/; not the header error",
+   "shown": false
+  }
+ },
+ "h-414-2": {
+  "1": {
+   "grade": "points",
+   "note": "names the writer log's contents; no caustic figures",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "caustic mask mean 9.05 over 1185px",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "no caustic figures",
+   "shown": true
+  }
+ },
+ "h-507-1": {
+  "1": {
+   "grade": "states",
+   "note": "link error, transform_mesh missing",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "link error, transform_mesh missing",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "link error, transform_mesh missing",
+   "shown": true
+  }
+ },
+ "h-507-2": {
+  "1": {
+   "grade": "states",
+   "note": "PtVertex dropped/undeclared",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "PtVertex dropped/undeclared",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "PtVertex dropped/undeclared",
+   "shown": true
+  }
+ },
+ "h-646-1": {
+  "1": {
+   "grade": "no",
+   "note": "no index for art-000646 in this draw",
+   "shown": false
+  },
+  "2": {
+   "grade": "states",
+   "note": "'link_escapes is private'",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "'link_escapes is private'",
+   "shown": true
+  }
+ },
+ "h-1608-1": {
+  "1": {
+   "grade": "states",
+   "note": "mesh path typo",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "mesh path typo",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "mesh path typo",
+   "shown": true
+  }
+ },
+ "h-1608-2": {
+  "1": {
+   "grade": "points",
+   "note": "writer log tail, no round-4 time",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "writer log tail, no round-4 time",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "round4 final 45.635",
+   "shown": true
+  }
+ },
+ "h-1661-1": {
+  "1": {
+   "grade": "states",
+   "note": "shader compile error 'undeclared params'",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "failure was shader compile",
+   "shown": true
+  },
+  "3": {
+   "grade": "no",
+   "note": "no covering line",
+   "shown": false
+  }
+ },
+ "h-1766-1": {
+  "1": {
+   "grade": "states",
+   "note": "host still typed PtBvhNodeQ*, build error",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "host still typed PtBvhNodeQ*, build error",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "host still typed PtBvhNodeQ*, build error",
+   "shown": true
+  }
+ },
+ "h-1766-2": {
+  "1": {
+   "grade": "states",
+   "note": "wrong scene path",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "wrong scene path",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "wrong scene path",
+   "shown": true
+  }
+ },
+ "h-3062-1": {
+  "1": {
+   "grade": "points",
+   "note": "BVH topology frozen; not that MAX_DEPTH 16->20 changed the image",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "MAX_DEPTH 16->20 changed alt-view PFM; topology is the estimator",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "MAX_DEPTH 16->20 changes alt-view PFM",
+   "shown": true
+  }
+ },
+ "h-414-3": {
+  "1": {
+   "grade": "states",
+   "note": "/tmp not writable (ppm error)",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "/tmp not writable",
+   "shown": false
+  },
+  "3": {
+   "grade": "no",
+   "note": "no covering line",
+   "shown": false
+  }
+ },
+ "h-557-1": {
+  "1": {
+   "grade": "points",
+   "note": "best and gpu only, no average",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "126.379",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "126.379",
+   "shown": true
+  }
+ },
+ "h-557-2": {
+  "1": {
+   "grade": "states",
+   "note": "gpu 100.887",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "gpu 100.887",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "gpu 100.887",
+   "shown": false
+  }
+ },
+ "h-557-3": {
+  "1": {
+   "grade": "states",
+   "note": "8x8=101.0",
+   "shown": true
+  },
+  "2": {
+   "grade": "states",
+   "note": "8x8=101.0",
+   "shown": false
+  },
+  "3": {
+   "grade": "states",
+   "note": "8x8=101.026",
+   "shown": false
+  }
+ },
+ "h-646-2": {
+  "1": {
+   "grade": "no",
+   "note": "no index for art-000646 in this draw",
+   "shown": false
+  },
+  "2": {
+   "grade": "states",
+   "note": "103.183 and 100.692",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "A/B with best times only",
+   "shown": true
+  }
+ },
+ "h-646-3": {
+  "1": {
+   "grade": "no",
+   "note": "no index for art-000646 in this draw",
+   "shown": false
+  },
+  "2": {
+   "grade": "points",
+   "note": "the smoke run, no setup_ms",
+   "shown": false
+  },
+  "3": {
+   "grade": "no",
+   "note": "no covering line",
+   "shown": false
+  }
+ },
+ "h-1608-3": {
+  "1": {
+   "grade": "points",
+   "note": "the reference render run, md5s, no setup_ms",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "the reference render run, md5s, no setup_ms",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "the reference render run, md5s, no setup_ms",
+   "shown": true
+  }
+ },
+ "h-1661-2": {
+  "1": {
+   "grade": "points",
+   "note": "the cost-share sweep, no PT_PROF=3",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "the cost-share sweep, no PT_PROF=3",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "the cost-share sweep, no PT_PROF=3",
+   "shown": true
+  }
+ },
+ "h-1661-3": {
+  "1": {
+   "grade": "points",
+   "note": "the glass A/B, min/mean but no gpu_min",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "the glass A/B, min/mean but no gpu_min",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "the glass A/B, min/mean but no gpu_min",
+   "shown": true
+  }
+ },
+ "h-1766-3": {
+  "1": {
+   "grade": "points",
+   "note": "the identity check, no setup_ms",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "the identity check, no setup_ms",
+   "shown": true
+  },
+  "3": {
+   "grade": "no",
+   "note": "no covering line",
+   "shown": false
+  }
+ },
+ "h-3062-2": {
+  "1": {
+   "grade": "states",
+   "note": "10/10 pairs, mean -0.2925ms",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "ledger +0.93% win, no pair record",
+   "shown": true
+  },
+  "3": {
+   "grade": "states",
+   "note": "10/10 wins, mean -0.2925ms",
+   "shown": true
+  }
+ },
+ "h-3133-1": {
+  "1": {
+   "grade": "points",
+   "note": "the cost split, trace times only, no wall time",
+   "shown": true
+  },
+  "2": {
+   "grade": "points",
+   "note": "the cost split, trace times only, no wall time",
+   "shown": true
+  },
+  "3": {
+   "grade": "points",
+   "note": "the cost split, trace times only, no wall time",
+   "shown": true
+  }
+ }
+}
