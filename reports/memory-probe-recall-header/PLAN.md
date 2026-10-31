@@ -34,6 +34,24 @@ checked on the new draws by `run.sh` before any probe call. Re-parsing the
 two lines instead was considered and not done: it would change the gate's
 remedy after the gate failed.
 
+**Stopped, and the remedy reopened (2026-10-31).** aos book's check of
+the same G1 caveat, sent before it saw this freeze, asks instead: if any
+stored draw differs under the new parser, do not reuse or silently
+re-parse it; report which draws and index recall under both parses, and
+stop before any model call. `run.sh` had started the handoffs at 00:26:50
+UTC; it was stopped at 00:27:25, before any handoff step finished (the
+work copy holds no artifact from the run; at most the first model call
+was in flight). The offline check (`reparse/`) replays all 34
+index_memory calls of the 27 handoffs through the old and new parsers
+(copied verbatim) with the cap each call's result reported: the old replay
+reproduces all 27 stored indexes; under the new parser 25 are identical
+and 2 differ (d1 art-001608: 1 line into 12; d3 art-000507: 1 line into
+18), with the same rejections and refusals in all 34 calls. Index recall
+(fact stated by a covering line in some draw): 16 of 23 under both
+parses; per draw 13, 12, 8 (old) and 13, 12, 10 (new); with a shown line
+under 6c55bdb's header, 10, 11, 7 and 10, 11, 9. Which draws the re-test
+uses waits for aos book.
+
 Consequences: the new probes were written before these indexes exist, so
 no index can have influenced them; the index-recall grades of the old
 draws (`coverage-old.*`, `coverage_grades-old.json`: fact stated in some

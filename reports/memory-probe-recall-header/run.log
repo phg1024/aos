@@ -1,0 +1,2 @@
+started 2026-10-31T00:26:50Z handoffs, binary 6d49bf7 (386eeeba1f58), new 5af3f5b442bb, frozen e5e11d8560f5
+stopped 2026-10-31T00:27:25Z: by hand during the handoffs, before any handoff finished; aos book asked to stop before any model call if the old draws parse differently under 6c55bdb

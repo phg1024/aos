@@ -1,0 +1,1001 @@
+[
+ {
+  "probe": "h-414-1",
+  "truth": 56,
+  "segment": "art-000414",
+  "draws": {
+   "1": {
+    "lines_in_index": 20,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 56,
+      "to": 57,
+      "text": "copying binary to out/pathtracer_r1 fails (needs include/+shaders/ next to binary); out/ already has round1_default.pfm/ppm reference images",
+      "position": 19,
+      "shown": false
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 15,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 46,
+      "to": 57,
+      "text": "memory entries set (baseline-timing 43-45, round2-plan); read pt_tonemap.metal (Reinhard+gamma 2.2, NaN guard); copying round-1 binary to out/ failed because shaders must sit next to binary",
+      "position": 14,
+      "shown": false
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 15,
+    "lines_shown": 15,
+    "range_covered": []
+   }
+  }
+ },
+ {
+  "probe": "h-414-2",
+  "truth": 31,
+  "segment": "art-000414",
+  "draws": {
+   "1": {
+    "lines_in_index": 20,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 31,
+      "to": 31,
+      "text": "writer log round-1: full design notes, bugs fixed (self-occluding shadow ray, fresnel eta, inside_glass, correlated cosine angles), known next targets (SAH, compact nodes, short stack, per-sample atomics, no spp tiling)",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 15,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 31,
+      "to": 31,
+      "text": "writer log round1: design notes, bug history, caustic mask mean 9.05/1185px, next-round targets (SAH, compact nodes, short stack, per-sample atomics, no spp tiling)",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 15,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 31,
+      "to": 31,
+      "text": "writer log round-1 (design notes, bug list, caustic stats: floor median 0.56, 1185 px >=3x, mean 9.05; known next targets: SAH, compact nodes, no wavefront, per-sample atomics).",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-507-1",
+  "truth": 83,
+  "segment": "art-000507",
+  "draws": {
+   "1": {
+    "lines_in_index": 22,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 83,
+      "to": 83,
+      "text": "link error - transform_mesh missing.",
+      "position": 12,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 79,
+      "to": 87,
+      "text": "build errors: I dropped PtVertex from the shared header (re-added, host-only) and dropped transform_mesh in a rewrite (restored).",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 18,
+    "lines_shown": 18,
+    "range_covered": [
+     {
+      "from": 83,
+      "to": 83,
+      "text": "link error transform_mesh missing.",
+      "position": 10,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-507-2",
+  "truth": 79,
+  "segment": "art-000507",
+  "draws": {
+   "1": {
+    "lines_in_index": 22,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 79,
+      "to": 79,
+      "text": "build errors - PtVertex undeclared (dropped from header).",
+      "position": 10,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 79,
+      "to": 87,
+      "text": "build errors: I dropped PtVertex from the shared header (re-added, host-only) and dropped transform_mesh in a rewrite (restored).",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 18,
+    "lines_shown": 18,
+    "range_covered": [
+     {
+      "from": 79,
+      "to": 79,
+      "text": "build errors - PtVertex missing from shared header.",
+      "position": 8,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-646-1",
+  "truth": 208,
+  "segment": "art-000646",
+  "draws": {
+   "1": {
+    "lines_in_index": 13,
+    "lines_shown": 13,
+    "range_covered": [
+     {
+      "from": 208,
+      "to": 208,
+      "text": "root cause found: build had FAILED with \"'link_escapes' is a private member\" so ./pathtracer was the OLD binary (b=0) reading NEW stackless shaders -> escape 0 = root = infinite loop; bvh_stats printed nodes=40597 max_leaf=4 depth=15",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 208,
+      "to": 208,
+      "text": "compile error 'link_escapes is private' (#208) proves ./pathtracer was the OLD host with NEW stackless shader -> escape 0 = root -> infinite loop; bvh_stats: nodes=40597 max_leaf=4 mean_leaf=3.42 max_depth=15",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 202,
+      "to": 212,
+      "text": "stackless build FAILED silently (link_escapes private, #208) leaving stale binary -> GPU infinite loop, 60s tool timeouts; fix = rm -f pathtracer + grep error before benching; smoke at spp2 with perl alarm.",
+      "position": 1,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1608-1",
+  "truth": 24,
+  "segment": "art-001608",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 24,
+      "to": 27,
+      "text": "round-4 ref PFMs out/r4_*.pfm, default md5 53600ca347f0b76ab1a0ff894f6a8f4e.",
+      "position": 11,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 11,
+    "lines_shown": 11,
+    "range_covered": []
+   }
+  }
+ },
+ {
+  "probe": "h-1608-2",
+  "truth": 5,
+  "segment": "art-001608",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 5,
+      "to": 5,
+      "text": "writer log tail: rounds 1-4 history, kept/rejected lists, round-5 ideas (normals interleave, ballot, SAH child order).",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 5,
+      "to": 5,
+      "text": "writer log tail: rounds 1-4 history, all kept/rejected items with timings; round-4 final 45.635 vs r3 47.828 interleaved, 2.403x over frozen 109.656; round-5 ideas (interleave normals into tri record, simdgroup ballot, 256spp harness, child ordering).",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 11,
+    "lines_shown": 11,
+    "range_covered": [
+     {
+      "from": 5,
+      "to": 5,
+      "text": "writer log tail: rounds 1-4 history, all kept/rejected items with numbers, round-5 ideas (normals interleave, ballot, 256spp harness, SAH child order)",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1661-1",
+  "truth": 54,
+  "segment": "art-001661",
+  "draws": {
+   "1": {
+    "lines_in_index": 18,
+    "lines_shown": 18,
+    "range_covered": [
+     {
+      "from": 54,
+      "to": 56,
+      "text": "shader compile error from using bare `params` in pt_intersect_scene; must use scene.params->pad",
+      "position": 2,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 0,
+    "lines_shown": 0,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 17,
+    "lines_shown": 17,
+    "range_covered": [
+     {
+      "from": 52,
+      "to": 54,
+      "text": "first sweep empty - shader compile error: undeclared 'params' in pt_intersect_scene, must use scene.params->pad",
+      "position": 4,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1766-1",
+  "truth": 153,
+  "segment": "art-001766",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 153,
+      "to": 155,
+      "text": "build failure \u2014 pt_metal_host.hpp GpuMeshData::nodes still typed PtBvhNodeQ*; fixed to PtBvhChild*",
+      "position": 8,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": [
+     {
+      "from": 153,
+      "to": 155,
+      "text": "build error \u2014 GpuMeshData::nodes still typed PtBvhNodeQ*; fixed to PtBvhChild* in pt_metal_host.hpp:18.",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": [
+     {
+      "from": 153,
+      "to": 155,
+      "text": "build error - pt_metal_host.hpp GpuMeshData::nodes still PtBvhNodeQ*; fixed to PtBvhChild*.",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1766-2",
+  "truth": 159,
+  "segment": "art-001766",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 159,
+      "to": 161,
+      "text": "scene configs live at the top level (scene-default.json, scene-alt-view.json, scene-caustic-closeup.json), not in scenes/; scratch dirs present: _b _e _p _prof _tools ab_r3 ab_r4 out",
+      "position": 10,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": [
+     {
+      "from": 157,
+      "to": 163,
+      "text": "child-pair build clean (only the known fastMathEnabled deprecation warning); 64spp seed-1 PFMs byte-identical to round 4 on default, alt-view and caustic-closeup, samples=16777216; workspace listing shows scenes at top level (scene-default.json, scene-alt-view.json, scene-caustic-closeup.json), snapshots _b/_e/ab_r4, reference PFMs in out/; _ab.sh is the interleaved A/B harness and the run tool caps a command at ~60s.",
+      "position": 6,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-3062-1",
+  "truth": 9,
+  "segment": "art-003062",
+  "draws": {
+   "1": {
+    "lines_in_index": 6,
+    "lines_shown": 6,
+    "range_covered": [
+     {
+      "from": 9,
+      "to": 9,
+      "text": "coordinator ledger + writer log: round7 VERIFIED PASS 9/9 (RMSE ratios 1.0003/1.0055/1.0015, caustic 0.9888/0.9742/1.0025, 20/20 stability); sub-5% counter=1 so round 8 decides the stop; round7 kept f32 nodes -0.44%, shadow payload -0.49%, 12B sample buffer -0.19%; rejected stk16 +27%, spt2 +1.08%, leaf2 +0.9%; BVH topology is part of the frozen estimator (MAX_DEPTH 16->20 changed alt-view PFM) so leaf_size/MAX_DEPTH/axis-order/bins are forbidden.",
+      "position": 4,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 10,
+    "lines_shown": 10,
+    "range_covered": [
+     {
+      "from": 9,
+      "to": 9,
+      "text": "writer log r7: kept f32 node -0.44%, shadow stack payload -0.49%, 12B sample buffer -0.19%; rejected stk16 +27%, stk24 0, 2spp/thread +1.08%, leaf2 +0.9%, leaf1-spec +0.4%, combine TG sweep noise",
+      "position": 4,
+      "shown": true
+     },
+     {
+      "from": 9,
+      "to": 9,
+      "text": "BVH TOPOLOGY is part of the frozen estimator (MAX_DEPTH 16->20 changed alt-view PFM): leaf/depth/axis/bin changes forbidden",
+      "position": 5,
+      "shown": true
+     },
+     {
+      "from": 9,
+      "to": 9,
+      "text": "file sizes: bvh.cpp 435, host.mm 309, integrator.metal 367, trace.metal 552",
+      "position": 6,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 8,
+    "lines_shown": 8,
+    "range_covered": [
+     {
+      "from": 9,
+      "to": 9,
+      "text": "source tree + line counts (include 8 headers, src 7 files, shaders pt_trace 552 / pt_integrator 367 / pt_tonemap 22).",
+      "position": 4,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-414-3",
+  "truth": 43,
+  "segment": "art-000414",
+  "draws": {
+   "1": {
+    "lines_in_index": 20,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 43,
+      "to": 45,
+      "text": "baseline re-measured on this machine: render_ms_best=105.947 render_ms_avg=113.523 gpu_ms_best=105.574; /tmp not writable (ppm error)",
+      "position": 15,
+      "shown": false
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 15,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 41,
+      "to": 45,
+      "text": "rebuilt round-1 OK; baseline on this machine render_ms_best=105.947 avg=113.523 gpu_ms_best=105.574; /tmp not writable, use phase3/out; sandbox prints harmless metalfe/gpuarchiver errors",
+      "position": 13,
+      "shown": false
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 15,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 43,
+      "to": 43,
+      "text": "baseline rebuilt+benchmarked here: render_ms_best=105.947 gpu_ms_best=105.574; /tmp not writable (ppm error).",
+      "position": 12,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-557-1",
+  "truth": 125,
+  "segment": "art-000557",
+  "draws": {
+   "1": {
+    "lines_in_index": 30,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 125,
+      "to": 125,
+      "text": "benchmark with stack 16 REGRESSED: best=119.866 avg=126.379 gpu=119.359",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 17,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 123,
+      "to": 125,
+      "text": "PT_BVH_STACK_SIZE 20->16 with MAX_DEPTH 16->15 REGRESSED to 119.866/119.359",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 26,
+    "lines_shown": 20,
+    "range_covered": [
+     {
+      "from": 125,
+      "to": 125,
+      "text": "regressed: render_ms_best=119.866 gpu=119.359",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-557-2",
+  "truth": 133,
+  "segment": "art-000557",
+  "draws": {
+   "1": {
+    "lines_in_index": 30,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 133,
+      "to": 133,
+      "text": "benchmark with fastMath: best=101.150 avg=116.465 gpu=100.887; deprecation warning macOS 15",
+      "position": 13,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 17,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 131,
+      "to": 133,
+      "text": "MTLCompileOptions fastMathEnabled=YES (deprecated in macOS 15): 101.150 best, gpu 100.887 - neutral gain, kept",
+      "position": 7,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 26,
+    "lines_shown": 20,
+    "range_covered": [
+     {
+      "from": 133,
+      "to": 133,
+      "text": "fastMath 101.150/116.465 gpu 100.887 (neutral) + deprecation warning (macOS 15, use mathMode)",
+      "position": 13,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-557-3",
+  "truth": 167,
+  "segment": "art-000557",
+  "draws": {
+   "1": {
+    "lines_in_index": 30,
+    "lines_shown": 15,
+    "range_covered": [
+     {
+      "from": 167,
+      "to": 167,
+      "text": "TG sweep (3 frames): 8x8=101.0, 16x8=96.4, 16x16=100.5, 32x8=104.6, 16x32=110.0, 32x16=118.8",
+      "position": 19,
+      "shown": false
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 17,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 167,
+      "to": 167,
+      "text": "shape sweep best-of-3: 8x8=101.026, 16x8=96.408 (gpu 93.635), 16x16=100.467, 32x8=104.591, 16x32=110.010, 32x16=118.828",
+      "position": 11,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 26,
+    "lines_shown": 20,
+    "range_covered": [
+     {
+      "from": 167,
+      "to": 167,
+      "text": "shape sweep best-of-3: 8x8=101.0, 16x8=96.4/93.6gpu, 16x16=100.5/96.0, 32x8=104.6, 16x32=110.0, 32x16=118.8",
+      "position": 20,
+      "shown": false
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-646-2",
+  "truth": 216,
+  "segment": "art-000646",
+  "draws": {
+   "1": {
+    "lines_in_index": 13,
+    "lines_shown": 13,
+    "range_covered": [
+     {
+      "from": 216,
+      "to": 216,
+      "text": "A/B of pre-stackless snapshot twice: 93.366/103.183 gpu 92.993 and 96.614/100.692 gpu 92.915 -> stackless is a ~9% regression",
+      "position": 6,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 216,
+      "to": 216,
+      "text": "A/B pre-stackless stack-based snapshot = 93.366/103.183 gpu 92.993 and 96.614/100.692 gpu 92.915 -> stackless REGRESSED",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 216,
+      "to": 216,
+      "text": "stack-based A/B same machine 93.366/103.183 gpu 92.993 and 96.614/100.692 gpu 92.915 -> stackless REGRESSED, reverted (#218, backup pathtracer_backup_stackless).",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-646-3",
+  "truth": 245,
+  "segment": "art-000646",
+  "draws": {
+   "1": {
+    "lines_in_index": 13,
+    "lines_shown": 13,
+    "range_covered": [
+     {
+      "from": 245,
+      "to": 245,
+      "text": "merged build smoke OK: samples=1048576 == 512*512*4, PPM+PFM written",
+      "position": 12,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 243,
+      "to": 245,
+      "text": "build clean, smoke spp4 samples=1048576 == 512*512*4, PPM+PFM written",
+      "position": 11,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": [
+     {
+      "from": 245,
+      "to": 245,
+      "text": "merged build smoke spp4 samples=1048576 OK.",
+      "position": 8,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1608-3",
+  "truth": 27,
+  "segment": "art-001608",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 24,
+      "to": 27,
+      "text": "round-4 ref PFMs out/r4_*.pfm, default md5 53600ca347f0b76ab1a0ff894f6a8f4e.",
+      "position": 11,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 9,
+    "lines_shown": 9,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 11,
+    "lines_shown": 11,
+    "range_covered": []
+   }
+  }
+ },
+ {
+  "probe": "h-1661-2",
+  "truth": 58,
+  "segment": "art-001661",
+  "draws": {
+   "1": {
+    "lines_in_index": 18,
+    "lines_shown": 18,
+    "range_covered": [
+     {
+      "from": 58,
+      "to": 58,
+      "text": "cost shares 512x512/64spp gpu_ms_best: full 45.35, no shadow 44.05, no mesh 4.77 (walk=89% of frame), no NEE 43.17, glass always-reflect 35.76",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 0,
+    "lines_shown": 0,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 17,
+    "lines_shown": 17,
+    "range_covered": [
+     {
+      "from": 58,
+      "to": 58,
+      "text": "COST SHARES 512x512/64spp gpu_ms_best: full 45.35, no shadow 44.05, no NEE 43.17, no mesh 4.77 (closest-hit walk = 89% of frame), glass always-reflect 35.76",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1661-3",
+  "truth": 78,
+  "segment": "art-001661",
+  "draws": {
+   "1": {
+    "lines_in_index": 18,
+    "lines_shown": 18,
+    "range_covered": [
+     {
+      "from": 78,
+      "to": 78,
+      "text": "glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base",
+      "position": 7,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 0,
+    "lines_shown": 0,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 17,
+    "lines_shown": 17,
+    "range_covered": [
+     {
+      "from": 78,
+      "to": 78,
+      "text": "glass micro-opt REJECTED: base 43.315 min/45.632 mean vs cand 45.025/46.563, 6/8 pairs favour base; reverted",
+      "position": 9,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-1766-3",
+  "truth": 163,
+  "segment": "art-001766",
+  "draws": {
+   "1": {
+    "lines_in_index": 12,
+    "lines_shown": 12,
+    "range_covered": [
+     {
+      "from": 163,
+      "to": 163,
+      "text": "child-pair binary built and default-scene render printed samples=16777216 (correct) with the sandbox_extension warnings that are harmless",
+      "position": 11,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": []
+   },
+   "3": {
+    "lines_in_index": 7,
+    "lines_shown": 7,
+    "range_covered": [
+     {
+      "from": 157,
+      "to": 163,
+      "text": "child-pair build clean (only the known fastMathEnabled deprecation warning); 64spp seed-1 PFMs byte-identical to round 4 on default, alt-view and caustic-closeup, samples=16777216; workspace listing shows scenes at top level (scene-default.json, scene-alt-view.json, scene-caustic-closeup.json), snapshots _b/_e/ab_r4, reference PFMs in out/; _ab.sh is the interleaved A/B harness and the run tool caps a command at ~60s.",
+      "position": 6,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-3062-2",
+  "truth": 7,
+  "segment": "art-003062",
+  "draws": {
+   "1": {
+    "lines_in_index": 6,
+    "lines_shown": 6,
+    "range_covered": [
+     {
+      "from": 7,
+      "to": 7,
+      "text": "benchmark.json: round7 vs round6 10/10 pairs, mean -0.2925ms, ratio 0.9917; gpu_fraction 0.991, wall-gpu 0.278ms, speedup_vs_round1 3.539, round1 109.656ms, round7 30.984/30.706ms.",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 10,
+    "lines_shown": 10,
+    "range_covered": [
+     {
+      "from": 7,
+      "to": 7,
+      "text": "bench.json: r7 render_ms_best=30.984 avg=31.035 gpu=30.706, samples=16777216, 10/10 vs r6 (-0.2925ms), speedup 3.539x, 99.1% GPU, 546M samples/s",
+      "position": 2,
+      "shown": true
+     },
+     {
+      "from": 7,
+      "to": 7,
+      "text": "ledger r4 45.220 / r5 ~44.0 / r6 36.283 / r7 30.984; stop if r7 AND r8 both <5%; r7 was 0.93% so counter=1",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 8,
+    "lines_shown": 8,
+    "range_covered": [
+     {
+      "from": 7,
+      "to": 7,
+      "text": "writer log tail (round 7 kept f32 node -0.44%, shadow payload -0.49%, 12B sample buffer -0.19%, combined -1.0% 18/18; rejected stk16 +27%, 2spp/thread +1.08%, leaf2 +0.9%; BVH TOPOLOGY is part of the frozen estimator - MAX_DEPTH 16->20 changes alt-view PFM).",
+      "position": 3,
+      "shown": true
+     }
+    ]
+   }
+  }
+ },
+ {
+  "probe": "h-3133-1",
+  "truth": 38,
+  "segment": "art-003133",
+  "draws": {
+   "1": {
+    "lines_in_index": 16,
+    "lines_shown": 16,
+    "range_covered": [
+     {
+      "from": 38,
+      "to": 38,
+      "text": "COST SPLIT 512x512/64spp trace_gpu_ms: d1=5.818, d2=10.956, d3=17.095, d12=30.275; PT_DIAG_NOSHADOW=26.682 (shadow walks only 3.65ms); combine gpu_ms_best=0.420-0.425.",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   },
+   "2": {
+    "lines_in_index": 13,
+    "lines_shown": 13,
+    "range_covered": [
+     {
+      "from": 34,
+      "to": 38,
+      "text": "_r8p hooks PT_DEFINE, PT_DIAG_DEPTH, PT_DIAG_NOSHADOW. trace_gpu_ms: d1=5.818, d2=10.956, d3=17.095, d12=30.275; noshadow=26.682 -> shadow walks 3.65ms (12%).",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   },
+   "3": {
+    "lines_in_index": 14,
+    "lines_shown": 14,
+    "range_covered": [
+     {
+      "from": 38,
+      "to": 38,
+      "text": "cost split at 512x512/64spp trace_gpu_ms: d1=5.82 d2=10.96 d3=17.10 d12=30.28; PT_DIAG_NOSHADOW=26.68 (shadow walks 3.65ms=12%)",
+      "position": 5,
+      "shown": true
+     }
+    ]
+   }
+  }
+ }
+]
