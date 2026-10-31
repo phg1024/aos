@@ -1,0 +1,10 @@
+Archive: your messages 1-12 are in 2 segments, out of the live history below. When you need something from them, such as an exact number, an error message, or what you already tried, call search_memory with words the message would contain (a message matches when it holds all of them; | separates alternatives; re: for a regexp), then read_memory from=N to=M for the messages around a hit, rather than redoing the work. A later message supersedes an earlier one.
+Index (recorded by the runtime, not a summary: tools called, and paths passed to read_file, write_file and edit_file; files that run commands touched are not listed):
+Indented lines under a segment are your own index of it, written when it was archived. The runtime checked only that their message numbers are in the segment; they are a map, not the record: read the messages they cite before relying on details.
+- messages 1-2 (art-000101)
+  1: art-000101 line 0 tttttttttttttt
+  2: art-000101 line 1 tttttttttttttt
+- messages 10-12 (art-000102)
+  10: art-000102 line 0 tttttttttttttt
+  (+2 more lines of this index: read_memory artifact_id=art-000102)
+

@@ -39,6 +39,11 @@ type RecallPolicy struct {
 	// zero is DefaultHeaderIndexBytes. PromptBackend shares it among the
 	// segments.
 	HeaderIndexBytes int `json:"header_index_bytes,omitempty"`
+	// NoPartialIndexNote (a1p) drops the header's note that the agent
+	// index is partial: that a fact missing from it may still be archived,
+	// and, when a segment's index is shortened, how to read the rest. It
+	// matters only with the agent index on.
+	NoPartialIndexNote bool `json:"no_partial_index_note,omitempty"`
 }
 
 // DefaultHeaderIndexBytes is the header's total for agent indexes when
@@ -55,7 +60,7 @@ func (p RecallPolicy) IndexBudget() int {
 
 // RecallOff is the policy with every aid off: the behaviour from before.
 func RecallOff() RecallPolicy {
-	return RecallPolicy{NoOverwriteWarning: true, NoPointerPrompt: true, NoHandoffRenotice: true, NoAgentIndex: true}
+	return RecallPolicy{NoOverwriteWarning: true, NoPointerPrompt: true, NoHandoffRenotice: true, NoAgentIndex: true, NoPartialIndexNote: true}
 }
 
 // Recall-notice items, as memory.notice events name them.

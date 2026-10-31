@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Partial Index Note Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>The Header Says the Agent Index Is Partial</h1>
+    <p>Eval's A1 header re-test (<code>c0c3471</code>) had 306 A1 answers.</p>
+    <ul>
+      <li>None of them called <code>read_memory artifact_id=…</code> for the lines the header hid.</li>
+      <li>Wrong answers clustered on negative claims, such as "8x8 was never measured". The line stating the fact was hidden, and the agent answered from working memory without a memory call.</li>
+      <li>The header called the index "a map, not the record". It never said the map is incomplete.</li>
+    </ul>
+    <p>This change adds one variable: a short note in the header. It is one commit on top of <code>6c55bdb</code>.</p>
+    <p><b>Result:</b> <span class="good"><code>go vet ./...</code> and <code>go test ./...</code> are clean</span>. With the note off, the header is <code>6c55bdb</code>'s byte for byte. <code>RecallOff()</code> is still byte-identical to the golden prompts. <span class="warn">The effect on the probes is unmeasured</span> until eval runs both arms.</p>
+  </div>
+
+  <h2>The Note</h2>
+  <p>The note follows the existing sentence that introduces the agent index, on the same line. It appears only when the header shows at least one index line.</p>
+  <table>
+    <tr><th>Part</th><th>Shown when</th><th>Text</th></tr>
+    <tr><td>S1</td><td>Any agent-index line is shown</td><td><code>This index is partial: a fact missing from it may still be in the archive. Before you answer that something was never done, measured or seen, search_memory for it.</code></td></tr>
+    <tr><td>S2</td><td>Some segment shows only its first lines, i.e. a "+K more" line is in the header</td><td><code>Some segments show only their first lines; "(+K more lines ...)" marks the rest, and read_memory artifact_id=&lt;segment&gt; returns the whole index.</code></td></tr>
+  </table>
+  <p>The note adds no tool and no mechanism. The "+K more" line, the line selection and the 6 KB budget are unchanged, and the note's bytes do not count against the index budget.</p>
+  <p>S2 is not shown for a segment that shows no line at all. That happens only when even the "+K more" lines overflow the budget, at about 85 segments.</p>
+
+  <h2>The Switch</h2>
+  <ul>
+    <li><b>Runtime:</b> <code>RecallPolicy.NoPartialIndexNote</code>, JSON <code>no_partial_index_note</code> in a workflow spec's <code>recall</code>. Zero means on, as for the other aids. It matters only with the agent index (a1) on.</li>
+    <li><b><code>RecallOff()</code></b> sets it, so "every aid off" stays true. A workflow with no <code>recall</code> block gets the note.</li>
+    <li><b>Trace:</b> <code>memory.header</code> records <code>agent_index_partial_note</code> and <code>agent_index_shortened_note</code> (1 or 0), beside the per-segment shown and hidden counts.</li>
+    <li><b>Probes:</b> a new aid name, <code>a1p</code>, for <code>aos probe-memory --recall</code>. memprobe and <code>cmd/aos/probe.go</code> live on eval's branch, so this is a patch for eval to apply: <a href="memory-recall-partial-note/memprobe-a1p.patch"><code>memory-recall-partial-note/memprobe-a1p.patch</code></a>. Its contents:
+      <ul>
+        <li><code>a1p</code> clears <code>NoPartialIndexNote</code>. memprobe's policy starts from <code>RecallOff()</code>, so <code>--recall a1</code> alone is still <code>c0c3471</code>'s condition, and <code>--recall a1,a1p</code> is the new arm.</li>
+        <li>The condition reads <code>recall=a1+a1p</code>.</li>
+        <li>Each sample records <code>agent_index_partial_note</code> and <code>agent_index_shortened_note</code>.</li>
+        <li>A test, <code>TestProbesNoteThatTheIndexIsPartial</code>.</li>
+      </ul>
+      I tested it in a throwaway detached worktree of <code>7d055e8</code>, with this commit applied: <code>go vet ./...</code> and <code>go test ./...</code> were clean. Eval's branch itself is untouched.</li>
+  </ul>
+
+  <h2>Does read_memory Return the Whole Index?</h2>
+  <p>In a real run, yes. <code>read_memory artifact_id=&lt;segment&gt;</code> returned the segment's stored index, every line, as <code>agent_index</code>, on every page. That was tested only for the first page, so the test now reads a later page too.</p>
+  <p><span class="warn">In eval's probes, no.</span> <code>--agent-indexes</code>, which the A1 probes use, puts the given index on the checkpoint's segment refs and leaves the segments unchanged. The header showed the given index, but <code>read_memory</code> returned none, so S2's pointer would have led nowhere.</p>
+  <p><b>Fix (runtime):</b> <code>read_memory</code> now returns the index from the segment's ref in the session, the same source the header draws from, and falls back to the segment's own index when the ref has none.</p>
+  <ul>
+    <li>In a real run, the ref's index is the segment's (both are set at the cut), so nothing changes.</li>
+    <li>In a probe, the given index now reads back too.</li>
+  </ul>
+  <p>The new test fails without the fix.</p>
+
+  <h2>Tests</h2>
+  <ul>
+    <li><code>TestHeaderSaysTheIndexIsPartial</code> (agentflow) covers:
+      <ul>
+        <li>S1 alone when nothing is hidden, and S1 + S2 when an index is shortened. Both are pinned as literals and placed after the intro sentence of <code>6c55bdb</code>'s header.</li>
+        <li>With <code>NoPartialIndexNote</code>, the header equals <code>testdata/header-6c55bdb/{whole,shortened}.txt</code> byte for byte. Those files were written by <code>6c55bdb</code>'s code before the change.</li>
+        <li>No note with no agent index, or with a1 off.</li>
+        <li>The trace's two flags in each case.</li>
+      </ul>
+    </li>
+    <li><code>TestWorkflowRecallReachesPromptAndRuntime</code>: <code>no_partial_index_note</code> decodes from a workflow file. The spec's whole <code>RecallPolicy</code> reaches both the backend and the runtime.</li>
+    <li><code>TestAgentIndexIsStoredWithItsSegment</code>:
+      <ul>
+        <li>a later <code>read_memory</code> page returns the whole index;</li>
+        <li>a checkpoint whose ref carries an index the segment lacks reads back the ref's index;</li>
+        <li>the base checkpoint is chosen as one holding the segment, because the first draft picked by store order and was flaky.</li>
+      </ul>
+    </li>
+    <li><code>TestRecallSwitchesAreIndependent</code>: <code>RecallOff()</code> sets the new field.</li>
+    <li><code>TestRecallOffKeepsThePromptsAsBefore</code>: unchanged and passing.</li>
+    <li>Eval's patch: <code>TestProbesNoteThatTheIndexIsPartial</code> covers:
+      <ul>
+        <li>a1 alone gives no note;</li>
+        <li>a1 + a1p gives S1 without S2;</li>
+        <li>a shortened index gives S2;</li>
+        <li>each sample's flags and condition;</li>
+        <li>after the header, <code>read_memory</code> returns the given index, including the hidden line.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>The "+K more" line, the line selection, the budget, the handoff logic and the golden prompts.</li>
+    <li>Eval's branch, <code>internal/memprobe</code> on main, probes and patterns.</li>
+    <li>Nothing pushed, and nothing run on phg-gpu.</li>
+  </ul>
+</body>
+</html>

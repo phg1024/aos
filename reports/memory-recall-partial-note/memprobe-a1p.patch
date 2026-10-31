@@ -1,0 +1,121 @@
+diff --git a/cmd/aos/probe.go b/cmd/aos/probe.go
+index 75a1019..d39dc58 100644
+--- a/cmd/aos/probe.go
++++ b/cmd/aos/probe.go
+@@ -31,7 +31,7 @@ func probeMemory(args []string) {
+ 	rescore := fs.String("rescore", "", "score the samples in this JSON-lines file again with --probes, without model calls")
+ 	noMemory := fs.Bool("no-working-memory", false, "leave out all working memory: what probes give the agent and what its checkpoint holds")
+ 	noCheckRule := fs.Bool("no-check-rule", false, "leave out the prompt's rule to check working memory before deciding")
+-	recall := fs.String("recall", "", "comma-separated recall aids to turn on (w1, w2, w4, a1); every other aid is off")
++	recall := fs.String("recall", "", "comma-separated recall aids to turn on (w1, w2, w4, a1, a1p); every other aid is off")
+ 	retry := fs.Int("backend-retry", -1, "attempts per failed model call within a step; -1 turns retrying off, 0 takes the runtime's defaults")
+ 	agentIndexes := fs.String("agent-indexes", "", "JSON object of agent-written indexes by memory_segment ID, shown with those segments (with --recall a1)")
+ 	headerIndexBytes := fs.Int("header-index-bytes", 0, "the header's total for agent indexes with --recall a1; 0 takes the runtime's default")
+diff --git a/internal/memprobe/memprobe.go b/internal/memprobe/memprobe.go
+index 1db4b94..be26e89 100644
+--- a/internal/memprobe/memprobe.go
++++ b/internal/memprobe/memprobe.go
+@@ -104,6 +104,11 @@ type Sample struct {
+ 	// AgentIndexBudget is the header's total for agent indexes it was
+ 	// shown under; zero unless a1 is on.
+ 	AgentIndexBudget int `json:"agent_index_budget,omitempty"`
++	// AgentIndexPartialNote and AgentIndexShortenedNote say whether that
++	// header said the agent index is partial, and how to read a shortened
++	// index; false unless a1 and a1p are on.
++	AgentIndexPartialNote   bool `json:"agent_index_partial_note,omitempty"`
++	AgentIndexShortenedNote bool `json:"agent_index_shortened_note,omitempty"`
+ 	// Tokens is what the answer's model calls used, as the backend
+ 	// reported it; zero if it reports none.
+ 	Tokens int `json:"tokens,omitempty"`
+@@ -134,8 +139,9 @@ type Config struct {
+ 	NoWorkingMemory bool
+ 	NoCheckRule     bool
+ 	// Recall names the recall aids turned on: "w1" (overwrite warning),
+-	// "w2" (pointer wording), "w4" (handoff renotice) and "a1" (agent
+-	// index). Every aid not named is off, so a Config that names none
++	// "w2" (pointer wording), "w4" (handoff renotice), "a1" (agent
++	// index) and "a1p" (the header's note that the agent index is
++	// partial; it shows only with a1). Every aid not named is off, so a Config that names none
+ 	// runs with the prompts from before the aids existed. The runtime's
+ 	// zero RecallPolicy turns every aid on, so it is never passed as is.
+ 	Recall []string
+@@ -157,7 +163,7 @@ type Config struct {
+ 
+ // RecallAids are the names Config.Recall takes, in the order a condition
+ // lists them.
+-var RecallAids = []string{"w1", "w2", "w4", "a1"}
++var RecallAids = []string{"w1", "w2", "w4", "a1", "a1p"}
+ 
+ // RecallPolicy is the runtime policy that turns on exactly the named aids.
+ func RecallPolicy(aids []string) (runtime.RecallPolicy, error) {
+@@ -172,6 +178,8 @@ func RecallPolicy(aids []string) (runtime.RecallPolicy, error) {
+ 			policy.NoHandoffRenotice = false
+ 		case "a1":
+ 			policy.NoAgentIndex = false
++		case "a1p":
++			policy.NoPartialIndexNote = false
+ 		default:
+ 			return runtime.RecallPolicy{}, fmt.Errorf("unknown recall aid %q (want %s)", aid, strings.Join(RecallAids, ", "))
+ 		}
+@@ -579,6 +587,7 @@ func ask(ctx context.Context, cfg Config, k *kernel.Kernel, store *artifact.Stor
+ 	sample.AgentIndexSegments, sample.AgentIndexBytes = backend.header["agent_index_segments"], backend.header["agent_index_bytes"]
+ 	sample.AgentIndexShown, sample.AgentIndexHidden = headerLines(backend.header, "agent_index_shown."), headerLines(backend.header, "agent_index_hidden.")
+ 	sample.AgentIndexBudget = backend.header["agent_index_budget"]
++	sample.AgentIndexPartialNote, sample.AgentIndexShortenedNote = backend.header["agent_index_partial_note"] == 1, backend.header["agent_index_shortened_note"] == 1
+ 	if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
+ 		sample.Error = err.Error()
+ 	}
+diff --git a/internal/memprobe/recall_test.go b/internal/memprobe/recall_test.go
+index 929f150..3aacda3 100644
+--- a/internal/memprobe/recall_test.go
++++ b/internal/memprobe/recall_test.go
+@@ -299,3 +299,49 @@ func TestProbesShowGivenAgentIndexes(t *testing.T) {
+ 		t.Fatal("a line outside its segment should be refused")
+ 	}
+ }
++
++// a1p adds the header's note that the agent index is partial, and, when
++// an index is shortened, the note on reading the rest; each sample records
++// which it was shown. read_memory of the segment returns the given index,
++// so the note's pointer holds in probes too.
++func TestProbesNoteThatTheIndexIsPartial(t *testing.T) {
++	stateDir, checkpoint, segment := indexedRun(t)
++	probes := []memprobe.Probe{{ID: "tg", Kind: "archive", Checkpoint: checkpoint, Question: "Which threadgroup size did you keep?", Expect: `TG4`}}
++	given := []runtime.IndexLine{{From: 1, To: 1, Text: "threadgroup sweep: TG4 kept over TG2"}, {From: 1, To: 1, Text: "TG8 never ran: out of registers, so the sweep stopped at TG4 and was not extended"}}
++	run := func(recall []string, budget int) (*scriptedCompleter, memprobe.Sample) {
++		t.Helper()
++		completer := &scriptedCompleter{actions: []map[string]any{memoryTool("read_memory", map[string]string{"artifact_id": segment})}}
++		samples, err := memprobe.Run(context.Background(), memprobe.Config{
++			StateDir: stateDir, WorkDir: t.TempDir(), Workflow: probeWorkflow(), Completer: completer, Recall: recall,
++			AgentIndexes: map[string][]runtime.IndexLine{segment: given}, HeaderIndexBytes: budget,
++		}, probes)
++		if err != nil {
++			t.Fatal(err)
++		}
++		return completer, samples[0]
++	}
++	const partial, shortened = "This index is partial: a fact missing from it may still be in the archive.", "Some segments show only their first lines"
++
++	off, sample := run([]string{"a1"}, 0)
++	if strings.Contains(off.users[0], partial) || sample.AgentIndexPartialNote || sample.Condition != "no-memory,check-rule,recall=a1" {
++		t.Fatalf("a1 alone should not add the note: %+v\n%s", sample, off.users[0])
++	}
++	on, sample := run([]string{"a1", "a1p"}, 0)
++	if !strings.Contains(on.users[0], partial) || strings.Contains(on.users[0], shortened) || !sample.AgentIndexPartialNote || sample.AgentIndexShortenedNote ||
++		sample.Condition != "no-memory,check-rule,recall=a1+a1p" {
++		t.Fatalf("a1p should add the note, without the shortened part when nothing is hidden: %+v\n%s", sample, on.users[0])
++	}
++	if strings.Count(on.users[1], given[1].Text) != 2 {
++		t.Fatalf("read_memory should return the given index after the header's:\n%s", on.users[1])
++	}
++	short, sample := run([]string{"a1", "a1p"}, 120)
++	if !strings.Contains(short.users[0], shortened) || !sample.AgentIndexShortenedNote || sample.AgentIndexHidden[segment] != 1 {
++		t.Fatalf("a shortened index should add the note on reading the rest: %+v\n%s", sample, short.users[0])
++	}
++	if !strings.Contains(short.users[1], given[1].Text) {
++		t.Fatalf("read_memory should return the line the header hid:\n%s", short.users[1])
++	}
++	if _, err := memprobe.RecallPolicy([]string{"a1p"}); err != nil {
++		t.Fatal(err)
++	}
++}

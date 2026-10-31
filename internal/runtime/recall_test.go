@@ -384,10 +384,14 @@ func TestAgentIndexIsStoredWithItsSegment(t *testing.T) {
 		t.Fatalf("the refs should carry each segment's index: %+v", last.MemoryRefs)
 	}
 
-	// read_memory shows a segment's index.
+	// read_memory shows a segment's whole index, on every page: the
+	// header's "+K more lines" points here for the lines it hides.
 	agent.Backend = &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
-		if call == 1 {
+		switch call {
+		case 1:
 			return toolAction("read_memory", map[string]string{"artifact_id": first}), nil
+		case 2:
+			return toolAction("read_memory", map[string]string{"artifact_id": first, "offset": "40"}), nil
 		}
 		return exitResult("done"), nil
 	}}
@@ -397,8 +401,56 @@ func TestAgentIndexIsStoredWithItsSegment(t *testing.T) {
 	if _, err := agent.Resume(context.Background(), reader.PID, checkpoint, nil, options); err != nil {
 		t.Fatal(err)
 	}
-	if len(reads) != 1 || reads[0].Output["agent_index"] != runtime.RenderIndex(want) {
+	if len(reads) != 2 || reads[0].Output["agent_index"] != runtime.RenderIndex(want) {
 		t.Fatalf("read_memory should show the index: %+v", reads)
+	}
+	if reads[1].Output["offset"] != "40" || reads[1].Output["agent_index"] != runtime.RenderIndex(want) {
+		t.Fatalf("a later page should show the whole index too: %+v", reads[1].Output)
+	}
+
+	// It reads the index from the segment's ref, where the header shows it
+	// from: a checkpoint whose ref carries an index the segment lacks, as
+	// memprobe gives one, reads back the ref's.
+	var session runtime.Session
+	records, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	given := []runtime.IndexLine{{From: ranges[2][0], To: ranges[2][0], Text: "given line one"}, {From: ranges[2][1], To: ranges[2][1], Text: "given line two"}}
+	var base artifact.Artifact
+	for _, record := range records {
+		if record.Type != "checkpoint" || record.ProducerPID != process.PID || base.ID != "" {
+			continue
+		}
+		if err := store.ReadJSON(record.ID, &session); err != nil {
+			t.Fatal(err)
+		}
+		for i := range session.MemoryRefs {
+			if session.MemoryRefs[i].ArtifactID == second {
+				session.MemoryRefs[i].Index, base = given, record
+			}
+		}
+	}
+	if base.ID == "" {
+		t.Fatal("no checkpoint holds the second segment")
+	}
+	cp, err := store.CreateJSON("checkpoint", base.ProducerPID, session, []string{base.ID}, map[string]string{"kind": "intermediate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.Backend = &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			return toolAction("read_memory", map[string]string{"artifact_id": second}), nil
+		}
+		return exitResult("done"), nil
+	}}
+	reads = nil
+	again, _ := k.Spawn(kernel.ProcessSpec{Role: "agent:writer", Metadata: map[string]string{"resumed_from": process.PID}})
+	if _, err := agent.Resume(context.Background(), again.PID, cp.ID, nil, options); err != nil {
+		t.Fatal(err)
+	}
+	if len(reads) != 1 || reads[0].Output["agent_index"] != runtime.RenderIndex(given) {
+		t.Fatalf("read_memory should show the index the segment's ref carries: %+v", reads)
 	}
 	asked := 0
 	for _, event := range kernelEvents(t, k, "memory.notice") {
@@ -615,7 +667,7 @@ func TestRecallSwitchesAreIndependent(t *testing.T) {
 	if !strings.Contains(results[1].Output["notice"], "it no longer holds v1, 3") {
 		t.Fatalf("w1 should stay on: %+v", results[1].Output)
 	}
-	if off := runtime.RecallOff(); !off.NoOverwriteWarning || !off.NoPointerPrompt || !off.NoHandoffRenotice || !off.NoAgentIndex {
+	if off := runtime.RecallOff(); !off.NoOverwriteWarning || !off.NoPointerPrompt || !off.NoHandoffRenotice || !off.NoAgentIndex || !off.NoPartialIndexNote {
 		t.Fatalf("RecallOff should turn every aid off: %+v", off)
 	}
 }

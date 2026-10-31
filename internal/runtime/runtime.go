@@ -2371,8 +2371,17 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if end < len(text) {
 			output["next_offset"] = strconv.Itoa(end)
 		}
-		if len(segment.Index) > 0 {
-			output["agent_index"] = RenderIndex(segment.Index)
+		// The index the header shows this segment with, so its "+K more
+		// lines" pointer reads back every line: the segment's ref carries
+		// it, as written at the cut; an older ref may not.
+		index := segment.Index
+		for _, ref := range session.MemoryRefs {
+			if ref.ArtifactID == id && len(ref.Index) > 0 {
+				index = ref.Index
+			}
+		}
+		if len(index) > 0 {
+			output["agent_index"] = RenderIndex(index)
 		}
 		return tools.Result{
 			Tool:    call.Name,
