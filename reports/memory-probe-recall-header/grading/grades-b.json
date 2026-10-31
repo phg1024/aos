@@ -1,0 +1,650 @@
+{
+ "g0003": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0015": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0017": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Names 'link_escapes is private' and the stale binary, but not the class BvhBuilder or pt_bvh.cpp:216 from the error (#208); also cites the fix at #195-#200 when it was #209/#210."
+ },
+ "g0020": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0022": {
+  "contra": 1,
+  "exact": 0,
+  "main": 1,
+  "note": "Gives avg 126.379 (#125) but states the stack-16 cost was ~23 ms of average time vs stack 20/cap 16; the stack-20 avgs were 113.313 (#121) and 114.621 (#129), so the avg gap was ~12-13 ms."
+ },
+ "g0024": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0029": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0032": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0039": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0042": {
+  "contra": 1,
+  "exact": 0,
+  "main": 1,
+  "note": "Value 101.026 correct (#167), but calls 8x8 the second-worst of the sweep; in #167 it was third-fastest of six (96.4, 100.5, 101.0, 104.6, 110.0, 118.8)."
+ },
+ "g0043": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0049": {
+  "contra": 1,
+  "exact": 0,
+  "main": 1,
+  "note": "Full error text correct (#208), but says the bvh_stats tool 'linked fine'; that compile failed with the same error (#208) and the printed stats came from the old bvh_stats binary."
+ },
+ "g0051": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0060": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0074": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0076": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0078": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0083": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0086": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0087": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0101": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0107": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0113": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0118": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0120": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0126": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0131": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0135": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0140": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0144": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0146": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0150": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Names the 'link_escapes' private-member error and stale binary, but not the class BvhBuilder or pt_bvh.cpp:216 (#208); cites the fix at #195-#200 when it was #209/#210."
+ },
+ "g0160": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0162": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0163": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0179": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0187": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0188": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0192": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0196": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0201": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0214": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0215": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0223": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0229": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0233": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0239": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0242": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0243": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0244": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0260": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0265": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0266": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0268": {
+  "contra": 0,
+  "exact": 0,
+  "main": 0,
+  "note": "Says it cannot recover the compiler error; #208 records \"'link_escapes' is a private member of 'pt::(anonymous namespace)::BvhBuilder'\" at src/pt_bvh.cpp:216."
+ },
+ "g0274": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0278": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0285": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0287": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0289": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0293": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0295": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0297": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Gives 101.0 ms (rounded) rather than the printed render_ms_best=101.026 (#167)."
+ },
+ "g0306": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0307": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0317": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0318": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0330": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Gives gpu_ms_best=100.792 (render 101.153, avg 105.598) and a fastMath-off run of 101.403/101.772/106.726; #133 printed gpu_ms_best=100.887 (render 101.150, avg 116.465) and the off run #129 was 101.771/114.621/gpu 101.237."
+ },
+ "g0343": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0353": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0354": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0356": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0358": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0359": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0364": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Names 'link_escapes is private' and the stale binary, but not the class BvhBuilder or the pt_bvh.cpp:216 location of the error (#208)."
+ },
+ "g0374": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0380": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0394": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Names link_escapes as a private member and the stale binary, but not the class BvhBuilder or the pt_bvh.cpp:216 location (#208)."
+ },
+ "g0395": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0400": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0404": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0409": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0419": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0421": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0422": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0436": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0445": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0448": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0452": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0477": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0480": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0495": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Gives a single stack-based avg of 96.61 ms; #216 printed two runs with render_ms_avg=103.183 and 100.692 (96.614 was run 2's render_ms_best)."
+ },
+ "g0502": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0506": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0510": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0516": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0519": {
+  "contra": 1,
+  "exact": 0,
+  "main": 0,
+  "note": "Says 8x8 was never measured and lists a sweep without it; #166-#167 ran 8x8 first in the sweep and printed render_ms_best=101.026 (avg 106.438, gpu 100.761)."
+ },
+ "g0541": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0550": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0556": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Names 'link_escapes is private' but not BvhBuilder or pt_bvh.cpp:216 (#208); places it in include/pt_bvh.hpp and dates the fix to ~#195-200, whereas the fix was #209/#210."
+ },
+ "g0557": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0558": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0568": {
+  "contra": 0,
+  "exact": 0,
+  "main": 1,
+  "note": "Gives 101.0 ms (rounded) rather than the printed render_ms_best=101.026 (#167)."
+ },
+ "g0569": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0582": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0596": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0598": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ },
+ "g0608": {
+  "contra": 1,
+  "exact": 0,
+  "main": 1,
+  "note": "Core value 100.887 correct (#133), but states the preceding no-fastMath run had gpu_ms_best=101.49; #129 printed gpu_ms_best=101.237."
+ },
+ "g0609": {
+  "contra": 0,
+  "exact": 1,
+  "main": 1,
+  "note": ""
+ }
+}

@@ -1,0 +1,1580 @@
+== archived segment art-001608: messages #1-#29 ==
+
+--- #1 user ---
+Round 5 optimization for pathtracer-bunny-phase3. BEST VERIFIED: render_ms_best=45.220ms, gpu_ms_best=44.907ms at 512x512/64spp seed 1 (round 4, snapshot pt_round_04, 2.4249x over frozen baseline 109.656ms). Live source dir: /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer (round-4 code). Build with the exact flags and DEVELOPER_DIR=/Library/Developer/CommandLineTools.
+
+Frame is ~99.3% GPU-bound; host overhead has no headroom. All gains must come from the compute kernels (BVH traversal, glass transport, NEE, shading).
+
+Cumulative REJECTED list (do not retry): stackless Wald, stack 20->16, depth cap 16->20, push-only-hit shadow rule (register pathology), root-AABB exit pruning, fresnel sin2_t sharing (statistically different), skipping emitter test on diffuse (biased), 2-spp-per-thread ILP (+19%), SAH bins 64, leaf_size 2, threadgroups 16x16/8x8/32x8/64x2, carrying whole child uint4.
+
+Kept so far: near-first closest-hit traversal, leaf 1, SAH bins 32, Morton 32x32 tiles, near-first any-hit shadow walk, sincos sampling, threadgroup 32x4, tone map in trace kernel, deferred shading normal, quantization params in constant buffer, fma slab test, 48-byte padded triangle table, shadow pops skip slab test, payload carry.
+
+Hard constraints unchanged: estimator bit-identical (same RNG per pixel, exactly w*h*spp, depth 12, unbiased RR after 3, NEE diffuse, BSDF glass), RMSE <=1.1x frozen gates (0.848/0.755/2.058), caustic ratio [0.8,1.25], noise ratio <=0.6, same-seed bit-identical, no forbidden APIs (no MTLAccelerationStructure/intersection/intersector/metal_raytracing/MPS/render pipelines), compute-only, threads <=8, timed-region boundaries unchanged.
+
+Round-5 experiment candidates (interleaved A/B vs the round-4 binary; keep only wins):
+1. simdgroup-cooperative traversal or per-tile ray pairing (your round-4 log idea): exploit that lanes within a simdgroup trace rays from the same Morton tile and share BVH prefixes; e.g. simdgroup broadcast of node data or ballot-based all-dead-lane early exit. Must keep per-lane RNG/hit results identical.
+2. Register-pressure pass over the trace kernel: check for spills by restructuring the path loop (state machine per bounce type, moving NEE/shading out of the traversal scope). Consider separate kernels for primary rays vs secondary bounces only if the sample accounting and RNG stay identical.
+3. NEE cost: the area light is small; consider a cheap conservative reject (e.g. skip shadow traversal when the light's projected solid angle from the hit point is under a threshold... NO — that biases; instead optimize the shadow traversal itself, or compute the geometry term with fewer ops).
+4. Glass path: total internal reflection branch ordering, avoiding redundant refract setup when Fresnel picks reflection; only if bit-identical results.
+5. If the above plateau, consider a wavefront/persistent-threads rewrite as a separate experiment behind a flag; revert if it doesn't win.
+
+After coding: build, smoke (samples==w*h*spp, no NaN, same-seed bit-identical, 64spp seed-1 PFM byte-identical to round 4 for all three scenes), --benchmark 5 seed 1 interleaved vs round-4 binary. Snapshot to /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pt_round_05. Append a concise entry to pathtracer_writer_log.txt with measurements, rejections with evidence, and round-6 ideas. Report the new timing and speedup vs 45.220ms.
+
+--- #2 assistant ---
+{"action":{"type":"tool","notes":"Round 5 start. Baseline to beat: 45.220ms render / 44.907ms gpu (round 4, pt_round_04). Plan: (1) read current sources + logs + frozen.json; (2) pick one kernel-level experiment (register pressure / simdgroup traversal); (3) build, byte-identical PFM check vs round-4, interleaved A/B benchmark 5; (4) snapshot pt_round_05 + log. First: list dirs.","tool_call":{"name":"list_dir","args":{"path":"/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3"}}}}
+
+--- #3 tool ---
+list_dir:map[entries:.aos-state.lock
+.aos-state/
+_ab.sh
+_ab_a.txt
+_ab_b.txt
+_ab_base.txt
+_ab_base/
+_ab_cand.txt
+_ab_cand_bin
+_ab_mort/
+_ab_nomort/
+_ab_t32/
+_abenv.sh
+_abtg.sh
+_h_base.txt
+_h_cand.txt
+_l_base.txt
+_l_cand.txt
+_scratch_500x300.json
+_tg_a.txt
+_tg_b.txt
+_tg_c.txt
+_tools/
+ab_r3/
+bench_r3/
+out/
+output.pfm
+output.ppm
+pathtracer/
+pathtracer_backup_stackless/
+pathtracer_benchmark.json
+pathtracer_benchmarker_log.txt
+pathtracer_coordinator_log.txt
+pathtracer_writer_log.txt
+pt_round_01/
+pt_round_02/
+pt_round_03/
+pt_round_04/
+round4_default.pfm
+round4_default.ppm
+round4_det.pfm
+round4_det.ppm
+run.log
+scene-alt-view.json
+scene-caustic-closeup.json
+scene-default.json path:/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3]
+
+--- #4 assistant ---
+{"action":{"type":"tool","notes":"Round 5 start. Baseline: 45.220ms render / 44.907ms gpu (round 4). Plan: read writer log tail + benchmark + sources; pick kernel experiment; A/B vs round-4 binary; snapshot pt_round_05. Next: read writer log tail.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && tail -n 120 pathtracer_writer_log.txt"}}}}
+
+--- #5 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && tail -n 120 pathtracer_writer_log.txt confinement:sandbox exit_code:0 stderr: stdout:-framework Foundation -o pathtracer -> clean, no warnings.
+
+Smoke tests (512x512):
+- --spp 4 --seed 1: samples=1048576 (=512*512*4), PPM 786447 B and PFM 3145744 B written, no NaN/Inf.
+- --benchmark 3 (default scene, 64 spp): render_ms_best=115.080 render_ms_avg=118.937
+  gpu_ms_best=114.613 spp=64 width=512 height=512 samples=16777216 threads_used=4.
+  samples == width*height*spp.
+- Caustic check on the 64 spp default render: floor median luminance 0.56, pixels >= 3x median 1185
+  (rows from 62%) with mean luminance 9.05, i.e. ~16x the floor: a clearly visible focused caustic in
+  front of the bunny (world x -0.11..0.06, z 0.05..0.20, mapped with a top-down debug camera).
+- scene-caustic-closeup.json and scene-alt-view.json render at 32 spp with no NaN and visible bunny +
+  caustic (ASCII luminance maps inspected).
+
+Light chosen after a comparison: center (0.12,0.80,-0.30), size 0.08x0.08, normal (0,-1,0), radiance
+(650,590,510). The earlier placement (0.28,0.75,-0.32, 0.10, 420/380/330) produced a wide bright pool of
+DIRECT light beside the bunny that dominated the caustic (mask mean 3.66 over 3499 px); the new one
+hides the direct pool behind the bunny and leaves a tight focused caustic (mask mean 9.05 over 1185 px).
+
+Bugs found and fixed during this round: wrong shader concatenation order (helpers undeclared), MSL
+runtime has no ptr<> template (switched to device pointers and explicit thread_position_in_grid
+parameters), maxTotalThreadsPerThreadgroup returns NSUInteger not MTLSize, pt_refract sign convention,
+inverted inside_glass flag, correlated phi/polar angles in the cosine sampler (both used r1),
+pt_fresnel using one eta for both the TIR test and R0, and the self-occluding shadow ray.
+
+Known limitations / next-round targets: median-split BVH (no SAH, no compact layout), megakernel with
+one thread per pixel doing all spp serially (no spp tiling or wavefront), no ray sorting/coherence, no
+short-stack or packet traversal, 16-byte-per-pixel float4 accumulation buffer, no tone-map/trace overlap.
+Snapshot: pt_round_01 (rebuilt and re-rendered standalone from that directory to confirm the shaders are
+found next to the binary).
+[round 2] GPU per-ray cost and occupancy. Changes kept (each verified bit-identical PFM vs out/d1.pfm, so statistics are untouched):
+1. Near-first closest-hit traversal (shaders/pt_trace.metal, pt_intersect_mesh): replaced 'always descend left, push right unconditionally' with 'test BOTH children with the new pt_ray_aabb_entered slab test, descend into the child with the smaller entered distance, push the other only when it is also hit'. Tighter best_t prunes far subtrees and the loop never pops a node the ray misses. 93.5 -> 64.9ms best. (#283,#285)
+2. BVH leaf size 4 -> 1 (src/pt_bvh.cpp kLeafSize): fewer wasted triangle tests per leaf visit; the build is outside the timed region so the deeper tree (bvh_nodes 131071 at PT_BVH_MAX_DEPTH 16) costs only setup (~150-180ms). 62.9 -> 59.1ms best. (#314,#316)
+3. Tone mapping merged into trace_kernel (shaders/pt_tonemap.metal is now an inline pt_tone_map(); host concatenates pt_trace,pt_tonemap,pt_integrator; image buffer bound at index 6; separate tone pipeline/encoder deleted). One dispatch and one buffer round-trip per frame; best unchanged, render_ms_avg -3ms. (#226-#247)
+4. Dropped two provably-unit normalize() calls (pt_refract result, pt_sample_cosine result in shaders/pt_integrator.metal). 93.5 -> 90.8ms. (#253)
+5. Threadgroup re-sweep on the new kernel via PT_TG: 16x8 best (62.9), 8x16 67.3, 16x4 73.9, 4x32 74.0, 16x16 76.7 -> default stays 16x8. (#300)
+Measured (512x512, 64spp, seed 1; noise ~+/-5ms so several repeats): best run render_ms_best=59.114 render_ms_avg=72.878 gpu_ms_best=58.839 (#316); repeats 60.378/62.166/64.627/65.491/66.323. vs the frozen gate 109.656/109.397 that is ~1.8x; vs this machine's round-1 rebuild 105.9 ~1.75x. Other scenes: alt-view 73.49/71.28, caustic-closeup 154.36/153.78 (more glass pixels). samples printed == width*height*spp in every run. Same seed gives a bit-identical PFM across runs and across --threads 8/3/4 (cmp ../out/f1.pfm ../out/f2.pfm = BIT_IDENTICAL, #331). PPM stats healthy (min 35, max 255, mean 106) so no black/flat image; the tone mapper clamps NaN to 0 and no pixel is 0.
+Rejected this round with evidence: stackless Wald traversal (102ms, #214); shrinking PT_BVH_STACK_SIZE 20->16 (76.4ms, #304); PT_BVH_MAX_DEPTH 16->20 with stack 24 (61.8ms, no gain, #318); applying the same 'test both children / push only hit children' rule to pt_shadow_hit (EXPLODED to 478ms - register pathology in the second inlined traversal, #291); root-AABB exit pruning (107ms, #143); sharing sin2_t between pt_fresnel and pt_refract (STATISTICALLY DIFFERENT: pt_fresnel guards TIR with (ior_t/ior_i)^2 while pt_refract uses (ior_i/ior_t)^2, and that asymmetry is what the frozen reference was rendered with - do not 'correct' it, #261); skipping the emitter test on diffuse continuations (not exact: the ray would pass through the light, #269).
+Next to try: quantize node bounds to half (20-byte nodes, outward rounding) to halve traversal memory traffic; a single fused traversal that tests floor/light analytically before entering the BVH is already in place, so the remaining cost is node fetches and triangle tests; also consider reordering the triangle table by Morton code for cache coherence, and checking whether the per-thread 20-entry stack can live in threadgroup memory.
+
+== Round 3 (optimization of the round-2 candidate; baseline verified 59.025 ms / gpu 58.746 ms at 512x512, 64 spp) ==
+
+Everything below was measured with interleaved A/B runs (alternating binaries per round, 8 rounds x 15 frames, --benchmark, seed 1, 8 host threads), because the machine drifts a lot between passes (the same binary read 46 ms and 62 ms at different times of the session). Absolute numbers from a single pass are therefore only indicative; the interleaved deltas are the evidence.
+
+KEPT (each verified bit-identical PFM against the round-2 baseline at spp 8 seed 3, and the final tree bit-identical at 64 spp seed 1 -- i.e. the estimator is provably unchanged):
+1. SAH bins 32 (was 16) as the shipped default in BvhBuildOptions: 81521 nodes instead of 131071. Interleaved mean 49.99 vs 51.15. Also removes the degenerate max_leaf=24 fallback that bins 16 hit on this mesh.
+2. Quantized-space slab test (already landed late in round 2 work) plus the 16-byte node layout remain: node test is one uint4 load, no decode multiply.
+3. Morton (Z-order) pixel order inside square tiles, so neighbouring threads trace spatially neighbouring rays and share the upper BVH levels. Only the thread->pixel map changes; the seed, RNG stream and output index still key on the true pixel, so the image is bit-identical (verified for both orders against each other). Host dispatch grid is rounded up to whole tiles and out-of-image threads return before touching a buffer; checked at 500x300 spp 3 where samples=450000=w*h*spp exactly.
+   - 16x16 tiles: min 47.726 / mean 49.933 vs identity order 48.763 / 50.549, 7 of 8 pairs better.
+   - 32x32 tiles: min 47.452 / mean 48.961 vs 16x16 48.380 / 49.736, 6 of 8 pairs better. Decode loop narrowed to the 5 Morton bits a 32-wide tile needs.
+4. Shadow-ray (any-hit) walk now tests both children at an internal node, descends into the nearer one and pushes the farther one already-tested; because the shadow limit never tightens, a node that was hit when pushed is still hit when popped, so the pop path skips the slab test. Only two floats and two bools stay live across the loop, which is what keeps this clear of the register blow-up round 2 saw when it fused the closest-hit bookkeeping into this walk. min 47.351 / mean 48.793 vs 48.430 / 49.883, 6 of 8 pairs better, PFM bit-identical.
+5. sincos() in cosine hemisphere sampling (one transcendental pair instead of two), bit-identical output; timing a wash (mean 49.587 vs 49.829) but strictly less work.
+6. Threadgroup shape re-tuned after the tile widened: 32x4 (one group per tile row) beat 16x8 (min 45.932 / mean 48.701 vs 47.234 / 48.919) and 16x16 (51.022 / 53.897). 8x8 was a wash (49.505 mean).
+
+REJECTED this round:
+- 2 camera samples per thread for ILP: correct (bit-identical at spp 8, odd-spp tail traced exactly w*h*spp) but min 56.114 / mean 58.871 vs 47.336 / 49.434 -- holding two live paths costs more in registers than the overlap buys. Reverted.
+- SAH bins 64: min 47.563 / mean 49.822 vs bins 32 46.897 / 49.638, no gain for the extra build cost.
+- leaf_size 2 at bins 32 under the wider tile: min 47.369 vs 47.237, a wash; leaf_size 1 kept (smaller leaves also keep the max-leaf fallback irrelevant).
+
+Final state (live pathtracer/ == snapshot pt_round_03/, snapshot builds with the exact command): same-state interleaved A/B against the round-2 candidate binary gave min 59.109 / mean 60.898 vs 63.102 / 68.246 (machine in a slow thermal state during that pair); in the faster stretch the same candidate read min 45.9 / mean 48.7, against the round-2 verified 59.025 ms. Roughly 1.2x faster than round 2 in matched conditions. Correctness self-checks: samples == w*h*spp at spp 3/4/8/16/64 and at 500x300, PFM bit-identical to the round-2 baseline at 64 spp seed 1, same seed reproduces bit for bit, no NaN/Inf, max 650 (light radiance) and a large population of >=3x-median hot floor pixels in all three scenes (default, alt-view, caustic-closeup). Forbidden-API grep clean.
+
+Next ideas: simdgroup-cooperative traversal (share the top-of-tree walk across a quad/simdgroup), a per-tile ray-pairing pass in shared memory for the diffuse bounces, and possibly moving the emitter/floor plane tests in front of the BVH only when the ray direction points away from both.
+
+== Round 4 (payload-carrying traversal, fma slab test, padded triangle table) ==
+Baseline entering the round: round 3 = 49.020ms render / 48.137ms gpu best at 512x512, 64 spp, seed 1
+(frozen baseline 109.656ms). A/B baseline binary frozen in ab_r3/pathtracer with its own copies of
+shaders/ and include/ so edits could never leak into it; harness _ab.sh interleaves the two binaries.
+
+Changes measured (each kept only with a pair-level win; all verified bit-identical at 64 spp seed 1 on
+scene-default, scene-alt-view and scene-caustic-closeup):
+  A) Carry the near child's whole uint4 across the traversal loop so the loop-top test skips its load:
+     REJECTED, 12/12 interleaved pairs slower - 4 extra live registers cost more than the saved load.
+  B) Shadow walk: popped nodes skip the slab test (pushed already-tested and the shadow limit is
+     constant for the whole walk) -> pop loads only the 4-byte payload. Wash on time, kept (strictly
+     less work), bit-identical.
+  C) Closest-hit walk: record the winner as (slot,u,v) and interpolate the shading normal once AFTER
+     the loop instead of inside the mesh loop. WIN 8/8 pairs, min 46.270 vs 47.451.
+  D) Drop bvh_origin/bvh_scale/bvh_inv_scale from PtScene; read them from the constant buffer inside
+     pt_make_qray. Five registers off the live set of the whole kernel. WIN 8/8, min 47.130 vs 47.917.
+  E) Slab test rewritten as two fma against a once-per-ray origin*inv product (was six subtracts and
+     six multiplies per node test). WIN, 7/8 and 8/10 pairs, bit-identical.
+  F) PtTri padded 36 -> 48 bytes so each of origin/edge1/edge2 is one aligned 16-byte vector load
+     (pt_v3_16) instead of three strided float3 loads. Host build pads the table; GPU arithmetic
+     unchanged. Stack B+C+D+E+F: 10/10 pairs, render_min 46.491 / gpu_min 46.237 vs 48.219 / 47.980.
+  G) Threadgroup shape retested now that register pressure is lower (PT_TG env knob, 6 rounds x 12
+     frames): 32x4 min 45.996 beats 32x8 (48.330) and 64x2 (46.861). Kept 32x4.
+  H) Carry only the descended child's PAYLOAD (1 uint, not the uint4 rejected in A). A node that
+     arrives already hit-tested gets its payload from the load its parent had to do, so the descent
+     touches no memory at all; shadow pops load 4 bytes instead of 16. Bit-identical on 3 scenes.
+
+Measurement hazard found mid-round: another tenant loaded the machine (load avg 4-7, single-frame
+minima swinging 47 -> 140ms), which made 64 spp min-of-mins useless. Switched to long runs
+(--spp 256 --benchmark 3) that average over the interference: 3/3 interleaved pairs, candidate
+189.38/189.85/190.77ms vs round-3 211.48/219.67/213.69ms = about 11% faster end to end.
+
+Final state (B+C+D+E+F+H): default scene 512x512 64 spp seed 1, --benchmark 5: see the entry the
+final benchmark appends below; the 64 spp PFM is byte-for-byte identical to round 3's
+(md5 53600ca347f0b76ab1a0ff894f6a8f4e) on all three scenes, samples printed = 16777216 = 512*512*64,
+no NaN/inf, caustic still present (43.4% of pixels above 3x the median luminance, max 597).
+Snapshot: pt_round_04.
+
+Ideas for round 5:
+  1) Same payload-carry trick for the triangle table: leaf payload already gives start/count, but the
+     normals table is a second dependent fetch per winning triangle - interleave n0/n1/n2 into the
+     padded triangle record so a win costs one cache line instead of two.
+  2) simdgroup ballot to retire fully-dead lanes early in the glass chain (many rays leave the bunny
+     after 1-2 hits and still run the full loop bookkeeping).
+  3) Re-examine the 256spp long-run harness as the primary A/B metric, and only report 64 spp numbers
+     when load avg <= 2.
+  4) Node layout: try ordering children so the near child is always node_index+1 (host-side reorder
+     per ray is impossible, but sorting SAH children by centroid along the split axis improves the
+     fraction of walks that descend into the already-loaded left slot).
+
+Final round-4 benchmark (machine quiet, interleaved against the frozen round-3 binary in ab_r3/, 8
+rounds x 10 frames, 512x512, 64 spp, seed 1, --threads 8):
+  round 4 (pt_round_04): render_ms_best=45.635 render_ms_avg=46.957 gpu_ms_best=45.349
+  round 3 (ab_r3):       render_ms_best=47.828 render_ms_avg=49.839 gpu_ms_best=47.561
+  8/8 interleaved pairs favoured round 4; samples printed 16777216 = 512*512*64.
+  Speedup 1.074x over round 3's verified 49.020ms, 2.403x over the frozen baseline 109.656ms.
+  The 256 spp long-run cross-check (immune to co-tenant load) independently showed ~11%: 189-191ms vs
+  211-220ms, 3/3 pairs.
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #6 assistant ---
+{"action":{"type":"tool","notes":"Read writer log: round 4 kept B+C+D+E+F+H, verified 45.220/44.907. Round-5 ideas from log: (1) interleave n0/n1/n2 into padded triangle record so a hit costs one cache line; (2) simdgroup ballot to retire dead lanes; (4) sort SAH children so near child is more often node_index+1. Next: read shaders/pt_trace.metal and host files.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer && ls -la shaders include src && wc -l shaders/*.metal include/*.h src/*"}}}}
+
+--- #7 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer && ls -la shaders include src && wc -l shaders/*.metal include/*.h src/* confinement:sandbox exit_code:1 stderr:wc: include/*.h: open: No such file or directory
+ stdout:include:
+total 72
+drwxr-xr-x@ 10 peihongguo  staff   320 Oct 29 15:11 .
+drwxr-xr-x@  6 peihongguo  staff   192 Oct 29 17:54 ..
+-rw-r--r--@  1 peihongguo  staff  2136 Oct 29 16:38 pt_bvh.hpp
+-rw-r--r--@  1 peihongguo  staff  5199 Oct 29 17:33 pt_gpu_types.hpp
+-rw-r--r--@  1 peihongguo  staff   637 Oct 29 14:49 pt_image.hpp
+-rw-r--r--@  1 peihongguo  staff  1788 Oct 29 14:49 pt_math.hpp
+-rw-r--r--@  1 peihongguo  staff   726 Oct 29 14:49 pt_mesh.hpp
+-rw-r--r--@  1 peihongguo  staff  2053 Oct 29 15:55 pt_metal_host.hpp
+-rw-r--r--@  1 peihongguo  staff   631 Oct 29 14:49 pt_parallel.hpp
+-rw-r--r--@  1 peihongguo  staff  1324 Oct 29 14:49 pt_scene.hpp
+
+shaders:
+total 88
+drwxr-xr-x@ 5 peihongguo  staff    160 Oct 29 11:50 .
+drwxr-xr-x@ 6 peihongguo  staff    192 Oct 29 17:54 ..
+-rw-r--r--@ 1 peihongguo  staff  12363 Oct 29 17:27 pt_integrator.metal
+-rw-r--r--@ 1 peihongguo  staff   1182 Oct 29 14:51 pt_tonemap.metal
+-rw-r--r--@ 1 peihongguo  staff  20676 Oct 29 17:41 pt_trace.metal
+
+src:
+total 136
+drwxr-xr-x@ 9 peihongguo  staff    288 Oct 29 15:10 .
+drwxr-xr-x@ 6 peihongguo  staff    192 Oct 29 17:54 ..
+-rw-r--r--@ 1 peihongguo  staff  17565 Oct 29 17:34 pt_bvh.cpp
+-rw-r--r--@ 1 peihongguo  staff   1715 Oct 29 14:49 pt_image.cpp
+-rw-r--r--@ 1 peihongguo  staff   9419 Oct 29 16:10 pt_main.cpp
+-rw-r--r--@ 1 peihongguo  staff   4142 Oct 29 14:49 pt_mesh.cpp
+-rw-r--r--@ 1 peihongguo  staff  11202 Oct 29 17:00 pt_metal_host.mm
+-rw-r--r--@ 1 peihongguo  staff   1238 Oct 29 14:49 pt_parallel.cpp
+-rw-r--r--@ 1 peihongguo  staff   6803 Oct 29 14:49 pt_scene.cpp
+     258 shaders/pt_integrator.metal
+      22 shaders/pt_tonemap.metal
+     506 shaders/pt_trace.metal
+     430 src/pt_bvh.cpp
+      51 src/pt_image.cpp
+     252 src/pt_main.cpp
+     117 src/pt_mesh.cpp
+     244 src/pt_metal_host.mm
+      41 src/pt_parallel.cpp
+     209 src/pt_scene.cpp
+    2130 total
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #8 tool ---
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true
+
+--- #9 assistant ---
+{"action":{"type":"tool","notes":"Layout known: pt_trace.metal 506 lines, pt_integrator.metal 258, pt_gpu_types.hpp shared GPU/host types. Next: read pt_trace.metal fully to plan round-5 experiments (triangle-table one-cache-line idea, ballot early exit, register pressure).","tool_call":{"name":"read_file","args":{"path":"/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/shaders/pt_trace.metal"}}}}
+
+--- #10 tool ---
+read_file:map[content:// pt_trace.metal: geometry, acceleration structure traversal and scene
+// intersection for the megakernel path tracer.
+//
+// The BVH is stored in pre-order with 16-byte quantized nodes: an internal
+// node's left child is `index + 1` and `payload` holds the right child, while a
+// leaf sets the high bit of `payload` and stores its triangle range in the
+// packed triangle table. Bounds are quantized relative to the root box by the
+// host and rounded outwards, so a box can look marginally bigger than it is
+// but never smaller, which keeps the hit result identical to a float32 walk.
+// Traversal keeps a short stack of deferred children; because the host build
+// caps the tree at PT_BVH_MAX_DEPTH levels, PT_BVH_STACK_SIZE entries suffice.
+// The host prepends <metal_stdlib> and pt_gpu_types.hpp before compiling, so
+// only kernel code appears here.
+
+// ---------------------------------------------------------------------------
+// Deterministic RNG (PCG-XSH) and small helpers.
+// ---------------------------------------------------------------------------
+
+inline uint pt_pcg_next(thread uint& state) {
+    state = state * 747796405u + 2891336453u;
+    const uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+inline float pt_random(thread uint& state) {
+    return float(pt_pcg_next(state)) * (1.0 / 4294967296.0);
+}
+
+// Per-pixel, per-sample stream seed: a pure function of (seed, pixel, sample).
+inline uint pt_seed_pixel(uint seed, uint pixel, uint sample) {
+    uint state = seed * 747796405u + pixel * 2654435761u + sample * 1597334677u;
+    return pt_pcg_next(state);
+}
+
+inline float3 pt_v3(device const float* a) {
+    return float3(a[0], a[1], a[2]);
+}
+
+inline float3 pt_v3(constant const float* a) {
+    return float3(a[0], a[1], a[2]);
+}
+
+inline float3 pt_orthonormal_tangent(float3 n) {
+    // Duff et al. branchless tangent frame construction.
+    const float sign = copysign(1.0f, n.z);
+    const float a = -1.0f / (sign + n.z);
+    const float b = n.x * n.y * a;
+    return float3(1.0f + sign * a * n.x * n.x, sign * b, -sign * n.x);
+}
+
+// ---------------------------------------------------------------------------
+// Ray and intersection structures.
+// ---------------------------------------------------------------------------
+
+struct PtRay {
+    float3 origin;
+    float3 direction;
+    float3 inv_direction;
+};
+
+inline PtRay pt_make_ray(float3 origin, float3 direction) {
+    PtRay ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    ray.inv_direction = float3(1.0f / direction.x, 1.0f / direction.y, 1.0f / direction.z);
+    return ray;
+}
+
+enum PtMaterial {
+    PtMaterialNone = 0,
+    PtMaterialFloor = 1,
+    PtMaterialLight = 2,
+    PtMaterialGlass = 3
+};
+
+struct PtHit {
+    float t;
+    uint material;
+    float3 normal;
+    float3 position;
+};
+
+struct PtScene {
+    constant PtParams* params;
+    device const uint4* nodes;   // one 16-byte quantized BVH node per uint4
+    device const PtTri* triangles;
+    device const PtTriNormals* normals;
+    // The quantization origin and scale are NOT copied into this struct: they
+    // live in the constant buffer and are read where needed, which keeps five
+    // registers off the live set of the whole trace kernel (the traversal loop
+    // is register-limited, so this buys occupancy).
+};
+
+// An axis-aligned box in quantized coordinates: the halves of a node's 32-bit
+// words read as float32, with no arithmetic applied.
+struct PtQBox {
+    float3 lo;
+    float3 hi;
+};
+
+// A ray in BVH quantized coordinates, where a box test needs no decode:
+// q_origin = (origin - root_min) * scale. The inverse direction is divided by
+// the same power of two, so the two factors cancel inside the slab test and it
+// returns t in WORLD units, directly comparable with the world-space t limits
+// of the ray. The scale is a power of two, so both multiplies are exact and the
+// only rounding is in the subtract, an order of magnitude smaller than the
+// quantization margin the host added to every box.
+// origin_times_inv is the once-per-ray product q_origin * q_inv_direction that
+// lets the slab test evaluate (plane - origin) * inv as a single fma, cutting
+// six subtracts out of every node test.
+struct PtQRay {
+    float3 origin;
+    float3 inv_direction;
+    float3 origin_times_inv;
+    float t_min;
+    float t_max;   // world-space t limits
+};
+
+inline PtQRay pt_make_qray(PtScene scene, PtRay ray, float world_t_min, float world_t_max) {
+    constant PtParams& params = *scene.params;
+    PtQRay q;
+    q.origin = (ray.origin - pt_v3(params.bvh_origin)) * float3(params.bvh_scale);
+    q.inv_direction = ray.inv_direction * float3(params.bvh_inv_scale);
+    q.origin_times_inv = q.origin * q.inv_direction;
+    q.t_min = world_t_min;
+    q.t_max = world_t_max;
+    return q;
+}
+
+// A node arrives as one 16-byte vector load; its low halves are the scaled
+// minima and its high halves the scaled maxima along x, y, z.
+inline PtQBox pt_decode_box(uint4 raw) {
+    PtQBox box;
+    box.lo = float3(float(raw.x & 0xFFFFu), float(raw.y & 0xFFFFu), float(raw.z & 0xFFFFu));
+    box.hi = float3(float(raw.x >> 16), float(raw.y >> 16), float(raw.z >> 16));
+    return box;
+}
+
+// Leaf payload layout: bit 31 set, bits 8..30 the triangle start, bits 0..7 the
+// triangle count minus one (the host build keeps every leaf at 256 or fewer).
+inline bool pt_node_is_leaf(uint payload) {
+    return (payload & PT_BVH_LEAF_BIT) != 0u;
+}
+
+inline uint pt_node_start(uint payload) {
+    return (payload >> 8) & 0x7FFFFFu;
+}
+
+inline uint pt_node_count(uint payload) {
+    return (payload & 0xFFu) + 1u;
+}
+
+// Ray/axis-aligned box slab test against a quantized box, run entirely in
+// quantized coordinates. The two multiplications that turn world t limits into
+// quantized ones are hoisted out of the traversal, and the plane-minus-origin
+// product is a single fma against the ray's precomputed origin*inv, so a node
+// test costs one convert, two fma, two min/max pairs and the compares per axis.
+inline bool pt_qbox_hit(PtQBox box, float3 q_inv_direction, float3 origin_times_inv,
+                        float t_min_q, float t_max_q) {
+    const float3 t0 = fma(box.lo, q_inv_direction, -origin_times_inv);
+    const float3 t1 = fma(box.hi, q_inv_direction, -origin_times_inv);
+    const float3 lower = fmin(t0, t1);
+    const float3 upper = fmax(t0, t1);
+    const float entered = fmax(fmax(lower.x, lower.y), max(lower.z, t_min_q));
+    const float exited = fmin(fmin(upper.x, upper.y), min(upper.z, t_max_q));
+    return entered <= exited && exited > 0.0f;
+}
+
+// Same test, but also reports where the ray enters the box, so the closest-hit
+// traversal can visit the nearer child first without a second test.
+inline bool pt_qbox_hit_entered(PtQBox box, float3 q_inv_direction, float3 origin_times_inv,
+                                float t_min_q, float t_max_q, thread float& entered_out) {
+    const float3 t0 = fma(box.lo, q_inv_direction, -origin_times_inv);
+    const float3 t1 = fma(box.hi, q_inv_direction, -origin_times_inv);
+    const float3 lower = fmin(t0, t1);
+    const float3 upper = fmax(t0, t1);
+    const float entered = fmax(fmax(lower.x, lower.y), max(lower.z, t_min_q));
+    const float exited = fmin(fmin(upper.x, upper.y), min(upper.z, t_max_q));
+    entered_out = entered;
+    return entered <= exited && exited > 0.0f;
+}
+
+// Reads one padded PtTri member as a single 16-byte vector load. The fourth
+// component is padding and is discarded, so the arithmetic is unchanged.
+inline float3 pt_v3_16(device const float (*v)[4]) {
+    const device float4& f = *reinterpret_cast<const device float4*>(v);
+    return float3(f.x, f.y, f.z);
+}
+
+// Moller-Trumbore against the precomputed origin/edge1/edge2 form, double
+// sided because the glass shows backfaces.
+inline bool pt_ray_triangle(device const PtTri& tri, float3 origin, float3 direction,
+                            thread float& t, thread float& u, thread float& v) {
+    const float3 e1 = pt_v3_16(&tri.edge1);
+    const float3 e2 = pt_v3_16(&tri.edge2);
+    const float3 p = cross(direction, e2);
+    const float det = dot(e1, p);
+    if (fabs(det) < 1e-12f) {
+        return false;
+    }
+    const float inv_det = 1.0f / det;
+    const float3 s = origin - pt_v3_16(&tri.origin);
+    u = dot(s, p) * inv_det;
+    if (u < 0.0f || u > 1.0f) {
+        return false;
+    }
+    const float3 q = cross(s, e1);
+    v = dot(direction, q) * inv_det;
+    if (v < 0.0f || u + v > 1.0f) {
+        return false;
+    }
+    t = dot(e2, q) * inv_det;
+    return t > 1e-5f;
+}
+
+inline bool pt_ray_plane_y(float3 origin, float3 direction, float height, thread float& t) {
+    if (fabs(direction.y) < 1e-9f) {
+        return false;
+    }
+    t = (height - origin.y) / direction.y;
+    return t > 1e-4f;
+}
+
+// Rectangle spanned by light_u/light_v around light_center, seen only from the
+// emission side (a one-sided emitter).
+inline bool pt_ray_light_rect(constant PtParams& params, float3 origin, float3 direction,
+                              thread float& t, thread float3& point) {
+    const float3 normal = pt_v3(params.light_normal);
+    const float denom = dot(direction, normal);
+    if (denom > -1e-9f) {
+        return false;
+    }
+    const float3 center = pt_v3(params.light_center);
+    const float candidate = dot(center - origin, normal) / denom;
+    if (candidate <= 1e-4f) {
+        return false;
+    }
+    const float3 hit_point = origin + candidate * direction;
+    const float3 delta = hit_point - center;
+    const float su = dot(delta, pt_v3(params.light_u));
+    const float sv = dot(delta, pt_v3(params.light_v));
+    if (fabs(su) > params.light_half_u || fabs(sv) > params.light_half_v) {
+        return false;
+    }
+    t = candidate;
+    point = hit_point;
+    return true;
+}
+
+// Nearest-hit BVH traversal. Normals are fetched only when a triangle wins, so
+// losing triangles cost nothing beyond the intersection test itself.
+//
+// The loop tracks whether the current node was already tested by its parent:
+// when the child selection below proves a child is hit, descending into it must
+// not repeat that slab test. Nodes taken from the stack are always re-tested,
+// because a nearer hit found since they were pushed may now prune them. This
+// changes no visited triangle, so the hit result is identical.
+inline bool pt_intersect_mesh(PtScene scene, PtRay ray, thread float& best_t,
+                              thread float3& best_normal) {
+    const float t_min_q = 1e-4f;
+    float t_max_q = best_t;
+    const PtQRay q = pt_make_qray(scene, ray, t_min_q, t_max_q);
+    uint stack[PT_BVH_STACK_SIZE];
+    int stack_size = 0;
+    uint node_index = 0;
+    bool node_tested = false;
+    // The winning triangle is recorded as (slot, u, v) and its shading normal is
+    // interpolated once, after the walk. Keeping the float3 normal and the
+    // dependent normals-table load out of the loop body takes three live
+    // registers and one memory fetch off the hot traversal path; the winner, and
+    // therefore the normal, is unchanged.
+    uint best_slot = 0xFFFFFFFFu;
+    float best_u = 0.0f;
+    float best_v = 0.0f;
+    // Payload of the current node. It is only read when the node arrived here
+    // already hit-tested by its parent, and in that case the parent had to load
+    // this very node to test its box, so it can hand the payload over for free
+    // and the descent loads nothing. Only one register is carried across the
+    // loop; carrying the whole 16-byte node measured slower (register pressure).
+    uint payload = 0u;
+
+    while (true) {
+        if (!node_tested) {
+            const uint4 raw = scene.nodes[node_index];
+            payload = raw.w;
+            if (!pt_qbox_hit(pt_decode_box(raw), q.inv_direction, q.origin_times_inv, q.t_min,
+                             t_max_q)) {
+                if (stack_size == 0) {
+                    break;
+                }
+                node_index = stack[--stack_size];
+                continue;
+            }
+        }
+        node_tested = false;
+
+        if (pt_node_is_leaf(payload)) {
+            const uint start = pt_node_start(payload);
+            const uint count = pt_node_count(payload);
+            for (uint i = 0; i < count; ++i) {
+                const uint slot = start + i;
+                float t = 0.0f;
+                float u = 0.0f;
+                float v = 0.0f;
+                if (pt_ray_triangle(scene.triangles[slot], ray.origin, ray.direction, t, u, v) &&
+                    t < best_t) {
+                    best_t = t;
+                    t_max_q = t;
+                    best_slot = slot;
+                    best_u = u;
+                    best_v = v;
+                }
+            }
+        } else {
+            // Pre-order layout: the left child is the next slot. Test both
+            // children and descend into the nearer one first so the hit distance
+            // tightens early and prunes the farther subtree. These two loads also
+            // supply the descended child's payload, which is why visiting an
+            // already-tested child afterwards needs no memory at all.
+            const uint left = node_index + 1u;
+            const uint right = payload;
+            const uint4 left_node = scene.nodes[left];
+            const uint4 right_node = scene.nodes[right];
+            float entered_left = 0.0f;
+            float entered_right = 0.0f;
+            const bool hit_left =
+                pt_qbox_hit_entered(pt_decode_box(left_node), q.inv_direction,
+                                    q.origin_times_inv, q.t_min, t_max_q, entered_left);
+            const bool hit_right =
+                pt_qbox_hit_entered(pt_decode_box(right_node), q.inv_direction,
+                                    q.origin_times_inv, q.t_min, t_max_q, entered_right);
+            if (hit_left && hit_right) {
+                const bool left_first = entered_left <= entered_right;
+                if (stack_size < PT_BVH_STACK_SIZE) {
+                    stack[stack_size++] = left_first ? right : left;
+                }
+                node_index = left_first ? left : right;
+                payload = left_first ? left_node.w : right_node.w;
+                node_tested = true;
+                continue;
+            } else if (hit_left) {
+                node_index = left;
+                payload = left_node.w;
+                node_tested = true;
+                continue;
+            } else if (hit_right) {
+                node_index = right;
+                payload = right_node.w;
+                node_tested = true;
+                continue;
+            }
+        }
+
+        if (stack_size == 0) {
+            break;
+        }
+        node_index = stack[--stack_size];
+        node_tested = false;
+    }
+
+    if (best_slot == 0xFFFFFFFFu) {
+        return false;
+    }
+    const device PtTriNormals& nrm = scene.normals[best_slot];
+    best_normal = normalize((1.0f - best_u - best_v) * pt_v3(nrm.n0) + best_u * pt_v3(nrm.n1) +
+                            best_v * pt_v3(nrm.n2));
+    return true;
+}
+
+// Any-hit traversal for shadow rays: no floor or emitter test, no normals, and
+// it returns as soon as one triangle is hit. The emitter sits above the floor
+// and shadow rays start on the floor pointing at it, so the floor plane can
+// never occlude them and skipping that test is exact.
+//
+// Variant measured this round: both children are tested once at the internal
+// node, the nearer hit is descended into immediately and the farther hit is
+// pushed already-tested. Because the shadow limit never tightens, a node that
+// was hit when pushed is still hit when popped, so the pop path needs no slab
+// test. Only two floats and two bools are live across the loop, which is what
+// keeps this out of the register blow-up the round-2 fusion caused.
+inline bool pt_shadow_hit(PtScene scene, PtRay ray, float t_limit) {
+    const PtQRay q = pt_make_qray(scene, ray, 1e-4f, t_limit);
+    uint stack[PT_BVH_STACK_SIZE];
+    int stack_size = 0;
+    uint node_index = 0;
+    bool node_tested = false;
+    uint payload = 0u;   // payload of the current node; see pt_intersect_mesh
+
+    while (true) {
+        if (!node_tested) {
+            const uint4 raw = scene.nodes[node_index];
+            payload = raw.w;
+            if (!pt_qbox_hit(pt_decode_box(raw), q.inv_direction, q.origin_times_inv, q.t_min,
+                             q.t_max)) {
+                if (stack_size == 0) {
+                    break;
+                }
+                node_index = stack[--stack_size];
+                // Popped nodes were hit-tested when pushed and the shadow limits
+                // are constant for the whole walk, so the test result cannot have
+                // changed: fetch just the payload and go straight to the walk.
+                payload = scene.nodes[node_index].w;
+                node_tested = true;
+                continue;
+            }
+        }
+        node_tested = false;
+
+        if (pt_node_is_leaf(payload)) {
+            const uint start = pt_node_start(payload);
+            const uint count = pt_node_count(payload);
+            for (uint i = 0; i < count; ++i) {
+                float t = 0.0f;
+                float u = 0.0f;
+                float v = 0.0f;
+                if (pt_ray_triangle(scene.triangles[start + i], ray.origin, ray.direction, t, u,
+                                    v) &&
+                    t < t_limit) {
+                    return true;
+                }
+            }
+        } else {
+            const uint left = node_index + 1u;
+            const uint right = payload;
+            const uint4 left_node = scene.nodes[left];
+            const uint4 right_node = scene.nodes[right];
+            float entered_left = 0.0f;
+            float entered_right = 0.0f;
+            const bool hit_left =
+                pt_qbox_hit_entered(pt_decode_box(left_node), q.inv_direction,
+                                    q.origin_times_inv, q.t_min, q.t_max, entered_left);
+            const bool hit_right =
+                pt_qbox_hit_entered(pt_decode_box(right_node), q.inv_direction,
+                                    q.origin_times_inv, q.t_min, q.t_max, entered_right);
+            if (hit_left && hit_right) {
+                const bool left_first = entered_left <= entered_right;
+                if (stack_size < PT_BVH_STACK_SIZE) {
+                    stack[stack_size++] = left_first ? right : left;
+                }
+                node_index = left_first ? left : right;
+                payload = left_first ? left_node.w : right_node.w;
+                node_tested = true;
+                continue;
+            } else if (hit_left) {
+                node_index = left;
+                payload = left_node.w;
+                node_tested = true;
+                continue;
+            } else if (hit_right) {
+                node_index = right;
+                payload = right_node.w;
+                node_tested = true;
+                continue;
+            }
+        }
+        if (stack_size == 0) {
+            break;
+        }
+        node_index = stack[--stack_size];
+        payload = scene.nodes[node_index].w;  // pushed nodes are already tested
+    }
+    return false;
+}
+
+// Closest hit over floor plane, one-sided emitter and mesh.
+inline PtHit pt_intersect_scene(PtScene scene, PtRay ray) {
+    PtHit hit;
+    hit.t = 1e30f;
+    hit.material = PtMaterialNone;
+    hit.normal = float3(0.0f, 1.0f, 0.0f);
+    hit.position = float3(0.0f);
+
+    float t_floor = 0.0f;
+    if (pt_ray_plane_y(ray.origin, ray.direction, scene.params->floor_height, t_floor) &&
+        t_floor < hit.t) {
+        hit.t = t_floor;
+        hit.material = PtMaterialFloor;
+        hit.normal = float3(0.0f, 1.0f, 0.0f);
+        hit.position = ray.origin + t_floor * ray.direction;
+    }
+
+    float t_light = 0.0f;
+    float3 light_point = float3(0.0f);
+    if (pt_ray_light_rect(*scene.params, ray.origin, ray.direction, t_light, light_point) &&
+        t_light < hit.t) {
+        hit.t = t_light;
+        hit.material = PtMaterialLight;
+        hit.normal = pt_v3(scene.params->light_normal);
+        hit.position = light_point;
+    }
+
+    float3 mesh_normal = float3(0.0f, 1.0f, 0.0f);
+    float mesh_t = hit.t;
+    if (pt_intersect_mesh(scene, ray, mesh_t, mesh_normal)) {
+        hit.t = mesh_t;
+        hit.material = PtMaterialGlass;
+        hit.normal = mesh_normal;
+        hit.position = ray.origin + mesh_t * ray.direction;
+    }
+    return hit;
+}
+
+// Shadow test: the bunny is the only possible occluder of the emitter.
+inline bool pt_occluded(PtScene scene, PtRay ray, float t_limit) {
+    return pt_shadow_hit(scene, ray, t_limit - 1e-3f);
+}
+ path:/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/shaders/pt_trace.metal]
+
+--- #11 assistant ---
+{"action":{"type":"tool","notes":"pt_trace.metal read. Closest-hit walk records (slot,u,v), normals fetched after loop from separate normals table indexed by slot (idea 1 from round-4 log: interleave n0/n1/n2 into padded triangle record so a win costs one cache line instead of two — but careful: PtTri is 48B; adding 3 normals = +48B -> 96B record; may hurt triangle-test cache traffic. Alternative: keep separate table but make normals a single padded struct of 48B (n0,n1,n2 packed as 3x float3 in 48 bytes = 36->48) — currently PtTriNormals likely 3 float3 = 36 bytes unaligned. Check pt_gpu_types.hpp next.","tool_call":{"name":"read_file","args":{"path":"/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/include/pt_gpu_types.hpp"}}}}
+
+--- #12 tool ---
+read_file:map[content:// pt_gpu_types.hpp: plain-old-data structures shared between the C++ host and
+// the Metal kernels. The host reads this exact file and prepends it to every
+// .metal source before compiling, so both sides always agree on the layout.
+// Only float arrays and `unsigned int` are used so the layout is identical in
+// C++17 and in the Metal shading language (no float3 alignment surprises).
+#pragma once
+
+// Maximum depth of the per-thread BVH traversal stack. The host build refuses
+// to make the tree deeper than PT_BVH_MAX_DEPTH, and a near-first walk pushes
+// at most one node per level, so this stack can never overflow.
+#define PT_BVH_STACK_SIZE 20
+#define PT_BVH_MAX_DEPTH 16
+
+// High bit of PtBvhNode::b marks a leaf; the low bits hold the triangle count.
+#define PT_BVH_LEAF_BIT 0x80000000u
+
+// One mesh vertex: position and geometric normal, world space. Host-only: the
+// GPU reads the packed triangle tables below instead.
+struct PtVertex {
+    float position[3];
+    float normal[3];
+};
+
+// One BVH node, exactly 32 bytes: half the traffic of the round-1 40-byte
+// layout, and four nodes fit in one 128-byte cache line. The tree is stored in
+// pre-order, so an internal node's left child is `index + 1` and only the
+// right child index needs storing. `b` doubles as the leaf flag: 0 marks an
+// internal node (a = right child), a positive `b` marks a leaf holding `b`
+// triangle slots starting at `a` in the packed triangle table. This float form
+// is what the host build produces; the GPU reads the quantized form below.
+struct PtBvhNode {
+    float bmin[3];
+    float bmax[3];
+    unsigned int a;
+    unsigned int b;
+};
+
+// GPU-facing BVH node, exactly 16 bytes: eight of them fit in one cache line
+// instead of four, which is the main remaining source of traversal traffic, so
+// one node is one 16-byte vector load. Bounds are quantized relative to the
+// root box along each axis: `loN` is the scaled box minimum and `hiN` the
+// scaled box maximum, stored interleaved so the kernel decodes both with one
+// uint4 load and two fma per axis. The scale is a power of two and both
+// coordinates are rounded outwards by one quantization step, so a quantized
+// box always contains its exact counterpart - the traversal can only visit a
+// box marginally earlier, never miss one, and the reported hit is unchanged.
+// `payload` mirrors the float node: the high bit marks a leaf, whose triangle
+// start is in bits 8..30 and whose (triangle count - 1) is in bits 0..7; for an
+// internal node it is simply the right child index. The kernel reads the whole
+// node as a single uint4.
+struct PtBvhNodeQ {
+    unsigned short lo0;
+    unsigned short hi0;
+    unsigned short lo1;
+    unsigned short hi1;
+    unsigned short lo2;
+    unsigned short hi2;
+    unsigned int payload;
+};
+
+// One triangle as an origin plus two edge vectors (36 bytes), precomputed on
+// the host. This removes the vertex-index indirection and two subtractions
+// from the hot intersection test, and a leaf's triangles are contiguous so one
+// leaf costs a couple of wide loads instead of twelve scattered ones.
+// One triangle as origin + two edges (the Möller-Trumbore form), padded to 48
+// bytes so each member is 16-byte aligned and 16-byte sized. With leaf size 1 a
+// leaf test reads exactly one triangle, so the padding costs no extra cache
+// line, and the GPU can fetch each member as a single float4 instead of nine
+// scalar loads. The fourth component is unused and always zero.
+struct PtTri {
+    float origin[4];
+    float edge1[4];
+    float edge2[4];
+};
+
+// The three vertex normals of one triangle (36 bytes), kept in a separate
+// table because they are only needed when a triangle wins the nearest-hit
+// test; shadow and any-hit rays never touch this memory.
+struct PtTriNormals {
+    float n0[3];
+    float n1[3];
+    float n2[3];
+};
+
+// Per-frame parameters: camera, area light, floor, integrator settings.
+// Bound as a `constant` buffer so the GPU reads it through the uniform path.
+struct PtParams {
+    float camera_position[3];
+    float camera_target[3];
+    float camera_up[3];
+    float camera_right[3];   // orthonormal basis, computed on the host
+    float camera_forward[3];
+    float camera_scale_x;    // image plane extent for the aspect ratio
+    float camera_scale_y;
+    float vertical_fov_deg;
+    float ior;
+    float floor_height;
+    float floor_albedo;
+    float env_radiance[3];
+    float light_center[3];
+    float light_u[3];        // unit tangent along the light's first axis
+    float light_v[3];        // unit tangent along the light's second axis
+    float light_normal[3];   // emission direction (unit)
+    float light_half_u;
+    float light_half_v;
+    float light_area;
+    float light_radiance[3];
+    float inv_spp;           // 1 / spp, used by the tone mapping pass
+    float bvh_origin[3];     // world-space minimum of the BVH root box
+    float bvh_inv_scale;     // 1 / quantization scale of PtBvhNodeQ (power of two)
+    float bvh_scale;         // quantization scale itself, 1 / bvh_inv_scale
+    unsigned int width;
+    unsigned int height;
+    unsigned int spp;
+    unsigned int seed;
+    unsigned int max_depth;
+    unsigned int pad;
+};
+ path:/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/include/pt_gpu_types.hpp]
+
+--- #13 assistant ---
+{"action":{"type":"tool","notes":"Types read: PtTri 48B padded, PtTriNormals 36B separate table (3 scalar float3 loads on a win). Round-5 candidate A: make the win path cheaper by padding normals to 16-byte rows (PtTriNormals -> float n0[4];n1[4];n2[4] = 48B, three aligned float4 loads) OR merge into PtTri (96B, hurts leaf traffic). Candidate B: simdgroup ballot early exit. Candidate C: register-pressure restructure. Next: read pt_integrator.metal (path loop, NEE, glass).","tool_call":{"name":"read_file","args":{"path":"/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/shaders/pt_integrator.metal"}}}}
+
+--- #14 tool ---
+read_file:map[content:// pt_integrator.metal: the path integral and the trace kernel entry point.
+//
+// Unbiased unidirectional path tracing. Diffuse floor vertices get next-event
+// estimation against the rectangular area light in addition to BSDF sampling;
+// glass vertices are pure BSDF sampling with a delta specular lobe, so their
+// light hits are counted directly. Emission along a continued path is added
+// only for the primary ray and after specular bounces, which is what keeps the
+// NEE term from being double counted.
+//
+// The statistics are unchanged from round 1: same sample count, same maximum
+// depth, same Russian-roulette rule after depth 3, and the same per-pixel RNG
+// stream, so a given seed reproduces its PFM bit for bit.
+
+inline float3 pt_environment(constant PtParams& params) {
+    return pt_v3(params.env_radiance);
+}
+
+// Schlick approximation of the Fresnel equations for a dielectric interface
+// between ior_i (the side the ray comes from) and ior_t (the other side).
+// NOTE: the total-internal-reflection guard uses (ior_t/ior_i)^2, which is not
+// the refraction-side ratio pt_refract uses. That asymmetry is exactly what the
+// frozen round-1 baseline was rendered with, so the caustic and RMSE gates are
+// defined by it and this expression must not be "corrected".
+inline float pt_fresnel(float cos_incident, float ior_i, float ior_t) {
+    const float c = clamp(cos_incident, 0.0f, 1.0f);
+    const float eta = ior_t / ior_i;
+    const float sin2_t = eta * eta * (1.0f - c * c);
+    if (sin2_t > 1.0f) {
+        return 1.0f;  // total internal reflection
+    }
+    const float r0 = (ior_i - ior_t) / (ior_i + ior_t);
+    const float r0sq = r0 * r0;
+    const float one_minus_c = 1.0f - c;
+    const float f2 = one_minus_c * one_minus_c;
+    const float f4 = f2 * f2;
+    return r0sq + (1.0f - r0sq) * (f4 * one_minus_c);
+}
+
+// Snell's law. `incident` is the unit ray direction, `surface_normal` is the
+// unit normal facing against it, `eta` is n_i / n_t. False means TIR.
+inline bool pt_refract(float3 incident, float3 surface_normal, float eta, thread float3& result) {
+    const float cos_incident = -dot(incident, surface_normal);  // positive by construction
+    const float sin2_t = eta * eta * (1.0f - cos_incident * cos_incident);
+    if (sin2_t > 1.0f) {
+        return false;
+    }
+    const float cos_t = sqrt(max(0.0f, 1.0f - sin2_t));
+    // eta * I + (eta * cos_i - cos_t) * N is already unit length by Snell's
+    // law, so it is returned un-normalized: one sqrt and one divide fewer per
+    // glass bounce.
+    result = eta * incident + (eta * cos_incident - cos_t) * surface_normal;
+    return true;
+}
+
+// Uniform sample of the emitter rectangle; returns the sampled point.
+inline float3 pt_sample_light(constant PtParams& params, thread uint& state) {
+    const float3 center = pt_v3(params.light_center);
+    const float3 u_axis = pt_v3(params.light_u);
+    const float3 v_axis = pt_v3(params.light_v);
+    const float su = (2.0f * pt_random(state) - 1.0f) * params.light_half_u;
+    const float sv = (2.0f * pt_random(state) - 1.0f) * params.light_half_v;
+    return center + su * u_axis + sv * v_axis;
+}
+
+// Cosine-weighted hemisphere direction around `normal`.
+inline float3 pt_sample_cosine(float3 normal, thread uint& state) {
+    const float r1 = pt_random(state);
+    const float r2 = pt_random(state);
+    const float phi = 6.283185307179586f * r2;
+    const float sin_theta = sqrt(r1);
+    const float cos_theta = sqrt(max(0.0f, 1.0f - r1));
+    const float3 tangent = pt_orthonormal_tangent(normal);
+    const float3 bitangent = cross(normal, tangent);
+    float cos_phi = 0.0f;
+    const float sin_phi = sincos(phi, cos_phi);  // one transcendental pair instead of two
+    // The frame is orthonormal and (sin_theta*cos_phi, sin_theta*sin_phi,
+    // cos_theta) is unit length, so the direction needs no renormalization.
+    return tangent * (cos_phi * sin_theta) + bitangent * (sin_phi * sin_theta) +
+           normal * cos_theta;
+}
+
+// One bounce of the integrator loop. Returns false when the path is finished.
+inline bool pt_trace_path(PtScene scene, PtRay ray, uint pixel_seed, thread float3& radiance) {
+    constant PtParams& params = *scene.params;
+    uint state = pixel_seed;
+    float3 throughput = float3(1.0f);
+    bool inside_glass = false;
+    // Whether the previous vertex was specular (mirror/glass). Emission at a
+    // light hit is counted only for the primary ray and after a specular
+    // bounce; diffuse vertices collect the light through next-event estimation.
+    bool last_specular = true;
+
+    for (uint depth = 0; depth < params.max_depth; ++depth) {
+        const PtHit hit = pt_intersect_scene(scene, ray);
+
+        if (hit.material == PtMaterialNone) {
+            radiance += throughput * pt_environment(params);
+            return false;
+        }
+
+        if (hit.material == PtMaterialLight) {
+            if (depth == 0u || last_specular) {
+                radiance += throughput * pt_v3(params.light_radiance);
+            }
+            return false;
+        }
+
+        if (hit.material == PtMaterialFloor) {
+            const float3 normal = hit.normal;
+
+            // Next-event estimation: uniform sample of the light rectangle.
+            const float3 light_point = pt_sample_light(params, state);
+            const float3 to_light = light_point - hit.position;
+            const float distance_sq = max(1e-8f, dot(to_light, to_light));
+            const float3 light_direction = to_light * rsqrt(distance_sq);
+            const float incident_cosine = dot(normal, light_direction);
+            // Cosine of the light's own lobe: emission direction toward x.
+            const float light_cosine = -dot(pt_v3(params.light_normal), light_direction);
+            if (incident_cosine > 0.0f && light_cosine > 0.0f) {
+                const PtRay shadow_ray =
+                    pt_make_ray(hit.position + normal * 1e-4f, light_direction);
+                const float shadow_limit = sqrt(distance_sq);
+                if (!pt_occluded(scene, shadow_ray, shadow_limit)) {
+                    // Contribution = (albedo/pi) * Le * cos_i * cos_l * A / d^2:
+                    // f_r times the geometry term divided by the area pdf 1/A.
+                    const float weight = params.floor_albedo * incident_cosine * light_cosine *
+                                         params.light_area / (3.14159265358979f * distance_sq);
+                    radiance += throughput * weight * pt_v3(params.light_radiance);
+                }
+            }
+
+            // Continue along a cosine-weighted diffuse direction. A diffuse
+            // vertex ends any glass traversal and forbids counting emission
+            // directly on the next vertex.
+            throughput *= params.floor_albedo;
+            inside_glass = false;
+            last_specular = false;
+            ray = pt_make_ray(hit.position + normal * 1e-4f, pt_sample_cosine(normal, state));
+        } else {
+            // Clear glass: sample reflection or refraction as a delta lobe.
+            const bool entering = dot(ray.direction, hit.normal) < 0.0f;
+            const float3 oriented_normal = entering ? hit.normal : -hit.normal;
+            const float ior_i = inside_glass ? params.ior : 1.0f;
+            const float ior_t = inside_glass ? 1.0f : params.ior;
+            const float ratio = ior_t / ior_i;
+            const float reflectance =
+                pt_fresnel(-dot(ray.direction, oriented_normal), ior_i, ior_t);
+
+            float3 transmitted = float3(0.0f);
+            const bool refracted =
+                pt_refract(ray.direction, oriented_normal, ior_i / ior_t, transmitted);
+
+            if (!refracted || pt_random(state) < reflectance) {
+                // Sampling probability equals the Fresnel reflectance, so the
+                // reflectance cancels and the throughput factor is 1.
+                last_specular = true;
+                ray = pt_make_ray(hit.position + oriented_normal * 1e-4f,
+                                  reflect(ray.direction, oriented_normal));
+            } else {
+                // Radiance scales by (n_t/n_i)^2 across a dielectric; the
+                // (1-F) transmittance cancels the sampling probability.
+                throughput *= ratio * ratio;
+                ray = pt_make_ray(hit.position - oriented_normal * 1e-4f, transmitted);
+                inside_glass = entering;
+                last_specular = true;
+            }
+        }
+
+        // Unbiased Russian roulette, only once the path is deep enough.
+        if (depth >= 4u) {
+            const float survival = clamp(max(throughput.x, max(throughput.y, throughput.z)),
+                                         0.05f, 0.95f);
+            if (pt_random(state) > survival) {
+                return false;
+            }
+            throughput /= survival;
+        }
+    }
+    return false;
+}
+
+// Morton (Z-order) index inside a kTraceTile x kTraceTile tile. Threads that
+// are neighbours in the dispatch order end up spatially close on screen, which
+// makes their camera rays walk the BVH through the same upper nodes and turns
+// eight separate cache lines into one. The mapping is a bijection on the tile,
+// so every pixel is still traced exactly once with its own RNG stream and the
+// output is bit-identical to the row-major order.
+inline uint2 pt_morton_decode(uint code) {
+    uint2 out = uint2(0u, 0u);
+    // A 32-wide tile needs 10 Morton bits, five per axis.
+    for (uint bit = 0u; bit < 5u; ++bit) {
+        out.x |= ((code >> (2u * bit)) & 1u) << bit;
+        out.y |= ((code >> (2u * bit + 1u)) & 1u) << bit;
+    }
+    return out;
+}
+
+constant uint kTraceTile = 32u;
+
+kernel void trace_kernel(uint2 grid_pos [[thread_position_in_grid]],
+                         constant PtParams& params [[buffer(0)]],
+                         device const uint4* nodes [[buffer(1)]],
+                         device const PtTri* triangles [[buffer(2)]],
+                         device const PtTriNormals* normals [[buffer(3)]],
+                         device float4* radiance_out [[buffer(4)]],
+                         device atomic_uint& sample_counter [[buffer(5)]],
+                         device uchar4* image_out [[buffer(6)]]) {
+    const uint width = params.width;
+    const uint height = params.height;
+    const uint2 tile = grid_pos / kTraceTile;
+    const uint2 local = grid_pos % kTraceTile;
+    const uint2 pixel =
+        tile * kTraceTile + pt_morton_decode(local.x + kTraceTile * local.y);
+    if (pixel.x >= width || pixel.y >= height) {
+        return;
+    }
+
+    PtScene scene;
+    scene.params = &params;
+    scene.nodes = nodes;
+    scene.triangles = triangles;
+    scene.normals = normals;
+
+    const float3 camera_position = pt_v3(params.camera_position);
+    const float3 camera_forward = pt_v3(params.camera_forward);
+    const float3 camera_right = pt_v3(params.camera_right);
+    const float3 camera_up = pt_v3(params.camera_up);
+
+    const uint index = pixel.y * width + pixel.x;
+    const float inv_width = 1.0f / float(width);
+    const float inv_height = 1.0f / float(height);
+
+    float3 accumulated = float3(0.0f);
+    for (uint sample = 0u; sample < params.spp; ++sample) {
+        const uint seed = pt_seed_pixel(params.seed, index, sample);
+        uint state = seed;
+        const float jitter_x = pt_random(state);
+        const float jitter_y = pt_random(state);
+        const float ndc_x = (2.0f * (float(pixel.x) + jitter_x) * inv_width - 1.0f) *
+                            params.camera_scale_x;
+        const float ndc_y = (1.0f - 2.0f * (float(pixel.y) + jitter_y) * inv_height) *
+                            params.camera_scale_y;
+        const float3 direction =
+            normalize(camera_forward + ndc_x * camera_right + ndc_y * camera_up);
+
+        float3 sample_radiance = float3(0.0f);
+        pt_trace_path(scene, pt_make_ray(camera_position, direction), seed, sample_radiance);
+        accumulated += sample_radiance;
+    }
+
+    // One atomic per thread instead of one per camera sample: the total is
+    // still exactly width*height*spp, but the hot loop has no atomics.
+    atomic_fetch_add_explicit(&sample_counter, params.spp, memory_order_relaxed);
+
+    const float3 average = accumulated * params.inv_spp;
+    radiance_out[index] = float4(average, 1.0f);
+    image_out[index] = pt_tone_map(average);
+}
+ path:/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/shaders/pt_integrator.metal]
+
+--- #15 assistant ---
+{"action":{"type":"tool","notes":"Integrator read. Key bit-identical micro-win spotted (goal candidate 4): in the glass branch the RNG draw is independent of pt_refract, so we can draw r BEFORE computing Fresnel/refract and only compute pt_refract when r >= reflectance — outcomes provably identical (r<reflectance ⇒ reflect in both versions; else same TIR test). Saves sqrt+mul chain on ~half the glass bounces, and skips refract entirely under TIR (reflectance==1). Plan: (0) reproduce baseline + inspect _ab.sh harness; (1) profile cost shares with scratch biased builds; (2) E8 glass restructure; (3) leaf count==1 fast path; (4) maybe stack-in-threadgroup. Next: read _ab.sh.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && cat _ab.sh _abenv.sh 2>/dev/null | head -60 && echo ---- && cat pathtracer_benchmark.json | head -40"}}}}
+
+--- #16 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && cat _ab.sh _abenv.sh 2>/dev/null | head -60 && echo ---- && cat pathtracer_benchmark.json | head -40 confinement:sandbox exit_code:0 stderr: stdout:#!/bin/zsh
+# Interleaved A/B timing: _ab.sh <base_binary> <cand_binary> [rounds] [frames] [spp]
+# Alternates the two binaries so machine drift hits both, then reports the
+# min-of-mins and the median of per-run mins for render_ms and gpu_ms.
+BASE=$1
+CAND=$2
+R=${3:-6}
+B=${4:-15}
+SPP=${5:-64}
+MESH=/Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj
+SCENE=/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/scene-default.json
+cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 || exit 1
+rm -f _ab_base.txt _ab_cand.txt
+for i in $(seq 1 $R); do
+  for BIN in "$BASE" "$CAND"; do
+    OUT=$(perl -e 'alarm 400; exec @ARGV' "./$BIN" --mesh $MESH --scene-config $SCENE --spp $SPP --seed 1 --benchmark $B --threads 8 2>/dev/null | tail -1)
+    R_MS=$(echo $OUT | sed -n 's/.*render_ms_best=\([0-9.]*\).*/\1/p')
+    G_MS=$(echo $OUT | sed -n 's/.*gpu_ms_best=\([0-9.]*\).*/\1/p')
+    if [ "$BIN" = "$BASE" ]; then echo "$R_MS $G_MS" >> _ab_base.txt; else echo "$R_MS $G_MS" >> _ab_cand.txt; fi
+  done
+done
+for F in _ab_base.txt _ab_cand.txt; do
+  RMIN=$(awk '{print $1}' $F | sort -g | head -1)
+  RAVG=$(awk '{s+=$1} END {printf "%.3f", s/NR}' $F)
+  GMIN=$(awk '{print $2}' $F | sort -g | head -1)
+  echo "$F render_min=$RMIN render_mean=$RAVG gpu_min=$GMIN"
+  echo "   runs: $(tr '\n' ' ' < $F)"
+done
+#!/bin/zsh
+# Interleaved BVH-config A/B on one binary: _abenv.sh "LEAF:BINS_A" "LEAF:BINS_B" [rounds] [frames]
+# Alternates the two builds' environments so machine drift hits both equally.
+A=$1
+B=$2
+R=${3:-8}
+F=${4:-15}
+MESH=/Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj
+SCENE=/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/scene-default.json
+cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 || exit 1
+rm -f _ab_a.txt _ab_b.txt
+run_one() {
+  local CFG=$1
+  local OUT=$2
+  local LA=${CFG%%:*}
+  local BA=${CFG##*:}
+  local RES=$(PT_BVH_LEAF=$LA PT_BVH_BINS=$BA perl -e 'alarm 400; exec @ARGV' ./pathtracer/pathtracer --mesh $MESH --scene-config $SCENE --spp 64 --seed 1 --benchmark $F --threads 8 2>/dev/null | tail -1)
+  local RMS=$(echo $RES | sed -n 's/.*render_ms_best=\([0-9.]*\).*/\1/p')
+  local GMS=$(echo $RES | sed -n 's/.*gpu_ms_best=\([0-9.]*\).*/\1/p')
+  echo "$RMS $GMS" >> $OUT
+}
+for i in $(seq 1 $R); do
+  run_one "$A" _ab_a.txt
+  run_one "$B" _ab_b.txt
+done
+for F in _ab_a.txt _ab_b.txt; do
+  RMIN=$(awk '{print $1}' $F | sort -g | head -1)
+  RAVG=$(awk '{s+=$1} END {printf "%.3f", s/NR}' $F)
+  GMIN=$(awk '{print $2}' $F | sort -g | head -1)
+  echo "$F render_min=$RMIN render_mean=$RAVG gpu_min=$GMIN"
+  echo "   runs: $(tr '\n' ' ' < $F)"
+done
+----
+{
+  "round": 4,
+  "workflow": "pathtracer-bunny-phase3",
+  "benchmarker_pid": "pid-000013",
+  "timestamp_utc": "2025-10-29T17:55:00Z",
+  "source_dir": "/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer",
+  "binary_path": "/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/pathtracer",
+  "image_path": "/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/round4_default.ppm",
+  "image_pfm_path": "/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/round4_default.pfm",
+  "scene_config": "/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/scene-default.json",
+  "compile_command": "DEVELOPER_DIR=/Library/Developer/CommandLineTools clang++ -O2 -std=c++17 -fobjc-arc -I /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/include /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/src/*.cpp /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/src/*.mm -framework Metal -framework Foundation -o /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/pathtracer",
+  "compile_exit_code": 0,
+  "compile_warnings": "1: 'fastMathEnabled' is deprecated (first deprecated in macOS 15.0, use mathMode instead) in pt_metal_host.mm:120 - non-fatal",
+  "run_command": "perl -e 'alarm 120; exec @ARGV' /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/pathtracer --mesh /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj --scene-config /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/scene-default.json --benchmark 5 --threads 8 --spp 64 --seed 1",
+  "spp": 64,
+  "width": 512,
+  "height": 512,
+  "samples": 16777216,
+  "samples_expected": 16777216,
+  "samples_check": "pass (16777216 == 512*512*64 in all 6 trials and in both single renders)",
+  "threads_used": 8,
+  "trials": 6,
+  "benchmark_frames_per_trial": 5,
+  "best_trial_line": "render_ms_best=45.220 render_ms_avg=52.390 gpu_ms_best=44.907 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+  "trial_lines": [
+    "render_ms_best=45.489 render_ms_avg=52.605 gpu_ms_best=45.197 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+    "render_ms_best=45.850 render_ms_avg=50.566 gpu_ms_best=45.572 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+    "render_ms_best=45.220 render_ms_avg=52.390 gpu_ms_best=44.907 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+    "render_ms_best=46.174 render_ms_avg=49.835 gpu_ms_best=45.897 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+    "render_ms_best=46.817 render_ms_avg=49.084 gpu_ms_best=46.185 spp=64 width=512 height=512 samples=16777216 threads_used=8",
+    "render_ms_best=45.946 render_ms_avg=50.390 gpu_ms_best=45.641 spp=64 width=512 height=512 samples=16777216 threads_used=8"
+  ],
+  "trial_render_ms": [45.489, 45.850, 45.220, 46.174, 46.817, 45.946],
+  "trial_gpu_ms": [45.197, 45.572, 44.907, 45.897, 46.185, 45.641],
+  "best_render_ms": 45.220,
+  "best_render_ms_best": 45.220,
+  "average_render_ms": 45.916,
+  "best_gpu_ms": 44.907,
+  "best_gpu_ms_best": 44.907,
+  "render_ms": 45.220,
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #17 assistant ---
+{"action":{"type":"tool","notes":"Harness understood (_ab.sh interleaves binaries). Baseline binary: check ab_r3 layout, then freeze round-4 binary+shaders into ab_r4/ (so A/B base can't drift), rebuild live dir, save round-4 64spp seed-1 PFMs for 3 scenes. Also plan: compile shaders with CLI metal -frecord-sources to get register counts (register-pressure pass). Next: inspect ab_r3 and build live dir.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && ls ab_r3 && ls ab_r3/* | head && which metal; ls /System/Library/Frameworks/Metal.framework/Versions/A/Headers >/dev/null && echo frameworks-ok; DEVELOPER_DIR=/Library/Developer/CommandLineTools clang++ -O2 -std=c++17 -fobjc-arc -I pathtracer/include pathtracer/src/*.cpp pathtracer/src/*.mm -framework Metal -framework Foundation -o pathtracer/pathtracer && echo BUILD_OK"}}}}
+
+--- #18 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && ls ab_r3 && ls ab_r3/* | head && which metal; ls /System/Library/Frameworks/Metal.framework/Versions/A/Headers >/dev/null && echo frameworks-ok; DEVELOPER_DIR=/Library/Developer/CommandLineTools clang++ -O2 -std=c++17 -fobjc-arc -I pathtracer/include pathtracer/src/*.cpp pathtracer/src/*.mm -framework Metal -framework Foundation -o pathtracer/pathtracer && echo BUILD_OK confinement:sandbox exit_code:0 stderr:ls: /System/Library/Frameworks/Metal.framework/Versions/A/Headers: No such file or directory
+pathtracer/src/pt_metal_host.mm:120:13: warning: 'fastMathEnabled' is deprecated: first deprecated in macOS 15.0 - Use mathMode instead [-Wdeprecated-declarations]
+  120 |     options.fastMathEnabled = YES;
+      |             ^
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks/Metal.framework/Headers/MTLLibrary.h:326:39: note: 'fastMathEnabled' has been explicitly marked deprecated here
+  326 | @property (readwrite, nonatomic) BOOL fastMathEnabled API_DEPRECATED("Use mathMode instead", macos(10.11, 15.0), ios(8.0, 18.0));
+      |                                       ^
+1 warning generated.
+ stdout:include
+pathtracer
+shaders
+ab_r3/pathtracer
+
+ab_r3/include:
+pt_bvh.hpp
+pt_gpu_types.hpp
+pt_image.hpp
+pt_math.hpp
+pt_mesh.hpp
+pt_metal_host.hpp
+pt_parallel.hpp
+BUILD_OK
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #19 assistant ---
+{"action":{"type":"tool","notes":"Live dir rebuilt OK (same deprecation warning as before). Next: freeze round-4 as A/B base in ab_r4/ (binary+shaders+include copies like ab_r3), and produce round-4 reference PFMs for the 3 scenes at 64spp seed 1 for byte-identity checks.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && mkdir -p ab_r4 && cp -R ab_r3/include ab_r4/include 2>/dev/null; cp -R pt_round_04/include ab_r4/include && cp -R pt_round_04/shaders ab_r4/shaders && cp pt_round_04/pathtracer ab_r4/pathtracer && chmod +x ab_r4/pathtracer && ls ab_r4 && md5 ab_r4/pathtracer pt_round_04/pathtracer pathtracer/pathtracer"}}}}
+
+--- #20 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && mkdir -p ab_r4 && cp -R ab_r3/include ab_r4/include 2>/dev/null; cp -R pt_round_04/include ab_r4/include && cp -R pt_round_04/shaders ab_r4/shaders && cp pt_round_04/pathtracer ab_r4/pathtracer && chmod +x ab_r4/pathtracer && ls ab_r4 && md5 ab_r4/pathtracer pt_round_04/pathtracer pathtracer/pathtracer confinement:sandbox exit_code:0 stderr: stdout:include
+pathtracer
+shaders
+MD5 (ab_r4/pathtracer) = 5c318568bd0d3a33b40ab176ae3d7eb6
+MD5 (pt_round_04/pathtracer) = 5c318568bd0d3a33b40ab176ae3d7eb6
+MD5 (pathtracer/pathtracer) = 02a4250293f3b63eda9d8ec73d6bf447
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #21 assistant ---
+{"action":{"type":"tool","notes":"ab_r4 base frozen (binary md5 == pt_round_04). Live binary md5 differs from snapshot — must verify live sources == pt_round_04 sources (diff) and that live binary reproduces round-4 PFMs byte-identically before A/B. Next: diff dirs + render refs.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && diff -r pt_round_04/include pathtracer/include && diff -r pt_round_04/shaders pathtracer/shaders && diff -r pt_round_04/src pathtracer/src && echo SOURCES_IDENTICAL"}}}}
+
+--- #22 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && diff -r pt_round_04/include pathtracer/include && diff -r pt_round_04/shaders pathtracer/shaders && diff -r pt_round_04/src pathtracer/src && echo SOURCES_IDENTICAL confinement:sandbox exit_code:0 stderr: stdout:SOURCES_IDENTICAL
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #23 assistant ---
+{"action":{"type":"tool","notes":"Sources identical to pt_round_04 (binary md5 differs only from link nondeterminism). Next: render 64spp seed-1 PFMs for the 3 scenes with the live (=round-4) binary into out/r4_*.pfm as the byte-identity reference for candidates.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && mkdir -p out && for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 2>&1 | tail -1; done; ls -la out/r4_*"}}}}
+
+--- #24 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && mkdir -p out && for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 2>&1 | tail -1; done; ls -la out/r4_* confinement:sandbox exit_code:1 stderr:ls: out/r4_*: No such file or directory
+ stdout:mesh error: cannot open mesh: /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj
+mesh error: cannot open mesh: /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj
+mesh error: cannot open mesh: /Users/peihongguo/Code/rasterizer-bunny/assets/stanford-bunny.obj
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #25 tool ---
+tool_notice name=run useful=false reason=non_zero_exit try_different_strategy=true
+
+--- #26 assistant ---
+{"action":{"type":"tool","notes":"Typo in mesh path (missing reports/). Correct: /Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj. Re-run the 3 reference renders.","tool_call":{"name":"run","args":{"command":"cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && M=/Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj && for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh $M --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 2>&1 | tail -1; done; md5 out/r4_*.pfm"}}}}
+
+--- #27 tool ---
+run:map[command:cd /Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3 && M=/Users/peihongguo/Code/aos/reports/rasterizer-bunny/assets/stanford-bunny.obj && for S in default alt-view caustic-closeup; do ./pathtracer/pathtracer --mesh $M --scene-config scene-$S.json --spp 64 --seed 1 --out out/r4_$S.ppm --out-pfm out/r4_$S.pfm --threads 8 2>&1 | tail -1; done; md5 out/r4_*.pfm confinement:sandbox exit_code:0 stderr: stdout:setup_ms=318.0 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521
+setup_ms=269.6 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521
+setup_ms=272.2 samples=16777216 width=512 height=512 spp=64 threads_used=8 triangles=69451 bvh_nodes=81521
+MD5 (out/r4_alt-view.pfm) = 1f0de1451174e4e7404adf7db1dfa269
+MD5 (out/r4_caustic-closeup.pfm) = 0e38e71841ec3185c2a82289a9be488d
+MD5 (out/r4_default.pfm) = 53600ca347f0b76ab1a0ff894f6a8f4e
+ timeout:1m0s timeout_bound:10m0s]
+
+--- #28 assistant ---
+{"action":{"type":"tool","notes":"Round-4 reference PFMs saved (default md5 53600ca... matches log). ab_r4 base frozen. Next: read host layer (pt_metal_host.mm) to see dispatch structure/clears inside the timed region before choosing kernel experiments.","tool_call":{"name":"read_file","args":{"path":"/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/src/pt_metal_host.mm"}}}}
+
+--- #29 tool ---
+read_file:map[content:// pt_metal_host.mm: Objective-C++ Metal host. Owns the device, the buffers and
+// the compute pipelines, and performs one frame per render_frame call. No
+// render pipelines and no Metal ray-tracing APIs are used anywhere.
+#import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
+
+#include "pt_metal_host.hpp"
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+
+namespace pt {
+
+struct MetalPathTracer::Impl {
+    id<MTLDevice> device = nil;
+    id<MTLCommandQueue> queue = nil;
+    id<MTLComputePipelineState> trace_pipeline = nil;
+
+    id<MTLBuffer> node_buffer = nil;         // 16-byte quantized BVH nodes
+    id<MTLBuffer> triangle_buffer = nil;     // packed origin/edge1/edge2
+    id<MTLBuffer> normal_buffer = nil;       // per-triangle vertex normals
+    id<MTLBuffer> params_buffer = nil;
+    id<MTLBuffer> radiance_buffer = nil;     // float4 per pixel (linear estimate)
+    id<MTLBuffer> image_buffer = nil;        // uchar4 per pixel (tone mapped)
+    id<MTLBuffer> counter_buffer = nil;      // uint camera-sample counter
+
+    int width = 0;
+    int height = 0;
+
+    bool fail(NSString* message, std::string& error) const {
+        error = message.length > 0 ? std::string([message UTF8String]) : std::string("metal error");
+        return false;
+    }
+};
+
+namespace {
+
+// Reads a text file into an NSString, returning nil on failure.
+NSString* read_text(NSString* path) {
+    NSData* data = [NSData dataWithContentsOfFile:path];
+    if (data == nil) {
+        return nil;
+    }
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+}
+
+}  // namespace
+
+MetalPathTracer::MetalPathTracer() : impl_(new Impl()) {}
+
+MetalPathTracer::~MetalPathTracer() {
+    delete impl_;
+}
+
+bool MetalPathTracer::init(const std::string& shader_dir, const std::string& shared_header_path,
+                           std::string& error) {
+    impl_->device = MTLCreateSystemDefaultDevice();
+    if (impl_->device == nil) {
+        return impl_->fail(@"no Metal device available", error);
+    }
+    impl_->queue = [impl_->device newCommandQueue];
+
+    NSString* dir = [NSString stringWithUTF8String:shader_dir.c_str()];
+    NSString* header = read_text([NSString stringWithUTF8String:shared_header_path.c_str()]);
+    if (header == nil) {
+        return impl_->fail(@"cannot read shared shader header", error);
+    }
+
+    NSMutableString* source = [NSMutableString string];
+    [source appendString:@"#include <metal_stdlib>\nusing namespace metal;\n"];
+    // The shared struct header is prepended so both sides agree on the layout;
+    // its include guard is meaningless inside a single translation unit.
+    [source appendString:[header stringByReplacingOccurrencesOfString:@"#pragma once"
+                                                           withString:@""]];
+
+    // The kernel files have dependencies (pt_trace.metal defines the helpers
+    // used by the tone mapping helper, which the integrator calls), so they are
+    // concatenated in this fixed order; any other .metal files are appended
+    // afterwards alphabetically.
+    NSArray<NSString*>* ordered =
+        @[ @"pt_trace.metal", @"pt_tonemap.metal", @"pt_integrator.metal" ];
+    NSFileManager* fm = [NSFileManager defaultManager];
+    NSArray<NSString*>* names = [[fm contentsOfDirectoryAtPath:dir error:nil]
+        sortedArrayUsingSelector:@selector(compare:)];
+    NSMutableArray<NSString*>* ordered_names = [NSMutableArray array];
+    for (NSString* name in ordered) {
+        if ([names containsObject:name]) {
+            [ordered_names addObject:name];
+        }
+    }
+    for (NSString* name in names) {
+        if (![name hasSuffix:@".metal"]) {
+            continue;
+        }
+        if (![ordered containsObject:name]) {
+            [ordered_names addObject:name];
+        }
+    }
+
+    bool saw_kernel = false;
+    for (NSString* name in ordered_names) {
+        NSString* text = read_text([dir stringByAppendingPathComponent:name]);
+        if (text == nil) {
+            return impl_->fail(@"cannot read shader file", error);
+        }
+        [source appendString:@"\n"];
+        [source appendString:text];
+        saw_kernel = true;
+    }
+    if (!saw_kernel) {
+        return impl_->fail(@"no .metal files found next to the binary", error);
+    }
+
+    NSError* ns_error = nil;
+    MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+    // Fast math lets the compiler use hardware reciprocal/sqrt approximations
+    // and fused multiply-add in the traversal and BSDF math. The estimator is
+    // unchanged (identical sample streams), only float rounding moves.
+    options.fastMathEnabled = YES;
+    id<MTLLibrary> library = [impl_->device newLibraryWithSource:source options:options
+                                                           error:&ns_error];
+    if (library == nil) {
+        NSString* combined = [NSString stringWithFormat:@"shader compile failed: %@",
+                              ns_error.localizedDescription];
+        NSLog(@"%@", combined);
+        return impl_->fail(combined, error);
+    }
+
+    impl_->trace_pipeline = [impl_->device
+        newComputePipelineStateWithFunction:[library newFunctionWithName:@"trace_kernel"]
+                                      error:&ns_error];
+    if (impl_->trace_pipeline == nil) {
+        return impl_->fail(@"trace_kernel pipeline failed", error);
+    }
+
+    impl_->params_buffer = [impl_->device newBufferWithLength:sizeof(PtParams)
+                                                      options:MTLResourceStorageModeShared];
+    impl_->counter_buffer = [impl_->device newBufferWithLength:sizeof(uint32_t)
+                                                      options:MTLResourceStorageModeShared];
+    return true;
+}
+
+bool MetalPathTracer::upload_mesh(const GpuMeshData& mesh, std::string& error) {
+    impl_->node_buffer = [impl_->device newBufferWithBytes:mesh.nodes
+                                                   length:mesh.node_count * sizeof(PtBvhNodeQ)
+                                                  options:MTLResourceStorageModeShared];
+    impl_->triangle_buffer = [impl_->device newBufferWithBytes:mesh.triangles
+                                                       length:mesh.triangle_count * sizeof(PtTri)
+                                                      options:MTLResourceStorageModeShared];
+    impl_->normal_buffer = [impl_->device newBufferWithBytes:mesh.normals
+                                                     length:mesh.normal_count * sizeof(PtTriNormals)
+                                                    options:MTLResourceStorageModeShared];
+    if (impl_->node_buffer == nil || impl_->triangle_buffer == nil ||
+        impl_->normal_buffer == nil) {
+        return impl_->fail(@"mesh upload failed", error);
+    }
+    return true;
+}
+
+bool MetalPathTracer::allocate(int width, int height, std::string& error) {
+    const NSUInteger pixels = static_cast<NSUInteger>(width) * static_cast<NSUInteger>(height);
+    impl_->width = width;
+    impl_->height = height;
+    impl_->radiance_buffer = [impl_->device newBufferWithLength:pixels * sizeof(float) * 4
+                                                       options:MTLResourceStorageModeShared];
+    impl_->image_buffer = [impl_->device newBufferWithLength:pixels * 4
+                                                    options:MTLResourceStorageModeShared];
+    if (impl_->radiance_buffer == nil || impl_->image_buffer == nil) {
+        return impl_->fail(@"image allocation failed", error);
+    }
+    return true;
+}
+
+bool MetalPathTracer::render_frame(const PtParams& params, std::vector<float>& radiance,
+                                   std::vector<unsigned char>& rgba8, unsigned int& sample_count,
+                                   double& gpu_ms, std::string& error) {
+    std::memcpy([impl_->params_buffer contents], &params, sizeof(PtParams));
+    std::memset([impl_->counter_buffer contents], 0, sizeof(uint32_t));
+
+    const NSUInteger width = params.width;
+    const NSUInteger height = params.height;
+
+    // Tuning knob for the threadgroup shape; the output is independent of it
+    // because every pixel is computed by exactly one thread. 32x4 measured
+    // fastest with the 32-wide Morton tile (one group spans exactly one tile
+    // row); 16x8 was the best before the tile widened.
+    NSUInteger group_w = 32;
+    NSUInteger group_h = 4;
+    const char* shape = getenv("PT_TG");
+    if (shape != nil) {
+        sscanf(shape, "%lux%lu", &group_w, &group_h);
+    }
+    if (group_w == 0 || group_h == 0 || group_w * group_h > 1024) {
+        group_w = 32;
+        group_h = 4;
+    }
+    const NSUInteger trace_limit = [impl_->trace_pipeline maxTotalThreadsPerThreadgroup];
+    const NSUInteger trace_total = std::min<NSUInteger>(group_w * group_h, trace_limit);
+    const NSUInteger trace_rows = std::max<NSUInteger>(1, trace_total / group_w);
+
+    id<MTLCommandBuffer> command_buffer = [impl_->queue commandBuffer];
+
+    // Single compute dispatch: the kernel traces every camera sample of its
+    // pixel, writes the linear estimate (which becomes the PFM) and tone maps
+    // the same value into the 8-bit image, so no second pass is needed.
+    id<MTLComputeCommandEncoder> trace_encoder = [command_buffer computeCommandEncoder];
+    [trace_encoder setComputePipelineState:impl_->trace_pipeline];
+    [trace_encoder setBuffer:impl_->params_buffer offset:0 atIndex:0];
+    [trace_encoder setBuffer:impl_->node_buffer offset:0 atIndex:1];
+    [trace_encoder setBuffer:impl_->triangle_buffer offset:0 atIndex:2];
+    [trace_encoder setBuffer:impl_->normal_buffer offset:0 atIndex:3];
+    [trace_encoder setBuffer:impl_->radiance_buffer offset:0 atIndex:4];
+    [trace_encoder setBuffer:impl_->counter_buffer offset:0 atIndex:5];
+    [trace_encoder setBuffer:impl_->image_buffer offset:0 atIndex:6];
+    if (getenv("PT_DEBUG") != nil) {
+        NSLog(@"[pt] max_threads_per_group trace=%lu",
+              (unsigned long)[impl_->trace_pipeline maxTotalThreadsPerThreadgroup]);
+    }
+    // 32x4 threadgroups measured fastest with the 32-wide Morton tile; larger
+    // groups spill registers and smaller ones lose tile locality.
+    // The grid is rounded up to whole 32-wide Morton tiles; threads outside the
+    // image return before touching any buffer.
+    const NSUInteger grid_w = ((width + 31) / 32) * 32;
+    const NSUInteger grid_h = ((height + 31) / 32) * 32;
+    [trace_encoder dispatchThreads:MTLSizeMake(grid_w, grid_h, 1)
+             threadsPerThreadgroup:MTLSizeMake(group_w, trace_rows, 1)];
+    [trace_encoder endEncoding];
+
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+
+    gpu_ms = 1000.0 * command_buffer.GPUEndTime - 1000.0 * command_buffer.GPUStartTime;
+
+    const NSUInteger pixels = width * height;
+    radiance.assign(static_cast<float*>([impl_->radiance_buffer contents]),
+                    static_cast<float*>([impl_->radiance_buffer contents]) + pixels * 4);
+    const unsigned char* image = static_cast<const unsigned char*>([impl_->image_buffer contents]);
+    rgba8.assign(image, image + pixels * 4);
+    sample_count = *static_cast<uint32_t*>([impl_->counter_buffer contents]);
+    return true;
+}
+
+}  // namespace pt
+ path:/Users/peihongguo/Code/aos/reports/pathtracer-bunny-phase3/pathtracer/src/pt_metal_host.mm]

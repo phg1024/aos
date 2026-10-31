@@ -1,0 +1,110 @@
+[
+ {
+  "gid": "g0007",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "Answer: setup_ms=245.7.\n\nHow I know: the first successful byte-identity check of the child-pair layout on the default scene was history message #163 — the run `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` followed by `cmp out/cp_default.pfm out/r4_default.pfm`. Its stdout was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nEarlier attempts at the same check (#159, #162) failed before writing anything — #159 printed \"scene error: cannot open scene...\" and `cmp: out/cp_default.pfm: No such file or directory` — so #163 is indeed the first success (the two sandbox_extension warnings in that line are unrelated setup noise; the run itself completed and the PFM compared equal). The two remaining scenes in the same batch (#165) printed setup_ms=201.2 for alt-view and setup_ms=192.1 for caustic-closeup, both IDENTICAL."
+ },
+ {
+  "gid": "g0033",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nHow I know: I read the archived history entry #163, which is the first child-pair run that actually produced a setup line — the command was `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` followed by `cmp out/cp_default.pfm out/r4_default.pfm`, and its stdout was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\n(so samples = 512*512*64 = 16,777,216 and the PFM was byte-identical to the round-4 reference). Two caveats from the same record: the earlier child-pair attempt (#157/#158) printed no setup line at all because the frozen base binary had a nested include/include path and silently failed to compile its shaders, so #163 is genuinely the first successful check; and the same run's stdout also carried two harmless `sandbox_extension_issue_file ... Operation not permitted` lines (for the app directory and com.apple.gpuarchiver) that did not stop the render. For contrast, the later revert verification runs printed setup_ms=204.1 (#194) and 189.5 (#199), i.e. the 245.7 figure is that first run's one-time device/shader-compile/BVH-upload cost under contention, not a per-frame number."
+ },
+ {
+  "gid": "g0041",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7.\n\nHow I know: that run is message #163 in my own history (retrieved with search_memory/read_memory, not re-run). The command was `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm`, i.e. the child-pair (32-byte BVH child block) layout at 64 spp, seed 1, on the default scene, and its output was `setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521` followed by `IDENTICAL_DEFAULT` from `cmp out/cp_default.pfm out/r4_default.pfm`. The other setup numbers nearby are different runs: #165 (same child-pair build, the other two scenes) printed 201.2 for alt-view and 192.1 for caustic-closeup, and #86 (the earlier entered-distance stack, not child-pair) printed 197.2 for the default scene."
+ },
+ {
+  "gid": "g0084",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nHow I know: I read the archived tool result #163, the run that rendered the child-pair candidate on scene-default.json at --spp 64 --seed 1 to out/cp_default.pfm and compared it against out/r4_default.pfm. Its stdout was:\n\n  sandbox_extension_issue_file failed for .../pathtracer: 1 (Operation not permitted)\n  sandbox_extension_issue_file failed for .../com.apple.gpuarchiver: 1 (Operation not permitted)\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nSo the first successful default-scene byte-identity check of the child-pair layout printed setup_ms=245.7 (the two sandbox_extension lines were warnings only — the render ran and the PFM compared identical). For contrast, the later three-scene check in #165 printed setup_ms=201.2 for alt-view and 192.1 for caustic-closeup; those were the other two scenes, not the default one. The higher 245.7 is expected for that first invocation because it includes shader compilation and pipeline creation, and setup is outside the timed region anyway. Context: that layout was later rejected as a wash (n=41 paired rounds, mean base−cand = +0.104 ± 0.218 ms)."
+ },
+ {
+  "gid": "g0092",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms. History message #163 is that exact run: pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm, then cmp against out/r4_default.pfm, printing setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521 and IDENTICAL_DEFAULT. That was the first byte-identity check of the child-pair (32-byte BVH child block) layout on the default scene; the same batch's other scenes showed setup_ms=201.2 (alt-view) and 192.1 (caustic-closeup)."
+ },
+ {
+  "gid": "g0100",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nThat is the setup line from message #163, the first run that actually rendered the child-pair-layout build on the default scene and compared it: `setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521` followed by `IDENTICAL_DEFAULT` (PFM byte-identical to out/r4_default.pfm, with samples correctly equal to 512*512*64).\n\nHow I know it: I re-read the archived history (#157-#165). The two attempts before it did not count — #159 failed with \"scene error: cannot open scene config: scenes/scene-default.json\" (the scene JSONs live at the top level of the workspace, not in a scenes/ subdirectory) so no PFM was written and cmp reported \"No such file\"; #162 was the corrected command whose run produced the #163 output above. The same batch then checked the other two scenes (#165): alt-view setup_ms=201.2 and caustic-closeup setup_ms=192.1, both IDENTICAL. Note these setup numbers are outside the timed region (device creation, shader compile, OBJ parse, BVH build, upload), and this candidate was later rejected as a timing wash and reverted to the _b tree."
+ },
+ {
+  "gid": "g0114",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7. That run was the child-pair-layout binary rendering scene-default.json at 64 spp, seed 1 to out/cp_default.pfm, which compared byte-identical to out/r4_default.pfm (printed IDENTICAL_DEFAULT alongside samples=16777216, width=512, height=512, spp=64, threads_used=4, triangles=69451, bvh_nodes=81521). I know it because the tool result is archived as message #163, which I just re-read verbatim from my compacted history; the two follow-up scene checks in #165 (alt-view 201.2, caustic-closeup 192.1) were separate runs. Note the setup time is outside the timed region, so it does not affect the 45.220ms render benchmark."
+ },
+ {
+  "gid": "g0137",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nHow I know: I read the archived tool result for that run directly (message #163). The command was `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` on the child-pair-layout build, and its stdout was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nSo that first successful default-scene byte-identity check (against out/r4_default.pfm) reported setup_ms=245.7 with the correct sample count 16777216 = 512*512*64. For context, the same build's follow-up checks on the other two scenes (message #165) printed setup_ms=201.2 (alt-view) and 192.1 (caustic-closeup); setup time is outside the timed region and varies with machine load, which was high at that point."
+ },
+ {
+  "gid": "g0184",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nHow I know: that run is archived tool result #163 — the first byte-identity smoke test of the child-pair build on the default scene, `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm`, whose stdout was `setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521` followed by `IDENTICAL_DEFAULT` (cmp against out/r4_default.pfm). The follow-up check of the other two scenes (#165) printed setup_ms=201.2 for alt-view and 192.1 for caustic-closeup, both IDENTICAL. Note the setup time is outside the timed region and varies with machine contention (it was elevated that whole stretch); the sample count 16777216 = 512*512*64 confirms the full sample budget."
+ },
+ {
+  "gid": "g0205",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "step limit exceeded"
+ },
+ {
+  "gid": "g0252",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nHow I know: I read the archived tool result directly (message #163). That run was `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` followed by `cmp out/cp_default.pfm out/r4_default.pfm`, and its stdout was:\n\n  sandbox_extension_issue_file failed for .../pathtracer: 1 (Operation not permitted)\n  sandbox_extension_issue_file failed for .../com.apple.gpuarchiver: 1 (Operation not permitted)\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nIt is the first successful check because the two earlier attempts at the same comparison (#158/#159) produced no PFM at all (\"scene error: cannot open scene...\", cmp: No such file or directory), and #163 is the first that printed IDENTICAL_DEFAULT. The two sandbox_extension warnings were benign — the render completed and the samples count was correct (16777216 = 512*512*64). For context, the same child-pair binary reported setup_ms=201.2 on alt-view and 192.1 on caustic-closeup in the next message (#165); the extra ~45ms on the default run is one-time shader-compile/cache warm-up, and setup is outside the timed region anyway. That candidate was later rejected as a timing wash (n=41 paired rounds, mean +0.104±0.218ms)."
+ },
+ {
+  "gid": "g0258",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nHow I know: I read the archived tool result directly (message #163). That call ran the child-pair-layout binary on the default scene at 64 spp, seed 1, writing out/cp_default.pfm, and compared it with out/r4_default.pfm. Its stdout was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nso the byte-identity check passed on the default scene with setup_ms=245.7 (the same run also logged two harmless sandbox_extension_issue_file warnings). The follow-up check for the other two scenes (#165) printed setup_ms=201.2 for alt-view and 192.1 for caustic-closeup, both also IDENTICAL — but the default-scene figure you asked about is 245.7 ms."
+ },
+ {
+  "gid": "g0300",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nHow I know: I read the archived tool result directly (message #163). That call ran `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` followed by `cmp out/cp_default.pfm out/r4_default.pfm`, i.e. the first default-scene byte-identity check of the child-pair (32-byte BVH child-block) layout, and it printed:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\n(The same run also emitted two harmless `sandbox_extension_issue_file ... Operation not permitted` warnings, which did not affect the render.) The other two scenes in the follow-up check (#165) printed setup_ms=201.2 for alt-view and setup_ms=192.1 for caustic-closeup, both also IDENTICAL. For context, the child-pair layout was later rejected as a statistical wash (n=41 paired rounds, mean +0.104±0.218 ms vs the _b base), and the live tree is _b plus the provably-equivalent `exited > 0` removal."
+ },
+ {
+  "gid": "g0309",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nHow I know: I re-read my own archived history (read_memory messages 158-167). The first child-pair smoke attempt (#159) failed before rendering because I passed the wrong scene path (\"scene error: cannot open scene config: scenes/scene-default.json\"), so it printed no setup line. The next call (#162/#163) used the correct top-level scene-default.json and printed:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n\nfollowed by IDENTICAL_DEFAULT from `cmp out/cp_default.pfm out/r4_default.pfm` — i.e. the first successful byte-identity check of the child-pair layout on the default scene at 64 spp, seed 1, showed setup_ms=245.7. (For reference, the same run on the other two scenes printed setup_ms=201.2 for alt-view and 192.1 for caustic-closeup, both also byte-identical.)"
+ },
+ {
+  "gid": "g0333",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nThat is the line printed by the first successful byte-identity check of the child-pair BVH layout on the default scene (512x512, 64 spp, seed 1, written to out/cp_default.pfm and compared against out/r4_default.pfm, which reported IDENTICAL_DEFAULT). The full line was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n\nHow I know: I read the archived history entry for that exact command (message #163, in the segment archived at 02:06) rather than re-running anything. The same run also printed two sandbox_extension_issue_file warnings (for the pathtracer directory and com.apple.gpuarchiver), which are unrelated to the render and only affect shader-cache writes; setup_ms there is the untimed startup region (device, shader compile, OBJ parse, BVH build, uploads), so 245.7 ms is the child-pair build's startup cost, slightly above the ~160-190 ms of the round-4 build because the host now quantizes BVH nodes into 32-byte child pairs."
+ },
+ {
+  "gid": "g0365",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nThat is the line printed by the first successful child-pair byte-identity check on the default scene (scene-default.json, 64 spp, seed 1, written to out/cp_default.pfm and compared against out/r4_default.pfm). The full result line was:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nHow I know: it is history message #163, which I just re-read with read_memory after search_memory pointed at the nearby attempts (#159 failed with 'cannot open scene config' and #162 was the same command before its sandbox-extension retry). The two follow-up scenes in that same batch (#165) printed setup_ms=201.2 for alt-view and 192.1 for caustic-closeup, both also IDENTICAL, but 245.7 ms is the default-scene first check you asked about."
+ },
+ {
+  "gid": "g0435",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms=245.7.\n\nThat is the line printed by the first successful byte-identity check of the child-pair BVH layout on the default scene, history message #163: `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm` produced\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nso the comparison `cmp out/cp_default.pfm out/r4_default.pfm` reported the child-pair PFM byte-identical to the round-4 reference at 64 spp / seed 1 (samples = 512*512*64 = 16,777,216 as required). I know this because I just re-read message #163 verbatim from the archive (search hit on \"IDENTICAL_default setup_ms\"); the same output also carries two benign sandbox_extension_issue_file notices for the binary directory and com.apple.gpuarchiver, which did not stop the run. For context, that layout was later rejected anyway: 41 paired A/B rounds gave mean(base-cand) = +0.104 ± 0.218 ms, i.e. no win."
+ },
+ {
+  "gid": "g0600",
+  "probe": "h-1766-3",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "answer": "setup_ms = 245.7 ms.\n\nHow I know: the child-pair (32-byte BVH child block) build first compiled cleanly at #157; my first smoke run of it failed only because I passed scenes/scene-default.json instead of the top-level scene-default.json (#159), so the first successful run is #163 — `./pathtracer/pathtracer --scene-config scene-default.json --spp 64 --seed 1 --out-pfm out/cp_default.pfm --out out/cp_default.ppm`, which printed exactly:\n\n  setup_ms=245.7 samples=16777216 width=512 height=512 spp=64 threads_used=4 triangles=69451 bvh_nodes=81521\n  IDENTICAL_DEFAULT\n\nso the samples count was correct (512*512*64 = 16,777,216) and out/cp_default.pfm compared byte-identical to out/r4_default.pfm. The companion runs at #165 gave setup_ms=201.2 (alt-view) and 192.1 (caustic-closeup), also identical. Note that 245.7 ms is setup only (device, shader compile, OBJ parse, BVH build, upload) and sits outside the timed frame region; it was elevated by the sandbox-extension warnings printed in the same run and by machine contention, not by the child-pair layout — that layout was later rejected on timing as a statistical wash (paired n=41 mean +0.104 ± 0.218 ms vs the round-4 base)."
+ }
+]

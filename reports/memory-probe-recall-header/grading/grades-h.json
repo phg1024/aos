@@ -1,0 +1,218 @@
+{
+ "g0104": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0115": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0153": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0180": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0202": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0253": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0290": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0319": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "E5 result correct (0/16, +0.90%), but calls the sibling-pair wash a round-7 experiment; writer log line 163 (#30) dates from the ~45 ms round-4/5 era (p50 45.25 ms; neighbouring line 167 is a round-5 candidate), not round 7."
+ },
+ "g0328": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0336": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0382": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0468": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0476": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0485": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0496": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0511": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0562": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0591": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0019": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives wash, n=41, +0.104 ms, line 163, but calls it a round-7 experiment, but writer log line 163 (#30) is from the ~45 ms round-4/5 era (p50 45.25 ms; line 167 next to it is a round-5 candidate), while round 7 ran at ~31 ms."
+ },
+ "g0045": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives wash, n=41, +0.104 ms, line 163, but calls it a round-7 experiment, but writer log line 163 (#30) is from the ~45 ms round-4/5 era (p50 45.25 ms; line 167 next to it is a round-5 candidate), while round 7 ran at ~31 ms."
+ },
+ "g0055": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it was tried and lost, but claims the shipped node holds both children's boxes and indices (archive: pre-order layout, node holds its own box, left child = index+1, right child in payload), calls the earlier attempt round-7 super-nodes that 'measured slower' (line 163, #30: a wash, n=41, +0.104 ms), and claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0058": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives wash, n=41, +0.104 ms, line 163, but calls it a round-7 experiment, but writer log line 163 (#30) is from the ~45 ms round-4/5 era (p50 45.25 ms; line 167 next to it is a round-5 candidate), while round 7 ran at ~31 ms."
+ },
+ "g0075": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says earlier round, wash, line 163 (#30), but omits the recorded figures (n=41, +0.104 +- 0.218 ms)."
+ },
+ "g0081": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says only that it was already rejected (no wash/n=41/+0.104 ms result from line 163, #30), and claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0119": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0125": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it was rejected in an earlier round but gives no recorded result; claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it), and wrongly says the round-8 archive does not contain the line verbatim (#30 does)."
+ },
+ "g0231": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Says it is on the round-8 brief's rejected list but omits the recorded result (wash, n=41, +0.104 ms, writer log line 163, #30)."
+ },
+ "g0311": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives wash, n=41, +0.104 ms, line 163, but calls it a round-7 experiment, but writer log line 163 (#30) is from the ~45 ms round-4/5 era (p50 45.25 ms; line 167 next to it is a round-5 candidate), while round 7 ran at ~31 ms; also says children are addressed as 2*index+1/+2 (archive: pre-order, left = index+1, right child in payload)."
+ },
+ "g0405": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "No answer ('step limit exceeded'); truth is line 163 (#30-#31): sibling-pair 32B blocks were a wash, n=41, +0.104 ms."
+ },
+ "g0446": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0456": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Quotes line 163 correctly (wash, n=41, +0.104 ms), but claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0461": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Quotes line 163 correctly, but describes E5's 16-byte node as 'holding both children's boxes' (archive #44-#47: six u16 = the node's own box + payload)."
+ },
+ "g0494": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says wash and line 163 but omits n=41 / +0.104 ms, and claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0576": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Quotes line 163 correctly (wash, n=41, +0.104 ms), but claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0578": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it was rejected but gives no recorded result; claims the shipped 32-byte node holds both child boxes (archive: node holds its own box, pre-order left = index+1), and claims the working memory lists '32-byte node pairs', but the art-003130 working memory has no such entry (only the round-8 goal brief, #1, lists it)."
+ },
+ "g0597": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ }
+}

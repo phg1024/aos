@@ -1,0 +1,110 @@
+[
+ {
+  "gid": "g0057",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-7 frame (512x512, 64 spp, default scene) the split is essentially all trace: I instrumented the host with a PT_SPLIT knob that commits the trace command buffer separately so Metal reports its own GPUStartTime/GPUEndTime, and the sample-parallel trace dispatch measured 30.30 ms of GPU time while the combine pass (summing each pixel's spp samples in order, tone mapping, writing the image) measured 0.42 ms — about 98.6% vs 1.4%. That is why I stopped attacking per-sample buffer traffic (the buffer is already sample-major, so the 32 lanes of a simdgroup write contiguous memory) and concentrated on the BVH-walk cost inside the trace kernel; the depth sweep (1/2/3/12 depth = 5.82/10.96/17.10/30.28 ms) and the shadow-walk disable (26.68 ms, so shadow rays are only 3.65 ms) both point at closest-hit traversal ALU/latency as the dominant cost."
+ },
+ {
+  "gid": "g0105",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is about 99:1 in favour of the path-tracing dispatch. I measured it by adding a debug knob (PT_SPLIT=1) to a scratch copy of the round-7 code that submits the trace dispatch and the sample-combining pass as two separate command buffers, so Metal's own GPUStartTime/GPUEndTime report each one separately. At the benchmark setting (512x512, 64 spp, scene-default) the trace dispatch took 30.30 ms of GPU time and the combine pass took 0.42 ms — i.e. tracing is ~98.6% of the GPU time and the summing/tone-mapping pass is ~1.4%, and the two add up to the ~30.7 ms gpu_ms_best of the round-7 candidate. That is why I treated the sample-buffer traffic and the combine kernel as not worth attacking this round, and spent the effort on the traversal loop instead (lane-footprint remaps, stack layout, threadgroup shape)."
+ },
+ {
+  "gid": "g0133",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "Round-7 frame GPU split, measured at 512x512 / 64 spp on the default scene: the path-tracing dispatch took 30.30 ms and the sample-combining pass took 0.42 ms, i.e. the trace kernel is 98.6% of the GPU time and the combine pass is 1.4% (the whole frame's gpu_ms_best was 30.706 ms).\n\nHow I know: I built a throwaway profiling copy of the round-7 source (_r8p/) with a PT_SPLIT=1 host hook that encodes the trace dispatch and the combine pass into two separate command buffers, so each one's GPUStartTime/GPUEndTime pair is timed independently, and printed both. The same split showed the combine pass is pure bandwidth work (a 201 MB read of the 12-byte-per-sample buffer plus a 3 MB write), which is why attacking sample-buffer traffic was judged not worth it and all remaining effort went into the BVH walk itself.\n\nSupporting cost breakdown from the same harness, for context: max-depth sweep gave trace_gpu_ms 5.82 (depth 1), 10.96 (2), 17.10 (3), 30.28 (12), and disabling the shadow-ray walk entirely gave 26.68 ms, so next-event-estimation shadow rays account for only about 3.65 ms (12%) — the dominant cost is closest-hit traversal ALU/latency."
+ },
+ {
+  "gid": "g0211",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "From the round-8 E0 profiling pass: the frame at 512x512 / 64 spp splits as roughly 30.30 ms for the path-tracing (sample-parallel trace) dispatch and 0.42 ms for the combine pass that sums each pixel's per-sample radiance, tone maps and writes the image — i.e. the trace kernel is about 98.6% of the GPU time and combine is ~1.4%. I know this because I built a scratch variant (_r8p/) with a PT_SPLIT=1 hook that encodes the trace and combine passes into two separate command buffers, so each one's GPUStartTime/GPUEndTime pair could be timed independently; the two numbers above are those measured GPU intervals (they sum to the ~30.7 ms gpu_ms_best of the round-7 baseline). Practical consequence for round 8: sample-buffer traffic and the combine pass are not worth attacking — only the BVH-walk cost inside the trace kernel matters. That profile is recorded in my working memory as the 'r8-cost-split' measurement (evidence: messages 38, alongside the depth sweep d1=5.82 / d2=10.96 / d3=17.10 / d12=30.28 ms and the shadow-walk cost of 3.65 ms)."
+ },
+ {
+  "gid": "g0224",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is essentially all trace: 30.30 ms for the path-tracing dispatch versus 0.42 ms for the sample-combining pass, i.e. the trace kernel is ~98.6% of the ~30.7 ms GPU frame and the combine pass is ~1.4%.\n\nHow I know: early in round 8 I built a profiler copy of the round-7 code in the scratch directory _r8p/ with an env hook PT_SPLIT=1 that records the trace dispatch and the combine dispatch in two separate command buffers, so each one's GPUStartTime/GPUEndTime interval is measured independently instead of the whole frame as one. Running the benchmark setting (512x512, 64 spp, scene-default) through that gave trace_gpu_ms = 30.30 and combine = 0.42, matching the single-buffer round-7 total of 30.706 ms. That is why I treated sample-buffer write traffic as not worth attacking and focused the round on the BVH walk itself (lane-footprint/tile remap, stack layout, threadgroup shape), and it is consistent with the earlier finding that the timed region is 99.1% GPU."
+ },
+ {
+  "gid": "g0283",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "GPU time split of the round-7 frame (512x512, 64 spp): the path-tracing dispatch is 30.30 ms and the sample-combining pass is 0.42 ms — i.e. the trace kernel is ~98.6% of the GPU time and combine is ~1.4% of the ~30.7 ms total.\n\nHow I know: this was measured directly, not estimated. I built a scratch variant in _r8p/ with an environment hook PT_SPLIT=1 that splits the frame into two separate command buffers (one containing only the trace dispatch, one containing only the combine dispatch) so each side reports its own command-buffer GPUStartTime/GPUEndTime interval. Reading those two intervals at the benchmark setting gave 30.30 ms vs 0.42 ms. The same profile also showed the depth sweep (trace_gpu_ms: depth 1 = 5.82, 2 = 10.96, 3 = 17.10, 12 = 30.28) and that disabling the shadow walk costs only 3.65 ms (26.68 vs 30.28), which is why round 8 stopped treating sample-buffer traffic and the combine pass as worth attacking and went after BVH-walk latency/coherence instead."
+ },
+ {
+  "gid": "g0350",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-7 frame at 512x512 and 64 spp, the path-tracing dispatch dominates almost completely: the trace kernel took 30.30 ms of GPU time while the combine pass (summing each pixel's samples in order, tone mapping, counting) took 0.42 ms — about 98.6% versus 1.4%.\n\nHow I know: I built a scratch copy of the round-7 source (_r8p/) with a PT_SPLIT=1 host hook that commits the trace command buffer separately from the combine command buffer and prints the trace buffer's GPUStartTime/GPUEndTime delta as trace_gpu_ms. That gave trace_gpu_ms=30.30 against the frame's overall gpu_ms_best=30.706, so the residual (combine plus the inter-command-buffer gap) is ~0.42 ms. This is why round 8 only pursued kernel-side changes in the traversal: the sample-buffer traffic and the combine pass are too small to matter."
+ },
+ {
+  "gid": "g0396",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "Round-7 frame profile at the benchmark setting (512x512, 64 spp, scene-default): the path-tracing dispatch dominates and the sample-combine pass is essentially free.\n\n- trace_samples dispatch: ~30.3 ms of GPU time\n- combine pass (summing each pixel's spp samples in sample order, tone mapping, atomic sample count): ~0.42 ms\n- i.e. the trace kernel is ~98.6% of the frame's GPU time; combine is ~1.4%\n\nHow I know: I built a scratch profiler in _r8p/ that adds a PT_SPLIT env knob, which splits the trace dispatch and the combine dispatch into two separate command buffers so each reports its own GPUStartTime/GPUEndTime interval. The first split run gave trace_gpu_ms=30.8 and combine gpu_ms_best=0.42, and a repeat gave trace=30.3 ms, consistent with the round-7 total gpu_ms_best=30.706 ms (and with the overall finding that the whole timed region is 99.1% GPU, only ~0.28 ms host). Consequence recorded in my working memory: per-sample buffer traffic is not worth attacking — the cost is BVH-walk ALU/latency in the closest-hit path (depth sweep d1=5.82, d2=10.96, d3=17.10, d12=30.28 ms; disabling the shadow walk only saves 3.65 ms). [evidence 23-25, 38]"
+ },
+ {
+  "gid": "g0407",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is overwhelmingly in favour of the path-tracing dispatch. In the round-8 profiling pass (E0) I ran the frozen round-7 build with the PT_SPLIT=1 hook, which puts the trace dispatch and the sample-combine pass in two separate command buffers so each one's GPUStartTime/GPUEndTime is measured on its own. At the benchmark setting (default scene, 512x512, 64 spp) that gave:\n\n- trace dispatch: 30.30 ms\n- combine pass (summing each pixel's spp samples, tone mapping, writing the image): 0.42 ms\n\nSo the trace kernel is about 98.6% of the frame's GPU time and the combine pass about 1.4% (of the ~30.7 ms gpu_ms_best that round 7 reports). That is why I stopped looking at sample-buffer traffic and the combine kernel and concentrated on the BVH-walk cost inside the trace kernel — the depth sweep (d1 = 5.82 ms, d2 = 10.96, d3 = 17.10, d12 = 30.28) and the shadow-ray ablation (26.68 ms without the shadow walk, i.e. shadow rays cost only 3.65 ms, 12%) both point at closest-hit traversal ALU/latency as the dominant cost. Evidence: the E0 profile in the round-8 scratch directory _r8p/ (working-memory entry r8-cost-split, evidence messages 38)."
+ },
+ {
+  "gid": "g0418",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is essentially all trace. Measuring the round-7 frame at 512x512 / 64 spp with the PT_SPLIT=1 profiler build (my _r8p/ tree, which puts the sample-parallel trace dispatch and the combine pass into two separate command buffers so each reports its own GPUStartTime/GPUEndTime): the path-tracing dispatch took 30.30 ms of GPU time and the combine pass (summing each pixel's spp samples in order, tone mapping, atomic count) took 0.42 ms — so the trace kernel is 98.6% of the frame's GPU time and combine is ~1.4%. That is why I stopped looking at sample-buffer traffic (the buffer is already sample-major, so the 32 lanes of a simdgroup write contiguous 12-byte records) and concentrated on the BVH walk itself: the depth sweep on the same build gave trace_gpu_ms 5.82 / 10.96 / 17.10 / 30.28 at max depth 1 / 2 / 3 / 12, and disabling the shadow walk moved it from 30.28 to 26.68 ms, i.e. shadow rays are only ~3.6 ms (12%). Since the timed region is 99.1% GPU overall, only kernel-side wins in the trace dispatch can move the benchmark."
+ },
+ {
+  "gid": "g0424",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is essentially all trace. I measured it with the PT_SPLIT=1 hook in my scratch build _r8p/, which encodes the two passes into separate command buffers so Metal reports GPUStartTime/GPUEndTime for each one independently, at the benchmark setting (512x512, 64 spp, seed 1, default scene):\n\n- path-tracing dispatch (trace_samples_kernel): 30.30 ms GPU\n- per-pixel sample sum + tone map (combine_kernel): 0.42 ms GPU\n\nSo the trace dispatch is 98.6% of the frame's GPU time and the combine pass is about 1.4% — consistent with the round-7 total of gpu_ms_best = 30.706 ms and the fact that the timed region is now 99.1% GPU. That is why I stopped attacking sample-buffer traffic (the buffer is already sample-major, so the 32 lanes of a simdgroup write 12-byte-contiguous records) and put every round-8 experiment into the closest-hit BVH walk: the same profile shows the shadow walk costs only 3.65 ms (26.68 ms with it disabled vs 30.28 ms), and a depth sweep gives 5.82 / 10.96 / 17.10 / 30.28 ms at depth 1 / 2 / 3 / 12, i.e. the cost is traversal ALU and latency, not bandwidth."
+ },
+ {
+  "gid": "g0449",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "At the benchmark setting (512x512, 64 spp) the round-7 frame splits as: path-tracing dispatch 30.30 ms, sample-combine pass 0.42 ms — so the trace kernel is 98.6% of the GPU time and the combine pass is 1.4%.\n\nHow I know: early in round 8 I built a throwaway profiler copy (_r8p/) whose host code splits the single command buffer into two — one command buffer for the trace dispatch, a second for the combine/tone-map pass — and prints each buffer's GPUStartTime/GPUEndTime interval separately (PT_SPLIT=1). That gave trace_gpu_ms = 30.30 and combine = 0.42 against the round-7 reported gpu_ms_best = 30.706 (the extra ~0.4 ms is the bubble between the two buffers). Two consequences I drew from it, both recorded in the writer log: attacking the sample-buffer traffic was pointless (the combine pass is the only consumer), and since the timed region is ~99% GPU, only kernel-side wins can move the benchmark."
+ },
+ {
+  "gid": "g0528",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-7 frame profile at 512x512 / 64 spp, the path-tracing dispatch took 30.30 ms of GPU time and the sample-combining pass took 0.42 ms — so the trace kernel is about 98.6% of the GPU time and the combine pass only ~1.4%.\n\nHow I know: I built a scratch variant (_r8p/) with a PT_SPLIT switch that puts the trace dispatch and the combine pass into two separate command buffers, so each one's GPUStartTime/GPUEndTime pair is reported on its own line (trace_gpu_ms vs combine_gpu_ms). That is how I concluded the per-sample buffer traffic is not worth attacking and that essentially all remaining headroom is in the trace kernel's BVH-walk ALU/latency."
+ },
+ {
+  "gid": "g0549",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "The split is essentially all path tracing. I measured it by building a scratch copy of the round-7 binary (_r8p/) with a PT_SPLIT=1 host switch that commits the trace command buffer on its own before the combine command buffer, so each dispatch reports its own GPUStartTime/GPUEndTime interval. At the benchmark setting (512x512, 64 spp, seed 1) the sample-parallel trace dispatch took trace_gpu_ms = 30.30 ms, while the combine pass (summing each pixel's samples in order, tone mapping, writing the image) took about 0.42 ms — roughly 98.6% vs 1.4% of the ~30.7 ms GPU total, and that matches the frozen round-7 numbers (gpu_ms_best = 30.706 for the whole frame, render_ms_best = 30.984). Consequence for the round: the sample buffer traffic is not worth attacking; the cost is BVH-walk ALU/latency in the closest-hit path (depth sweep d1 = 5.82, d2 = 10.96, d3 = 17.10, d12 = 30.28 ms; disabling the shadow walk only saves 3.65 ms, i.e. shadow rays are ~12%)."
+ },
+ {
+  "gid": "g0552",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "Round-7 GPU time split at the benchmark setting (512x512, 64 spp): the path-tracing dispatch took 30.30 ms and the sample-combining pass took 0.42 ms — i.e. the trace kernel is 98.6% of the GPU time and the combine pass about 1.4%. Together 30.72 ms, matching the reported gpu_ms_best of 30.706 ms, which is why I treat only kernel-side (trace) wins as worth pursuing.\n\nHow I know: I built a scratch variant (_r8p/) with a PT_SPLIT=1 host hook that encodes the trace dispatch and the combine pass into two separate command buffers, so each one's GPUStartTime/GPUEndTime can be read independently instead of the whole frame as one. Running the default scene with that gave trace_gpu_ms=30.30 and combine_gpu_ms=0.42. Related probes from the same profile: disabling the shadow walk gave 26.68 ms (so shadow rays cost 3.65 ms, 12%), and a depth sweep gave 5.82 / 10.96 / 17.10 / 30.28 ms for max depth 1 / 2 / 3 / 12 — the cost is BVH-walk latency and ALU in the closest-hit path, not memory traffic."
+ },
+ {
+  "gid": "g0566",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-7 frame at 512x512 / 64 spp, the path-tracing dispatch is essentially the whole cost: the trace dispatch took 30.30 ms of GPU time and the sample-combine pass took 0.42 ms, i.e. 98.6% trace vs 1.4% combine (about 30.7 ms total, matching the reported gpu_ms_best = 30.706).\n\nHow I know: early in round 8 I built a profiling copy of the round-7 code in the scratch directory _r8p/ with a PT_SPLIT=1 hook that submits the trace dispatch and the combine pass as two separate command buffers, so each one's GPUStartTime/GPUEndTime is measured independently. Reading those per-buffer GPU intervals gave 30.30 ms and 0.42 ms for the two encoders. That is why I stopped treating the 12-byte sample buffer traffic (write in trace, read in combine) as worth optimizing, and why round 8's experiments all target the traversal loop in the trace kernel."
+ },
+ {
+  "gid": "g0577",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-7 frame at the benchmark setting (512x512, 64 spp), the GPU time is essentially all in the path-tracing dispatch: splitting the frame into two command buffers (the PT_SPLIT hook in my round-8 profiling scratch dir) measured the trace dispatch at 30.30 ms and the sample-combining pass at 0.42 ms, i.e. the trace kernel is 98.6% of the ~30.7 ms gpu_ms_best and the combine pass is only about 1.4%.\n\nHow I know: that split is a direct measurement, not an estimate - each dispatch ran in its own command buffer so Metal's own GPUStartTime/GPUEndTime gave per-pass GPU durations (recorded in the Round-8 entry of pathtracer_writer_log.txt and in my working memory, evidence message 38). Two supporting probes from the same session: the depth sweep of the trace kernel (depth 1 = 5.82 ms up to depth 12 = 30.28 ms) and disabling the shadow walk (26.68 ms) both move only the trace dispatch, confirming the cost is BVH-walk ALU/latency inside the trace kernel. Practical consequence for round 8: attacking sample-buffer traffic or the combine pass cannot pay (it is already only ~0.4 ms), so only kernel-side changes to the traversal count."
+ },
+ {
+  "gid": "g0610",
+  "probe": "r8-trace-share",
+  "question": "When you profiled the round-7 frame, how was GPU time divided between the path-tracing dispatch and the pass that adds up each pixel's samples?",
+  "answer": "In the round-8 E0 profile of the round-7 frame (512x512, 64 spp) I split the frame into two command buffers so each dispatch reported its own GPU time (PT_SPLIT=1 in the _r8p/ scratch build). The path-tracing dispatch took 30.30 ms and the sample-combining pass took 0.42 ms — so the trace kernel is about 98.6% of the GPU time and the combine pass is roughly 1.4%. That is why I dropped sample-buffer traffic as an optimization target and aimed the round-8 experiments at the BVH walk itself (lane coherence, threadgroup shape, stack layout), which is where any measurable win has to come from."
+ }
+]

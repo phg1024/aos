@@ -1,0 +1,542 @@
+{
+ "g0018": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0028": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0116": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0174": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0210": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0238": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0381": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0450": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says it compiled cleanly; #153 shows the first build failed (pt_metal_host.hpp:18 unknown type name 'PtBvhNodeQ'; pt_main.cpp:165 cannot initialize 'const PtBvhNode *' with 'PtBvhChild *')."
+ },
+ "g0026": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0062": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0068": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0176": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0220": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Names the PtBvhNodeQ member but not the pt_main.cpp PtBvhChild* initializer error (#153); also says the fix changed sizeof in pt_metal_host.mm, but that was already switched at #143-144 and the fix (#154) only changed the header member."
+ },
+ "g0296": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Opens with 'Yes' but describes the failure; omits the pt_main.cpp initializer error (#153); claims the fix also changed the newBufferWithBytes sizeof, which was already PtBvhChild at #144 (fix #154 only touched the header)."
+ },
+ "g0291": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says the output was a single '1 error generated' block for pt_metal_host.hpp; #153 also shows '2 errors generated' with the pt_main.cpp:165 PtBvhChild* initializer error."
+ },
+ "g0432": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Gives the PtBvhNodeQ unknown-type error in GpuMeshData but not the pt_main.cpp:165 initializer error (#153)."
+ },
+ "g0455": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Gives the stale PtBvhNodeQ member but attributes the failure to the .mm unit only and does not name the pt_main.cpp:165 PtBvhChild* initializer error (#153)."
+ },
+ "g0534": {
+  "main": 1,
+  "exact": 0,
+  "contra": 0,
+  "note": "Gives the stale PtBvhNodeQ member (unknown type) but not the pt_main.cpp:165 PtBvhChild* initializer error (#153)."
+ },
+ "g0056": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0064": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0111": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0143": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0161": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0206": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0255": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0305": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0315": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0388": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0389": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0438": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0537": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0585": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0593": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0302": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Opening says the reference PFM had not been produced; #159 shows out/r4_default.pfm existed and it was the candidate out/cp_default.pfm that was missing (later text gets this right)."
+ },
+ "g0602": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Names the compared file as out/nx_default.pfm; #158-159 compared out/cp_default.pfm (missing) against out/r4_default.pfm."
+ },
+ "g0604": {
+  "main": 0,
+  "exact": 0,
+  "contra": 1,
+  "note": "Denies any DIFF happened; #159 shows DIFF_DEFAULT caused by 'cannot open scene config: scenes/scene-default.json' and a missing out/cp_default.pfm."
+ },
+ "g0007": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0041": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0084": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0092": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0100": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0114": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0137": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0184": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0252": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0258": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0300": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0309": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0333": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0365": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0435": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0600": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0033": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Value 245.7 correct (#163), but says the earlier attempt failed because of the ab_r4 include/include nesting; #159 shows the earlier attempt failed on the wrong scene path scenes/scene-default.json."
+ },
+ "g0205": {
+  "main": 0,
+  "exact": 0,
+  "contra": 0,
+  "note": "No answer (step limit exceeded); truth is setup_ms=245.7 (#163)."
+ },
+ "g0009": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0011": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0106": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0181": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0241": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0310": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0386": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0417": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0521": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested."
+ },
+ "g0027": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "cp -R include/include nesting and silent shader-compile failure given, but says the binary could not find its shaders (shaders/shaders); archive #74-75 shows round-4 shaders were found and failed to compile against the ROUND-3 header (36-byte PtTri float[3]) in the flat include/; shaders were not nested. Also says the base returned non-zero; #72 shows EXIT=0."
+ },
+ "g0142": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives nesting + silent shader failure and mentions the round-3 header, but says the host found no .metal files (shaders/shaders); #74-75: round-4 shaders were present and failed to compile against the round-3 header."
+ },
+ "g0158": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Gives the right mechanism (round-3 float[3] PtTri header with round-4 shaders, #75), but also states shaders were nested like include; only include was copied twice (#20, #75), shaders were flat."
+ },
+ "g0170": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says stale round-3 SHADERS were picked up against round-4 host code and shaders were nested; #75: it was the round-3 HEADER with round-4 shaders, only include nested; fix copied include/shaders/binary, not src."
+ },
+ "g0171": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Mentions round-3 header vs round-4 shaders (#75), but also says the binary had no shaders next to it (shaders nested) and that the fix copied src/; only include was nested and the fix (#76) copied include, shaders and the binary."
+ },
+ "g0257": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says kernels were buried in shaders/shaders (only include was nested, #75) and that the fix copied src/ (#76 copied include, shaders, binary); round-3 header part is right."
+ },
+ "g0304": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "No round-3 header mechanism; says the empty-base run gave a bogus 45.0 vs 43.3 comparison, but #68 had an empty base and cand 43.714 (45.025/43.315 is the corrected run #78); also says the fixed base printed samples=16777216, but #76 ran 8 spp (samples=2097152)."
+ },
+ "g0403": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "Says shaders/shaders left the shader dir empty and that the fix copied from _b and showed ~43-45 ms; #75-76: round-3 header vs round-4 shaders, fix copied from pt_round_04, verify run at 8 spp gave render_ms_best=6.293."
+ },
+ "g0412": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0013": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0034": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0038": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0079": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0098": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0145": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0193": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0235": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0279": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0326": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0334": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0431": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0459": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0565": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0574": {
+  "main": 1,
+  "exact": 1,
+  "contra": 0,
+  "note": ""
+ },
+ "g0183": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "States the minimum moved about 0.47 ms; #88: 44.493 vs 44.425 is 0.07 ms."
+ },
+ "g0514": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "States about -0.44 ms on the best-of; #88: min 44.493 vs 44.425 is 0.07 ms."
+ },
+ "g0372": {
+  "main": 1,
+  "exact": 0,
+  "contra": 1,
+  "note": "States about 0.44 ms improvement on both minimum and mean; #88: minimum moved 0.07 ms (44.493 vs 44.425)."
+ }
+}

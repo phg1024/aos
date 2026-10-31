@@ -1,0 +1,46 @@
+{
+ "r2-first-sah": {
+  "main": "a large regression caused by the SAH partition failing (giant leaves / degenerate splits)",
+  "exact": "plus 4416 ms (or ~40x of ~105 ms), with no wrong numbers"
+ },
+ "r2-root-exit": {
+  "main": "it made traversal slower (regressed) and was reverted",
+  "exact": "plus 107.0 / 126.0 ms, measured this round, and no claim that it is still in use"
+ },
+ "r2-shadow-limit": {
+  "main": "the bug is no longer open (fixed)",
+  "exact": "plus names the bug: shadow hits not checked against t_limit (over-occlusion)"
+ },
+ "r2-verify-dir": {
+  "main": "the directory could not be read (sandbox, Operation not permitted)",
+  "exact": "same"
+ },
+ "r5-empty-base": {
+  "main": "a cp -R nesting (include/include) caused a silent shader-compile failure",
+  "exact": "plus the mechanism: the base used the round-3 header, so the round-4 shaders failed to compile"
+ },
+ "r5-entered-stack": {
+  "main": "a small win, kept, with 6/8 pairs or 45.607 vs 46.042",
+  "exact": "plus no wrong delta (the minimum moved 0.07 ms, not 0.4)"
+ },
+ "r5-register-counts": {
+  "main": "no register counts (no offline compiler), but an occupancy proxy of 1024 was obtained",
+  "exact": "same"
+ },
+ "r5-tir-guard": {
+  "main": "yes, the reflectance-1 branch can trigger",
+  "exact": "plus the right rays: those entering the glass from air, because the code uses eta = ior_t / ior_i"
+ },
+ "r8-trace-share": {
+  "main": "about 98.6% trace / 1.4% combine (30.30 / 0.42 ms)",
+  "exact": "plus no wrong figure"
+ },
+ "r8-small-node": {
+  "main": "no, it was slower",
+  "exact": "plus this round's E5 result (0/16 pairs, +0.90%)"
+ },
+ "r8-sibling-pairs": {
+  "main": "yes, it had been tried and gave no gain",
+  "exact": "plus the recorded result: a wash, n=41, +0.104 ms (writer log line 163)"
+ }
+}

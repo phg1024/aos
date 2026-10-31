@@ -1,0 +1,110 @@
+[
+ {
+  "gid": "g0015",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That 5-frame benchmark (stack 16 / depth cap 15, median-split tree, 512x512 at 64 spp, seed 1) printed render_ms_avg=126.379 ms, alongside render_ms_best=119.866 ms and gpu_ms_best=119.359 ms, with samples=16777216 (= 512*512*64) and threads_used=8. I know this because the raw run output is preserved in my archived history as message #125; my note in #126 (\"Stack 16/depth cap 15 REGRESSED (119.9 vs 103.3ms)\") was the reaction to it, and I reverted to stack 20 / cap 16, which measured render_ms_best=103.290 / render_ms_avg=113.313 in #121 and reproduced at 101.77 in #130. Note this early stack-shrink regression is separate from the later one at #304 (stack 20->16 on the near-first kernel: 76.4 vs 62.9 ms best) — both were reverted for the same reason. Current live round-2 state is render_ms_best=59.114 / gpu_ms_best=58.839 at best, ~60-66 ms on repeats."
+ },
+ {
+  "gid": "g0020",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That configuration printed render_ms_avg=126.379 ms (with render_ms_best=119.866 ms and gpu_ms_best=119.359 ms) on the 5-frame 512x512/64spp seed-1 benchmark. I know it because the run's output line was logged at message #125 and I recorded it in my working memory as \"stack 16/depth cap 15 regressed to 119.9\" (#125), which is why I reverted to PT_BVH_STACK_SIZE 20 with PT_BVH_MAX_DEPTH 16 (#129, 101.771/114.621 at the time). For context, the same stack-size experiment was repeated later after the near-first traversal win and again regressed (76.353/85.219 vs 62.9-65.5 with stack 20, message #304), so stack 20 is what the round-2 candidate keeps."
+ },
+ {
+  "gid": "g0022",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms.\n\nThe full line from the 5-frame benchmark (--scene-config ../scene-default.json --seed 1 --threads 8 --spp 64 --benchmark 5) was:\n\nrender_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nHow I know: it is the archived tool result at message #125, which is exactly the run I reverted in #126 (\"Stack 16/depth cap 15 REGRESSED (119.9 vs 103.3ms). Revert to stack 20 / cap 16\") and which my working-memory entry round2-progress item (b) cites as \"stack 16/depth cap 15 regressed to 119.9 -> keep PT_BVH_STACK_SIZE 20 / cap 16 (#125 vs #129)\". Context: at that point the tree was the round-1 median-split-on-widest-axis build (40,597 nodes, max leaf 4, depth 15) running at ~101.8-103.4 ms best, so the 16-entry stack cost roughly 16 ms of best time and ~23 ms of average time versus stack 20 / cap 16."
+ },
+ {
+  "gid": "g0074",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "It printed render_ms_avg=126.379.\n\nThat benchmark was the 5-frame run at 512x512/64spp, seed 1, threads 8, right after I replaced the failed binned-SAH build with the round-1 median-split-on-widest-axis tree. The full line was: render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8 (archived tool result #125). Since the median-split tree before it measured 101.8-103.4ms best, the stack shrink to 16 entries with cap 15 was a clear regression, so I reverted to PT_BVH_STACK_SIZE 20 / PT_BVH_MAX_DEPTH 16 (confirmed 101.77ms in #129). I know the exact avg because I retrieved the original tool output from memory rather than relying on my note, which only recorded the 119.9 best figure."
+ },
+ {
+  "gid": "g0083",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "The stack-16 / depth-cap-15 run printed render_ms_avg=126.379 ms (with render_ms_best=119.866 and gpu_ms_best=119.359) on the 5-frame default-scene benchmark, versus render_ms_best=101.771 / avg=114.621 for the same binary rebuilt with stack 20 / cap 16. I know this from my own working memory: measurement entry 'round2-progress' item (b) records 'stack 16/depth cap 15 regressed to 119.9 -> keep PT_BVH_STACK_SIZE 20 / cap 16', citing history messages #125 (the regressed run) and #129 (the reverted rebuild); the exact triple 119.866/126.379/119.359 is the tool result recorded at message #125 in the archived index. That config was reverted, and the later stack-20->16 retry in the near-first kernel also regressed (76.4 vs ~63 ms, message #304), so 20 entries stayed."
+ },
+ {
+  "gid": "g0101",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (full line: render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8).\n\nHow I know: it was the 5-frame benchmark (--benchmark 5, seed 1, 512x512/64spp, default scene) run immediately after editing PT_BVH_STACK_SIZE 20->16 and PT_BVH_MAX_DEPTH 16->15 in include/pt_gpu_types.hpp. I read the raw tool result back from my compacted history (message #125, with the surrounding notes #122-#129) rather than re-running it. Context: with the median-split tree that configuration was a regression — 119.866/126.379 versus 103.290 best on the immediately preceding stack-20/cap-16 build, and 101.771/114.621 when re-measured right after reverting (#129), so stack 20 / cap 16 was kept. Note that later in round 2, after the near-first child-ordering traversal landed, I retested stack 16 (on the much faster kernel) and it again regressed (76.353 vs ~62.9), so 20 stayed."
+ },
+ {
+  "gid": "g0107",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "render_ms_avg was 126.379 ms for that run (the full line was: render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8).\n\nHow I know: it is the archived benchmark tool result at message #125 of my own session history, produced by the exact experiment described — PT_BVH_STACK_SIZE 20->16 with PT_BVH_MAX_DEPTH 15 (the tree already had max_depth 15), default scene at 512x512/64spp, seed 1, --benchmark 5. My note at #126 records the conclusion \"Stack 16/depth cap 15 REGRESSED (119.9 vs 103.3ms)\", and the working-memory entry measurements/round2-progress item (b) (evidence 119-173) keeps the same conclusion, which is why I reverted to stack 20 / cap 16.\n\nOne disambiguation, since there were two stack-16 experiments: the later one (#302-#304) paired stack 16 with the depth cap still at 16, after the near-first traversal had landed, and measured render_ms_best=76.353 render_ms_avg=85.219 — also a regression (62.9 ms at stack 20), so it was reverted too. The cap-15 run the question asks about is the earlier one, avg 126.379 ms."
+ },
+ {
+  "gid": "g0131",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "render_ms_avg was 126.379 ms for that configuration.\n\nHow I know: that experiment (PT_BVH_STACK_SIZE 20 -> 16 together with PT_BVH_MAX_DEPTH 16 -> 15) is recorded in my round-2 measurement notes and in the archive index line for messages 123-125, which holds the full printed line: render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 at 512x512/64spp. For comparison, reverting to stack 20 / cap 16 in the same round measured render_ms_best=101.771 render_ms_avg=114.621 gpu_ms_best=101.237, so the smaller stack cost roughly 18 ms on the best and about 12 ms on the average, which is why I reverted it. (Later, after the near-first traversal change, I re-tested stack 16 and it again regressed - 76.4 ms vs 62.9 ms - so the final round-2 state keeps stack 20 / cap 16.)"
+ },
+ {
+  "gid": "g0135",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "render_ms_avg = 126.379 ms.\n\nHow I know: that configuration (PT_BVH_STACK_SIZE 20->16 with PT_BVH_MAX_DEPTH 16->15, on top of the median-split tree) was benchmarked on scene-default at 512x512/64spp seed 1, and the printed line was:\n\n  render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nThat is tool result #125 in my history, which I just re-confirmed by searching my compacted archive for \"119.866\" (one hit, that exact benchmark line). It was a regression versus the median-split baseline (101.8-103.4 ms best), so I reverted both constants back to stack 20 / depth cap 16 (message #129 re-measured 101.771 best, gpu 101.237)."
+ },
+ {
+  "gid": "g0144",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (alongside render_ms_best=119.866 and gpu_ms_best=119.359, at 512x512 / 64 spp, samples=16777216, threads_used=8).\n\nHow I know: it was the benchmark in my history at message #125 — the run where PT_BVH_STACK_SIZE was 20->16 with PT_BVH_MAX_DEPTH capped at 15, right after I had reverted the binned-SAH build back to median-split-on-widest-axis. I recorded it in my working memory as \"stack 16/depth cap 15 regressed to 119.9\" citing #125, and I just re-read #125 from the archive to get the exact avg rather than quote my rounded note. The paired comparison was #129 (stack 20 / cap 16) at 101.8-103.4 ms best, which is why I reverted the smaller stack. (Separately, in the later near-first traversal kernel, stack 16 regressed again: 76.4 ms best at #304, reverted to 20.)"
+ },
+ {
+  "gid": "g0160",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (alongside render_ms_best=119.866 and gpu_ms_best=119.359, at 512x512 / 64 spp / seed 1, threads_used=8, samples=16777216).\n\nHow I know: it is the archived tool result at message #125 in my session history (archive segment art-000557), which was the 5-frame benchmark of the median-split tree with PT_BVH_STACK_SIZE 16 and PT_BVH_MAX_DEPTH 15. My working-memory entry 'round2-progress' records exactly that experiment as item (b) — \"stack 16/depth cap 15 regressed to 119.9 -> keep PT_BVH_STACK_SIZE 20 / cap 16 (#125 vs #129)\" — and the comparison run #129 (stack 20 / cap 16) was the faster one, so the 16/15 configuration was reverted. I confirmed the number by searching the archive for the literal 'render_ms_best=119', which returned only #125 and its avg of 126.379."
+ },
+ {
+  "gid": "g0192",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (with render_ms_best=119.866 ms and gpu_ms_best=119.359 ms) at 512x512/64spp, seed 1, 8 host threads.\n\nHow I know: it was attempt (b) of round 2, logged in my working-memory entry 'round2-progress' and in writer-log history at messages #123-#125 — I set PT_BVH_STACK_SIZE 20->16 and PT_BVH_MAX_DEPTH 16->15 on the median-split tree, benchmarked, and got 119.866/126.379 (gpu 119.359) versus 101.771/114.621 for the reverted stack-20/cap-16 configuration in the very next rebuild (#129), so I reverted it.\n\nFor clarity, that is a different experiment from the later stack-16 trial on the near-first kernel (#304), which printed 76.353 best / 85.219 avg and was also reverted."
+ },
+ {
+  "gid": "g0233",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 (alongside render_ms_best=119.866 and gpu_ms_best=119.359, spp=64, 512x512, samples=16777216, threads_used=8).\n\nHow I know: it is the exact stdout of the benchmark I ran right after setting PT_BVH_STACK_SIZE 16 / PT_BVH_MAX_DEPTH 15 on the median-split tree — history message #125 (my edit that made the change is #122). For comparison, the immediately following run that reverted to stack 20 / cap 16 printed render_ms_best=101.771 render_ms_avg=114.621 gpu_ms_best=101.237 (#129), which is why I reverted the smaller stack; that rejection is recorded in my working memory entry round2-progress with evidence 119-173."
+ },
+ {
+  "gid": "g0242",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "It printed render_ms_avg=126.379 (with render_ms_best=119.866 and gpu_ms_best=119.359 at 512x512/64spp, samples=16777216, threads_used=8).\n\nHow I know: that run's full output line is still in my history — archived tool result #125, which I just re-read via search_memory for \"render_ms_best=119\". At that point the tree was the round-1 style median-split-on-widest-axis build (kLeafSize 4, 40597 nodes, max depth 15) and I had shrunk PT_BVH_STACK_SIZE to 16 with the depth cap at 15; the same configuration measured 101.8-103.4ms best with stack 20 / cap 16 (#129), so I reverted the stack shrink. Worth noting for context: after the later near-first traversal change, a stack shrink to 16 again regressed (76.4ms vs 62.9-65.5ms, #304), so both times the smaller stack was a pure register/layout loss and the live build keeps PT_BVH_STACK_SIZE 20 with PT_BVH_MAX_DEPTH 16."
+ },
+ {
+  "gid": "g0317",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "It printed render_ms_avg=126.379 ms (with render_ms_best=119.866 and gpu_ms_best=119.359) for that 5-frame run at 512x512/64spp, seed 1. I know this from my own log of that attempt: after replacing binned SAH with the median-split tree I set PT_BVH_STACK_SIZE 20->16 and PT_BVH_MAX_DEPTH 16->15, benchmarked, and got 119.866/126.379 vs the 101.77/114.62 of the same code with stack 20 / cap 16 (#125 vs #129), so I reverted both constants. Note this is distinct from a later round-2 test on the optimized near-first kernel, where shrinking the stack to 16 again regressed (76.353 best) and was reverted (#304)."
+ },
+ {
+  "gid": "g0380",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "render_ms_avg was 126.379 ms for that configuration.\n\nHow I know: the run is in my session archive at message #125. That attempt set PT_BVH_STACK_SIZE 20 -> 16 and PT_BVH_MAX_DEPTH 16 -> 15 (message #122) and then benchmarked the default scene at 512x512, 64 spp, seed 1 with --benchmark 5. The printed line was:\n\n  render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8\n\nSo best 119.866 ms / avg 126.379 ms / gpu_best 119.359 ms, versus 103.290 best / 113.313 avg immediately before it (#121) — a clear regression, which is why I reverted to stack 20 / depth cap 16 (#126-#129, 101.771 best / 114.621 avg). That stack-size finding held later too: with the near-first traversal, stack 16 again regressed (76.353 best, #304) against 62.9 with stack 20, so the live build still uses PT_BVH_STACK_SIZE 20 / PT_BVH_MAX_DEPTH 16."
+ },
+ {
+  "gid": "g0541",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (full line: render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359 spp=64 width=512 height=512 samples=16777216 threads_used=8).\n\nHow I know: it is recorded verbatim in my session history as message #125, the 5-frame benchmark I ran right after reverting binned-SAH to the median-split build and shrinking PT_BVH_STACK_SIZE to 16 with PT_BVH_MAX_DEPTH 15. I kept the conclusion in working memory (\"stack 16/depth cap 15 regressed to 119.9 -> keep stack 20 / cap 16, #125 vs #129\") and just re-retrieved the full output line from the archive to read off the average. For context, the same-session median-split build with stack 20 / cap 16 measured 101.8-103.4 ms best, which is why the 16-entry stack was reverted; a later stack-16 test (#304, 76.353 ms best) was a different configuration — near-first traversal with depth cap 16 — and was also reverted."
+ },
+ {
+  "gid": "g0558",
+  "probe": "h-557-1",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "answer": "That run printed render_ms_avg=126.379 ms (alongside render_ms_best=119.866 ms and gpu_ms_best=119.359 ms) on the 5-frame default-scene benchmark at 512x512 / 64 spp, seed 1.\n\nHow I know: it is recorded verbatim in my history at messages #123-125 (\"PT_BVH_STACK_SIZE 20->16 + cap 15 REGRESSED: 119.866/126.379 gpu 119.359\") and carried in my working-memory entry `round2-progress` item (b), which cites #125 for the regression and #129 for the revert back to stack 20 / cap 16 (that revert measured 101.771 best / 114.621 avg). For context, that was an early round-2 A/B before the near-first traversal rewrite; the later, separate stack-size probe after that rewrite (stack 20->16 at depth cap 16, message #304) measured 76.353 best / 85.219 avg and was also reverted."
+ }
+]
