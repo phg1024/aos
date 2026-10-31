@@ -1,0 +1,40 @@
+[
+ {
+  "id": "h-1608-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "At the start of round 5 you read the tail of the writer log. What final benchmark time (render_ms_best) had round 4 recorded for itself?",
+  "topic": "(?i)(round.?4|benchmark|render_ms|ms\\b|millisecond)",
+  "expect": "(?i)45\\.6(?:35|4|3)?(?:\\D|$)",
+  "reject": "(?i)45\\.(607|35)\\b",
+  "note": "Truth: #5 (writer log tail) 'round 4 (pt_round_04): render_ms_best=45.635 render_ms_avg=46.957 gpu_ms_best=45.349 ... round 3 (ab_r3): render_ms_best=47.828 ... 8/8 interleaved pairs favoured round 4 ... Speedup 1.074x over round 3's verified 49.020ms'. Not in the checkpoint's working memory (art-001763) or live history (checked: 45.635, 47.828, 1.074, 2.403, 8/8, 'round 4 ('; '45.6' occurs only as 45.607, the entered-stack mean). The writer log is on disk, so the probed agent can also re-read it."
+ },
+ {
+  "id": "h-1661-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's PT_PROF cost-share sweep, what did the combined setting PT_PROF=3 (no shadow walk and no mesh closest-hit) measure?",
+  "topic": "(?i)(prof|shadow|mesh|ms\\b|gpu|render)",
+  "expect": "(?i)(0\\.4[56]|0\\.62)",
+  "note": "Truth: #58 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Second pass, secondary fact (settings 0, 1, 2, 4, 8 are in working memory round5-cost-shares; 3 is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 0.458, 0.623, 'PT_PROF=3')."
+ },
+ {
+  "id": "h-3133-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-003135",
+  "question": "In the round-8 E0 profile (scratch _r8p/ build with PT_SPLIT=1), what render_ms_best (wall time) did the default configuration, with no diagnostic flags, print?",
+  "topic": "(?i)(render|wall|split|profile|ms\\b)",
+  "expect": "(?i)31\\.2(36|4)?(?:\\D|$)",
+  "note": "Truth: #38 cfg='' '[split] trace_gpu_ms=30.329' then 'render_ms_best=31.236 render_ms_avg=35.855 gpu_ms_best=0.425'. Second pass, secondary fact (trace 30.30 and the depth sweep are in working memory r8-cost-split; the wall time is not). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.236, 35.855, 27.593, 7.204)."
+ },
+ {
+  "id": "h-414-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "Early in round 2 you tried to save a round-1 reference render by copying the round-1 binary into the out/ folder and running it from there. Did that run produce the reference image? If not, what error did it print?",
+  "topic": "(?i)(reference|round.?1|cop(y|ied)|out/|pathtracer_r1|r1_default|shader|header|error)",
+  "expect": "(?i)(shared (shader )?header|(cannot|could ?n[o']t|can'?t|unable to|failed to) (read|find|load|open)[^.]{0,30}header|header[^.]{0,40}(not found|missing|unreadable|not readable|could ?n[o']t be (read|found))|metal init error)",
+  "reject": "(?i)^\\W*yes\\b",
+  "note": "Truth: #56 'metal init error: cannot read shared shader header' (and 'shasum: out/r1_default.pfm: No such file'). Not in the checkpoint's working memory (art-000643) or live history (checked: 'shared shader header', 'shader header', 'cannot read', 'init error', pathtracer_r1, r1_default)."
+ }
+]

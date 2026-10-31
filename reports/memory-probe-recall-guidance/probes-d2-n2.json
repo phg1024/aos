@@ -1,0 +1,57 @@
+[
+ {
+  "id": "h-1608-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "topic": "(?i)(setup|reference|default|ms\\b)",
+  "expect": "(?i)318(\\.0)?(?:\\D|$)",
+  "note": "Truth: #27 'setup_ms=318.0 ... bvh_nodes=81521' for the default scene (alt-view 269.6, caustic-closeup 272.2). Second pass, secondary fact. Not in the checkpoint's working memory (art-001763) or live history (checked: 318.0, 'setup_ms=318', 269.6, 272.2; setup_ms occurs in live history only with other values)."
+ },
+ {
+  "id": "h-1661-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's PT_PROF cost-share sweep, what did the combined setting PT_PROF=3 (no shadow walk and no mesh closest-hit) measure?",
+  "topic": "(?i)(prof|shadow|mesh|ms\\b|gpu|render)",
+  "expect": "(?i)(0\\.4[56]|0\\.62)",
+  "note": "Truth: #58 'PT_PROF=3 render_ms_best=0.623 render_ms_avg=1.073 gpu_ms_best=0.458'. Second pass, secondary fact (settings 0, 1, 2, 4, 8 are in working memory round5-cost-shares; 3 is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 0.458, 0.623, 'PT_PROF=3')."
+ },
+ {
+  "id": "h-1661-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "topic": "(?i)(gpu|min|refract|glass|candidate|ms\\b)",
+  "expect": "(?i)44\\.7(57|6)?(?:\\D|$)",
+  "note": "Truth: #78 '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' (base gpu_min 43.026). Second pass, secondary fact (render_min/mean of both sides are in working memory round5-glass-and-stack; gpu_min is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 44.757, 44.76, 43.026)."
+ },
+ {
+  "id": "h-3133-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-003135",
+  "question": "In the round-8 E0 profile (scratch _r8p/ build with PT_SPLIT=1), what render_ms_best (wall time) did the default configuration, with no diagnostic flags, print?",
+  "topic": "(?i)(render|wall|split|profile|ms\\b)",
+  "expect": "(?i)31\\.2(36|4)?(?:\\D|$)",
+  "note": "Truth: #38 cfg='' '[split] trace_gpu_ms=30.329' then 'render_ms_best=31.236 render_ms_avg=35.855 gpu_ms_best=0.425'. Second pass, secondary fact (trace 30.30 and the depth sweep are in working memory r8-cost-split; the wall time is not). Not in the checkpoint's working memory (art-003130) or live history (checked: 31.236, 35.855, 27.593, 7.204)."
+ },
+ {
+  "id": "h-414-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "At the start of round 2 you benchmarked the rebuilt round-1 code with its image outputs pointed at /tmp (base.ppm / base.pfm). Did that run write its image? If not, what did it report?",
+  "topic": "(?i)(/tmp|image|output|write|ppm|pfm|sandbox|error)",
+  "expect": "(?i)(cannot open output|ppm error|(could ?n[o']t|cannot|can'?t|unable to|failed to|not (allowed|permitted) to) (write|open|create)[^.]{0,40}(/tmp|output|ppm|image|file)|(/tmp|output)[^.]{0,40}(not writable|denied|not permitted|blocked|sandbox))",
+  "reject": "(?i)^\\W*yes\\b",
+  "note": "Truth: #43 'ppm error: cannot open output: /tmp/base.ppm' (exit 1; the benchmark line itself printed). Second pass, secondary fact (the primary, render_ms_best=105.947, is in working memory). Not in the checkpoint's working memory (art-000643) or live history (checked: /tmp, 'cannot open output', 'ppm error', base.ppm)."
+ },
+ {
+  "id": "h-646-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "topic": "(?i)(setup|smoke|merged|ms\\b)",
+  "expect": "(?i)180\\.8|\\b181 ?ms",
+  "note": "Truth: #245 'setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597'. Second pass, secondary fact (the run passing is implied by working memory round2-final). Not in the checkpoint's working memory (art-000643) or live history (checked: 180.8, 1048576, merged.ppm)."
+ }
+]

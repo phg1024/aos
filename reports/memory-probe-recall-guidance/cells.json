@@ -1,0 +1,542 @@
+[
+ {
+  "probe": "h-1608-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-1661-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-1661-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-1766-2",
+  "draw": 3,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-414-2",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-414-3",
+  "draw": 1,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-507-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-557-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "n-1608-1",
+  "draw": 1,
+  "kind": "negative-claim",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "n-1608-1",
+  "draw": 2,
+  "kind": "negative-claim",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "n-1608-1",
+  "draw": 3,
+  "kind": "negative-claim",
+  "grade": "states",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "harm",
+  "n": 3
+ },
+ {
+  "probe": "h-1608-2",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 0,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1608-2",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 0,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1608-3",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1608-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1608-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1661-1",
+  "draw": 3,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1661-2",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1661-2",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1661-2",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 1,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1661-3",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1661-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1661-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1766-3",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-1766-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-1766-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-3062-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-3062-2",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-3133-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-3133-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-3133-1",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-414-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "states",
+  "shown": false,
+  "prior_a1_main": 1,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-414-1",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": false,
+  "prior_a1_main": 1,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-414-1",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": false,
+  "prior_a1_main": 0,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-414-2",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-414-2",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-414-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-414-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-557-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-557-2",
+  "draw": 3,
+  "kind": "new",
+  "grade": "states",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-557-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "states",
+  "shown": false,
+  "prior_a1_main": 0,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-557-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "states",
+  "shown": false,
+  "prior_a1_main": 1,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-646-1",
+  "draw": 1,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-646-2",
+  "draw": 1,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-646-2",
+  "draw": 3,
+  "kind": "new",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": 2,
+  "set": "target",
+  "n": 6
+ },
+ {
+  "probe": "h-646-3",
+  "draw": 1,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-646-3",
+  "draw": 2,
+  "kind": "new",
+  "grade": "points",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "h-646-3",
+  "draw": 3,
+  "kind": "new",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": 3,
+  "set": "target",
+  "n": 2
+ },
+ {
+  "probe": "n-1661-1",
+  "draw": 1,
+  "kind": "negative-claim",
+  "grade": "no",
+  "shown": false,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ },
+ {
+  "probe": "n-1661-1",
+  "draw": 2,
+  "kind": "negative-claim",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ },
+ {
+  "probe": "n-1661-1",
+  "draw": 3,
+  "kind": "negative-claim",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ },
+ {
+  "probe": "n-1766-1",
+  "draw": 1,
+  "kind": "negative-claim",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ },
+ {
+  "probe": "n-1766-1",
+  "draw": 2,
+  "kind": "negative-claim",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ },
+ {
+  "probe": "n-1766-1",
+  "draw": 3,
+  "kind": "negative-claim",
+  "grade": "points",
+  "shown": true,
+  "prior_a1_main": null,
+  "set": "target",
+  "n": 4
+ }
+]

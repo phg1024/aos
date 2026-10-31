@@ -1,0 +1,85 @@
+[
+ {
+  "id": "h-1608-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "At the start of round 5, when you rendered the round-4 reference images with the correct mesh path, what setup_ms did the default scene's render print?",
+  "topic": "(?i)(setup|reference|default|ms\\b)",
+  "expect": "(?i)318(\\.0)?(?:\\D|$)",
+  "note": "Truth: #27 'setup_ms=318.0 ... bvh_nodes=81521' for the default scene (alt-view 269.6, caustic-closeup 272.2). Second pass, secondary fact. Not in the checkpoint's working memory (art-001763) or live history (checked: 318.0, 'setup_ms=318', 269.6, 272.2; setup_ms occurs in live history only with other values)."
+ },
+ {
+  "id": "h-1661-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5's 8x12 interleaved A/B of the glass refract-skip candidate against the round-4 binary, what gpu_min did the candidate measure?",
+  "topic": "(?i)(gpu|min|refract|glass|candidate|ms\\b)",
+  "expect": "(?i)44\\.7(57|6)?(?:\\D|$)",
+  "note": "Truth: #78 '_ab_cand.txt render_min=45.025 render_mean=46.563 gpu_min=44.757' (base gpu_min 43.026). Second pass, secondary fact (render_min/mean of both sides are in working memory round5-glass-and-stack; gpu_min is not). Not in the checkpoint's working memory (art-001763) or live history (checked: 44.757, 44.76, 43.026)."
+ },
+ {
+  "id": "h-1766-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "In round 5, the first successful byte-identity check of the child-pair layout on the default scene (64 spp, seed 1, against out/r4_default.pfm) printed a setup line. What setup_ms did it show?",
+  "topic": "(?i)(setup|child|pair|default|ms\\b)",
+  "expect": "(?i)245\\.7|\\b246 ?ms",
+  "note": "Truth: #163 'setup_ms=245.7 samples=16777216 ... threads_used=4 ... bvh_nodes=81521' then IDENTICAL_DEFAULT. Second pass, secondary fact (the identity result is in working memory round5-childpair). Not in the checkpoint's working memory (art-001763) or live history (checked: 245.7; setup_ms occurs in live history only with other values)."
+ },
+ {
+  "id": "h-3062-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-003135",
+  "question": "In the round-7 section of the writer log you read at the start of round 8, what happened when the BVH's maximum depth was raised from 16 to 20, and what did the round-7 writer conclude about changing the tree's shape?",
+  "topic": "(?i)(depth|tree|bvh|topolog|estimator|identical|image|pfm)",
+  "expect": "(?i)(1022129|(pfm|image|output|alt.?view)[^.]{0,40}(chang|differ|not (bit|byte).identical)|(chang|differ)[^.]{0,30}(pfm|image|output|alt.?view)|tie.?break|test order|topolog|part of the (frozen )?estimator)",
+  "reject": "(?i)(no (effect|change) (on|to) the (image|pfm|output)|stayed (bit|byte).identical|(was|is|remained) (bit|byte).identical)",
+  "note": "Truth: #9 (writer log, Round 7) 'CRITICAL FINDING - the BVH TOPOLOGY IS PART OF THE FROZEN ESTIMATOR. Raising PT_BVH_MAX_DEPTH from 16 to 20 (nodes 81521 -> 123159 ...) changes the scene-alt-view PFM at byte 1022129 ... the cause is the tie-break ... rules out the whole class of tree-quality ideas'. Not in the checkpoint's working memory (art-003130) or live history (checked: 1022129, 123159, topology, MAX_DEPTH, tie-break, 'test order', 'tree quality', 'leaf size', 'deeper tree'). The writer log is on disk, so the probed agent can also re-read it."
+ },
+ {
+  "id": "h-414-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "At the start of round 2 you read the round-1 writer log. It recorded a caustic check on the 64 spp default render. How bright was the caustic compared with the floor?",
+  "topic": "(?i)(caustic|luminance|floor|bright)",
+  "expect": "(?i)(9\\.05|\\b16 ?(x|×|times)|sixteen|1185|1,185)",
+  "note": "Truth: #31 (round-1 writer log) 'floor median luminance 0.56, pixels >= 3x median 1185 ... with mean luminance 9.05, i.e. ~16x the floor'. Not in the checkpoint's working memory (art-000643) or live history (checked: 9.05, 1185, 0.56, luminance, 3.66, 3499; '16x' occurs only as threadgroup shapes such as 16x8). The writer log is on disk, so the probed agent can also re-read it."
+ },
+ {
+  "id": "h-557-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, after going back to the median-split tree, you tried shrinking the traversal stack to 16 entries with a depth cap of 15. Besides its best time, what render_ms_avg did that 5-frame benchmark print?",
+  "topic": "(?i)(avg|average|stack|depth|ms\\b)",
+  "expect": "(?i)126\\.(3|4)",
+  "reject": "(?i)126\\.0\\b",
+  "note": "Truth: #125 'render_ms_best=119.866 render_ms_avg=126.379 gpu_ms_best=119.359'. Second pass, secondary fact (the best time, 119.9, is in working memory round2-progress (b)). Not in the checkpoint's working memory (art-000643) or live history (checked: 126.379, 126.4, 119.359; '126.' occurs only as the root-exit 'avg 126.0')."
+ },
+ {
+  "id": "h-646-1",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2 your first stackless-traversal build hung the GPU because the host binary was stale: the host build had failed. What was the compiler error in that failed build?",
+  "topic": "(?i)(compile|error|build|escape|private|stale)",
+  "expect": "(?i)(link_escapes|\\bprivate\\b|access (control|specifier)|not (public|accessible))",
+  "note": "Truth: #208 \"src/pt_bvh.cpp:216:13: error: 'link_escapes' is a private member of 'pt::(anonymous namespace)::BvhBuilder'\". The checkpoint's working memory (art-000643, round2-progress2 (h)) says only that 'a failed compile left a stale ./pathtracer binary', not why it failed. Not in live history (checked: link_escapes, 'private member', private)."
+ },
+ {
+  "id": "h-646-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, when you rebuilt the pre-stackless stack-based snapshot (out/pt_snapshot_pre_stackless) and ran it twice for the A/B against the stackless walk, what render_ms_avg values did the two runs print?",
+  "topic": "(?i)(avg|average|stack|snapshot|ms\\b)",
+  "expect": "(?i)(103\\.(183|18|2)(?:\\D|$)|100\\.(692|69|7)(?:\\D|$))",
+  "note": "Truth: #216 run 1 'render_ms_best=93.366 render_ms_avg=103.183', run 2 'render_ms_best=96.614 render_ms_avg=100.692'. Second pass, secondary fact (the best times 93.4/96.6 and gpu 92.9 are in working memory round2-progress2 (f)). Not in the checkpoint's working memory (art-000643) or live history (checked: 103.183, 100.692, 103.2, 100.7)."
+ },
+ {
+  "id": "h-646-3",
+  "kind": "unrecorded",
+  "checkpoint": "art-000648",
+  "question": "In round 2, after merging the tone mapping into the trace kernel, you ran a 4 spp smoke test writing out/merged.ppm. What setup_ms did that run print?",
+  "topic": "(?i)(setup|smoke|merged|ms\\b)",
+  "expect": "(?i)180\\.8|\\b181 ?ms",
+  "note": "Truth: #245 'setup_ms=180.8 samples=1048576 width=512 height=512 spp=4 threads_used=8 triangles=69451 bvh_nodes=40597'. Second pass, secondary fact (the run passing is implied by working memory round2-final). Not in the checkpoint's working memory (art-000643) or live history (checked: 180.8, 1048576, merged.ppm)."
+ }
+]

@@ -1,0 +1,22 @@
+[
+ {
+  "id": "h-1766-2",
+  "kind": "unrecorded",
+  "checkpoint": "art-001768",
+  "question": "During the round-5 child-pair experiment, one byte-identity check of the default scene against out/r4_default.pfm reported a difference. What caused it?",
+  "topic": "(?i)(scene|path|pfm|identi|diff|config)",
+  "expect": "(?i)(scenes/|scene[^.]{0,40}(path|cannot open|could ?n[o']t (open|find)|not found|missing|wrong)|wrong[^.]{0,30}(scene|path|config)|no (pfm|image|output)|cannot open scene)",
+  "reject": "(?i)(layout|child.pair|tie.?break)[^.]{0,40}(changed|altered|broke) the (image|pfm|output)",
+  "note": "Truth: #159 'scene error: cannot open scene config: scenes/scene-default.json' and 'cmp: out/cp_default.pfm: No such file or directory' -> DIFF_DEFAULT; the rerun with the right path (#163) was IDENTICAL_DEFAULT. Not in the checkpoint's working memory (art-001763) or live history (checked: 'scenes/', 'cannot open scene', 'scene error', DIFF_DEFAULT)."
+ },
+ {
+  "id": "n-1608-1",
+  "kind": "negative-claim",
+  "checkpoint": "art-001768",
+  "question": "During round 5, did you ever rebuild the live pathtracer/ directory from the unchanged round-4 sources, before making any edit of your own? If so, what did it show?",
+  "topic": "(?i)(build|rebuil|compil|clang|warning|round.?4|live)",
+  "expect": "(?i)(fast.?math|deprecat|mathMode|BUILD_OK|built (ok|fine|clean(ly)?|success(fully)?|without (any )?errors?)|compiled (ok|fine|clean(ly)?|success(fully)?|without (any )?errors?)|build (succeeded|passed|was (ok|fine|clean|successful))|succeeded)",
+  "reject": "(?i)(^\\W*no[,.;:]?\\s+(I\\s+)?(never|did ?n[o']t|have ?n[o']t)\\b|^\\W*no\\W*$|\\bI never (re)?buil)",
+  "note": "Truth: #18 \"pathtracer/src/pt_metal_host.mm:120:13: warning: 'fastMathEnabled' is deprecated: first deprecated in macOS 15.0 - Use mathMode instead ... 1 warning generated.\" then 'BUILD_OK' (printed only on clang++ success; the same command's `which metal` printed nothing and the Metal.framework Headers ls failed). Not in the checkpoint's working memory (art-001763) or live history (checked: BUILD_OK, fastMathEnabled, deprecat, mathMode, ab_r3, SOURCES_IDENTICAL, 'which metal', md5; '1 warning' occurs only in #249, the later occupancy-diag build that printed '1 warning and 1 error generated')."
+ }
+]
