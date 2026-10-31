@@ -397,3 +397,142 @@ commit, and records any that changed and which were used.
   the job folder.
 - **What this does not check:** the fix build's budget switch. The A1 smoke
   trial checks that.
+
+### A1, 2026-10-31, before the first counted trial: build, switch, judging strings
+
+**Build.**
+
+- aos code's fix is 1574f69 (parent 76710c0), in local main, not pushed.
+- This branch merged local main as ad239f9, and 1574f69 is an ancestor of
+  HEAD.
+- The run builds from ad239f9. The static Linux binaries are built once,
+  into `.cache/harbor-dist-budget/`, with `CGO_ENABLED=0 -trimpath
+  -buildvcs=false`, as run-tb.sh builds them. Their SHA-256:
+  - `aos-linux-amd64` bcc4daf71dd6d53f81fec02e7752e4c950d375bde308b308751cfecb004619cf
+  - `aos-linux-arm64` 17b201f4bf99777be7ec87d122a5a7e6b58982735653229dea472f9be7dd4575
+- The inputs the adapter reads at run time, also SHA-256:
+  - `workflows/terminal-bench.json`
+    94e7fcfb2c9bb9007c47a056188f146871c9b6a851d1fff35f14b84625f8534a
+  - `bench/harbor/aos_agent.py`
+    1efa52bc79ac5ef028be3bc65ed8c802ba6ced8a911c91fde4afcd0303fd649d
+- None of these is edited during the run.
+- `bench/harbor/run-tb.sh --self-test` passes: 18 tests.
+
+**Switch.** Each trial runs with `--ak time_budget=<arm>`, and `run.sh`
+unsets `AOS_TIME_BUDGET`. With Harbor's 900 s agent timeout, the adapter
+passes:
+
+| Arm | Flags passed to `aos run` |
+|---|---|
+| `strict` | `--time-budget <B>s --strict-time-budget` |
+| `advisory` | `--time-budget <B>s` |
+| `off` | no budget flag |
+
+`B` is 900 s minus setup minus the 20 s margin. In the smoke it was 879 s.
+Each trial's metadata records `time_budget` and `time_budget_flag`, and
+`collect.py` copies both into the record.
+
+**Sampling.** The call ledger of the smoke trial records the parameters
+sent: temperature 0.6, top_p 0.95, max_tokens 8192, reasoning budget 2048.
+These are the pilot's, unchanged.
+
+**Judging strings, from 1574f69's `internal/runtime/budget.go` and
+`runtime.go`.**
+
+- **Budget notes.** They arrive as user messages, `[#N] budget ...`; the
+  `[#N] ` prefix is stripped before matching.
+  - Time note, every step when a time budget is set:
+    `budget time=<L>s used=<U>s left=<R>s`. Under strict, it also carries
+    ` (strict: the run is stopped when it runs out)`.
+  - Time warning, once, when 10% or less of the time is left:
+    `budget warning: less than 10% of the time is left. Commit your best
+    answer now: write or submit what you have, then exit.`
+  - Steps note, in the last tenth of the steps only (from step 271 of 300),
+    and always on the last step:
+    `budget steps=<N> used=<U> left=<L> (strict: the run is stopped after
+    the last step)`.
+  - Steps warning, once, with the first steps note:
+    `budget warning: <L> of <N> steps are left, this one included. Commit
+    your best answer now: ...`. It is matched by the regular expression
+    `budget warning: \d+ of \d+ steps are left`.
+- **Time of a note.** A note is added at the start of a step. Its time is
+  the start of the model call that first carried it, taken as the ledger
+  record's time minus its `latency_ms`.
+- **Budget exit (strict only).**
+  - The run ends with the kernel exit reason `time budget exceeded: <L>s
+    strict budget of <owner>`, from `ErrTimeBudgetExceeded`, with code 1,
+    retryable, and a checkpoint.
+  - A cancelled tool reports `time_budget_exceeded`.
+  - The trace's `exit` record carries the same reason:
+    `code=1 reason=time budget exceeded: …`.
+  - `collect.py` classifies a trial as `budget_exit` when `time budget
+    exceeded` appears in that `exit` record, or in `aos.log` when there is
+    no `exit` record, and Harbor raised no exception.
+  - The in-flight model call that the budget cancels is recorded in the
+    ledger with the error `…: time budget exceeded: …`. That is the budget
+    exit itself, not a backend error, so it does not make the trial an
+    `infra_error`.
+- **Warning fraction:** 0.1, from `budgetWarningFraction`. So `T_warn` in
+  the `off` arm is (agent timeout − 20 s) × 0.9 from the agent's start.
+  That is 791 s for a 900 s timeout. It assumes the setup time is under a
+  second, as it was in the smoke.
+
+**How collect.py reads a trial.**
+
+- **Tool calls.** The ledger (`run/calls.jsonl`) does not hold the model's
+  replies as tool-call fields. They are JSON action envelopes in the
+  assistant messages, `{"action":{"type":"tool","tool_call":{"name":…,"args":…}}}`.
+  - The *k*-th envelope is paired with the *k*-th `tool_call` record in
+    `run/trace.jsonl`. Its outcome is the trace's next `tool_result` or
+    `tool_error`, and its time is that outcome's time.
+  - The last step's reply is not in the ledger, because no later call
+    carries it. For that step only, the trace's shortened `detail` is
+    used.
+- **Answer writes.** Only a tool call whose outcome is `tool_result`
+  counts as a write of an answer path.
+- **Contention.** Before and after each trial, the driver reads
+  `/v1/status` through the relay and counts the relay's
+  `POST /v1/chat/completions`. If the server's request delta exceeds the
+  relay's, the trial is contended.
+
+**Smoke, counted for nothing.**
+
+1. `fix-git`, `strict`, the full 900 s timeout, job
+   `tb2-budget-smoke-fix-git-strict`, record in `smoke.jsonl`.
+   - Reward 1.0, `completed`, `aos_exit=0`.
+   - 51 s of agent time, 7 calls, 6 `run` tool calls.
+   - Flag `--time-budget 879s --strict-time-budget`, and 7 time notes, all
+     with the strict suffix.
+   - Contention: server 7, relay 7, surplus 0.
+2. `polyglot-c-py`, `strict`, checked with `--agent-timeout-multiplier 0.2`
+   (an agent timeout of 180 s), to make the warning and the strict exit
+   happen.
+   - Flag `--time-budget 159s --strict-time-budget`.
+   - The time warning came at 157 s.
+   - Classified `budget_exit`. The exit record reads `code=1 reason=time
+     budget exceeded: 159s strict budget of run retryable=true`, and
+     `aos_exit=1`.
+   - The answer was written by `write_file` at 130 s, before the warning,
+     and the reward was 1.0.
+   - The first version of `collect.py` counted the cancelled call as a
+     backend error and classified this trial `infra_error`. It was fixed
+     (see above) before any counted trial.
+3. `polyglot-c-py`, `advisory`, with the same 180 s.
+   - Flag `--time-budget 159s` (no strict).
+   - The time warning came at 147 s. The agent exited on its own at 153 s
+     with `aos_exit=0`, classified `completed`.
+   - The answer was written at 43 s. The reward was 0.0, with
+     `test_fibonacci_polyglot` failing.
+
+The steps warning did not occur in any smoke, since all were far below 300
+steps. Its string is pinned from the source above.
+
+None of the three smokes was contended: the server's request count rose
+exactly by the relay's (7, 5 and 9). Their records are in `smoke.jsonl`,
+with seq 0, −1 and −2. They are not results.
+
+**Driver files**, SHA-256 at this commit (`run.sh`, `collect.py`, `relay.py`,
+`schedule.json`): see the commit. They are not edited during the run. If a
+parsing bug turns up mid-run, the raw job folders are kept and the records
+are recomputed from them after the run, with the fix listed in the report;
+the run itself is not touched.
