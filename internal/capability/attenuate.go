@@ -39,7 +39,10 @@ func Union(a, b Set) Set {
 
 // Excess lists what requested asks for beyond grantable: tools it lacks,
 // path scopes outside every granted scope, and network. Empty means
-// requested is within grantable.
+// requested is within grantable. Paths here, as in the mount and scope
+// narrowing below, are compared where they really point (contains): a
+// symlink, or a spelling that a case-insensitive volume opens as another
+// path, neither passes a scope it lies outside nor escapes one it is in.
 func Excess(grantable, requested Set) []string {
 	var excess []string
 	for _, tool := range requested.Tools {
@@ -95,7 +98,7 @@ func AttenuateMounts(parent, requested []Mount) []Mount {
 			continue
 		}
 		for _, outer := range parent {
-			if within(mount.HostPath, outer.HostPath) {
+			if contains(mount.HostPath, outer.HostPath) {
 				out = append(out, Mount{Name: mount.Name, HostPath: outer.HostPath, ReadOnly: mount.ReadOnly || outer.ReadOnly})
 			}
 		}
@@ -122,7 +125,7 @@ func MountExcess(parent, requested []Mount) []string {
 func coveringMounts(mounts []Mount, path string) []Mount {
 	var out []Mount
 	for _, mount := range mounts {
-		if within(mount.HostPath, path) {
+		if contains(mount.HostPath, path) {
 			out = append(out, mount)
 		}
 	}
@@ -140,7 +143,7 @@ func anyReadOnly(mounts []Mount) bool {
 
 func withinAnyScope(scopes []string, path string) bool {
 	for _, scope := range scopes {
-		if within(scope, path) {
+		if contains(scope, path) {
 			return true
 		}
 	}
@@ -157,7 +160,7 @@ func intersectScopes(parent, requested []string) []string {
 			continue
 		}
 		for _, inner := range parent {
-			if within(scope, inner) {
+			if contains(scope, inner) {
 				out = appendUnique(out, filepath.Clean(inner))
 			}
 		}

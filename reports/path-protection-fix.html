@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Path Protection Fix</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Path Protection: Case Variants, Symlinked Delegation and Earlier Sessions</h1>
+    <p>Eval's least-privilege probes (<code>717e4b6</code>, <code>reports/least-privilege-probes.html</code>, run against <code>283a92e</code>) found two holes.</p>
+    <ul>
+      <li><b>Hole 1 (macOS):</b> on a case-insensitive volume, the file tools reached the protected state directory and a nested read-only mount through a path in another case, such as <code>ws/.AOS-STATE</code> or <code>ws/REF</code>. Through it they forged a kernel event and an artifact-index entry, read <code>events.json</code> and <code>processes.json</code>, and wrote and overwrote the read-only mount. Every lower-case control was refused, and so was every variant through the sandboxed <code>run</code>.</li>
+      <li><b>Hole 2 (any OS):</b> under <code>scripts/tui.sh</code>, earlier TUI sessions sit in the writable workspace, and only the current session was protected. <code>write_file</code> and <code>run</code> wrote into them (probes x1 and x2).</li>
+    </ul>
+    <p>Fixing hole 1's sibling checks in delegation (attenuation) turned up a third problem, which needs no case variant: a scope or mount that is a symlink out of the parent's was granted to a child.</p>
+    <p>All three are fixed in one commit on top of <code>283a92e</code>.</p>
+    <p><b>Result:</b> <span class="good"><code>go vet ./...</code> and <code>go test ./...</code> are clean.</span> Every new test fails on <code>283a92e</code>, run with the old code in a throwaway worktree, and passes now. <span class="warn">Eval's probes have not been re-run</span> on this commit.</p>
+  </div>
+
+  <h2>Hole 1: Compare What Paths Name</h2>
+  <p><b>Cause.</b> Every containment check went through <code>capability.within</code>, which compares two strings with <code>filepath.Rel</code>. This covers:</p>
+  <ul>
+    <li><code>tools.Runtime.protected</code>;</li>
+    <li>the read-only mount veto;</li>
+    <li>scope and mount containment.</li>
+  </ul>
+  <p><code>filepath.EvalSymlinks</code>, which <code>resolvePath</code> applies first, keeps the caller's spelling. On a case-insensitive volume, two different strings can therefore name the same directory. APFS also ignores Unicode normalization, so even the same letters can be spelled two ways.</p>
+  <p><b>Method.</b> <code>within(base, target)</code> keeps the string test. Failing it, target is inside base when target, or one of its existing ancestors, is the same file as base. "Same file" is <code>os.SameFile</code>: the same device and inode. It is stdlib only.</p>
+  <ul>
+    <li><b>Why identity rather than case folding:</b> folding would have to match the volume's rules, which differ per volume and include Unicode normalization. Identity asks the file system itself, so no spelling gets past it, and it is portable.</li>
+    <li><b>Why every ancestor:</b> a path can reach base at another depth, through a firmlink such as <code>/System/Volumes/Data/Users/…</code> or a bind mount. Once mount containment matches by identity, the protected check must match at the same depths, or it would let those spellings through.</li>
+    <li><b>Why the string test stays:</b> it is cheaper, and it still answers for paths that do not exist yet.</li>
+    <li>Callers pass resolved paths, so no existing ancestor is a symlink, and identity cannot be fooled by a link.</li>
+  </ul>
+  <p>The fix works in both directions:</p>
+  <ul>
+    <li>Refusals now hold however a path is spelled: the protected state directory, its lock and a read-only mount.</li>
+    <li>A case variant inside a granted scope and mount is now granted, where before it was refused.</li>
+  </ul>
+  <p>The check covers all five file tools: <code>write_file</code>, <code>edit_file</code>, <code>read_file</code>, <code>list_dir</code> and <code>find_files</code>. <code>find_files</code> skips a variant while walking.</p>
+  <p><b>Cost.</b> When the string test fails, the check makes one <code>stat</code> of base and one <code>lstat</code> for each ancestor of target. The string test fails for every file checked against a root it is not in, such as the protected directory, so <code>find_files</code> pays this for each file it walks.</p>
+
+  <h2>Attenuation</h2>
+  <p><code>Excess</code>, <code>intersectScopes</code>, <code>coveringMounts</code> and <code>AttenuateMounts</code> compared the spec's path strings, without resolving them. They were not safe:</p>
+  <table>
+    <tr><th>Request</th><th>Before</th><th>Now</th></tr>
+    <tr><td>Parent mounts <code>ws</code> (rw) and <code>ws/ref</code> (ro). A child asks for <code>ws/REF</code> writable.</td><td>Covered by <code>ws</code> only, so the child got a <b>writable</b> mount of the read-only tree, and <code>MountExcess</code> reported nothing.</td><td>The mount is read-only, and a writable request is an excess.</td></tr>
+    <tr><td>Parent scope <code>ws</code>. A child asks for <code>ws/link</code>, a symlink to a directory outside <code>ws</code>, as a scope or a mount.</td><td>Granted as lexically inside. The child's own checks resolve the link, so the child could read or write <b>outside the parent's authority</b>.</td><td>An excess, and dropped.</td></tr>
+  </table>
+  <p>Attenuation now compares through <code>contains</code>, which resolves both paths and then applies <code>within</code>. The granted strings are kept as the spec wrote them.</p>
+  <p><span class="warn">Residual limit:</span> the check runs at spawn. Suppose a parent can write the directory that holds a child's scope or mount. It could replace the scope with a symlink after the child starts, and the child's checks would follow the new link. Closing that needs the child's access to be checked against its grantor chain at use time. That is a larger change, not made here.</p>
+
+  <h2>Hole 2: Protect the Sessions Directory</h2>
+  <p><b>Choice:</b> protect, rather than move the default out of the workspace.</p>
+  <ul>
+    <li><code>/resume</code>, <code>aos inspect</code> and the README all point at <code>.aos-sessions</code>. Moving the default would hide existing sessions from <code>/resume</code>.</li>
+    <li>Protection also covers any <code>--sessions-dir</code> or <code>AOS_TUI_SESSIONS_DIR</code> a user picks inside the workspace.</li>
+  </ul>
+  <p><b>Rule</b> (<code>protectedPaths</code> in <code>cmd/aos-tui</code>), applied to the file tools and to <code>run</code>'s hidden paths:</p>
+  <ul>
+    <li>The current state directory and its lock are protected, as before.</li>
+    <li>The whole sessions directory is protected, so a session another TUI starts later is covered too. Under <code>scripts/tui.sh</code> that is <code>$ROOT/.aos-sessions</code>.</li>
+    <li><b>Exception:</b> the sessions directory may hold what the tools must reach. That is the workspace, or the temporary directory where <code>run</code> keeps its scratch. Both can happen with the default sessions directory, which is the state directory's parent: for a TUI with no <code>--state-dir</code> it is <code>$TMPDIR</code>.
+      <ul>
+        <li>Then each session found there at start is protected, with its lock, and the rest is not.</li>
+        <li><span class="warn">Limit:</span> in this case, a session created after start, or a directory the agent plants to look like one, is not protected.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Clearer Refusal Reasons (P1c)</h2>
+  <p>The reasons came out of the change naturally, so they are included. A refused path now carries its reason, both in the error the agent sees (<code>path access denied by capabilities: …</code>) and in <code>capability.denied</code>:</p>
+  <ul>
+    <li><code>path is in the protected state directory</code></li>
+    <li><code>path is in a read-only mount</code></li>
+    <li><code>path outside the granted scopes or mounts</code></li>
+  </ul>
+  <p><code>errors.Is(err, tools.ErrPathDenied)</code> still holds, and <code>tools.DenialReason</code> reads the reason.</p>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>Covers</th><th>On 283a92e</th></tr>
+    <tr><td><code>TestCaseVariantsGetTheSameAnswer</code> (tools; skips on a case-sensitive temp volume)</td>
+      <td>
+        <ul>
+          <li>For <code>.aos-state</code>, <code>.AOS-STATE</code> and <code>.Aos-State</code>: a new file, overwriting and appending to <code>events.json</code>, reading it, <code>list_dir</code> and <code>find_files</code>, each refused as protected.</li>
+          <li>For <code>ref</code>, <code>REF</code> and <code>Ref</code>: a new file, an overwrite and an edit, each refused as read-only, while reads still work.</li>
+          <li>Nothing on disk changed.</li>
+          <li>A case variant in scope still writes.</li>
+        </ul>
+      </td>
+      <td>Fails: 17 variant attempts succeeded, and events, the reference and both directories changed. The lower-case rows were refused, as eval found.</td></tr>
+    <tr><td><code>TestEvaluatorComparesWhatPathsName</code> (capability)</td><td>The read-only veto for <code>REF</code> and <code>Ref</code>, and a case variant of the writable mount.</td><td>Fails</td></tr>
+    <tr><td><code>TestAttenuationComparesWhatPathsName</code> (capability)</td><td>A symlinked scope or mount is an excess and is dropped (on any volume). A case variant of a read-only mount stays read-only and is an excess when asked for writable. A case variant inside the grant is not an excess.</td><td>Fails</td></tr>
+    <tr><td><code>TestEarlierSessionsAreProtected</code> (aos-tui)</td><td>Under the <code>tui.sh</code> layout, <code>write_file</code> is refused into the earlier session (x1), a later one, the current one and the earlier session's lock, and so is <code>read_file</code>. The workspace stays writable.</td><td>Fails</td></tr>
+    <tr><td><code>TestRunCannotReachEarlierSessions</code> (aos-tui, darwin with sandbox)</td><td><code>run</code> cannot write (x2), overwrite or read the earlier session, or plant a new one. The earlier session still loads, and <code>run</code> still writes the workspace.</td><td>Fails: the session was overwritten and no longer loads.</td></tr>
+    <tr><td><code>TestSessionsDirectoryHoldingTheWorkspace</code> (aos-tui)</td><td>The per-session fallback when the sessions directory is or holds the workspace, and that <code>$TMPDIR</code> is never protected whole.</td><td>Fails</td></tr>
+  </table>
+  <p>To run the new tests on <code>283a92e</code>, the reason assertions were reduced to "refused", and <code>protectedPaths</code> was replaced by a shim returning the old current-session-only list. The existing sandbox and tools tests are unchanged and pass, among them <code>TestConfinedRunCannotLeaveItsScopes</code>. One existing test now checks the reason too.</p>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>The sandbox's profile. <code>run</code> refused every variant already, and it now also hides the sessions directory.</li>
+    <li>Hard links. A hard link to a file in the protected directory would pass. No tool can make one: the file tools have no link operation, and a confined <code>run</code> cannot reach the source. An unconfined <code>run</code> is outside these checks by design.</li>
+    <li>The time between a check and the open it guards (TOCTOU), as before.</li>
+    <li>Eval's branch, memprobe, probes and patterns.</li>
+    <li>Nothing pushed.</li>
+  </ul>
+</body>
+</html>

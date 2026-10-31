@@ -151,10 +151,10 @@ func runTUI() []string {
 		fail(err)
 	}
 
-	// No tool reaches the state directory; web_fetch refuses the model
-	// endpoint unless allowlisted.
+	// No tool reaches the state directory or another saved session;
+	// web_fetch refuses the model endpoint unless allowlisted.
 	toolRuntime := tools.NewRuntime()
-	toolRuntime.Protected = []string{stateDir, statedir.LockPath(stateDir)}
+	toolRuntime.Protected = protectedPaths(stateDir, sessionsDir, absWorkdir)
 	if parsed, err := url.Parse(llmConfig.BaseURL); err == nil && parsed.Hostname() != "" {
 		toolRuntime.ModelHosts = []string{parsed.Hostname()}
 	}
