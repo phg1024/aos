@@ -96,7 +96,12 @@ func TestSIGTERMRecordsTheExit(t *testing.T) {
 			t.Fatalf("%s left %s", process.PID, process.State)
 		}
 	}
-	solver := processes[1]
+	var solver kernel.Process
+	for _, process := range processes {
+		if process.Role == "agent:solver" {
+			solver = process
+		}
+	}
 	status := solver.ExitStatus
 	if status == nil || status.Code != 1 || !status.Retryable || status.Reason != "terminated by signal (SIGTERM)" || status.Checkpoint == "" {
 		t.Fatalf("solver exit = %+v", status)

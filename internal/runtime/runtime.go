@@ -335,6 +335,17 @@ func messageChars(message Message) int {
 	return len(message.Role) + len(message.Content)
 }
 
+// Effective is the policy as the runtime applies it: the zero policy is
+// DefaultCompactionPolicy, and a zero TargetChars is half of MaxChars.
+// KeepMessages and MaxMessages of zero mean no limit.
+func (p CompactionPolicy) Effective() CompactionPolicy {
+	if p == (CompactionPolicy{}) {
+		p = DefaultCompactionPolicy()
+	}
+	p.TargetChars = p.targetChars()
+	return p
+}
+
 func (r *AgentRuntime) compactionPolicy() CompactionPolicy {
 	if r.Compaction == (CompactionPolicy{}) {
 		return DefaultCompactionPolicy()

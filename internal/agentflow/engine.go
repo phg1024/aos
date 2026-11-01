@@ -294,7 +294,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if err != nil {
 		return RunSummary{}, err
 	}
-	started, err := e.Kernel.RecordEvent(root.PID, RunStartedEvent, e.runStartedData(specRecord.ID, specRecord.SHA256))
+	started, err := e.Kernel.RecordEvent(root.PID, RunStartedEvent, e.runStartedData(spec, specRecord.ID, specRecord.SHA256))
 	if err != nil {
 		return RunSummary{}, err
 	}

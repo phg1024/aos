@@ -97,6 +97,10 @@ type BackendRetryPolicy struct {
 	Max      time.Duration
 }
 
+// Effective is the policy as model calls are retried: zero fields take
+// the defaults. Attempts below zero (retrying off) stay as they are.
+func (p BackendRetryPolicy) Effective() BackendRetryPolicy { return p.withDefaults() }
+
 func (p BackendRetryPolicy) withDefaults() BackendRetryPolicy {
 	if p.Attempts == 0 {
 		p.Attempts = 12

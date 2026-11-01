@@ -53,17 +53,29 @@ func buildRecord() map[string]string {
 }
 
 // backendRecord is the backend's identity and driver settings, never its
-// key: what a replay needs to send byte-identical requests.
+// key, as they take effect: a sampling field left at zero is not sent, so
+// the server's own default applies, and a context window of zero is
+// unknown.
 func backendRecord(config inference.BackendConfig) map[string]string {
+	orServer := func(value string, set bool) string {
+		if !set {
+			return "server default"
+		}
+		return value
+	}
+	window := "unknown"
+	if config.ContextWindow > 0 {
+		window = strconv.Itoa(config.ContextWindow)
+	}
 	return map[string]string{
 		"backend":         string(config.Kind),
 		"base_url":        config.BaseURL,
 		"model":           config.Model,
 		"temperature":     strconv.FormatFloat(config.Sampling.Temperature, 'g', -1, 64),
-		"top_p":           strconv.FormatFloat(config.Sampling.TopP, 'g', -1, 64),
-		"max_tokens":      strconv.Itoa(config.Sampling.MaxTokens),
-		"thinking_budget": strconv.Itoa(config.Sampling.ThinkingBudget),
-		"context_window":  strconv.Itoa(config.ContextWindow),
+		"top_p":           orServer(strconv.FormatFloat(config.Sampling.TopP, 'g', -1, 64), config.Sampling.TopP > 0),
+		"max_tokens":      orServer(strconv.Itoa(config.Sampling.MaxTokens), config.Sampling.MaxTokens > 0),
+		"thinking_budget": orServer(strconv.Itoa(config.Sampling.ThinkingBudget), config.Sampling.ThinkingBudget > 0),
+		"context_window":  window,
 		"timeout":         config.Timeout.String(),
 	}
 }

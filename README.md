@@ -92,10 +92,10 @@ If `aos run --workflow` stops on a Go error after the root process started (canc
 A workflow run records what it runs under before anything runs:
 - a `run_spec` artifact holding the workflow spec, as the engine ran it, and the request;
 - a `run.started` kernel event on the root process holding:
-  - the run's budget (`budget_tokens`, `budget_seconds`, `budget_strict_time`);
-  - the compaction and retry settings;
+  - the run's budget (`budget_tokens`, `budget_seconds`, `budget_strict_time`, and `budget_time`: none, advisory or strict; a limit of 0 means none);
+  - the compaction and retry settings and each agent's `max_steps_<id>`, as they take effect, with defaults filled in, and `compaction_source` and `retry_source` saying whether each was configured or is the default;
   - the build (`build_version`, set with `-ldflags -X main.version=…`; `build_revision` when stamped; and the binary's `build_sha256`);
-  - the backend's endpoint, model and sampling, but never its key.
+  - the backend's endpoint, model and sampling, never its key. A sampling field the run leaves unset reads `server default`, because it is not sent.
 
 On SIGTERM or SIGINT, `aos run` stops the run as a strict budget does. The call or command in flight is cancelled, and each process exits `{1, "terminated by signal (SIGTERM)", retryable}` with a final checkpoint. The call gets its outcome line, and the summary is written. A second signal kills. The Harbor adapter sends SIGTERM when Harbor's agent timeout cancels it, and waits up to 15 s, so the ending is recorded before the logs are collected.
 

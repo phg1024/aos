@@ -28,22 +28,34 @@ type RunSpec struct {
 	Request RunRequest   `json:"request"`
 }
 
-// runStartedData is the run.started event's data.
-func (e *Engine) runStartedData(specID, specSHA string) map[string]string {
+// runStartedData is the run.started event's data. Settings are recorded
+// as they take effect, defaults filled in, so the record can be read
+// without knowing the code's defaults; *_source says whether a setting was
+// configured or is the default, so a replay can set it up the same way.
+// A limit of 0 means none: budget_tokens and budget_seconds unlimited,
+// compact_max_messages and compact_keep no limit.
+func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[string]string {
+	compaction, retry := e.Compaction.Effective(), e.BackendRetry.Effective()
 	data := map[string]string{
 		"run_spec":             specID,
 		"run_spec_sha256":      specSHA,
 		"budget_tokens":        strconv.Itoa(e.Budget.Tokens),
 		"budget_seconds":       strconv.Itoa(e.Budget.Seconds),
 		"budget_strict_time":   strconv.FormatBool(e.Budget.StrictTime),
-		"compact_max_messages": strconv.Itoa(e.Compaction.MaxMessages),
-		"compact_max_chars":    strconv.Itoa(e.Compaction.MaxChars),
-		"compact_keep":         strconv.Itoa(e.Compaction.KeepMessages),
-		"compact_target_chars": strconv.Itoa(e.Compaction.TargetChars),
-		"compact_handoff":      strconv.FormatBool(e.Compaction.Handoff),
-		"retry_attempts":       strconv.Itoa(e.BackendRetry.Attempts),
-		"retry_base":           e.BackendRetry.Base.String(),
-		"retry_max":            e.BackendRetry.Max.String(),
+		"budget_time":          timeBudgetKind(e.Budget),
+		"compaction_source":    source(e.Compaction == (runtime.CompactionPolicy{})),
+		"compact_max_messages": strconv.Itoa(compaction.MaxMessages),
+		"compact_max_chars":    strconv.Itoa(compaction.MaxChars),
+		"compact_keep":         strconv.Itoa(compaction.KeepMessages),
+		"compact_target_chars": strconv.Itoa(compaction.TargetChars),
+		"compact_handoff":      strconv.FormatBool(compaction.Handoff),
+		"retry_source":         source(e.BackendRetry == (runtime.BackendRetryPolicy{})),
+		"retry_attempts":       strconv.Itoa(retry.Attempts),
+		"retry_base":           retry.Base.String(),
+		"retry_max":            retry.Max.String(),
+	}
+	for _, agent := range spec.Agents {
+		data["max_steps_"+agent.ID] = strconv.Itoa(maxSteps(agent))
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {
@@ -51,6 +63,24 @@ func (e *Engine) runStartedData(specID, specSHA string) map[string]string {
 		}
 	}
 	return data
+}
+
+// timeBudgetKind is how a time budget binds: none, advisory or strict.
+func timeBudgetKind(budget capability.Budget) string {
+	switch {
+	case budget.Seconds <= 0:
+		return "none"
+	case budget.StrictTime:
+		return "strict"
+	}
+	return "advisory"
+}
+
+func source(isDefault bool) string {
+	if isDefault {
+		return "default"
+	}
+	return "configured"
 }
 
 // RunSettings are the engine settings a run.started event records.
@@ -105,6 +135,14 @@ func ParseRunStarted(data map[string]string) (RunSettings, error) {
 		Handoff:      boolean("compact_handoff"),
 	}
 	settings.BackendRetry = runtime.BackendRetryPolicy{Attempts: integer("retry_attempts"), Base: duration("retry_base"), Max: duration("retry_max")}
+	// A default setting is set up as the default again, which behaves the
+	// same and records the same.
+	if data["compaction_source"] == "default" {
+		settings.Compaction = runtime.CompactionPolicy{}
+	}
+	if data["retry_source"] == "default" {
+		settings.BackendRetry = runtime.BackendRetryPolicy{}
+	}
 	settings.Record = maps.Clone(data)
 	return settings, err
 }
