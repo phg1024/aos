@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS TUI Model Switch</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>/model: Switching Models Mid-Session in aos-tui</h1>
+    <p>The user asked for a <code>/model</code> command to change models during a session, for example from the Strata on phg-gpu to the Strata on this Mac.</p>
+    <p><code>/model</code> lists named endpoint profiles and switches between them. The switch takes effect from the next model call, the session carries over, and the switch is recorded.</p>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good"><code>go vet ./...</code> and <code>go test ./...</code> are clean.</span></li>
+      <li><span class="good">A live smoke test switched from phg-gpu to the local Strata in one session.</span> The second model answered with the first model's history, the records show which endpoint answered each call, and a relaunch came back on the chosen model.</li>
+      <li>No key appeared in the state directory or the output.</li>
+    </ul>
+  </div>
+
+  <h2>Usage</h2>
+  <ul>
+    <li><code>/model</code> lists the profiles, with the current one marked <code>*</code>. It uses the same ↑/↓ and Enter picker as <code>/resume</code>, or a numbered list where no picker is available.</li>
+    <li><code>/model NAME</code> or <code>/model N</code> switches.</li>
+    <li><code>/help</code> lists the command.</li>
+    <li><code>/state</code> shows the profile, the model and the endpoint.</li>
+    <li>The startup banner shows the profile. A resumed session also says when it went back to the model its last switch chose.</li>
+  </ul>
+  <pre>you&gt; /model
+ Models   …/scripts/models.json
+    1  strata-phg         qwen3.8-flash-next-nvfp4-nvfp4             256k  http://phg-gpu.local:8080
+  * 2  strata             qwen3.8-flash-next-unsloth-ud-q4_k_xl      256k  http://127.0.0.1:8080
+    3  strata-phg-vllm    qwen3.8-flash-next-iq3_s                   256k  http://phg-vllm.local:8081
+    4  ollama             qwen3.6:35b-a3b-mtp-q4_K_M                       http://localhost:11434
+    5  vllm               QuantTrio/Qwen3.5-35B-A3B-AWQ                    http://lenovo-px.local:8000
+  * current · /model NAME or /model N switches</pre>
+
+  <h2>Profiles</h2>
+  <p>A profile (<code>internal/inference/profiles.go</code>) holds:</p>
+  <ul>
+    <li><code>name</code>, <code>description</code>, <code>backend</code>, <code>base_url</code>, <code>model</code>;</li>
+    <li><code>api_key_env</code>, the <em>name</em> of the variable that holds the key;</li>
+    <li>the driver settings: <code>context_window</code>, <code>compact_ratio</code>, <code>timeout_seconds</code> and <code>sampling</code> (<code>temperature</code>, <code>top_p</code>, <code>max_tokens</code>, <code>thinking_budget</code>).</li>
+  </ul>
+  <p>The thinking budget and the other driver settings travel with the profile, so no model needs special-casing. There is no separate action-format setting in the driver today, so a profile has none to carry.</p>
+
+  <p><b>Where profiles come from.</b></p>
+  <ul>
+    <li>The first profile is the backend the TUI started with, from <code>AOS_LLM_*</code>. It is named by <code>AOS_MODEL_PROFILE</code>, which <code>tui.sh</code> sets to its preset name, or else <code>env</code>.
+      <ul>
+        <li>Without a profiles file, it is the only profile, so nothing changes for existing setups.</li>
+        <li>A file profile with the same name is replaced by it, because the environment is what was actually launched.</li>
+      </ul>
+    </li>
+    <li>The other profiles come from a file: <code>--models</code>, else <code>AOS_MODELS_FILE</code>, else <code>~/.config/aos/models.json</code> (honouring <code>XDG_CONFIG_HOME</code>).
+      <ul>
+        <li>Profiles belong to the user, not to one session, so they live in a per-user config directory rather than in a state directory.</li>
+        <li><code>tui.sh</code> uses the user's file when there is one, else the checked-in <code>scripts/models.json</code>. That file holds <code>tui.sh</code>'s own presets with their existing settings.</li>
+        <li>The local Strata profile is <code>strata</code>: <code>http://127.0.0.1:8080</code>, <code>qwen3.8-flash-next-unsloth-ud-q4_k_xl</code>, no key, a 262144-token window, as <code>tui.sh strata</code> sets it.</li>
+      </ul>
+    </li>
+    <li>The loader refuses a profile that holds an <code>api_key</code> field, a repeated name, a missing base URL or model, an unknown field, or a ratio outside 0 to 1. Its error messages never repeat the key.</li>
+  </ul>
+
+  <h2>Keys</h2>
+  <ul>
+    <li>A profile names its key's variable, for example <code>AOS_KEY_STRATA_PHG</code>. <code>tui.sh</code> fills <code>AOS_KEY_STRATA_PHG</code> and <code>AOS_KEY_STRATA_PHG_VLLM</code> from <code>~/.hermes/config.yaml</code> when they are not already set.</li>
+    <li>A profile whose variable is not set is listed but refused, with the variable's name in the message.</li>
+    <li><b>The TUI drops every key variable from its environment once it has read them</b>, including <code>AOS_LLM_API_KEY</code>. Until now, <code>run</code> commands inherited <code>AOS_LLM_API_KEY</code>, so the agent's commands could read it. More key variables would have widened that leak, so this closes it.
+      <ul>
+        <li><code>/resume</code> restarts the TUI with the environment it was launched with, so the restarted TUI still has its keys.</li>
+      </ul>
+    </li>
+    <li><code>web_fetch</code> refuses every profile's host, not only the current one's.</li>
+    <li>Keys appear in neither the event nor the ledger. The tests check this, and the smoke test grepped the state directory and the output for the phg-gpu key and found nothing.</li>
+  </ul>
+
+  <h2>Semantics</h2>
+  <ul>
+    <li><b>When it applies:</b> from the next model call. The prompt backends call a swappable client, so the root agent and, in workflow mode, its delegates all move to the new model. <code>/model</code> runs only between turns.</li>
+    <li><b>What carries over:</b> the process, history, working memory, archive and budgets. Tokens keep counting against the same budget.</li>
+    <li><b>Prompt cache:</b> lost. The new server starts cold.</li>
+    <li><b>Compaction</b> follows the new model's window:
+      <ul>
+        <li>The trigger H is <code>window × ratio × 3</code> characters and the target L is H/2, as at startup.</li>
+        <li>The runtime's and the workflow engine's policies are both replaced, and the new policy must pass the same validation as at startup.</li>
+        <li>A profile with no window falls back to the runtime's default policy.</li>
+      </ul>
+    </li>
+    <li><b>History already over the new H:</b> the switch is accepted with a warning. The next message starts with the usual handoff on the new model, where the agent updates its working memory, and then the history is compacted.</li>
+    <li><b>History larger than the new window itself</b> (estimated at 3 characters per token): the switch is refused. Not even the handoff call could be sent, and failed calls would only retry for about 10 minutes.</li>
+    <li><b>Tokenizer:</b> the exact-tokenizer sidecar is restarted for the new model. If that fails, it falls back to the heuristic count.</li>
+  </ul>
+
+  <h2>Records</h2>
+  <p><b>Event:</b> <code>model.switched</code>, a kernel event on the root process, recorded <em>before</em> the switch. If recording fails, nothing changes. Its data:</p>
+  <table>
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td><code>from</code>, <code>to</code></td><td>Profile names</td></tr>
+    <tr><td><code>backend</code>, <code>base_url</code>, <code>model</code></td><td>The new endpoint</td></tr>
+    <tr><td><code>api_key_env</code></td><td>The key's variable name (only when the profile names one)</td></tr>
+    <tr><td><code>context_window</code>, <code>compact_at_chars</code>, <code>compact_to_chars</code></td><td>The new window and compaction thresholds H and L (only with a known window)</td></tr>
+  </table>
+  <ul>
+    <li><b>Which model answered which call:</b> the call ledger already records each call's <code>backend</code> (base URL) and <code>model</code>, so the record shows it per call with no change. Linking a call to its step is still open; it is gap "step and clock per call" in <code>replay-design.md</code>.</li>
+    <li><b>Resume and recover:</b>
+      <ul>
+        <li><code>/recover</code> keeps the current model, since it runs in the same TUI.</li>
+        <li>A resumed session (<code>/resume</code>, or starting on its <code>--state-dir</code>) reads the latest <code>model.switched</code> event in the state directory and goes back to that profile.</li>
+        <li>If that profile is no longer in the file, or its key is missing, the session starts on the launch backend and says why.</li>
+      </ul>
+    </li>
+    <li><b>Why an event and not a field in <code>Session</code>:</b> the event is durable and in the state directory, which is the session. It also survives a switch made before any checkpoint, and a new agent that continues an ended one. A field in each checkpoint would be a second copy that could disagree with the event.</li>
+  </ul>
+
+  <h2>Live Smoke Test</h2>
+  <p>The test ran <code>scripts/tui.sh strata-phg</code> with a scratch workspace and state directory, driven through piped input:</p>
+  <table>
+    <tr><th>Input</th><th>Seen</th></tr>
+    <tr><td><code>Reply with exactly one word: alpha.</code></td><td><code>alpha</code> from phg-gpu (<code>qwen3.8-flash-next-nvfp4-nvfp4</code>)</td></tr>
+    <tr><td><code>/model strata</code></td><td><code>model: strata (qwen3.8-flash-next-unsloth-ud-q4_k_xl at http://127.0.0.1:8080) from the next model call…</code></td></tr>
+    <tr><td><code>Reply … beta. Then say which word you replied with before.</code></td><td><code>beta</code> / <code>I previously replied with alpha.</code> from the local Strata, using phg-gpu's history</td></tr>
+    <tr><td><code>/state</code>, <code>/model</code></td><td>Profile <code>strata</code>, and the list above with <code>strata</code> marked</td></tr>
+    <tr><td>Relaunch <code>tui.sh strata-phg</code> on the same state directory</td><td><code>Model: … (profile strata …)</code> and <code>model profile strata, as this session last chose with /model</code></td></tr>
+  </table>
+  <ul>
+    <li><b>Ledger:</b> calls 1–2 went to <code>http://phg-gpu.local:8080</code> and calls 3–4 to <code>http://127.0.0.1:8080</code>, each with its model.</li>
+    <li><b>Event <code>evt-000008</code>:</b> <code>from=strata-phg to=strata</code>, <code>base_url=http://127.0.0.1:8080</code>, <code>context_window=262144 compact_at_chars=629145 compact_to_chars=314572</code>.</li>
+  </ul>
+  <p><span class="warn">Found on the way, unchanged:</span> the default interactive agent always loads the <code>python-runner</code> skill from <code>&lt;workdir&gt;/skills</code> or <code>../aos/skills</code>, so a workspace outside the repo fails with "skill not found" unless <code>--skill-dir</code> is given. The smoke test passed <code>--skill-dir</code>.</p>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>Covers</th></tr>
+    <tr><td><code>TestLoadProfilesNormalizesAndChecks</code> (inference)</td><td>Base URL and backend normalisation, the profile's settings reaching the config, compaction from the profile's window, defaults, and every refusal. No error repeats the key.</td></tr>
+    <tr><td><code>TestEnvProfileRoundTrips</code></td><td>The environment's backend, as a profile, gives back the same config.</td></tr>
+    <tr><td><code>TestCheckedInProfiles</code></td><td><code>scripts/models.json</code> loads and holds both Stratas, the local one without a key.</td></tr>
+    <tr><td><code>TestModelsComeFromTheEnvironmentAndTheFile</code> (aos-tui)</td><td>
+      <ul>
+        <li>The environment's profile comes first, is current, and replaces a file profile of its name.</li>
+        <li><code>web_fetch</code> refuses every profile's host.</li>
+        <li>Keys are read from the named variables, and the variables are then dropped.</li>
+        <li><code>/model 3</code> works.</li>
+        <li>A missing key is refused, naming the variable.</li>
+        <li>Every event field is checked, and the event holds no key.</li>
+      </ul>
+    </td></tr>
+    <tr><td><code>TestSwitchFollowsTheNewWindow</code></td><td>Compaction follows a 64k window with handoff. History over H gets a notice, history over the window is refused, and a profile with no window gets the default policy.</td></tr>
+    <tr><td><code>TestSwitchingModelsMidSession</code></td><td>
+      <ul>
+        <li>Two fake servers and two TUI turns with a switch between them.</li>
+        <li>The second server gets the whole conversation and its own key.</li>
+        <li>The ledger names each call's endpoint and model.</li>
+        <li><code>lastSwitched</code> finds the profile for a resume.</li>
+        <li>No key appears in the ledger or the events.</li>
+      </ul>
+    </td></tr>
+  </table>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>The <code>aos</code> CLI. It still takes its backend from the environment, though the profile loader could serve it later.</li>
+    <li>The runtime, the kernel and the call ledger's format.</li>
+    <li>The least-privilege probe results.</li>
+    <li>Nothing pushed, and no long or benchmark runs: the smoke test made four short calls.</li>
+  </ul>
+</body>
+</html>

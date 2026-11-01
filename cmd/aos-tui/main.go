@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,8 +31,11 @@ import (
 )
 
 func main() {
+	// The TUI drops API keys from its environment once it has read them;
+	// switching sessions starts it again with the environment it had.
+	launchEnv := os.Environ()
 	if args := runTUI(); args != nil {
-		if err := restart(args); err != nil {
+		if err := restart(args, launchEnv); err != nil {
 			fail(err)
 		}
 	}
@@ -52,6 +54,7 @@ func runTUI() []string {
 	var toolList string
 	var skillDirs sliceFlags
 	var skillRefs sliceFlags
+	var modelsPath string
 
 	flag.StringVar(&workflowPath, "workflow", "", "optional workflow JSON path")
 	flag.StringVar(&agentID, "agent", "", "agent ID when using a workflow")
@@ -62,6 +65,7 @@ func runTUI() []string {
 	flag.StringVar(&toolList, "tools", "list_dir,find_files,read_file,write_file,run,web_search,web_fetch", "comma-separated tools for direct interactive mode")
 	flag.Var(&skillDirs, "skill-dir", "directory containing Claude-Code-style skills (repeatable)")
 	flag.Var(&skillRefs, "skill", "skill name or skill path to load (repeatable)")
+	flag.StringVar(&modelsPath, "models", getenv(inference.ProfilesFileEnv, inference.DefaultProfilesFile()), "model profiles file for /model")
 	flag.Parse()
 
 	ui := render.NewPalette(os.Stdout)
@@ -132,20 +136,52 @@ func runTUI() []string {
 		}
 	}
 
-	llmConfig := inference.LoadBackendConfig(180 * time.Second)
+	// The environment's backend is one profile among those /model offers;
+	// a session that switched before goes back to the model it chose.
+	envConfig := inference.LoadBackendConfig(defaultModelTimeout)
+	models, err := loadModels(getenv("AOS_MODEL_PROFILE", "env"), envConfig, modelsPath)
+	if err != nil {
+		fail(err)
+	}
+	scrubKeys(models.keyVariables())
+	envProfile, _ := models.find(models.current)
+	active, err := models.configure(envProfile)
+	if err != nil {
+		fail(err)
+	}
+	var modelNote string
+	if events, err := k.Events(); err == nil {
+		if chosen := lastSwitched(events); chosen != "" && chosen != models.current {
+			profile, ok := models.find(chosen)
+			planned, planErr := models.configure(profile)
+			switch {
+			case !ok:
+				modelNote = fmt.Sprintf("this session last used model profile %s, which is not in %s; using %s", chosen, modelsPath, models.current)
+			case planErr != nil:
+				modelNote = fmt.Sprintf("this session last used model profile %s, but %v; using %s", chosen, planErr, models.current)
+			default:
+				active, models.current = planned, chosen
+				modelNote = "model profile " + chosen + ", as this session last chose with /model"
+			}
+		}
+	}
+	llmConfig := active.config
 	modelName := llmConfig.Model
 	repoRoot := detectRepoRoot(absWorkdir)
 	stream := render.NewStreamRenderer(ui)
-	backend := inference.NewBackendFromConfig(llmConfig, inference.BackendOptions{
-		OnStreamEvent: stream.Handle,
-	})
+
 	// Model calls and delegated agents' trace go to disk as they happen, so
 	// the session can be inspected later with aos inspect.
 	callLog, err := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
 	if err != nil {
 		fail(err)
 	}
-	backend.SetCallLog(callLog)
+	newBackend := func(config inference.BackendConfig) *inference.VLLMBackend {
+		backend := inference.NewBackendFromConfig(config, inference.BackendOptions{OnStreamEvent: stream.Handle})
+		backend.SetCallLog(callLog)
+		return backend
+	}
+	completer := &swapCompleter{backend: newBackend(llmConfig)}
 	traceLog, err := runlog.Open(runlog.Path(stateDir, runlog.TraceFile))
 	if err != nil {
 		fail(err)
@@ -155,14 +191,9 @@ func runTUI() []string {
 	// web_fetch refuses the model endpoint unless allowlisted.
 	toolRuntime := tools.NewRuntime()
 	toolRuntime.Protected = protectedPaths(stateDir, sessionsDir, absWorkdir)
-	if parsed, err := url.Parse(llmConfig.BaseURL); err == nil && parsed.Hostname() != "" {
-		toolRuntime.ModelHosts = []string{parsed.Hostname()}
-	}
+	toolRuntime.ModelHosts = models.modelHosts()
 
-	compaction := llmConfig.CompactionPolicy()
-	if err := compaction.Validate(tools.MaxToolResultBytes); err != nil {
-		fail(err)
-	}
+	compaction := active.compaction
 	agentRuntime := &runtime.AgentRuntime{
 		Kernel:     k,
 		Artifacts:  store,
@@ -177,7 +208,7 @@ func runTUI() []string {
 		fail(err)
 	}
 	agentRuntime.Backend = agentflow.PromptBackend{
-		Completer: backend,
+		Completer: completer,
 		Workflow:  spec,
 		Agent:     agent,
 		Skills:    loadedSkills,
@@ -186,17 +217,18 @@ func runTUI() []string {
 	footer := render.NewFooterBar(ui)
 	defer footer.Unpin()
 	observeRoot := func(kind, detail string) {}
+	var engine *agentflow.Engine
 	if workflowPath != "" {
 		progress := render.NewWorkflowProgress(ui, spec)
 		footer.SetProgress(progress)
-		engine := &agentflow.Engine{
+		engine = &agentflow.Engine{
 			Kernel:    k,
 			Artifacts: store,
 			Bus:       bus,
 			Leases:    leaseManager,
 			Tools:     agentRuntime.Tools,
 			Factory: agentflow.StaticBackendFactory{
-				Completer: backend,
+				Completer: completer,
 				Skills:    skills.NewRegistry(spec.SkillRoots),
 			},
 			Compaction: compaction,
@@ -217,15 +249,29 @@ func runTUI() []string {
 		defer stopTicker()
 	}
 	var tokenCounter tokenizer.Counter
-	if sidecar, sidecarErr := tokenizer.Start(getenv("AOS_TOKENIZER_PYTHON", "python3"), repoRoot, modelName); sidecarErr == nil {
-		tokenCounter = sidecar
-		defer tokenCounter.Close()
+	startTokenizer := func() {
+		if tokenCounter != nil {
+			tokenCounter.Close()
+			tokenCounter = nil
+		}
+		if sidecar, sidecarErr := tokenizer.Start(getenv("AOS_TOKENIZER_PYTHON", "python3"), repoRoot, modelName); sidecarErr == nil {
+			tokenCounter = sidecar
+		}
 	}
+	startTokenizer()
+	defer func() {
+		if tokenCounter != nil {
+			tokenCounter.Close()
+		}
+	}()
 
 	fmt.Println(ui.Banner(render.AOSBanner()))
 	fmt.Println(ui.Header(fmt.Sprintf("AOS TUI ready  agent=%s  pid=%s", agent.ID, root.process.PID)))
 	fmt.Println(ui.Subtle("Backend: " + string(llmConfig.Kind)))
-	fmt.Println(ui.Subtle("Model: " + modelName))
+	fmt.Println(ui.Subtle(fmt.Sprintf("Model: %s  (profile %s; /model switches)", modelName, models.current)))
+	if modelNote != "" {
+		fmt.Println(ui.Subtle(modelNote))
+	}
 	if tokenCounter != nil {
 		fmt.Println(ui.Subtle("Tokenizer: exact sidecar"))
 	} else {
@@ -357,7 +403,62 @@ func runTUI() []string {
 			fmt.Print("\x1b[2J\x1b[H")
 			continue
 		case "/state":
-			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s", root.process.PID, root.checkpointID, stateDir)))
+			footer.Println(ui.Subtle(fmt.Sprintf("pid=%s checkpoint=%s state_dir=%s model=%s (%s, %s)", root.process.PID, root.checkpointID, stateDir, models.current, modelName, llmConfig.BaseURL)))
+			continue
+		case "/model":
+			arg := strings.TrimSpace(strings.TrimPrefix(line, "/model"))
+			var profile inference.Profile
+			if arg == "" {
+				if !useEditor {
+					footer.Println(modelList(ui, models, modelsPath))
+					continue
+				}
+				rows := make([]string, len(models.profiles))
+				for i, candidate := range models.profiles {
+					rows[i] = modelRow(ui, i, candidate, models.current)
+				}
+				chosen, err := render.Pick(ui, os.Stdin, "Model", rows)
+				switch {
+				case errors.Is(err, render.ErrLineEditorUnavailable):
+					footer.Println(modelList(ui, models, modelsPath))
+					continue
+				case err != nil || chosen < 0:
+					footer.Println(ui.Subtle("model unchanged"))
+					continue
+				}
+				profile = models.profiles[chosen]
+			} else {
+				var ok bool
+				if profile, ok = models.find(arg); !ok {
+					footer.Println(ui.Warn("no model profile " + arg + " · /model lists them"))
+					continue
+				}
+			}
+			if profile.Name == models.current {
+				footer.Println(ui.Subtle("already on " + profile.Name))
+				continue
+			}
+			planned, err := models.planSwitch(profile, root.session)
+			if err != nil {
+				footer.Println(ui.Warn("model unchanged: " + err.Error()))
+				continue
+			}
+			// The event comes first: if it cannot be recorded, nothing changes.
+			if _, err := k.RecordEvent(root.process.PID, modelSwitchedEvent, switchedData(models.current, planned)); err != nil {
+				footer.Println(ui.Error("model unchanged: " + err.Error()))
+				continue
+			}
+			completer.set(newBackend(planned.config))
+			agentRuntime.Compaction = planned.compaction
+			if engine != nil {
+				engine.Compaction = planned.compaction
+			}
+			models.current, llmConfig, modelName = profile.Name, planned.config, planned.config.Model
+			startTokenizer()
+			footer.Println(ui.Subtle(fmt.Sprintf("model: %s (%s at %s) from the next model call; history, memory and budgets carry over", profile.Name, modelName, llmConfig.BaseURL)))
+			if planned.notice != "" {
+				footer.Println(ui.Warn(planned.notice))
+			}
 			continue
 		case "/recover":
 			if root.checkpointID == "" {
@@ -440,6 +541,7 @@ var tuiCommands = []render.Command{
 	{Name: "/state", Summary: "show the process, checkpoint and state directory"},
 	{Name: "/resume", Summary: "pick a saved session with ↑/↓ and Enter; /resume N switches to one"},
 	{Name: "/recover", Summary: "restart the agent from its last checkpoint"},
+	{Name: "/model", Summary: "pick a model profile with ↑/↓ and Enter; /model NAME switches to one"},
 	{Name: "/clear", Summary: "clear the screen"},
 	{Name: "/quit", Summary: "exit"},
 }

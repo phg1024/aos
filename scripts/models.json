@@ -1,0 +1,53 @@
+{
+  "profiles": [
+    {
+      "name": "strata",
+      "description": "Strata on this Mac (Metal); runs without an API key",
+      "backend": "openai-compatible",
+      "base_url": "http://127.0.0.1:8080",
+      "model": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+      "context_window": 262144,
+      "timeout_seconds": 3600,
+      "sampling": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 32768, "thinking_budget": 16384}
+    },
+    {
+      "name": "strata-phg",
+      "description": "Strata on phg-gpu (5070 Ti, NVFP4)",
+      "backend": "openai-compatible",
+      "base_url": "http://phg-gpu.local:8080",
+      "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+      "api_key_env": "AOS_KEY_STRATA_PHG",
+      "context_window": 262144,
+      "timeout_seconds": 3600,
+      "sampling": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 32768, "thinking_budget": 16384}
+    },
+    {
+      "name": "strata-phg-vllm",
+      "description": "Strata on phg-vllm (Intel B70); swaps models on demand, so a first call may wait",
+      "backend": "openai-compatible",
+      "base_url": "http://phg-vllm.local:8081",
+      "model": "qwen3.8-flash-next-iq3_s",
+      "api_key_env": "AOS_KEY_STRATA_PHG_VLLM",
+      "context_window": 262144,
+      "timeout_seconds": 3600,
+      "sampling": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 32768, "thinking_budget": 16384}
+    },
+    {
+      "name": "ollama",
+      "description": "Ollama on this Mac",
+      "backend": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "qwen3.6:35b-a3b-mtp-q4_K_M",
+      "timeout_seconds": 600
+    },
+    {
+      "name": "vllm",
+      "description": "vLLM on lenovo-px",
+      "backend": "vllm",
+      "base_url": "http://lenovo-px.local:8000",
+      "model": "QuantTrio/Qwen3.5-35B-A3B-AWQ",
+      "api_key_env": "AOS_KEY_VLLM",
+      "timeout_seconds": 600
+    }
+  ]
+}

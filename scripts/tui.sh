@@ -86,9 +86,35 @@ case "$BACKEND" in
     ;;
 esac
 
+# /model offers the profiles in AOS_MODELS_FILE: the user's own file when
+# there is one, else the presets above. The backend launched here is the
+# profile of the same name. Keys stay in named variables, read from
+# ~/.hermes/config.yaml when not set; the TUI drops them from its
+# environment once read, so the agent's commands never see them.
+export AOS_MODEL_PROFILE="$BACKEND"
+if [[ -z "${AOS_MODELS_FILE:-}" ]]; then
+  user_models="${XDG_CONFIG_HOME:-$HOME/.config}/aos/models.json"
+  if [[ -f "$user_models" ]]; then
+    export AOS_MODELS_FILE="$user_models"
+  else
+    export AOS_MODELS_FILE="$ROOT_DIR/scripts/models.json"
+  fi
+fi
+export_key() {
+  local name="$1" provider="$2" value
+  [[ -n "${!name:-}" ]] && return 0
+  value="$(hermes_api_key "$provider")"
+  [[ -n "$value" ]] && export "$name=$value"
+  return 0
+}
+export_key AOS_KEY_STRATA_PHG strata-phg-gpu
+export_key AOS_KEY_STRATA_PHG_VLLM strata-phg-vllm
+[[ -n "${AOS_KEY_VLLM:-}" ]] || export AOS_KEY_VLLM=dummy
+
 echo "backend: $AOS_LLM_BACKEND"
 echo "base_url: $AOS_LLM_BASE_URL"
 echo "model: $AOS_LLM_MODEL"
+echo "model profiles: $AOS_MODELS_FILE"
 
 # Checked-in workflows use absolute paths from the machine they were written
 # on; run a copy rebased onto this checkout when they differ.
