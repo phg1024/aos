@@ -134,3 +134,21 @@ named by the record that is missing, counted, with one example each.
   ended the agent phase. Whether Harbor copied it at that moment, or the
   process stopped writing, is not known from either source. The probe scores
   the folder as Harbor left it.
+
+## Amendments
+
+### A1, 2026-11-01, after scoring: two counts and one window, no rule changed
+
+- **Q9b's count.** The plan says 39 passed trials have an answer path. The
+  correct count is 41: 54 trials of the six answer-path tasks, less the 13
+  failed ones. Q9b is scored on all 41. The rule is unchanged.
+- **Q3's truth window.** `truth.py` attributes a request to a trial when it
+  starts between that trial's agent start and the next trial's agent start.
+  The only requests between a trial's end and the next trial's agent start
+  are the driver's `GET /v1/status` checks, which are not counted. So this
+  is the same set of POSTs as the plan's window ("to the next trial's first
+  backend check").
+- **Q9 for a missed write.** When the write rule finds no write but the
+  hand-check does (seq 27), the records-only answer is "not written". The
+  plan's four classes do not name this case. It is scored "wrong": the
+  script gave an answer, and the answer was wrong.

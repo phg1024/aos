@@ -1,0 +1,17 @@
+{
+  "_about": "Q10, answered by hand from AOS records only (tool-result artifacts), with q10_candidates.py as an aid, before comparing with the verifier. method: 'shown' when a tool result after the last write prints the answer; 'inferred' when no result shows it and the answer is read off the last commands (a gcc -o /app/polyglot/cmain with no later rm and no later listing).",
+  "trials": [
+    {"seq": 7,  "answer": {"G_x0": 6327.266, "2D_x0": 3745.072}, "method": "shown", "source": "art-000043 (fin2.py writes and prints results.json), art-000045 prints the file back"},
+    {"seq": 25, "answer": {"G_x0": 6328.000484754192, "2D_x0": 3745.375002371893}, "method": "shown", "source": "art-000047: cat /app/results.json"},
+    {"seq": 27, "answer": {"G_x0": 10438.17415197566, "2D_x0": 19195.909294424353}, "method": "shown", "source": "art-000039: the heredoc script dumps results.json and prints it; art-000041 is a later fit that does not write the file"},
+    {"seq": 58, "answer": {"G_x0": 19197.42766647826, "2D_x0": 33833.68938885539}, "method": "shown", "source": "art-000049, the last record before the kill: the script dumps and prints results.json"},
+    {"seq": 5,  "answer": ["cmain", "main.py.c"], "method": "shown", "source": "art-000037: rm cmain, gcc -o /app/polyglot/cmain, then ls -l /app/polyglot lists both"},
+    {"seq": 62, "answer": ["cmain", "main.py.c"], "method": "shown", "source": "art-000045: ls -l /app/polyglot lists both"},
+    {"seq": 4,  "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000023: cd /app/polyglot && gcc main.py.c -o cmain; nothing later removes it"},
+    {"seq": 6,  "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000021: gcc /app/polyglot/main.py.c -o /app/polyglot/cmain; only a read_file follows"},
+    {"seq": 46, "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000029: rm then gcc -o /app/polyglot/cmain (twice); the last call works in /tmp"},
+    {"seq": 48, "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000033: gcc /app/polyglot/main.py.c -o /app/polyglot/cmain; only update_memory follows"},
+    {"seq": 61, "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000045: gcc /app/polyglot/main.py.c -o /app/polyglot/cmain; only update_memory follows"},
+    {"seq": 63, "answer": ["cmain", "main.py.c"], "method": "inferred", "source": "art-000035: rm then gcc -o /app/polyglot/cmain; its ls lists only main.py.c by name, so the folder is not shown"}
+  ]
+}

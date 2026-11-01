@@ -1,0 +1,207 @@
+{
+ "per_question": {
+  "Q1": {
+   "correct": 72,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  },
+  "Q2": {
+   "not_answerable": 5,
+   "wrong_seqs": [],
+   "not_answerable_seqs": [
+    2,
+    9,
+    40,
+    58,
+    66
+   ]
+  },
+  "Q3": {
+   "correct": 67,
+   "wrong": 5,
+   "wrong_seqs": [
+    2,
+    9,
+    40,
+    58,
+    66
+   ],
+   "not_answerable_seqs": []
+  },
+  "Q4": {
+   "no_truth": 72,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  },
+  "Q5": {
+   "correct": 68,
+   "wrong": 4,
+   "wrong_seqs": [
+    2,
+    9,
+    58,
+    66
+   ],
+   "not_answerable_seqs": []
+  },
+  "Q6": {
+   "correct": 67,
+   "wrong": 5,
+   "wrong_seqs": [
+    2,
+    9,
+    40,
+    58,
+    66
+   ],
+   "not_answerable_seqs": []
+  },
+  "Q7": {
+   "no_truth": 23,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  },
+  "Q8": {
+   "correct": 72,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  },
+  "Q9": {
+   "correct": 12,
+   "wrong": 1,
+   "wrong_seqs": [
+    27
+   ],
+   "not_answerable_seqs": []
+  },
+  "Q9b": {
+   "correct": 31,
+   "wrong": 10,
+   "wrong_seqs": [
+    11,
+    22,
+    23,
+    24,
+    34,
+    36,
+    37,
+    50,
+    51,
+    71
+   ],
+   "not_answerable_seqs": []
+  },
+  "Q10": {
+   "correct": 12,
+   "no_truth": 1,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  },
+  "Q11": {
+   "descriptive": 14,
+   "wrong_seqs": [],
+   "not_answerable_seqs": []
+  }
+ },
+ "q10_methods": {
+  "inferred": 6,
+  "shown": 6
+ },
+ "q11_claims_in_failed": 13,
+ "q11_failed": 14,
+ "gap_killed": [
+  {
+   "seq": 2,
+   "ledger_calls": 32,
+   "relay_requests": 34,
+   "missing_requests": 2,
+   "last_record_to_kill_s": 34.3,
+   "requests_started_after_kill": [
+    "19:27:13.714"
+   ],
+   "after_kill_s": [
+    1.3
+   ]
+  },
+  {
+   "seq": 9,
+   "ledger_calls": 36,
+   "relay_requests": 37,
+   "missing_requests": 1,
+   "last_record_to_kill_s": 24.9,
+   "requests_started_after_kill": [],
+   "after_kill_s": []
+  },
+  {
+   "seq": 40,
+   "ledger_calls": 25,
+   "relay_requests": 26,
+   "missing_requests": 1,
+   "last_record_to_kill_s": 1.2,
+   "requests_started_after_kill": [],
+   "after_kill_s": []
+  },
+  {
+   "seq": 58,
+   "ledger_calls": 25,
+   "relay_requests": 26,
+   "missing_requests": 1,
+   "last_record_to_kill_s": 34.6,
+   "requests_started_after_kill": [],
+   "after_kill_s": []
+  },
+  {
+   "seq": 66,
+   "ledger_calls": 30,
+   "relay_requests": 32,
+   "missing_requests": 2,
+   "last_record_to_kill_s": 29.3,
+   "requests_started_after_kill": [
+    "01:13:02.950"
+   ],
+   "after_kill_s": [
+    10.7
+   ]
+  }
+ ],
+ "gap_refusals": {
+  "tool_errors": 26,
+  "trials": 23,
+  "by_tool": {
+   "run": 17,
+   "update_memory": 7,
+   "list_dir": 1,
+   "write_file": 1
+  },
+  "kernel_events": 0,
+  "told_in_ledger": 26
+ },
+ "gap_run_writes": {
+  "failed_missed": [
+   27
+  ],
+  "passed_missed": [
+   11,
+   22,
+   23,
+   24,
+   34,
+   36,
+   37,
+   50,
+   51,
+   71
+  ],
+  "passed_total": 41
+ },
+ "backend_retry_events": {
+  "1": 1,
+  "3": 1,
+  "5": 1,
+  "15": 1,
+  "39": 1,
+  "48": 1,
+  "59": 1,
+  "61": 1
+ }
+}

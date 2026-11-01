@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Record Reconstruction Probe</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ok { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .muted { color: #6b7280; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Record-reconstruction probe: 72 Terminal-Bench trials</h1>
+    <p><b>For a run that ended on its own, AOS's own records rebuild its state and causality.</b> From the state folder alone (kernel events, trace, call ledger, artifacts and checkpoints), plus <code>aos inspect</code> at v0.1.1, a script answered these correctly in all 72 trials:</p>
+    <ul>
+      <li>how the run ended;</li>
+      <li>which budget it ran under;</li>
+      <li>whether the low-time warning was sent.</li>
+    </ul>
+    <p>Every tool error is recorded three times, in agreement, and each one reached the agent. A reader could also recover the final answer of every failed trial that could be checked: 12 of 12, half of them by inference.</p>
+    <p><b>For a run that something outside AOS stopped, the records cannot say what stopped it, and they are wrong about its end.</b> In all 5 trials that Harbor killed:</p>
+    <ul>
+      <li>the records do not name the stop;</li>
+      <li>they miss 1 or 2 model requests;</li>
+      <li>they end up to 35 s before the kill.</li>
+    </ul>
+    <p>In 2 of the 5, the agent process sent a request <i>after</i> Harbor had ended the agent phase, and nothing in the records shows it.</p>
+    <p><b>The records do not say which files a <code>run</code> call changed.</b> Because of this, the frozen script could not find the answer write in 1 of 13 failed trials and in 10 of 41 passed ones.</p>
+  </div>
+
+  <p class="note"><b>Scope.</b> No new runs and no GPU. The material is the 72 counted trials of the Terminal-Bench budget rerun (<code>tb2-budget-rerun.html</code>): one single-agent workflow on one model. Multi-agent runs, the bus and leases are not exercised. The plan was frozen as 7d96cfd before anything was scored. Amendment A1, made after scoring, corrects one count and states two definitions; it changes no rule.</p>
+
+  <h2>Method</h2>
+  <ul>
+    <li><b>Records-only answers.</b> <code>reconstruct.py</code> reads each trial's <code>agent/aos-state/</code> folder and the output of <code>aos inspect --json --tail -1</code>, built from <code>cmd/aos</code> at v0.1.1 (70779be) and run on a copy of the folder.
+      <ul>
+        <li>It never opens Harbor's files, the verifier's output, <code>aos.log</code>, <code>relay.log</code> or any result of the budget rerun.</li>
+        <li>The checkpoint holds the message history the model saw. It is an AOS artifact, so it counts as a record. The model itself is never asked anything.</li>
+      </ul>
+    </li>
+    <li><b>Ground truth.</b> <code>truth.py</code> reads only sources outside AOS:
+      <ul>
+        <li>Harbor's <code>result.json</code>: the exception, the agent span, the reward, and the <code>aos_exit</code> code that the adapter's shell captured;</li>
+        <li>the verifier's <code>ctrf.json</code>;</li>
+        <li><code>relay.log</code>, which has every request that reached phg-gpu, by start time;</li>
+        <li><code>schedule.json</code>;</li>
+        <li>the earlier hand-check of the failed trials.</li>
+      </ul>
+      Harbor's container artifact folder is empty in every trial.
+    </li>
+    <li><b>Scoring.</b> <code>score.py</code> compares the two. Each answer is <i>correct</i>, <i>wrong</i>, <i>not answerable</i> (the records do not hold it), or <i>no truth</i> (the records give an answer that nothing outside AOS can check).</li>
+    <li><b>The hand-answered question.</b> Q10 was answered by reading the records before comparing with the verifier (<code>q10_hand.json</code>).</li>
+  </ul>
+
+  <h2>Results per question</h2>
+  <div class="wrap">
+  <table>
+    <tr><th>#</th><th>Question</th><th class="num">Trials</th><th class="num">Correct</th><th class="num">Wrong</th><th class="num">Not answerable</th><th class="num">No truth</th><th>Where it fails</th></tr>
+    <tr><td>Q1</td><td>Did the run end on its own, and how?</td><td class="num">72</td><td class="num ok">72</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td>The answers were 66 agent exits, 1 strict budget exit, and 5 runs that did not end on their own.</td></tr>
+    <tr><td>Q2</td><td>If it did not end on its own, what ended it?</td><td class="num">5</td><td class="num">0</td><td class="num">0</td><td class="num bad">5</td><td class="num">0</td><td>Seq 2, 9, 40, 58, 66. No exit event, and <code>inspect</code> says only "not exited, no run holds this state".</td></tr>
+    <tr><td>Q3</td><td>How many model requests did the run send?</td><td class="num">72</td><td class="num">67</td><td class="num bad">5</td><td class="num">0</td><td class="num">0</td><td>The same 5 killed trials, which miss 7 requests between them. Seq 39 counts as correct: its ledger has 10 records against 9 at the relay, and the extra one is a call whose connection never opened.</td></tr>
+    <tr><td>Q4</td><td>How many tokens did the run spend?</td><td class="num">72</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">72</td><td>The backend gives no per-request tokens, so nothing can check this. The 7 missing requests have no token counts at all.</td></tr>
+    <tr><td>Q5</td><td>How long did the agent run? (±5 s)</td><td class="num">72</td><td class="num">68</td><td class="num bad">4</td><td class="num">0</td><td class="num">0</td><td>Seq 2, 9, 58, 66 end 24.9 to 34.6 s early. Seq 40 is within tolerance: its last record came 1.2 s before the kill.</td></tr>
+    <tr><td>Q6</td><td>What was the last thing the agent did?</td><td class="num">72</td><td class="num">67</td><td class="num bad">5</td><td class="num">0</td><td class="num">0</td><td>In all 5 killed trials, the records end with a <code>tool_result</code>. A model request followed at the relay, and no record shows it.</td></tr>
+    <tr><td>Q7</td><td>Which tool calls were refused, and was the agent told?</td><td class="num">23</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">23</td><td>26 tool errors in 23 trials. Trace, artifact and ledger agree on every one, and all 26 reached the agent. None is a kernel event.</td></tr>
+    <tr><td>Q8</td><td>Under which time budget, and did the warning reach the agent?</td><td class="num">72</td><td class="num ok">72</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td>The kind matches the arm in every trial, but it comes only from the note text. The warning was sent in 5 trials, and the ledger and the checkpoint agree on it in all 72.</td></tr>
+    <tr><td>Q9</td><td>When was the answer first written? (failed trials, ±2 s)</td><td class="num">13</td><td class="num">12</td><td class="num bad">1</td><td class="num">0</td><td class="num">0</td><td>Seq 27: the write happened inside a <code>python3 - &lt;&lt;'EOF'</code> script.</td></tr>
+    <tr><td>Q9b</td><td>Was the answer written at all? (passed trials)</td><td class="num">41</td><td class="num">31</td><td class="num bad">10</td><td class="num">0</td><td class="num">0</td><td>The misses are 7 openssl trials and 3 prove trials, where files were written after a <code>cd</code> or by <code>coqc</code>.</td></tr>
+    <tr><td>Q10</td><td>What was in the answer at the end? (hand)</td><td class="num">13</td><td class="num ok">12</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td>In 6 trials the records print the answer, and in 6 it had to be inferred. Seq 47 has no truth, because its verifier did not run.</td></tr>
+    <tr><td>Q11</td><td>Did the agent claim a finished, checked answer? (descriptive)</td><td class="num">14</td><td colspan="4">13 of the 14 failed trials end with an exit reason claiming the answer was written or verified. The 14th, seq 58, was killed and has no exit reason.</td><td>Not a gap. Correctness is the verifier's job, and the records are not expected to know it.</td></tr>
+  </table>
+  </div>
+  <p class="muted"><code>inspect</code>'s call and token totals equal the ledger's in all 72 trials. Q4 and Q7 have no outside truth, so they are checked only by whether the AOS records agree with each other.</p>
+
+  <h2>Gaps, each named by the missing record</h2>
+
+  <h3>1. A <code>run</code> result does not record which files the command changed</h3>
+  <ul>
+    <li><b>What is recorded.</b> The command, its exit code, stdout and stderr: in the trace (shortened), in the tool-result artifact, and in the next ledger call. There is no list of files created or changed.</li>
+    <li><b>Count.</b> The frozen rule matches the answer path and a write operator in the command. It failed in:
+      <ul>
+        <li>1 of 13 failed trials (Q9, seq 27);</li>
+        <li>10 of 41 passed trials (Q9b): 7 openssl-selfsigned-cert and 3 prove-plus-comm.</li>
+      </ul>
+    </li>
+    <li><b>Example, seq 27 (raman-fitting, strict).</b>
+      <ul>
+        <li>Step #19, at 628 s, runs <code>cd /app &amp;&amp; python3 - &lt;&lt;'EOF'</code>. Inside the script is <code>json.dump(res, open('/app/results.json','w'))</code>.</li>
+        <li>The command has no <code>&gt;</code>, so a script cannot tell it wrote the answer. A reader can, by reading the script, and the hand-check did.</li>
+      </ul>
+    </li>
+    <li><b>The other misses.</b>
+      <ul>
+        <li>openssl: <code>cd /app/ssl &amp;&amp; … &gt; verification.txt</code>, a relative name after a <code>cd</code>, or <code>openssl genrsa -out server.key</code> after a <code>cd</code>.</li>
+        <li>prove: <code>coqc plus_comm.v</code>, which makes <code>plus_comm.vo</code> without naming it.</li>
+      </ul>
+    </li>
+    <li><b>Effect on Q10.</b>
+      <ul>
+        <li>For 6 of the 8 checkable polyglot trials, no record shows the folder at the end. That <code>cmain</code> was still there had to be inferred from the last <code>gcc … -o /app/polyglot/cmain</code> with no later <code>rm</code>. The inference was right in all 6.</li>
+        <li>Seq 63 shows the risk. Its last command ran <code>rm -f /app/polyglot/cmain</code> and then compiled <code>cmain</code> again. Its <code>ls</code> named only <code>main.py.c</code>, so the result looked clean when it was not.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>2. A tool refusal is recorded in the trace and as an artifact, not as a kernel event</h3>
+  <ul>
+    <li><b>Count.</b> 26 tool errors in 23 trials:
+      <ul>
+        <li>17 <code>run requires command</code>;</li>
+        <li>7 <code>update_memory</code> evidence rejections;</li>
+        <li>1 <code>write_file requires content</code>;</li>
+        <li>1 <code>list_dir</code> on a file.</li>
+      </ul>
+    </li>
+    <li><b>Where each is recorded.</b> Every one appears as a trace <code>tool_error</code> and as a <code>tool_error</code> artifact with the full message. In all 26, the message reached the agent in its next model call. None of the 26 is a kernel event.</li>
+    <li><b>Kernel events, by contrast.</b> The kernel records only process spawn, transition and exit, a memory header, and <code>backend.retry</code>. There are 8 <code>backend.retry</code> events: 7 malformed actions, and seq 39's connection timeout.</li>
+    <li><b>Example, seq 25 (raman-fitting, advisory).</b>
+      <ul>
+        <li>At 823 s, just after the low-time warning, <code>update_memory</code> was refused. Its message: <code>evidence "#68 (shift-space profile: …" is neither message numbers … nor an artifact</code>.</li>
+        <li>The refusal is trace record #51 and artifact art-000049. The error text is in the next ledger call, so the agent saw it.</li>
+        <li>That call's reply ended the run 7 s later, with an exit reason that reports the fit and the file as done and does not mention the failed note.</li>
+        <li>The kernel log of this run has 7 events, and none is the refusal. An operator who reads only kernel events would not know it happened.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>3. A killed run's records stop at its last finished step, and the in-flight call is not in the ledger</h3>
+  <table>
+    <tr><th class="num">Seq</th><th>Task</th><th class="num">Ledger calls</th><th class="num">Requests at the relay</th><th class="num">Missing</th><th class="num">Last record → kill</th><th>Requests that started after the kill</th></tr>
+    <tr><td class="num">2</td><td>cobol-modernization</td><td class="num">32</td><td class="num">34</td><td class="num">2</td><td class="num">34.3 s</td><td>1, at +1.3 s (during the verifier)</td></tr>
+    <tr><td class="num">9</td><td>raman-fitting</td><td class="num">36</td><td class="num">37</td><td class="num">1</td><td class="num">24.9 s</td><td>none</td></tr>
+    <tr><td class="num">40</td><td>cobol-modernization</td><td class="num">25</td><td class="num">26</td><td class="num">1</td><td class="num">1.2 s</td><td>none</td></tr>
+    <tr><td class="num">58</td><td>raman-fitting</td><td class="num">25</td><td class="num">26</td><td class="num">1</td><td class="num">34.6 s</td><td>none</td></tr>
+    <tr><td class="num">66</td><td>cobol-modernization</td><td class="num">30</td><td class="num">32</td><td class="num">2</td><td class="num">29.3 s</td><td>1, at +10.7 s (after the verifier)</td></tr>
+  </table>
+  <ul>
+    <li><b>What the records show.</b>
+      <ul>
+        <li>The trace ends with a <code>tool_result</code>, and the ledger ends with the call before it.</li>
+        <li>Both processes are still "running" in <code>processes.json</code>, and no exit event exists.</li>
+        <li><code>inspect</code> reports "not exited (no exit record)… no run holds this state directory: 2 orphaned".</li>
+        <li>The last checkpoint matches the last tool result.</li>
+      </ul>
+    </li>
+    <li><b>What the records do not show.</b>
+      <ul>
+        <li>The model request in flight when Harbor killed the run. In every killed trial it started within 10 ms of the last trace record.</li>
+        <li>Who stopped the run, and when.</li>
+      </ul>
+    </li>
+    <li><b>The four late-logged pairs.</b>
+      <ul>
+        <li>These are the four ±1 request-count pairs of the budget rerun (seq 2, 9, 40, 66). Each is one of these unrecorded requests, logged by the relay after the next trial's check.</li>
+        <li>Seq 58 also has an unrecorded in-flight request, but it finished before the check, so it caused no pair.</li>
+      </ul>
+    </li>
+    <li><b>The process kept running in 2 trials.</b>
+      <ul>
+        <li>In seq 2 and 66, a request started 1.3 s and 10.7 s after Harbor ended the agent phase. So the AOS process was still working, during or after the verifier.</li>
+        <li>The state folder holds nothing from after the kill. Neither source shows whether Harbor copied the folder at that moment or the process stopped writing to it.</li>
+        <li>For these runs the records cannot rule out that the agent changed files while the verifier was reading them.</li>
+      </ul>
+    </li>
+    <li><b>Example, seq 2 (cobol-modernization, off).</b>
+      <ul>
+        <li>Trace record #55, a <code>tool_result</code> at 19:26:38.163Z, is the last record.</li>
+        <li>The relay shows a request at 19:26:38.172Z, another at 19:27:13.714Z, and Harbor's kill at 19:27:12.443Z.</li>
+        <li>The ledger has 32 calls, and the server counted 34.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>Further finding: the budget is recorded only as text the agent read</h3>
+  <ul>
+    <li>No process metadata, kernel event or <code>inspect</code> field records whether a time budget was set, its size (879 s) or its kind (strict or advisory).</li>
+    <li>Q8 was answered correctly in all 72 trials, but only by parsing the note text (<code>budget time=879s …</code>, with or without the strict suffix) in the ledger's messages.</li>
+    <li>A run with no budget is told apart from one with a budget only by the absence of notes.</li>
+    <li>The checkpoint's <code>budget_warned</code> records whether the warning was sent, but not the budget itself.</li>
+    <li><b>Example, seq 41 (cobol-modernization, strict).</b>
+      <ul>
+        <li>The warning was in the request that the strict stop cancelled 54 s later.</li>
+        <li>The ledger records that request, with its error. So the records show the warning was sent, and also that no reply to it exists.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>What the records do well</h2>
+  <ul>
+    <li><b>Endings that AOS made itself are complete.</b>
+      <ul>
+        <li>The exit event carries the code, the origin, the reason, and the checkpoint to resume from.</li>
+        <li>The one strict budget exit is labelled <code>time budget exceeded: 879s strict budget of run</code>.</li>
+        <li>The one infra error, seq 39, can be found: its ledger record has the <code>dial tcp … i/o timeout</code> error, and a <code>backend.retry</code> kernel event matches it.</li>
+      </ul>
+    </li>
+    <li><b>Answers that the agent printed can be recovered exactly.</b> In all 4 raman failures, the x0 values in the last printed <code>results.json</code> match the verifier's "Got" values to every printed digit.</li>
+    <li><b>Records agree with each other.</b> The trace, artifacts, ledger and checkpoints never disagreed on any question that both could answer.</li>
+  </ul>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>There is one workflow (single agent), one model and one harness. The bus and lease folders are empty in every trial.</li>
+    <li>Q9's ground truth is a careful human reading of the same records. No outside timeline of the container's files exists. Q9 measures a script against that reader.</li>
+    <li>Q4 and Q7 have no truth outside AOS, so they show agreement between records, not correctness.</li>
+    <li>For killed trials, the probe scores the state folder as Harbor left it.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/record-reconstruction-probe/PLAN.md</code>: the frozen plan, with amendment A1.</li>
+    <li><code>reconstruct.py</code> → <code>records.jsonl</code>: the records-only answers.</li>
+    <li><code>truth.py</code> → <code>truth.jsonl</code>: the ground truth.</li>
+    <li><code>q10_candidates.py</code> and <code>q10_hand.json</code>: the hand-answered Q10.</li>
+    <li><code>score.py</code> → <code>scores.jsonl</code> and <code>summary.json</code>.</li>
+    <li>The trial folders are in <code>reports/terminal-bench/jobs/tb2-budget-*</code> (gitignored).</li>
+  </ul>
+  <p>To reproduce, build <code>go build -o .cache/bin/aos-v0.1.1 ./cmd/aos</code> at v0.1.1, then run <code>reconstruct.py</code>, <code>truth.py</code> and <code>score.py</code> with <code>python3 -I</code>.</p>
+</body>
+</html>
