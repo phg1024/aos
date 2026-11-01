@@ -86,7 +86,13 @@ func TestInspectReconstructsKilledRun(t *testing.T) {
 	tracePath := runlog.Path(stateDir, runlog.TraceFile)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		calls, _ := runlog.Read[inference.CallRecord](callsPath)
+		records, _ := runlog.Read[inference.CallRecord](callsPath)
+		var calls []inference.CallRecord
+		for _, record := range records {
+			if record.Finished() {
+				calls = append(calls, record)
+			}
+		}
 		trace, _ := runlog.Read[agentflow.TraceRecord](tracePath)
 		starts := 0
 		for _, event := range trace {
@@ -94,7 +100,8 @@ func TestInspectReconstructsKilledRun(t *testing.T) {
 				starts++
 			}
 		}
-		if len(calls) == 4 && starts == 3 {
+		// Four calls done, and the fifth on its way: its start is on disk.
+		if len(calls) == 4 && starts == 3 && len(inference.InFlight(records)) == 1 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -133,8 +140,13 @@ func TestInspectReconstructsKilledRun(t *testing.T) {
 	if report.TotalUsage.Calls != 4 || report.TotalUsage.PromptTokens != 100+200+300+400 || report.TotalUsage.CompletionTokens != 10 || report.TotalUsage.CachedTokens != 200 {
 		t.Fatalf("usage totals = %+v", report.TotalUsage)
 	}
-	if len(report.Usage) != 2 || report.Usage[0].AgentID != "coordinator" || report.Usage[0].Calls != 2 || report.Usage[1].Calls != 2 {
+	// The fifth call, the second writer's first, was in flight at the
+	// kill: its start line is on disk with no outcome.
+	if len(report.Usage) != 3 || report.Usage[0].AgentID != "coordinator" || report.Usage[0].Calls != 2 || report.Usage[1].Calls != 2 {
 		t.Fatalf("per-process usage = %+v", report.Usage)
+	}
+	if inFlight := report.Usage[2]; inFlight.PID != "pid-000004" || inFlight.Calls != 0 || inFlight.InFlight != 1 || report.TotalUsage.InFlight != 1 {
+		t.Fatalf("the second writer's call should show as in flight: %+v", report.Usage)
 	}
 	kinds := []string{}
 	joined := 0

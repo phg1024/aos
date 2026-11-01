@@ -75,13 +75,44 @@ Artifacts under `<state-dir>/artifacts` are content-addressed: the index records
 A run keeps its own record on disk as it goes, so a killed run can still be reconstructed. Under `<state-dir>/run`:
 
 - `trace.jsonl` holds the engine trace (start, delegate, tool calls, exit, `capability_denied`, and so on). Records that match a kernel event, such as start, exit, runtime errors and denials, name it in `kernel_event`.
-- `calls.jsonl` holds one record per model call: process and agent, usage (prompt, cached and completion tokens), latency, error, request params, and the sha256 of the exact request body. Prompts are stored by delta: a call records only the messages added since its process's previous successful call (`base` is how many it carries over). So the system prompt is written once, in the process's first call, and `inference.RebuildRequestBody` reproduces any request byte for byte. Repair calls are flagged `repair`.
+- `calls.jsonl` holds two lines per model call, so a call cut off by a kill still shows.
+  - The **start** line (`"phase":"start"`) is written and synced before the request goes out. It holds the process and agent, the step, the seconds the run had used when the step began (`elapsed_s`), the run's `run.started` event (`run`), the request params, and the sha256 of the exact request body.
+  - The **outcome** line (`"phase":"outcome"`, naming its start in `start`) is written when the call returns. It holds usage (prompt, cached and completion tokens), latency, error, and the raw reply (`response`).
+  - A start no outcome names was in flight when the process died. `aos inspect` counts such calls as `in_flight`.
+  - Prompts are stored by delta: a start records only the messages added since its process's previous start (`base` is that start's seq). So the system prompt is written once, and `inference.RebuildRequestBody` reproduces any request byte for byte.
+  - Repair calls are flagged `repair`.
+  - Ledgers from before the split have one line per finished call, without the reply.
 
 Both are append-only JSONL. Each record gets a `seq` assigned under a file lock (`*.lock`), and the line is fsynced before the call returns. Several writers, including other processes, keep `seq` gap-free, and a kill can leave at most a torn last line, which readers skip. These files are diagnostic; the kernel event log stays the source of truth.
 
 `aos inspect <state-dir>` rebuilds a run from these files and the kernel and artifact stores, without a model. It shows the process tree with exit records, which processes never exited (and whether a run still holds the state directory, or they are orphans), each process's latest checkpoint, the leases held, the verification verdict, token usage per process and in total, and the trace tail. Use `--json` for machine-readable output and `--tail N` to set the trace length (default 20); flags may come before or after the path. The Harbor adapter reads its token counts from `aos inspect --json`, and on a timeout from `calls.jsonl` directly.
 
 If `aos run --workflow` stops on a Go error after the root process started (cancellation, a failed store write), it still writes the report and the summary JSON, with the error in `error`, and it records an exit for every process it started.
+
+A workflow run records what it runs under before anything runs:
+- a `run_spec` artifact holding the workflow spec, as the engine ran it, and the request;
+- a `run.started` kernel event on the root process holding:
+  - the run's budget (`budget_tokens`, `budget_seconds`, `budget_strict_time`);
+  - the compaction and retry settings;
+  - the build (`build_version`, set with `-ldflags -X main.version=…`; `build_revision` when stamped; and the binary's `build_sha256`);
+  - the backend's endpoint, model and sampling, but never its key.
+
+On SIGTERM or SIGINT, `aos run` stops the run as a strict budget does. The call or command in flight is cancelled, and each process exits `{1, "terminated by signal (SIGTERM)", retryable}` with a final checkpoint. The call gets its outcome line, and the summary is written. A second signal kills. The Harbor adapter sends SIGTERM when Harbor's agent timeout cancels it, and waits up to 15 s, so the ending is recorded before the logs are collected.
+
+`run` records what a command did to the files of the `workspace` mount, but not in the output the agent sees, so prompts do not change. It compares each path's size and modification time before and after, and records the result in the `tool_result` artifact (`changes`: `created`, `modified`, `deleted`, capped at 200 with a count of the rest). The trace also shows it, as `files=+a,~b,-c`. **Writes outside the workspace mount are not covered.** A write that keeps a file's size and modification time is not seen. A workspace over 50,000 entries is recorded as `unknown`.
+
+`aos replay <state-dir>` re-executes a recorded single-agent workflow run against its record.
+- **What runs for real:** the runtime, kernel, artifact store and prompt assembly.
+- **What comes from the record:**
+  - the model's replies, from the outcome lines;
+  - the world tools' results, from the run's `tool_result` and `tool_error` artifacts;
+  - the clock: each step's recorded `elapsed_s`, and the kernel's and store's recorded timestamps.
+- **The check:** every request must hash to the recorded `request_sha256`, and the kernel events, process table and artifacts must come out the same. A checkpoint's usage seconds are left out, because they come from the wall clock at save time.
+- **Exit codes:** 0 when identical, 1 at the first divergence, which is reported by kind, call, step and message diff. Exit 2 means the run cannot be replayed: a multi-agent run, a ledger from before replies were recorded, or no `run.started`.
+- **A killed run** replays up to the call in flight and is compared as far as its record goes.
+- **Options:** `--json` prints the report as JSON, `--keep DIR` keeps the replay's own state, and `--unpinned-clock` shows what pinning the clock prevents.
+- A replay by a different build says so.
+- The TUI's sessions are not replayable yet.
 
 ## Run Lifecycle and Recovery
 

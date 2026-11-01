@@ -26,9 +26,12 @@ fi
 export GOCACHE="${GOCACHE:-$ROOT_DIR/.cache/go-build}"
 export GOTMPDIR="${GOTMPDIR:-$ROOT_DIR/.cache/tmp}"
 mkdir -p "$GOCACHE" "$GOTMPDIR" "$AOS_HARBOR_DIST"
+# The version names the commit in each run's run.started event; the event
+# also records the binary's SHA-256.
+AOS_VERSION="$(git -C "$ROOT_DIR" describe --tags --always --dirty 2>/dev/null || echo dev)"
 for arch in amd64 arm64; do
   (cd "$ROOT_DIR" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -buildvcs=false \
-    -o "$AOS_HARBOR_DIST/aos-linux-$arch" ./cmd/aos)
+    -ldflags "-X main.version=$AOS_VERSION" -o "$AOS_HARBOR_DIST/aos-linux-$arch" ./cmd/aos)
 done
 
 echo "model: ${AOS_LLM_MODEL:-qwen3.8-flash-next-unsloth-ud-q4_k_xl} at ${AOS_LLM_BASE_URL:-http://127.0.0.1:8080}"

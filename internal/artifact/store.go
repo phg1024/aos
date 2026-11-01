@@ -89,6 +89,44 @@ type Store struct {
 	root      string
 	mu        sync.Mutex
 	producers atomic.Pointer[func(pid string) error]
+	clock     atomic.Pointer[func(id string) time.Time]
+}
+
+// SetClock makes the store stamp each new artifact with now(id) instead
+// of the wall clock, as a replay does with the recorded times.
+func (s *Store) SetClock(now func(id string) time.Time) {
+	if now != nil {
+		s.clock.Store(&now)
+	}
+}
+
+// NextID is the ID the next artifact will get.
+func (s *Store) NextID() (string, error) {
+	unlock, err := s.lock()
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	state, err := s.readState()
+	if err != nil {
+		return "", err
+	}
+	index, err := s.readIndex()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("art-%06d", nextSequence(state, index)), nil
+}
+
+// nextSequence is the sequence number of the next artifact.
+func nextSequence(state storeState, index map[string]Artifact) int {
+	next := state.NextArtifactID
+	for id := range index {
+		if seq := sequence(id); seq >= next {
+			next = seq + 1
+		}
+	}
+	return next
 }
 
 func New(root string) (*Store, error) {
@@ -152,12 +190,7 @@ func (s *Store) CreateJSON(artifactType, producerPID string, payload any, parent
 		}
 	}
 
-	next := state.NextArtifactID
-	for id := range index {
-		if seq := sequence(id); seq >= next {
-			next = seq + 1
-		}
-	}
+	next := nextSequence(state, index)
 	id := fmt.Sprintf("art-%06d", next)
 	payloadPath := filepath.Join(s.root, "payloads", id+".json")
 	if err := writeFileAtomic(payloadPath, bytes, 0o444); err != nil {
@@ -173,6 +206,9 @@ func (s *Store) CreateJSON(artifactType, producerPID string, payload any, parent
 		SHA256:      hex.EncodeToString(sum[:]),
 		Metadata:    clone(metadata),
 		CreatedAt:   time.Now().UTC(),
+	}
+	if clock := s.clock.Load(); clock != nil {
+		artifact.CreatedAt = (*clock)(id)
 	}
 	index[id] = artifact
 	// Index before counter: a crash in between only leaves a counter that

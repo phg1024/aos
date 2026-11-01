@@ -1,8 +1,9 @@
 # Replay Design
 
 Status: proposal, 2026-10-31, written at the request of the aos book session
-for Chapter 6 (Observability and Replay). Nothing here is implemented
-except what "Today" says is. The user decides what to build after reading.
+for Chapter 6 (Observability and Replay). Built on 2026-11-01 at the
+expanded scope (gaps 1, 3 and 4, and the single-agent slice of level b);
+see "As built". The rest stays proposed.
 
 ## Why
 
@@ -344,6 +345,73 @@ the first call it affects.
 - **Ledger format:** start and outcome pairs survive a torn last line, as
   `runlog` promises. `aos inspect` totals usage from outcome lines and
   counts unpaired starts.
+
+## As built (2026-11-01)
+
+The user chose the expanded scope: the slice above plus gap 1 (file
+changes) and signal handling (gap 3).
+
+- **Ledger.** `CallRecord` lines now come in two phases.
+  - A start line is written before the request: `step`, `elapsed_s`,
+    `run` (the `run.started` event's ID), params, delta messages and the
+    request hash.
+  - An outcome line is written after the call returns: `start`, usage,
+    latency, error, and the raw `response`.
+  - `inference.InFlight` lists starts that no outcome names, and
+    `inference.RequestMessages` rebuilds a start's messages.
+  - `aos inspect` and the Harbor adapter count only finished calls, and
+    report calls in flight.
+- **Clock.** Each step reads the clock once (`stepNow`). The step's budget
+  notes come from that reading, and its calls record the top account's
+  seconds at that reading as `elapsed_s`. This is what makes the notes
+  replayable exactly, not just to within a second.
+  - `AgentRuntime.Clock`, `StepClock` and `Sleep` (also on `Engine`),
+    `Kernel.SetClock` and `artifact.Store.SetClock` are the seams.
+- **`run.started` and `run_spec`** are recorded by the engine right after
+  the root starts, with the data listed in gap 4. They also hold the
+  sampling, so a replay sends identical requests.
+- **Signals.** `aos run` cancels with `runtime.ErrTerminated` as the cause,
+  and the runtime ends processes as it does for a strict budget. The Harbor
+  adapter's `TERMINATE_COMMAND` finds `aos` by `/proc/*/comm` and uses the
+  shell's own `kill`. It was checked in a Terminal-Bench task image.
+- **File changes.** `tools.FileChanges` sits on run results: a size and
+  mtime snapshot of the `workspace` mount, kept out of the agent's output.
+  The trace shows it as `files=`.
+- **Replay.** `internal/replay` and `aos replay`.
+  - World tools are stubbed at `tools.Runtime.Recorded`. The recorded
+    outcome is the artifact at the ID the replayed outcome will get, which
+    is unambiguous because the run is identical up to that point.
+  - Recorded refusals are rebuilt with `tools.RecordedError`, so they log
+    `capability.denied` as before.
+  - A call or command cut off by a strict budget or a signal is stopped
+    with the cause rebuilt from the process's recorded exit.
+  - What differs from the proposal: the kernel and the store get the
+    recorded timestamps, so events, processes and artifact records are
+    compared exactly, timestamps included. Only a checkpoint's usage
+    seconds are excluded.
+- **Limits.**
+  - Single-agent workflow runs only. Multi-agent runs need a recorded
+    schedule.
+  - TUI sessions are not covered: they are multi-turn, and their user
+    input arrives through the mailbox.
+  - A lower account in the chain that has its own time limit reads the
+    run's origin, not its own start, so its notes could differ. No
+    single-agent run has one.
+  - A step that makes no model call has no recorded reading and keeps the
+    previous step's.
+  - File changes miss writes outside the workspace mount, and writes that
+    keep size and mtime.
+- **Tests.**
+  - Round trip (write, `run`, a failed read, a retried model error, and
+    compaction after a handoff, all identical).
+  - A changed tool result diverges at the next call, and a changed prompt
+    at call 1.
+  - Pinned against unpinned clock.
+  - Token budget, strict stop mid-call, killed run, a ledger cut short,
+    and refusal of an unreplayable run.
+  - SIGTERM end to end (`cmd/aos`) and the adapter's SIGTERM path.
+  - File changes, including a heredoc write.
+  - Ledger phases and torn lines.
 
 ## Open Questions
 

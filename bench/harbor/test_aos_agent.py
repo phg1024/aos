@@ -1,5 +1,6 @@
 """Run with Harbor's Python: bench/harbor/run-tb.sh --self-test"""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from aos_agent import (
+    TERMINATE_COMMAND,
     AOSAgent,
     agent_timeout_sec,
     container_base_url,
@@ -77,10 +79,26 @@ class UsageFromLedgerTest(unittest.TestCase):
             '{"seq":2,"prompt_tokens":120,"cached_tokens":100,"completion_tokens":9}\n'
             '{"seq":3,"prompt_tok'
         )
-        self.assertEqual(usage_from_ledger(path), {"requests": 2, "prompt_tokens": 220, "cached_tokens": 160, "completion_tokens": 16})
+        self.assertEqual(
+            usage_from_ledger(path),
+            {"requests": 2, "prompt_tokens": 220, "cached_tokens": 160, "completion_tokens": 16, "in_flight": 0},
+        )
 
     def test_missing_ledger(self):
         self.assertIsNone(usage_from_ledger(Path(tempfile.mkdtemp()) / "absent.jsonl"))
+
+    def test_start_and_outcome_lines(self):
+        path = Path(tempfile.mkdtemp()) / "calls.jsonl"
+        path.write_text(
+            '{"seq":1,"phase":"start","prompt_tokens":0}\n'
+            '{"seq":2,"phase":"outcome","start":1,"prompt_tokens":100,"cached_tokens":60,"completion_tokens":7}\n'
+            '{"seq":3,"phase":"start","prompt_tokens":0}\n'
+            '{"seq":4,"phase":"outc'
+        )
+        self.assertEqual(
+            usage_from_ledger(path),
+            {"requests": 1, "prompt_tokens": 100, "cached_tokens": 60, "completion_tokens": 7, "in_flight": 1},
+        )
 
 
 class TimeBudgetFlagTest(unittest.TestCase):
@@ -123,6 +141,49 @@ class TimeBudgetModeTest(unittest.TestCase):
             self.assertEqual(AOSAgent(logs_dir=logs, time_budget="off")._time_budget, "off")
             with self.assertRaises(ValueError):
                 AOSAgent(logs_dir=logs, time_budget="sometimes")
+
+
+class TerminateOnTimeoutTest(unittest.TestCase):
+    """Harbor's agent timeout cancels run(); aos gets SIGTERM before the
+    cancellation goes on, so it can record its exit."""
+
+    def run_cancelled(self, terminate_error=None):
+        agent = AOSAgent(logs_dir=Path(tempfile.mkdtemp()))
+        calls = []
+
+        async def exec_as_agent(environment, command, env=None, **_):
+            if command == "pwd":
+                return mock.Mock(stdout="/app\n")
+            calls.append("aos run")
+            raise asyncio.CancelledError()
+
+        async def exec_as_root(environment, command, **_):
+            calls.append(command)
+            if terminate_error:
+                raise terminate_error
+            return mock.Mock(stdout="")
+
+        async def upload(*args, **kwargs):
+            return None
+
+        with mock.patch.object(agent, "exec_as_agent", exec_as_agent), mock.patch.object(agent, "exec_as_root", exec_as_root), \
+                mock.patch.object(agent, "_upload_config_text", upload), mock.patch.object(agent, "_trial_timeout_sec", lambda env: 900.0), \
+                mock.patch.object(agent, "render_instruction", lambda text: text):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(agent.run("do the task", mock.Mock(), mock.Mock(metadata={})))
+        return calls
+
+    def test_sends_sigterm_then_reraises(self):
+        self.assertEqual(self.run_cancelled(), ["aos run", TERMINATE_COMMAND])
+
+    def test_a_failed_terminate_still_reraises(self):
+        self.assertEqual(self.run_cancelled(RuntimeError("container gone")), ["aos run", TERMINATE_COMMAND])
+
+    def test_command_finds_aos_by_name(self):
+        # By /proc/*/comm, so the shell running it never matches itself,
+        # and kill is the shell's own, so no procps is needed.
+        self.assertIn('= aos ] && kill -TERM', TERMINATE_COMMAND)
+        self.assertNotIn("pkill", TERMINATE_COMMAND)
 
 
 if __name__ == "__main__":

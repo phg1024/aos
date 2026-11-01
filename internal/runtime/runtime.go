@@ -236,6 +236,14 @@ type AgentRuntime struct {
 	Recall RecallPolicy
 	// BackendRetry retries failed model calls within a step.
 	BackendRetry BackendRetryPolicy
+	// Clock, when set, replaces the wall clock for budgets; Sleep, when
+	// set, replaces the wait between retries. A replay sets both.
+	Clock func() time.Time
+	Sleep func(ctx context.Context, d time.Duration)
+	// StepClock, when set, gives the clock reading of a process's step,
+	// which its budget notes come from: a replay returns what the step's
+	// model call recorded.
+	StepClock func(pid string, step int) time.Time
 	// OnCapabilityDenied, when set, receives each capability.denied kernel
 	// event this runtime records.
 	OnCapabilityDenied func(kernel.Event)
@@ -584,6 +592,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		owner = fmt.Sprintf("%s (%s)", agentID, pid)
 	}
 	account := NewAccount(owner, limit, session.Usage, AccountFrom(ctx))
+	account.SetClock(r.Clock)
 	account.Start()
 	ctx = WithAccount(ctx, account)
 	if strict := account.timeLeft(true); strict.ok {
@@ -649,7 +658,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	// stop handles a cancelled ctx: a strict time budget running out ends
 	// the process; anything else (the user's Esc) parks it.
 	stop := func() (RunResult, error) {
-		if cause := context.Cause(ctx); errors.Is(cause, ErrTimeBudgetExceeded) {
+		if cause := context.Cause(ctx); errors.Is(cause, ErrTimeBudgetExceeded) || errors.Is(cause, ErrTerminated) {
 			return budgetExit(cause.Error())
 		}
 		return r.cancelRun(ctx, pid, synced(), latest(), &unacked)
@@ -693,7 +702,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			return stop()
 		}
 		session.Usage.Steps++
-		for _, note := range budgetNotes(account, &session, maxSteps) {
+		// The step's one reading of the clock: its budget notes come from
+		// it, and its model calls record it.
+		stepNow := account.now()
+		if r.StepClock != nil {
+			stepNow = r.StepClock(pid, session.Usage.Steps)
+		}
+		_, stepElapsed := account.top().UsedAt(stepNow)
+		for _, note := range budgetNotes(account, &session, maxSteps, stepNow) {
 			session.Messages = append(session.Messages, Message{Role: "tool", Content: note})
 		}
 		if r.Bus != nil {
@@ -737,7 +753,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 
 		// Check the token budget before the call, and cap the reply to what
 		// is left of it; its prompt may still overshoot, by at most one call.
-		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"]}
+		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"], Step: session.Usage.Steps, Elapsed: stepElapsed, Run: RunIDFrom(ctx)}
 		if tokens := account.tokensLeft(); tokens.ok {
 			if tokens.Left <= 0 {
 				return budgetExit(fmt.Sprintf("token budget exceeded: %d of %d tokens used (budget of %s)", tokens.Limit-int(tokens.Left), tokens.Limit, tokens.Owner))
@@ -792,7 +808,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}); recordErr != nil {
 				return RunResult{}, recordErr
 			}
-			sleepContext(ctx, delay)
+			if r.Sleep != nil {
+				r.Sleep(ctx, delay)
+			} else {
+				sleepContext(ctx, delay)
+			}
 			if ctx.Err() != nil {
 				return stop()
 			}
@@ -2011,8 +2031,11 @@ type memorySegment struct {
 // cancelReason says why ctx stopped a tool or delegate: the user, or a
 // strict time budget.
 func cancelReason(ctx context.Context) string {
-	if errors.Is(context.Cause(ctx), ErrTimeBudgetExceeded) {
+	switch cause := context.Cause(ctx); {
+	case errors.Is(cause, ErrTimeBudgetExceeded):
 		return "time_budget_exceeded"
+	case errors.Is(cause, ErrTerminated):
+		return "terminated"
 	}
 	return "interrupted_by_user"
 }

@@ -51,9 +51,9 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 }
 
 type RunRequest struct {
-	Goal       string
-	InputPaths []string
-	OutputPath string
+	Goal       string   `json:"goal"`
+	InputPaths []string `json:"input_paths,omitempty"`
+	OutputPath string   `json:"output_path,omitempty"`
 }
 
 type AgentRun struct {
@@ -118,6 +118,16 @@ type Engine struct {
 	// it, and the entry agent's budget is bounded by it. A time budget is
 	// advisory unless StrictTime.
 	Budget capability.Budget
+	// Clock, when set, replaces the wall clock for budgets, and Sleep the
+	// wait between model-call retries; a replay sets both.
+	Clock func() time.Time
+	Sleep func(ctx context.Context, d time.Duration)
+	// StepClock, when set, gives each agent step's clock reading
+	// (runtime.AgentRuntime.StepClock).
+	StepClock func(pid string, step int) time.Time
+	// RunRecord is what the run.started event records beyond the engine's
+	// own settings, such as the build and the backend.
+	RunRecord map[string]string
 }
 
 type TraceEvent struct {
@@ -279,8 +289,19 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if _, err := e.Kernel.Transition(root.PID, kernel.StateRunning); err != nil {
 		return RunSummary{}, err
 	}
+	// What the run runs under, recorded before anything runs.
+	specRecord, err := e.Artifacts.CreateJSON(RunSpecArtifact, root.PID, RunSpec{Spec: spec, Request: req}, nil, map[string]string{"workflow": spec.Name})
+	if err != nil {
+		return RunSummary{}, err
+	}
+	started, err := e.Kernel.RecordEvent(root.PID, RunStartedEvent, e.runStartedData(specRecord.ID, specRecord.SHA256))
+	if err != nil {
+		return RunSummary{}, err
+	}
+	ctx = runtime.WithRunID(ctx, started.ID)
 	// The run's own account heads the chain every agent's account joins.
 	runAccount := runtime.NewAccount("run", e.Budget, runtime.Usage{}, runtime.AccountFrom(ctx))
+	runAccount.SetClock(e.Clock)
 	runAccount.Start()
 	defer runAccount.Stop()
 	ctx = runtime.WithAccount(ctx, runAccount)
@@ -416,6 +437,9 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		Compaction:   e.Compaction,
 		Recall:       spec.Recall,
 		BackendRetry: e.BackendRetry,
+		Clock:        e.Clock,
+		Sleep:        e.Sleep,
+		StepClock:    e.StepClock,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),
@@ -693,7 +717,35 @@ func formatToolResult(result tools.Result) string {
 	for _, key := range keys[:min(3, len(keys))] {
 		parts = append(parts, fmt.Sprintf("%s=%s", key, summarizeTraceText(result.Output[key])))
 	}
-	return fmt.Sprintf("%s %s", result.Tool, strings.Join(parts, " "))
+	line := fmt.Sprintf("%s %s", result.Tool, strings.Join(parts, " "))
+	if changes := result.Changes; changes != nil {
+		line += " " + formatChanges(changes)
+	}
+	return line
+}
+
+// formatChanges is a run result's file changes as the trace shows them.
+func formatChanges(changes *tools.FileChanges) string {
+	if changes.Unknown != "" {
+		return "files=unknown"
+	}
+	var parts []string
+	for _, group := range []struct {
+		mark  string
+		paths []string
+	}{{"+", changes.Created}, {"~", changes.Modified}, {"-", changes.Deleted}} {
+		for _, path := range group.paths {
+			parts = append(parts, group.mark+path)
+		}
+	}
+	if len(parts) == 0 {
+		return "files=unchanged"
+	}
+	shown := parts[:min(5, len(parts))]
+	if rest := len(parts) - len(shown) + changes.More; rest > 0 {
+		shown = append(shown, fmt.Sprintf("(+%d more)", rest))
+	}
+	return "files=" + strings.Join(shown, ",")
 }
 
 func summarizeTraceText(value string) string {

@@ -14,6 +14,7 @@ with this directory on PYTHONPATH (run-tb.sh does both).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shlex
@@ -65,6 +66,19 @@ MIN_TIME_BUDGET_SEC = 60
 #   advisory  the agent sees the budget and is warned, but is not stopped
 #   off       no AOS time budget; only Harbor's timeout ends the trial
 TIME_BUDGET_MODES = ("strict", "advisory", "off")
+
+# When Harbor's agent timeout cancels run(), aos is asked to stop with
+# SIGTERM, which it turns into a recorded, retryable exit with a final
+# checkpoint, before Harbor collects the logs. The process is found by its
+# name (/proc/*/comm), so this command cannot match its own shell, and is
+# waited for up to TERMINATE_GRACE_SEC.
+TERMINATE_GRACE_SEC = 15
+TERMINATE_COMMAND = (
+    'for p in /proc/[0-9]*; do [ "$(cat "$p/comm" 2>/dev/null)" = aos ] && kill -TERM "${p#/proc/}" 2>/dev/null; done; '
+    "i=0; while [ $i -lt 20 ]; do alive=; "
+    'for p in /proc/[0-9]*; do [ "$(cat "$p/comm" 2>/dev/null)" = aos ] && alive=1; done; '
+    '[ -z "$alive" ] && exit 0; sleep 0.5; i=$((i+1)); done; exit 1'
+)
 
 
 def time_budget_mode(value: str | None) -> str:
@@ -136,20 +150,30 @@ def usage_from_ledger(path: Path) -> dict | None:
     """Total the model-call ledger (calls.jsonl) AOS writes as it runs.
 
     The ledger survives a killed run, so it is the usage source when the
-    trial timed out. A torn last line from the kill is skipped.
+    trial timed out. A torn last line from the kill is skipped. Each call
+    has a start line and, once it returns, an outcome line; a start no
+    outcome names was in flight at the kill and is counted as in_flight.
+    Ledgers from before the split have one line per finished call.
     """
     if not path.is_file():
         return None
-    totals = {"requests": 0, "prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0}
+    totals = {"requests": 0, "prompt_tokens": 0, "cached_tokens": 0, "completion_tokens": 0, "in_flight": 0}
+    starts, closed = set(), set()
     with path.open() as ledger:
         for line in ledger:
             try:
                 call = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if call.get("phase") == "start":
+                starts.add(call.get("seq"))
+                continue
+            if call.get("phase") == "outcome":
+                closed.add(call.get("start"))
             totals["requests"] += 1
             for key in ("prompt_tokens", "cached_tokens", "completion_tokens"):
                 totals[key] += call.get(key) or 0
+    totals["in_flight"] = len(starts - closed)
     return totals
 
 
@@ -157,7 +181,12 @@ def apply_usage(context: AgentContext, usage: dict, source: str) -> None:
     context.n_input_tokens = usage.get("prompt_tokens")
     context.n_output_tokens = usage.get("completion_tokens")
     context.n_cache_tokens = usage.get("cached_tokens")
-    context.metadata = {**(context.metadata or {}), "requests": usage.get("requests") or usage.get("calls"), "usage_source": source}
+    context.metadata = {
+        **(context.metadata or {}),
+        "requests": usage.get("requests") or usage.get("calls"),
+        "in_flight": usage.get("in_flight") or 0,
+        "usage_source": source,
+    }
 
 
 def parse_run_summary(output: str) -> dict | None:
@@ -241,7 +270,12 @@ class AOSAgent(BaseInstalledAgent):
             f'--state-dir {LOG_DIR}/aos-state "$AOS_INSTRUCTION" 2>&1; '
             f'echo "aos_exit=$?"; }} | tee {LOG_DIR}/aos.log'
         )
-        result = await self.exec_as_agent(environment, command=command, env=env)
+        try:
+            result = await self.exec_as_agent(environment, command=command, env=env)
+        except asyncio.CancelledError:
+            # Harbor's timeout: let aos record its own ending first.
+            await self._terminate(environment)
+            raise
 
         output = result.stdout or ""
         summary = parse_run_summary(output.rsplit("aos_exit=", 1)[0])
@@ -268,6 +302,15 @@ class AOSAgent(BaseInstalledAgent):
             apply_usage(context, report["total_usage"], "ledger")
         elif summary and summary.get("usage"):
             apply_usage(context, summary["usage"], "summary")
+
+    async def _terminate(self, environment: BaseEnvironment) -> None:
+        """Send aos SIGTERM and wait briefly for it to record its exit."""
+        try:
+            await asyncio.wait_for(self.exec_as_root(environment, TERMINATE_COMMAND), TERMINATE_GRACE_SEC)
+        except Exception:
+            # Harbor kills the trial anyway; a failure here only loses the
+            # recorded ending.
+            pass
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         # Harbor calls this when run() recorded nothing, e.g. after an agent

@@ -15,6 +15,11 @@ import (
 // budget.
 var ErrTimeBudgetExceeded = errors.New("time budget exceeded")
 
+// ErrTerminated is the cause of a run stopped by a termination signal
+// (aos run on SIGTERM or SIGINT). Like a spent budget, it ends the process
+// retryably, with a final checkpoint.
+var ErrTerminated = errors.New("terminated by signal")
+
 // budgetWarningFraction is the share of a budget left at which the agent is
 // told, once, to commit its best answer now.
 const budgetWarningFraction = 0.1
@@ -61,6 +66,14 @@ func NewAccount(owner string, limit capability.Budget, used Usage, parent *Accou
 	return &Account{Owner: owner, Limit: limit, parent: parent, tokens: used.Tokens, seconds: used.Seconds, now: time.Now}
 }
 
+// SetClock makes the account read time from now instead of the wall
+// clock, as a replay does.
+func (a *Account) SetClock(now func() time.Time) {
+	if now != nil {
+		a.now = now
+	}
+}
+
 // Start and Stop bracket the time the account's owner runs.
 func (a *Account) Start() {
 	a.mu.Lock()
@@ -90,13 +103,26 @@ func (a *Account) AddTokens(n int) {
 
 // Used is the tokens and seconds consumed so far.
 func (a *Account) Used() (int, float64) {
+	return a.UsedAt(a.now())
+}
+
+// UsedAt is the tokens consumed so far and the seconds consumed by time t.
+func (a *Account) UsedAt(t time.Time) (int, float64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	seconds := a.seconds
 	if !a.since.IsZero() {
-		seconds += a.now().Sub(a.since).Seconds()
+		seconds += t.Sub(a.since).Seconds()
 	}
 	return a.tokens, seconds
+}
+
+// top is the account at the head of a's chain: the run's, in a workflow.
+func (a *Account) top() *Account {
+	for a.parent != nil {
+		a = a.parent
+	}
+	return a
 }
 
 // Limited is the tightest remaining amount over the chain: how much is
@@ -127,12 +153,17 @@ func (a *Account) tokensLeft() Limited {
 // timeLeft is the tightest time budget over the chain; strict selects only
 // strict budgets.
 func (a *Account) timeLeft(strictOnly bool) Limited {
+	return a.timeLeftAt(strictOnly, a.now())
+}
+
+// timeLeftAt is timeLeft at time t.
+func (a *Account) timeLeftAt(strictOnly bool, t time.Time) Limited {
 	var tightest Limited
 	for account := a; account != nil; account = account.parent {
 		if account.Limit.Seconds <= 0 || (strictOnly && !account.Limit.StrictTime) {
 			continue
 		}
-		_, used := account.Used()
+		_, used := account.UsedAt(t)
 		left := float64(account.Limit.Seconds) - used
 		if !tightest.ok || left < tightest.Left {
 			tightest = Limited{Left: left, Limit: account.Limit.Seconds, Owner: account.Owner, ok: true}
@@ -172,8 +203,9 @@ func (m *TokenMeter) Total() int     { return int(m.total.Load()) }
 // the last tenth of the steps instead, the warning with its first. Steps
 // count from the start of the turn (StepBase) and include this one. The
 // last step is always in that stretch, so a limit under ten steps still
-// gets the warning.
-func budgetNotes(account *Account, session *Session, maxSteps int) []string {
+// gets the warning. Time is read once, at now, so the notes depend only on
+// that reading, which the step's model calls record.
+func budgetNotes(account *Account, session *Session, maxSteps int, now time.Time) []string {
 	var notes []string
 	if maxSteps > 0 {
 		used := session.Usage.Steps - session.StepBase - 1
@@ -186,11 +218,11 @@ func budgetNotes(account *Account, session *Session, maxSteps int) []string {
 			}
 		}
 	}
-	time := account.timeLeft(false)
+	time := account.timeLeftAt(false, now)
 	if time.ok {
 		left := max(time.Left, 0)
 		note := fmt.Sprintf("budget time=%ds used=%ds left=%ds", time.Limit, int(float64(time.Limit)-left), int(left))
-		if account.timeLeft(true).ok {
+		if account.timeLeftAt(true, now).ok {
 			note += " (strict: the run is stopped when it runs out)"
 		}
 		notes = append(notes, note)

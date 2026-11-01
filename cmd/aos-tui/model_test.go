@@ -207,7 +207,13 @@ func TestSwitchingModelsMidSession(t *testing.T) {
 		t.Fatalf("the reply = %+v", last)
 	}
 
-	calls, _ := runlog.Read[inference.CallRecord](callLog.Path())
+	records, _ := runlog.Read[inference.CallRecord](callLog.Path())
+	var calls []inference.CallRecord
+	for _, record := range records {
+		if record.Finished() {
+			calls = append(calls, record)
+		}
+	}
 	if len(calls) != 2 || calls[0].Backend != first.server.URL || calls[0].Model != "model-1" || calls[1].Backend != second.server.URL || calls[1].Model != "model-2" {
 		t.Fatalf("the ledger should say which model answered each call: %+v", calls)
 	}

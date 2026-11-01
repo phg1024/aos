@@ -29,6 +29,25 @@ type VLLMConfig struct {
 	Sampling      Sampling
 	HTTPClient    *http.Client
 	OnStreamEvent func(StreamEvent)
+	// Stream asks for a streamed reply even without OnStreamEvent, as a
+	// replay of a streamed run must.
+	Stream bool
+	// Replayer, when set, answers every call instead of the server.
+	Replayer Replayer
+}
+
+// Replayer answers a model call from a record instead of the network:
+// aos replay's recorded replies. body is the exact request body.
+type Replayer interface {
+	Reply(ctx context.Context, body []byte) (RecordedReply, error)
+}
+
+// RecordedReply is a recorded call's raw reply and usage.
+type RecordedReply struct {
+	Content          string
+	PromptTokens     int
+	CompletionTokens int
+	CachedTokens     int
 }
 
 type VLLMBackend struct {
@@ -40,6 +59,8 @@ type VLLMBackend struct {
 	maxRetries    int
 	onStreamEvent func(StreamEvent)
 	sampling      Sampling
+	stream        bool
+	replayer      Replayer
 	calls         *callRecorder
 
 	usageMu sync.Mutex
@@ -156,6 +177,8 @@ func NewVLLMBackend(config VLLMConfig) *VLLMBackend {
 		maxRetries:    max(1, config.MaxRetries),
 		onStreamEvent: config.OnStreamEvent,
 		sampling:      config.Sampling,
+		stream:        config.Stream || config.OnStreamEvent != nil,
+		replayer:      config.Replayer,
 	}
 }
 
@@ -220,10 +243,11 @@ func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (str
 		// What is left of the caller's token budget.
 		payload.MaxTokens = info.MaxTokens
 	}
+	pending := b.recordStart(ctx, payload)
 	started := time.Now()
 	var usage *responseUsage
 	content, err := b.send(ctx, payload, &usage)
-	b.recordCall(ctx, payload, usage, time.Since(started), err)
+	b.recordOutcome(pending, payload.Model, usage, time.Since(started), content, err)
 	if info.Meter != nil && usage != nil {
 		info.Meter.Add(usage.PromptTokens + usage.CompletionTokens)
 	}
@@ -238,7 +262,7 @@ func (b *VLLMBackend) request(messages []chatMessage) chatCompletionRequest {
 		TopP:                  b.sampling.TopP,
 		MaxTokens:             b.sampling.MaxTokens,
 		ReasoningBudgetTokens: b.sampling.ThinkingBudget,
-		Stream:                b.onStreamEvent != nil,
+		Stream:                b.stream,
 	}
 	if payload.Stream {
 		payload.StreamOptions = &streamOptions{IncludeUsage: true}
@@ -252,6 +276,21 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 	if err != nil {
 		return "", err
 	}
+	if b.replayer != nil {
+		reply, err := b.replayer.Reply(ctx, body)
+		if err != nil {
+			return reply.Content, err
+		}
+		recorded := &responseUsage{PromptTokens: reply.PromptTokens, CompletionTokens: reply.CompletionTokens}
+		if reply.CachedTokens > 0 {
+			recorded.PromptTokensDetails = &struct {
+				CachedTokens int `json:"cached_tokens"`
+			}{reply.CachedTokens}
+		}
+		b.recordUsage(recorded)
+		*usage = recorded
+		return reply.Content, nil
+	}
 	var lastErr error
 	for attempt := 0; attempt < b.maxRetries; attempt++ {
 		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/v1/chat/completions", bytes.NewReader(body))
@@ -262,7 +301,7 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 		if b.apiKey != "" {
 			httpRequest.Header.Set("Authorization", "Bearer "+b.apiKey)
 		}
-		if b.onStreamEvent != nil {
+		if b.stream {
 			httpRequest.Header.Set("Accept", "text/event-stream")
 		}
 
@@ -289,7 +328,7 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 			return "", lastErr
 		}
 
-		if b.onStreamEvent != nil {
+		if b.stream {
 			var fullResponse strings.Builder
 			scanner := bufio.NewScanner(response.Body)
 			var streamUsage *responseUsage
@@ -311,12 +350,12 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 						delta := chunk.Choices[0].Delta
 						for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
 							if reasoning != "" {
-								b.onStreamEvent(StreamEvent{Kind: StreamThinking, Text: reasoning})
+								b.emit(StreamEvent{Kind: StreamThinking, Text: reasoning})
 								fullResponse.WriteString(reasoning)
 							}
 						}
 						if delta.Content != "" {
-							b.onStreamEvent(StreamEvent{Kind: StreamContent, Text: delta.Content})
+							b.emit(StreamEvent{Kind: StreamContent, Text: delta.Content})
 							fullResponse.WriteString(delta.Content)
 						}
 					}
@@ -332,7 +371,7 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 			}
 			b.recordUsage(streamUsage)
 			*usage = streamUsage
-			b.onStreamEvent(StreamEvent{Kind: StreamDone})
+			b.emit(StreamEvent{Kind: StreamDone})
 			return fullResponse.String(), nil
 		}
 
@@ -361,6 +400,13 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 		return "", lastErr
 	}
 	return "", ErrMalformedModelResponse
+}
+
+// emit passes a stream event to OnStreamEvent, if set.
+func (b *VLLMBackend) emit(event StreamEvent) {
+	if b.onStreamEvent != nil {
+		b.onStreamEvent(event)
+	}
 }
 
 func isRetryableVLLMError(err error) bool {

@@ -74,18 +74,24 @@ type Mailbox struct {
 
 // Usage totals model calls, per process or for the whole run.
 type Usage struct {
-	PID              string `json:"pid,omitempty"`
-	AgentID          string `json:"agent_id,omitempty"`
-	Calls            int    `json:"calls"`
-	Repairs          int    `json:"repairs"`
-	Errors           int    `json:"errors"`
-	PromptTokens     int    `json:"prompt_tokens"`
-	CachedTokens     int    `json:"cached_tokens"`
-	CompletionTokens int    `json:"completion_tokens"`
-	LatencyMS        int64  `json:"latency_ms"`
+	PID     string `json:"pid,omitempty"`
+	AgentID string `json:"agent_id,omitempty"`
+	Calls   int    `json:"calls"`
+	// InFlight counts calls started but never finished: in flight when the
+	// process died.
+	InFlight         int   `json:"in_flight,omitempty"`
+	Repairs          int   `json:"repairs"`
+	Errors           int   `json:"errors"`
+	PromptTokens     int   `json:"prompt_tokens"`
+	CachedTokens     int   `json:"cached_tokens"`
+	CompletionTokens int   `json:"completion_tokens"`
+	LatencyMS        int64 `json:"latency_ms"`
 }
 
 func (u *Usage) add(call inference.CallRecord) {
+	if !call.Finished() {
+		return
+	}
 	u.Calls++
 	if call.Repair {
 		u.Repairs++
@@ -203,6 +209,10 @@ func Load(stateDir string, tail int) (Report, error) {
 		}
 		usage.add(call)
 		report.TotalUsage.add(call)
+	}
+	for _, open := range inference.InFlight(calls) {
+		perPID[open.PID].InFlight++
+		report.TotalUsage.InFlight++
 	}
 	for _, pid := range order {
 		report.Usage = append(report.Usage, *perPID[pid])
@@ -330,6 +340,9 @@ func (r Report) WriteText(w io.Writer) {
 		fmt.Fprintf(w, "\nverification (%s, %s): %s  %s\n", v.Policy, r.VerdictID, v.Status, clip(v.Reason, 120))
 	}
 	fmt.Fprintf(w, "\nusage (%d model calls):\n", r.TotalUsage.Calls)
+	if r.TotalUsage.InFlight > 0 {
+		fmt.Fprintf(w, "  %d call(s) started and never finished: in flight when the run died\n", r.TotalUsage.InFlight)
+	}
 	for _, usage := range append(append([]Usage(nil), r.Usage...), withLabel(r.TotalUsage, "total")) {
 		fmt.Fprintf(w, "  %-14s %-11s calls=%-4d prompt=%-8d cached=%-8d completion=%-7d latency=%-8s repairs=%d errors=%d\n",
 			usage.AgentID, usage.PID, usage.Calls, usage.PromptTokens, usage.CachedTokens, usage.CompletionTokens,

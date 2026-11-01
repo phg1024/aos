@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Replay Implementation</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Replay: Record What Comes From Outside, Re-Run the Rest</h1>
+    <p>This builds the expanded scope of <code>replay-design.md</code> (<code>c53cd79</code>), as the user chose:</p>
+    <ol>
+      <li>start and outcome lines in the call ledger;</li>
+      <li>a <code>run.started</code> kernel event;</li>
+      <li>recorded exits on SIGTERM and SIGINT, with the Harbor adapter sending SIGTERM;</li>
+      <li>file changes recorded on <code>run</code>;</li>
+      <li><code>aos replay</code> for single-agent runs.</li>
+    </ol>
+    <p>Refusals stay as they are, with no kernel event.</p>
+    <p><b>Result:</b> <span class="good"><code>go vet ./...</code>, <code>go test ./...</code> and the Harbor adapter tests (22) are clean.</span></p>
+    <ul>
+      <li>A recorded CLI run replays identically: every request byte for byte, plus the kernel events, the process table and every artifact.</li>
+      <li>Seven replay tests cover the round trip, divergence at the right call, the pinned clock, token and strict budgets, a killed run, and a ledger cut short.</li>
+    </ul>
+    <p><span class="warn">No live trial has been replayed yet.</span> As the user chose, the Terminal-Bench re-recordings go to the eval session.</p>
+  </div>
+
+  <h2>1. Ledger: a Start and an Outcome per Call</h2>
+  <table>
+    <tr><th>Line</th><th>Written</th><th>Holds</th></tr>
+    <tr><td><code>"phase":"start"</code></td><td>Before the request is sent, synced</td><td>pid, agent, <code>step</code>, <code>elapsed_s</code> (the run's seconds when the step began), <code>run</code> (the <code>run.started</code> event), params, delta messages (<code>base</code> = the previous start's seq), <code>request_sha256</code></td></tr>
+    <tr><td><code>"phase":"outcome"</code></td><td>When the call returns</td><td><code>start</code> (its start's seq), usage, latency, error, <code>response</code> (the raw reply)</td></tr>
+  </table>
+  <ul>
+    <li><b>Calls in flight:</b> a start that no outcome names was in flight at a kill. <code>inference.InFlight</code> lists such starts, <code>aos inspect</code> shows them as <code>in_flight</code> per process, and the Harbor adapter records <code>in_flight</code> in the trial metadata.</li>
+    <li><b>Torn lines</b> are skipped, as <code>runlog</code> promises. A test cuts the ledger after a start, with a half line behind it.</li>
+    <li><b>Ledger readers:</b>
+      <ul>
+        <li><code>aos inspect</code> and the Harbor adapter count only finished calls, and still read old ledgers.</li>
+        <li><span class="warn">Eval's frozen <code>collect.py</code></span> counts lines, so on new ledgers it would count each call twice.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>2. The Clock, Read Once per Step</h2>
+  <ul>
+    <li>Each step reads the clock once. Its budget notes come from that reading, and its calls record the run's seconds at that reading as <code>elapsed_s</code>.</li>
+    <li>A replay sets each step's reading back to exactly that value, so the notes come out byte for byte, with no rounding at a second boundary.</li>
+    <li><b>Seams:</b> <code>Clock</code>, <code>StepClock</code> and <code>Sleep</code> on the runtime and the engine, <code>Kernel.SetClock</code> and <code>Store.SetClock</code>.</li>
+  </ul>
+
+  <h2>3. <code>run.started</code> and <code>run_spec</code></h2>
+  <p>Right after the root process starts, the engine writes:</p>
+  <ul>
+    <li>a <code>run_spec</code> artifact holding the workflow as run and the request;</li>
+    <li>a <code>run.started</code> kernel event on the root process.</li>
+  </ul>
+  <p>The event from the CLI smoke run:</p>
+  <pre>backend=openai-compatible base_url=http://127.0.0.1:18765 model=fake temperature=0.6 top_p=0 max_tokens=0 thinking_budget=0
+context_window=0 timeout=2m0s
+budget_seconds=120 budget_strict_time=false budget_tokens=0
+compact_handoff=false compact_keep=0 compact_max_chars=0 compact_max_messages=0 compact_target_chars=0
+retry_attempts=0 retry_base=0s retry_max=0s
+run_spec=art-000001 run_spec_sha256=c9e01323…
+build_version=replay-smoke build_sha256=cc5cddd3… go_version=go1.26.3</pre>
+  <ul>
+    <li>The record holds no key.</li>
+    <li><code>run-tb.sh</code> now stamps <code>build_version</code> with <code>git describe</code>.</li>
+    <li>A run now creates one more artifact and one more event at the start, so artifact and event IDs shift by one against older runs.</li>
+  </ul>
+
+  <h2>4. Signals</h2>
+  <ul>
+    <li><b><code>aos run</code></b> turns the first SIGTERM or SIGINT into a cancellation with <code>runtime.ErrTerminated</code> as its cause. The runtime then ends each process as a strict budget does:
+      <ul>
+        <li>the exit is <code>{1, "terminated by signal (SIGTERM)", retryable}</code>, with a final checkpoint;</li>
+        <li>the call in flight gets its outcome line, with the cause as its error;</li>
+        <li>a running command's process group is killed;</li>
+        <li>the summary is written, and nothing is left <code>running</code>.</li>
+      </ul>
+      A second signal kills outright.
+    </li>
+    <li><b>Harbor adapter:</b> Harbor's timeout cancels <code>run()</code> through <code>asyncio.wait_for</code>, which waits for the coroutine to finish its cleanup. The adapter catches the cancellation, runs <code>TERMINATE_COMMAND</code> as root, waits up to 15 s, and re-raises, so the ending is on disk before Harbor collects the logs.
+      <ul>
+        <li><code>TERMINATE_COMMAND</code> finds <code>aos</code> by <code>/proc/*/comm</code>, so it never matches its own shell, and uses the shell's own <code>kill</code>, so it does not need <code>procps</code>.</li>
+        <li><b>Checked in a real task image</b> (<code>alexgshaw/fix-git</code>, amd64 under emulation): one process named <code>aos</code> before, exit 0, none after.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>5. File Changes on <code>run</code></h2>
+  <ul>
+    <li><code>tools.FileChanges</code> compares the <code>workspace</code> mount's size and mtime before and after a command, as <code>created</code>, <code>modified</code> and <code>deleted</code>, capped at 200 with a count of the rest.</li>
+    <li>It is stored in the <code>tool_result</code> artifact and shown in the trace as <code>files=+a,~b,-c</code>.</li>
+    <li><b>The agent's message is unchanged.</b> It is built from the output only, so prompts and replays are unaffected.</li>
+  </ul>
+  <p>The CLI smoke run repeated seq 27's case, a heredoc script writing the answer:</p>
+  <pre>trace: run command=python3 - &lt;&lt;'PY' import json json.dump({'ok': True}, open('result.json','w')) PY cat result.json … files=+result.json
+tool_result changes: {"root": ".../ws", "created": ["result.json"]}</pre>
+  <p><span class="warn">Not covered:</span></p>
+  <ul>
+    <li>writes outside the workspace mount, such as <code>apt install</code> under Terminal-Bench's <code>/</code> grant;</li>
+    <li>a write that keeps a file's size and mtime;</li>
+    <li>trees over 50,000 entries, which are recorded as <code>unknown</code>.</li>
+  </ul>
+
+  <h2>6. <code>aos replay</code></h2>
+  <p><code>internal/replay</code> loads the record read-only and rebuilds the engine from <code>run.started</code> and <code>run_spec</code>. It then runs the workflow for real.</p>
+  <table>
+    <tr><th>Input from outside</th><th>In the replay</th></tr>
+    <tr><td>Model replies</td><td><code>VLLMConfig.Replayer</code>. The real backend builds each request. The replay checks its hash against the recorded start, then answers with the recorded outcome: reply, usage or error.</td></tr>
+    <tr><td>World tools</td><td><code>tools.Runtime.Recorded</code> answers with the recorded outcome at the artifact ID the replayed outcome will get. That position is unambiguous, because the run is identical up to there. Recorded refusals are rebuilt with <code>tools.RecordedError</code>, so they still log <code>capability.denied</code>.</td></tr>
+    <tr><td>Clock</td><td>Each step gets the origin plus its recorded <code>elapsed_s</code>, and other budget reads get the origin. The kernel and the store get the recorded timestamps, in order. Retry waits are skipped.</td></tr>
+    <tr><td>Strict stop or signal</td><td>The call or command that was cut off is stopped with the cause rebuilt from the process's recorded exit, so the exit reason matches.</td></tr>
+  </table>
+  <ul>
+    <li><b>Verdict:</b> every request hash, every kernel event (timestamps included), the process table, and every artifact (record, creation time and payload). Two things are left out: the payload path, and a checkpoint's usage seconds, which come from the wall clock at save time.</li>
+    <li><b>First divergence:</b> reported by kind, call, step and pid, with the differing message clipped around the first differing character.</li>
+    <li><b>Exit codes:</b> 0 when identical, 1 at a divergence, 2 when the run cannot be replayed (a multi-agent run, an old ledger, or no <code>run.started</code>).</li>
+  </ul>
+  <pre>$ aos replay …/cli-replay/state
+replay of …/cli-replay/state (workflow cli-replay)
+  calls: 3 recorded, 3 replayed with identical requests
+  tool results from the record: 2
+  kernel: 8 events and the process table identical
+  artifacts: 8 identical (checkpoint usage seconds not compared)
+  result: identical</pre>
+  <p>This run was recorded by <code>aos run --workflow … --time-budget 120s</code> against a local fake model server, with the heredoc script above.</p>
+
+  <h2>Tests</h2>
+  <table>
+    <tr><th>Test</th><th>Covers</th></tr>
+    <tr><td><code>TestReplayRoundTrip</code></td><td>A recording with a write, two <code>run</code>s, a failed read, a model error that is retried, and compaction after a handoff, under an advisory budget. The replay is identical: every call matched and 6 tool results used.</td></tr>
+    <tr><td><code>TestReplayFindsTheFirstDivergence</code></td><td>A changed <code>run</code> result diverges at the next step's call, at the exact start seq, with "hello" and "HELLO" shown. A changed system prompt diverges at call 1, message 1.</td></tr>
+    <tr><td><code>TestReplayPinsTheClock</code></td><td>Pinned: identical. Unpinned: diverges at step 3's note, <code>used=1s</code> against <code>used=0s</code>.</td></tr>
+    <tr><td><code>TestReplayOfATokenBudget</code></td><td>The <code>max_tokens</code> caps, which are in the hashed params, and the token-budget exit replay.</td></tr>
+    <tr><td><code>TestReplayOfAStrictStop</code></td><td>A strict budget that runs out mid-call replays with the same exit reason.</td></tr>
+    <tr><td><code>TestReplayOfAKilledRun</code></td><td>A run copied while a call hangs replays to that call, with its kernel and artifacts matching as far as the record goes.</td></tr>
+    <tr><td><code>TestReplayOfALedgerCutShort</code></td><td>An outcome is removed while the kernel log goes on. The call reads as in flight, and the replay names the kernel event after the cut.</td></tr>
+    <tr><td><code>TestReplayRefusesWhatItCannotReplay</code></td><td>A run without <code>run.started</code> is refused, naming it.</td></tr>
+    <tr><td><code>TestSIGTERMRecordsTheExit</code> (cmd/aos)</td><td>SIGTERM to a running workflow during a model call:
+      <ul>
+        <li>both processes exit;</li>
+        <li>the agent exits retryably with the signal named and a final checkpoint;</li>
+        <li>the call is closed with its error;</li>
+        <li><code>run.started</code> is present, and the summary records the ending.</li>
+      </ul>
+    </td></tr>
+    <tr><td><code>TestCallLedgerRebuildsEachRequest</code>, <code>TestCallLedgerShowsCallsInFlight</code></td><td>Start and outcome pairing, base chains, raw replies, step, elapsed and run carried, the start written before sending, an error in the outcome, and a torn line.</td></tr>
+    <tr><td><code>TestRunRecordsFileChanges</code>, <code>TestFileChangesAreBounded</code></td><td>A heredoc write, a modified file, a deleted file and a new directory; the agent's output unchanged; no record without a workspace mount; the cap and the size bound.</td></tr>
+    <tr><td>Harbor: <code>TerminateOnTimeoutTest</code>, <code>test_start_and_outcome_lines</code></td><td>Cancellation sends <code>TERMINATE_COMMAND</code> and re-raises, even when the command fails. The ledger fallback counts outcomes and calls in flight.</td></tr>
+    <tr><td><code>TestInspectReconstructsKilledRun</code> (updated)</td><td>The killed call now shows as in flight for its process. The test waits for that start line instead of sleeping, which was flaky under load.</td></tr>
+  </table>
+
+  <h2>Limits</h2>
+  <ul>
+    <li><b>Single-agent workflow runs only.</b> Multi-agent runs need a recorded schedule, and TUI sessions need their user input fed back in.</li>
+    <li><b>A step with no model call</b>, such as the one where a token budget stops the run, has no recorded reading and keeps the previous step's.</li>
+    <li><b>An account below the run's</b> that has its own time limit reads the run's origin, so its notes could differ. No single-agent run has one.</li>
+    <li><b>A replay by another build</b> says so. Divergence is then the expected signal, not an error.</li>
+  </ul>
+
+  <h2>Not Changed</h2>
+  <ul>
+    <li>Refusals stay as they are, with no kernel event, as decided.</li>
+    <li>The least-privilege probe results. <code>go test ./...</code> rewrites them, and they are left uncommitted.</li>
+    <li>Nothing pushed, and nothing run on phg-gpu: the evidence above uses local fake servers and one task image.</li>
+  </ul>
+</body>
+</html>

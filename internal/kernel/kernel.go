@@ -32,6 +32,15 @@ func New(root string) (*Kernel, error) {
 	}, nil
 }
 
+// SetClock makes the kernel stamp records with now instead of the wall
+// clock, as a replay does with the recorded times. The kernel reads it
+// once per event.
+func (k *Kernel) SetClock(now func() time.Time) {
+	if now != nil {
+		k.now = now
+	}
+}
+
 func (k *Kernel) Spawn(spec ProcessSpec) (Process, error) {
 	var process Process
 	err := k.store.update(func(t *tx) error {

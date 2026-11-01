@@ -66,6 +66,9 @@ type Result struct {
 	Tool    string            `json:"tool"`
 	Summary string            `json:"summary"`
 	Output  map[string]string `json:"output,omitempty"`
+	// Changes, on a run result, is what the command did to the workspace
+	// mount's files. It is recorded, not shown to the agent.
+	Changes *FileChanges `json:"changes,omitempty"`
 }
 
 type Runtime struct {
@@ -83,7 +86,10 @@ type Runtime struct {
 	// ScratchRoot holds each process's run scratch directory; empty means
 	// a temporary directory made on first use.
 	ScratchRoot string
-	scratchMu   sync.Mutex
+	// Recorded, when set, answers every permitted tool call instead of
+	// running it: aos replay's recorded tool results.
+	Recorded  func(ctx context.Context, req Request) (Result, error)
+	scratchMu sync.Mutex
 }
 
 // ErrRunUnconfined means run was refused: it cannot be confined here and
@@ -115,7 +121,38 @@ func DenialReason(err error) string {
 	if errors.As(err, &denied) {
 		return denied.reason
 	}
+	var recorded recordedError
+	if errors.As(err, &recorded) && recorded.sentinel == ErrPathDenied {
+		return strings.TrimPrefix(recorded.text, ErrPathDenied.Error()+": ")
+	}
 	return ""
+}
+
+// recordedError is a tool error read back from a record: its text, and
+// the kind of refusal the text shows, so a replayed refusal is logged as
+// the original was.
+type recordedError struct {
+	text     string
+	sentinel error
+}
+
+func (e recordedError) Error() string        { return e.text }
+func (e recordedError) Is(target error) bool { return e.sentinel != nil && target == e.sentinel }
+
+// RecordedError rebuilds a tool error from its recorded text.
+func RecordedError(text string) error {
+	err := recordedError{text: text}
+	switch {
+	case strings.HasPrefix(text, ErrPathDenied.Error()):
+		err.sentinel = ErrPathDenied
+	case strings.Contains(text, ErrNetworkDenied.Error()):
+		err.sentinel = ErrNetworkDenied
+	case strings.Contains(text, ErrRunUnconfined.Error()):
+		err.sentinel = ErrRunUnconfined
+	case strings.HasPrefix(text, ErrToolDenied.Error()):
+		err.sentinel = ErrToolDenied
+	}
+	return err
 }
 
 func (r *Runtime) canRead(path string, req Request) bool {
@@ -172,6 +209,9 @@ func (r *Runtime) Execute(req Request) (Result, error) {
 func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, error) {
 	if !r.evaluator.ToolAllowed(req.Tool, req.CapabilitySet) {
 		return Result{}, ErrToolDenied
+	}
+	if r.Recorded != nil {
+		return r.Recorded(ctx, req)
 	}
 
 	switch req.Tool {
@@ -367,6 +407,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if err != nil {
 			return Result{}, err
 		}
+		changes := watchChanges(req.Mounts)
 		isolateProcessGroup(cmd)
 		// Bound the wait for output pipes in case a detached descendant still holds them.
 		cmd.WaitDelay = runWaitDelay
@@ -406,6 +447,7 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 			Tool:    req.Tool,
 			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
 			Output:  output,
+			Changes: changes(),
 		}, nil
 	case "web_search":
 		query := strings.TrimSpace(req.Args["query"])

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -54,6 +55,8 @@ func main() {
 		inspectRun(os.Args[2:])
 	case "reap":
 		reapRun(os.Args[2:])
+	case "replay":
+		replayRun(os.Args[2:])
 	case "probe-memory":
 		probeMemory(os.Args[2:])
 	default:
@@ -157,7 +160,11 @@ func run(args []string) {
 	if workflowPath != "" {
 		budget := capability.Budget{Seconds: int(timeBudget.Round(time.Second).Seconds()), Tokens: tokenBudget}
 		budget.StrictTime = strictTime && budget.Seconds > 0
-		if err := runWorkflow(context.Background(), backend, llmConfig.CompactionPolicy(), budget, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
+		runRecord = buildRecord()
+		maps.Copy(runRecord, backendRecord(llmConfig))
+		ctx, stop := terminationContext(context.Background())
+		defer stop()
+		if err := runWorkflow(ctx, backend, llmConfig.CompactionPolicy(), budget, workflowPath, []string(inputs), outputPath, reportPath, stateDir, goal, trace); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			var failed workflowFailed
 			if errors.As(err, &failed) {
@@ -257,6 +264,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		Compaction:   compaction,
 		BackendRetry: backendRetry,
 		Budget:       budget,
+		RunRecord:    runRecord,
 	}
 	// The trace and the model-call ledger go to disk as the run happens, so
 	// a killed run can still be inspected (aos inspect).
@@ -447,6 +455,7 @@ func printUsage() {
 	fmt.Println("  aos run --workflow workflow.json --input A --output B --report run.html \"complete the task\"")
 	fmt.Println("  aos inspect [--json] [--tail N] <state-dir>")
 	fmt.Println("  aos reap <state-dir>   exit processes left running by a run that is gone, so they can be recovered")
+	fmt.Println("  aos replay [--json] [--keep DIR] <state-dir>   re-run a recorded single-agent run against its record and report the first divergence")
 	fmt.Println("  aos probe-memory --workflow W --probes P [--samples N] [--out F] <state-dir>   ask agents what they remember, on a copy")
 }
 
