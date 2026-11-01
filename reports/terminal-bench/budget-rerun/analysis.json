@@ -1,0 +1,1055 @@
+{
+ "trials": 72,
+ "per_task": {
+  "off": {
+   "fix-git": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "prove-plus-comm": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "cobol-modernization": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "openssl-selfsigned-cert": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "nginx-request-logging": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "polyglot-c-py": {
+    "n": 3,
+    "c": 0,
+    "pass_at": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    },
+    "pass_hat": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    }
+   },
+   "vulnerable-secret": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "raman-fitting": {
+    "n": 3,
+    "c": 2,
+    "pass_at": {
+     "1": 0.6666666666666667,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 0.6666666666666666,
+     "2": 0.3333333333333333,
+     "3": 0.0
+    }
+   }
+  },
+  "strict": {
+   "fix-git": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "prove-plus-comm": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "cobol-modernization": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "openssl-selfsigned-cert": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "nginx-request-logging": {
+    "n": 3,
+    "c": 2,
+    "pass_at": {
+     "1": 0.6666666666666667,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 0.6666666666666666,
+     "2": 0.3333333333333333,
+     "3": 0.0
+    }
+   },
+   "polyglot-c-py": {
+    "n": 3,
+    "c": 0,
+    "pass_at": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    },
+    "pass_hat": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    }
+   },
+   "vulnerable-secret": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "raman-fitting": {
+    "n": 3,
+    "c": 1,
+    "pass_at": {
+     "1": 0.33333333333333337,
+     "2": 0.6666666666666667,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 0.3333333333333333,
+     "2": 0.0,
+     "3": 0.0
+    }
+   }
+  },
+  "advisory": {
+   "fix-git": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "prove-plus-comm": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "cobol-modernization": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "openssl-selfsigned-cert": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "nginx-request-logging": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "polyglot-c-py": {
+    "n": 3,
+    "c": 0,
+    "pass_at": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    },
+    "pass_hat": {
+     "1": 0.0,
+     "2": 0.0,
+     "3": 0.0
+    }
+   },
+   "vulnerable-secret": {
+    "n": 3,
+    "c": 3,
+    "pass_at": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0
+    }
+   },
+   "raman-fitting": {
+    "n": 3,
+    "c": 2,
+    "pass_at": {
+     "1": 0.6666666666666667,
+     "2": 1.0,
+     "3": 1.0
+    },
+    "pass_hat": {
+     "1": 0.6666666666666666,
+     "2": 0.3333333333333333,
+     "3": 0.0
+    }
+   }
+  }
+ },
+ "arms": {
+  "off": {
+   "n": 24,
+   "successes": 20,
+   "pass_at": {
+    "1": 0.8333333333333334,
+    "2": 0.875,
+    "3": 0.875
+   },
+   "pass_hat": {
+    "1": 0.8333333333333334,
+    "2": 0.7916666666666666,
+    "3": 0.75
+   },
+   "endings": {
+    "completed": 19,
+    "budget_exit": 0,
+    "harbor_timeout": 5,
+    "infra_error": 0,
+    "agent_crash": 0
+   },
+   "endings_by_task": {
+    "fix-git": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "prove-plus-comm": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "cobol-modernization": [
+     "harbor_timeout",
+     "harbor_timeout",
+     "harbor_timeout"
+    ],
+    "openssl-selfsigned-cert": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "nginx-request-logging": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "polyglot-c-py": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "vulnerable-secret": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "raman-fitting": [
+     "harbor_timeout",
+     "completed",
+     "harbor_timeout"
+    ]
+   },
+   "harbor_timeout_rewards": [
+    1.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0
+   ],
+   "time_warnings": 0,
+   "steps_warnings": 0,
+   "agent_s_median": 98.38140100000001,
+   "agent_s_total": 8102.574824,
+   "agent_s_max": 900.007665,
+   "prompt_tokens": 4455383,
+   "cached_tokens": 4108504,
+   "completion_tokens": 455605,
+   "model_calls": 384,
+   "tool_calls": 335,
+   "contended": 4,
+   "by_task": {
+    "fix-git": {
+     "agent_s_median": 54.078943,
+     "agent_s_total": 183.448025,
+     "prompt_tokens": 149338,
+     "completion_tokens": 8864,
+     "model_calls": 26
+    },
+    "prove-plus-comm": {
+     "agent_s_median": 90.767451,
+     "agent_s_total": 239.842036,
+     "prompt_tokens": 110604,
+     "completion_tokens": 13161,
+     "model_calls": 28
+    },
+    "cobol-modernization": {
+     "agent_s_median": 900.002192,
+     "agent_s_total": 2700.007552,
+     "prompt_tokens": 1484927,
+     "completion_tokens": 157263,
+     "model_calls": 87
+    },
+    "openssl-selfsigned-cert": {
+     "agent_s_median": 78.687766,
+     "agent_s_total": 244.32514,
+     "prompt_tokens": 159233,
+     "completion_tokens": 12675,
+     "model_calls": 27
+    },
+    "nginx-request-logging": {
+     "agent_s_median": 105.068139,
+     "agent_s_total": 298.89434,
+     "prompt_tokens": 223534,
+     "completion_tokens": 13945,
+     "model_calls": 35
+    },
+    "polyglot-c-py": {
+     "agent_s_median": 677.667485,
+     "agent_s_total": 1996.501046,
+     "prompt_tokens": 529558,
+     "completion_tokens": 112418,
+     "model_calls": 71
+    },
+    "vulnerable-secret": {
+     "agent_s_median": 57.632681,
+     "agent_s_total": 172.526954,
+     "prompt_tokens": 227389,
+     "completion_tokens": 8639,
+     "model_calls": 32
+    },
+    "raman-fitting": {
+     "agent_s_median": 900.004176,
+     "agent_s_total": 2267.029731,
+     "prompt_tokens": 1570800,
+     "completion_tokens": 128640,
+     "model_calls": 78
+    }
+   }
+  },
+  "strict": {
+   "n": 24,
+   "successes": 18,
+   "pass_at": {
+    "1": 0.75,
+    "2": 0.8333333333333334,
+    "3": 0.875
+   },
+   "pass_hat": {
+    "1": 0.75,
+    "2": 0.6666666666666666,
+    "3": 0.625
+   },
+   "endings": {
+    "completed": 22,
+    "budget_exit": 1,
+    "harbor_timeout": 0,
+    "infra_error": 1,
+    "agent_crash": 0
+   },
+   "endings_by_task": {
+    "fix-git": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "prove-plus-comm": [
+     "completed",
+     "infra_error",
+     "completed"
+    ],
+    "cobol-modernization": [
+     "completed",
+     "budget_exit",
+     "completed"
+    ],
+    "openssl-selfsigned-cert": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "nginx-request-logging": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "polyglot-c-py": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "vulnerable-secret": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "raman-fitting": [
+     "completed",
+     "completed",
+     "completed"
+    ]
+   },
+   "harbor_timeout_rewards": [],
+   "time_warnings": 3,
+   "steps_warnings": 0,
+   "agent_s_median": 119.2948615,
+   "agent_s_total": 6678.797314000002,
+   "agent_s_max": 879.443062,
+   "prompt_tokens": 4315288,
+   "cached_tokens": 3986863,
+   "completion_tokens": 368970,
+   "model_calls": 370,
+   "tool_calls": 321,
+   "contended": 0,
+   "by_task": {
+    "fix-git": {
+     "agent_s_median": 105.68931,
+     "agent_s_total": 328.987206,
+     "prompt_tokens": 215569,
+     "completion_tokens": 17133,
+     "model_calls": 30
+    },
+    "prove-plus-comm": {
+     "agent_s_median": 74.147409,
+     "agent_s_total": 248.97815099999997,
+     "prompt_tokens": 112555,
+     "completion_tokens": 11855,
+     "model_calls": 28
+    },
+    "cobol-modernization": {
+     "agent_s_median": 809.913781,
+     "agent_s_total": 2454.08986,
+     "prompt_tokens": 1762559,
+     "completion_tokens": 140916,
+     "model_calls": 93
+    },
+    "openssl-selfsigned-cert": {
+     "agent_s_median": 91.995543,
+     "agent_s_total": 321.201108,
+     "prompt_tokens": 232899,
+     "completion_tokens": 17242,
+     "model_calls": 33
+    },
+    "nginx-request-logging": {
+     "agent_s_median": 84.31825,
+     "agent_s_total": 249.981895,
+     "prompt_tokens": 199743,
+     "completion_tokens": 11390,
+     "model_calls": 33
+    },
+    "polyglot-c-py": {
+     "agent_s_median": 291.738553,
+     "agent_s_total": 1086.802863,
+     "prompt_tokens": 493316,
+     "completion_tokens": 58895,
+     "model_calls": 55
+    },
+    "vulnerable-secret": {
+     "agent_s_median": 64.843463,
+     "agent_s_total": 186.188428,
+     "prompt_tokens": 254407,
+     "completion_tokens": 9197,
+     "model_calls": 32
+    },
+    "raman-fitting": {
+     "agent_s_median": 736.511349,
+     "agent_s_total": 1802.567803,
+     "prompt_tokens": 1044240,
+     "completion_tokens": 102342,
+     "model_calls": 66
+    }
+   }
+  },
+  "advisory": {
+   "n": 24,
+   "successes": 20,
+   "pass_at": {
+    "1": 0.8333333333333334,
+    "2": 0.875,
+    "3": 0.875
+   },
+   "pass_hat": {
+    "1": 0.8333333333333334,
+    "2": 0.7916666666666666,
+    "3": 0.75
+   },
+   "endings": {
+    "completed": 24,
+    "budget_exit": 0,
+    "harbor_timeout": 0,
+    "infra_error": 0,
+    "agent_crash": 0
+   },
+   "endings_by_task": {
+    "fix-git": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "prove-plus-comm": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "cobol-modernization": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "openssl-selfsigned-cert": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "nginx-request-logging": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "polyglot-c-py": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "vulnerable-secret": [
+     "completed",
+     "completed",
+     "completed"
+    ],
+    "raman-fitting": [
+     "completed",
+     "completed",
+     "completed"
+    ]
+   },
+   "harbor_timeout_rewards": [],
+   "time_warnings": 2,
+   "steps_warnings": 0,
+   "agent_s_median": 75.729427,
+   "agent_s_total": 6652.551169,
+   "agent_s_max": 852.365363,
+   "prompt_tokens": 4791213,
+   "cached_tokens": 4409736,
+   "completion_tokens": 369663,
+   "model_calls": 364,
+   "tool_calls": 320,
+   "contended": 0,
+   "by_task": {
+    "fix-git": {
+     "agent_s_median": 61.535138,
+     "agent_s_total": 197.75512700000002,
+     "prompt_tokens": 182727,
+     "completion_tokens": 9503,
+     "model_calls": 27
+    },
+    "prove-plus-comm": {
+     "agent_s_median": 66.056024,
+     "agent_s_total": 226.07903299999998,
+     "prompt_tokens": 118457,
+     "completion_tokens": 12053,
+     "model_calls": 29
+    },
+    "cobol-modernization": {
+     "agent_s_median": 772.464335,
+     "agent_s_total": 2352.701174,
+     "prompt_tokens": 1821069,
+     "completion_tokens": 136306,
+     "model_calls": 84
+    },
+    "openssl-selfsigned-cert": {
+     "agent_s_median": 75.202949,
+     "agent_s_total": 289.14402,
+     "prompt_tokens": 185968,
+     "completion_tokens": 15374,
+     "model_calls": 28
+    },
+    "nginx-request-logging": {
+     "agent_s_median": 66.708961,
+     "agent_s_total": 205.46750100000003,
+     "prompt_tokens": 158854,
+     "completion_tokens": 9016,
+     "model_calls": 28
+    },
+    "polyglot-c-py": {
+     "agent_s_median": 476.730015,
+     "agent_s_total": 1246.88147,
+     "prompt_tokens": 475146,
+     "completion_tokens": 67121,
+     "model_calls": 67
+    },
+    "vulnerable-secret": {
+     "agent_s_median": 50.841465,
+     "agent_s_total": 154.79206299999998,
+     "prompt_tokens": 228146,
+     "completion_tokens": 7394,
+     "model_calls": 32
+    },
+    "raman-fitting": {
+     "agent_s_median": 645.869362,
+     "agent_s_total": 1979.7307810000002,
+     "prompt_tokens": 1620846,
+     "completion_tokens": 112896,
+     "model_calls": 69
+    }
+   }
+  }
+ },
+ "primary": {
+  "a": "strict",
+  "b": "off",
+  "n_a": 24,
+  "n_b": 24,
+  "diff": -0.08333333333333337,
+  "p_two_sided": 0.5500000000000006
+ },
+ "exploratory": [
+  {
+   "a": "advisory",
+   "b": "off",
+   "n_a": 24,
+   "n_b": 24,
+   "diff": 0.0,
+   "p_two_sided": 1.0
+  },
+  {
+   "a": "strict",
+   "b": "advisory",
+   "n_a": 24,
+   "n_b": 24,
+   "diff": -0.08333333333333337,
+   "p_two_sided": 0.5500000000000006
+  }
+ ],
+ "sensitivity": {
+  "excluded": [
+   39,
+   47
+  ],
+  "strict_vs_off": {
+   "a": "strict",
+   "b": "off",
+   "n_a": 22,
+   "n_b": 24,
+   "diff": -0.06060606060606066,
+   "p_two_sided": 0.5500000000000002
+  }
+ },
+ "secondary": {
+  "off": {
+   "failed": 4,
+   "with_answer_path": 4,
+   "before_warn": 4,
+   "before_end": 4,
+   "present_at_end": 4,
+   "trials": [
+    {
+     "seq": 5,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 706.323602,
+     "t_warn_s": 792.0,
+     "warning_given": false,
+     "first_answer_s": 41.1,
+     "collect_first_answer_s": 41.132361,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    },
+    {
+     "seq": 46,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 677.667485,
+     "t_warn_s": 792.0,
+     "warning_given": false,
+     "first_answer_s": 403.3,
+     "collect_first_answer_s": 403.338971,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    },
+    {
+     "seq": 58,
+     "task": "raman-fitting",
+     "ending": "harbor_timeout",
+     "agent_s": 900.007665,
+     "t_warn_s": 792.0,
+     "warning_given": false,
+     "first_answer_s": 715.9,
+     "collect_first_answer_s": 715.94355,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "wrong fit: G and 2D peaks fitted at x0 19197 and 33834 (broad background features in wavelength space)",
+     "corrected": false
+    },
+    {
+     "seq": 63,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 612.509959,
+     "t_warn_s": 792.0,
+     "warning_given": false,
+     "first_answer_s": 42.4,
+     "collect_first_answer_s": 42.386822,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    }
+   ]
+  },
+  "strict": {
+   "failed": 6,
+   "with_answer_path": 5,
+   "before_warn": 5,
+   "before_end": 5,
+   "present_at_end": 5,
+   "trials": [
+    {
+     "seq": 6,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 291.738553,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 156.1,
+     "collect_first_answer_s": 156.089266,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    },
+    {
+     "seq": 7,
+     "task": "raman-fitting",
+     "ending": "completed",
+     "agent_s": 805.152649,
+     "t_warn_s": 798.390489,
+     "warning_given": true,
+     "first_answer_s": 641.0,
+     "collect_first_answer_s": 640.988946,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "wrong units: peaks fitted in the file's wavelength axis (x0 6327 and 3745), not converted to Raman shift (1580 and 2670)",
+     "corrected": false
+    },
+    {
+     "seq": 27,
+     "task": "raman-fitting",
+     "ending": "completed",
+     "agent_s": 736.511349,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 628.3,
+     "collect_first_answer_s": null,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "wrong fit: G and 2D peaks fitted at x0 10438 and 19196 (broad background features)",
+     "corrected": true
+    },
+    {
+     "seq": 45,
+     "task": "nginx-request-logging",
+     "ending": "completed",
+     "agent_s": 84.31825,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": null,
+     "collect_first_answer_s": null,
+     "answer_path": false,
+     "before_warn": null,
+     "before_end": null,
+     "present_at_end": null,
+     "cause": "log format: test_log_file_format looks for a quoted user agent at the end of each log line; the agent's format puts it in the middle and ends with the body size",
+     "corrected": false
+    },
+    {
+     "seq": 47,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 147.15732,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 42.5,
+     "collect_first_answer_s": 42.494355,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "verifier did not run: test.sh could not download uv (curl to astral.sh failed), so reward 0 with no test results. The trace's last listing of /app/polyglot shows cmain beside main.py.c, so the directory test would have failed as in the other eight polyglot trials",
+     "corrected": false
+    },
+    {
+     "seq": 61,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 647.90699,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 176.3,
+     "collect_first_answer_s": 176.264361,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    }
+   ]
+  },
+  "advisory": {
+   "failed": 4,
+   "with_answer_path": 4,
+   "before_warn": 4,
+   "before_end": 4,
+   "present_at_end": 4,
+   "trials": [
+    {
+     "seq": 4,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 287.995036,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 90.1,
+     "collect_first_answer_s": 90.149405,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    },
+    {
+     "seq": 25,
+     "task": "raman-fitting",
+     "ending": "completed",
+     "agent_s": 831.205223,
+     "t_warn_s": 823.198626,
+     "warning_given": true,
+     "first_answer_s": 747.4,
+     "collect_first_answer_s": 747.424128,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "wrong units: peaks fitted in the file's wavelength axis (x0 6328 and 3745), not converted to Raman shift",
+     "corrected": false
+    },
+    {
+     "seq": 48,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 476.730015,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 100.3,
+     "collect_first_answer_s": 100.252108,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    },
+    {
+     "seq": 62,
+     "task": "polyglot-c-py",
+     "ending": "completed",
+     "agent_s": 482.156419,
+     "t_warn_s": 791.1,
+     "warning_given": false,
+     "first_answer_s": 115.7,
+     "collect_first_answer_s": 115.748262,
+     "answer_path": true,
+     "before_warn": true,
+     "before_end": true,
+     "present_at_end": true,
+     "cause": "stray build output: /app/polyglot holds cmain besides main.py.c",
+     "corrected": false
+    }
+   ]
+  },
+  "fisher_before_warn_strict_vs_off": 1.0
+ },
+ "corrections": [
+  {
+   "seq": 27,
+   "first_answer_s": 628.3,
+   "correction": "collect.py found no write (answer_status 'not written'). Step #19 at 628.3 s is a run of `python3 - <<'EOF'` whose script calls json.dump(res, open('/app/results.json','w')) and prints the file back; the frozen rule counts a script run that the trace shows creating the file. The heredoc has no '>' so the regex missed it."
+  }
+ ]
+}
