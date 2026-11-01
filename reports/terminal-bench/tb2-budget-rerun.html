@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Terminal-Bench Budget Rerun</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pass { color: #047857; font-weight: 600; }
+    .fail { color: #b91c1c; font-weight: 600; }
+    .muted { color: #6b7280; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Terminal-Bench 2.0 budget rerun: off, strict and advisory</h1>
+    <p><b>On these 8 tasks, with this model, the time budget made no measurable difference to reward.</b> Strict solved 18 of 24 trials, off 20 of 24 and advisory 20 of 24. The primary test, strict versus off, gives a difference of −8.3 points with p = 0.55. The run can only detect differences of about 21 to 33 points.</p>
+    <p><b>The pilot's failure mode did not recur in any arm.</b> In the pilot, both failures were 900 s timeouts with no answer written. Here, every failed trial in every arm, including <code>off</code>, had written its answer before the warning point. The trials failed on wrong or unclean answers, not missing ones.</p>
+    <p><b>The budget changed how trials ended.</b> In <code>off</code>, 5 of 24 trials ran into Harbor's 900 s timeout; 4 of the 5 still passed because the answer was already on disk. <code>strict</code> and <code>advisory</code> had no Harbor timeouts. <code>strict</code> had one budget exit, at 879 s, and that trial passed.</p>
+  </div>
+
+  <p class="note"><b>The pilot is not a baseline.</b> The pilot (6/8, <code>tb2-pilot.html</code>) used a different backend (local Strata on Apple Metal, Unsloth UD-Q4_K_XL), an older solver prompt and an older AOS build. Its numbers are context only. Every comparison below is between the arms of this run.</p>
+
+  <h2>What was run</h2>
+  <ul>
+    <li><b>Plan.</b> Frozen before any trial in <code>reports/terminal-bench/budget-rerun/PLAN.md</code> (commit b118cbe). There are two amendments, both made before the first counted trial: A0 (b987b17) moved the backend to phg-gpu, and A1 (cf83a5c) pinned the build, the switch and the judging strings. There were no changes after the run started.</li>
+    <li><b>Tasks.</b> The pilot's 8 tasks from <code>terminal-bench@2.0</code>: fix-git, prove-plus-comm, cobol-modernization, openssl-selfsigned-cert, nginx-request-logging, polyglot-c-py, vulnerable-secret, raman-fitting. Each has a 900 s agent timeout.</li>
+    <li><b>Harness.</b> Harbor 0.25.0 with its default timeouts, one trial at a time.</li>
+    <li><b>Build.</b> AOS at ad239f9, which contains aos code's fix 1574f69. The static Linux binaries are <code>aos-linux-amd64</code> bcc4daf7… and <code>aos-linux-arm64</code> 17b201f4…; the full hashes are in A1.</li>
+    <li><b>Backend.</b> Strata 0.1.54 on phg-gpu (RTX 5070 Ti 16 GB), model <code>qwen3.8-flash-next-nvfp4-nvfp4</code>, reached through a host relay (<code>relay.py</code>) because Docker Desktop's containers cannot reach the LAN. Sampling: temperature 0.6, top_p 0.95, max_tokens 8192, thinking budget 2048. The server's start time and model were checked before every trial and never changed.</li>
+    <li><b>Arms.</b> Each arm is set by the adapter switch <code>--ak time_budget=…</code>.
+      <ul>
+        <li><code>off</code>: no AOS clock.</li>
+        <li><code>strict</code>: <code>--time-budget 879s --strict-time-budget</code>. A clock note at every step, a warning when 10% of the time is left, and a hard stop with a checkpoint.</li>
+        <li><code>advisory</code>: <code>--time-budget 879s</code>. The same notes and warning, but no stop.</li>
+      </ul>
+    </li>
+    <li><b>Size and order.</b> 3 rounds × 8 tasks × 3 arms = 72 trials. The order is in <code>schedule.json</code> (seed 20261031): the task order is shuffled per round, and each task's arm order rotates so every arm runs first, second and third once. No trial was rerun or replaced.</li>
+    <li><b>Wall time.</b> 2026-10-31 18:58:55Z to 2026-11-01 01:24:36Z, 6 h 26 min, against the 7.9 h estimate. The rounds took 2 h 11 min, 2 h 08 min and 2 h 06 min.</li>
+  </ul>
+
+  <h2>Reward</h2>
+  <table>
+    <tr><th>Arm</th><th class="num">Solved</th><th class="num">pass@1</th><th class="num">pass@2</th><th class="num">pass@3</th><th class="num">pass^2</th><th class="num">pass^3</th></tr>
+    <tr><td><code>off</code></td><td class="num">20 / 24</td><td class="num">0.833</td><td class="num">0.875</td><td class="num">0.875</td><td class="num">0.792</td><td class="num">0.750</td></tr>
+    <tr><td><code>strict</code></td><td class="num">18 / 24</td><td class="num">0.750</td><td class="num">0.833</td><td class="num">0.875</td><td class="num">0.667</td><td class="num">0.625</td></tr>
+    <tr><td><code>advisory</code></td><td class="num">20 / 24</td><td class="num">0.833</td><td class="num">0.875</td><td class="num">0.875</td><td class="num">0.792</td><td class="num">0.750</td></tr>
+  </table>
+  <p class="muted">pass@k = 1 − C(n−c,k)/C(n,k) and pass^k = C(c,k)/C(n,k), from each task's c successes in n = 3 trials, averaged over the 8 tasks. pass^1 equals pass@1.</p>
+
+  <h3>Per task (successes out of 3)</h3>
+  <table>
+    <tr><th>Task</th><th class="num"><code>off</code></th><th class="num"><code>strict</code></th><th class="num"><code>advisory</code></th><th>Pilot (1 trial, not a baseline)</th></tr>
+    <tr><td>fix-git</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>prove-plus-comm</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>cobol-modernization</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>openssl-selfsigned-cert</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>nginx-request-logging</td><td class="num">3</td><td class="num fail">2</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>vulnerable-secret</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>1</td></tr>
+    <tr><td>polyglot-c-py</td><td class="num fail">0</td><td class="num fail">0</td><td class="num fail">0</td><td>0 (timeout)</td></tr>
+    <tr><td>raman-fitting</td><td class="num">2</td><td class="num fail">1</td><td class="num">2</td><td>0 (timeout)</td></tr>
+  </table>
+
+  <h3>Tests</h3>
+  <ul>
+    <li><b>Primary, <code>strict</code> versus <code>off</code>.</b> An exact stratified permutation test of mean reward, with labels permuted within each task, two-sided. The difference is −2/24 = −8.3 points, p = 0.55. Only raman-fitting and nginx-request-logging vary between the arms; the other six tasks give the same result in both.</li>
+    <li><b>Exploratory.</b> <code>advisory</code> − <code>off</code> = 0 points, p = 1.00. <code>strict</code> − <code>advisory</code> = −8.3 points, p = 0.55.</li>
+    <li><b>Sensitivity.</b> Leaving out the one <code>infra_error</code> trial (seq 39) and the trial whose verifier did not run (seq 47) gives strict 17/22 against off 20/24: −6.1 points, p = 0.55. The conclusion is the same.</li>
+    <li><b>What the run can detect.</b> This was fixed before the run, at α = 0.05 two-sided. With 24 trials per arm, differences under about 21 to 33 points cannot be detected; the power for a true 0.75 → 0.90 is about 0.19. <b>So a non-significant result here is not evidence that the budget has no effect.</b> The two tasks the pilot failed have 6 trials each in the strict-versus-off comparison; only 0/6 versus 5/6 or more would have been significant.</li>
+  </ul>
+
+  <h2>Endings</h2>
+  <table>
+    <tr><th>Arm</th><th class="num">completed</th><th class="num">budget_exit</th><th class="num">harbor_timeout</th><th class="num">infra_error</th><th class="num">agent_crash</th><th>Where the non-completed ones are</th></tr>
+    <tr><td><code>off</code></td><td class="num">19</td><td class="num">0</td><td class="num">5</td><td class="num">0</td><td class="num">0</td><td>harbor_timeout: cobol-modernization ×3 (all passed), raman-fitting ×2 (1 passed)</td></tr>
+    <tr><td><code>strict</code></td><td class="num">22</td><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td>budget_exit: cobol-modernization seq 41 (passed); infra_error: prove-plus-comm seq 39 (passed)</td></tr>
+    <tr><td><code>advisory</code></td><td class="num">24</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td></td></tr>
+  </table>
+  <ul>
+    <li><b>Harbor timeouts happened only without the clock.</b> In <code>off</code>, the two long tasks ran into Harbor's 900 s kill five times. With the clock visible, every trial of the same tasks ended on its own, at 852 s at the latest, except seq 41, which the strict budget stopped at 879 s. Off has 5 of 24 timeouts and strict has 0 of 24. A two-sided Fisher test gives p ≈ 0.05, but this comparison is <b>post hoc</b>: the plan did not name it as a test. It is shown for scale only.</li>
+    <li><b>A Harbor timeout cost almost nothing in reward here.</b> 4 of the 5 killed trials passed, because the verifier reads the files the agent had already written.</li>
+    <li><b>Infra errors stayed far below the stop rule.</b> There was 1 in 72 (1.4%), against a 10% limit.</li>
+  </ul>
+
+  <h3>The low-time warning</h3>
+  <p>The warning reached 5 trials: 3 in <code>strict</code> and 2 in <code>advisory</code>, all on cobol-modernization or raman-fitting. No trial came near the 300-step limit, so the steps warning never fired.</p>
+  <table>
+    <tr><th class="num">Seq</th><th>Task</th><th>Arm</th><th class="num">Warning</th><th class="num">End</th><th>What happened after the warning</th><th>Reward</th></tr>
+    <tr><td class="num">3</td><td>cobol-modernization</td><td>strict</td><td class="num">797 s</td><td class="num">810 s</td><td>Exited on its own, 13 s later. The answer had been written at 475 s.</td><td class="pass">1</td></tr>
+    <tr><td class="num">7</td><td>raman-fitting</td><td>strict</td><td class="num">798 s</td><td class="num">805 s</td><td>Exited on its own, 7 s later, with an answer in the wrong units.</td><td class="fail">0</td></tr>
+    <tr><td class="num">41</td><td>cobol-modernization</td><td>strict</td><td class="num">825 s</td><td class="num">879 s</td><td>The model call that carried the warning was still running when the strict budget stopped it (<code>budget_exit</code>). The answer had been written at 650 s.</td><td class="pass">1</td></tr>
+    <tr><td class="num">25</td><td>raman-fitting</td><td>advisory</td><td class="num">823 s</td><td class="num">831 s</td><td>Tried to save a memory note, then exited 8 s later. The note says that x0 = 6328 is 1580.3 cm⁻¹, which is the expected value. The answer it left was not converted.</td><td class="fail">0</td></tr>
+    <tr><td class="num">42</td><td>cobol-modernization</td><td>advisory</td><td class="num">829 s</td><td class="num">852 s</td><td>Restored the data folder and exited 23 s later. The answer had been written at 180 s.</td><td class="pass">1</td></tr>
+  </table>
+  <p class="muted">A note is attached at the start of a step. The warning therefore arrives at the first step that begins with 10% or less of the 879 s left, which is after 791 s.</p>
+
+  <h2>Key secondary: committed answers in failed trials</h2>
+  <p>A candidate answer is a successful write to the file the hidden tests read, using the plan's frozen definition. <code>T_warn</code> is the time of the warning. When no warning was given, it is the offset where the warning would have come: 791 s with an 879 s budget, 792 s in <code>off</code>. Every failed trial was hand-checked against its trace.</p>
+  <table>
+    <tr><th>Arm</th><th class="num">Failed</th><th class="num">With an answer path</th><th class="num">Answer before T_warn</th><th class="num">Answer before end</th><th class="num">Answer present at end</th></tr>
+    <tr><td><code>off</code></td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td></tr>
+    <tr><td><code>strict</code></td><td class="num">6</td><td class="num">5</td><td class="num">5</td><td class="num">5</td><td class="num">5</td></tr>
+    <tr><td><code>advisory</code></td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">4</td></tr>
+  </table>
+  <p>Every failed trial that has an answer file had committed it before <code>T_warn</code>. The Fisher test for "answer before T_warn", strict versus off, gives p = 1.00 and is shown only for reference. The one trial without an answer path is nginx-request-logging, whose answer is a running server. The arms do not differ on this measure, because the pilot's failure mode (no answer at the timeout) occurred in none of them.</p>
+
+  <div class="wrap">
+  <table>
+    <tr><th class="num">Seq</th><th>Arm</th><th>Task</th><th>Ending</th><th class="num">First answer</th><th class="num">T_warn</th><th class="num">End</th><th>Why it failed</th></tr>
+    <tr><td class="num">5</td><td>off</td><td>polyglot-c-py</td><td>completed</td><td class="num">41 s</td><td class="num">792 s</td><td class="num">706 s</td><td rowspan="1">stray <code>cmain</code></td></tr>
+    <tr><td class="num">46</td><td>off</td><td>polyglot-c-py</td><td>completed</td><td class="num">403 s</td><td class="num">792 s</td><td class="num">678 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">63</td><td>off</td><td>polyglot-c-py</td><td>completed</td><td class="num">42 s</td><td class="num">792 s</td><td class="num">613 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">58</td><td>off</td><td>raman-fitting</td><td>harbor_timeout</td><td class="num">716 s</td><td class="num">792 s</td><td class="num">900 s</td><td>wrong peaks (broad background features)</td></tr>
+    <tr><td class="num">6</td><td>strict</td><td>polyglot-c-py</td><td>completed</td><td class="num">156 s</td><td class="num">791 s</td><td class="num">292 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">47</td><td>strict</td><td>polyglot-c-py</td><td>completed</td><td class="num">42 s</td><td class="num">791 s</td><td class="num">147 s</td><td>verifier did not run (see Data quality); <code>cmain</code> was left in place</td></tr>
+    <tr><td class="num">61</td><td>strict</td><td>polyglot-c-py</td><td>completed</td><td class="num">176 s</td><td class="num">791 s</td><td class="num">648 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">7</td><td>strict</td><td>raman-fitting</td><td>completed</td><td class="num">641 s</td><td class="num">798 s</td><td class="num">805 s</td><td>wrong units (wavelength axis not converted)</td></tr>
+    <tr><td class="num">27</td><td>strict</td><td>raman-fitting</td><td>completed</td><td class="num">628 s*</td><td class="num">791 s</td><td class="num">737 s</td><td>wrong peaks (broad background features)</td></tr>
+    <tr><td class="num">45</td><td>strict</td><td>nginx-request-logging</td><td>completed</td><td class="num">n/a</td><td class="num">791 s</td><td class="num">84 s</td><td>log format: the user agent is not the last field</td></tr>
+    <tr><td class="num">4</td><td>advisory</td><td>polyglot-c-py</td><td>completed</td><td class="num">90 s</td><td class="num">791 s</td><td class="num">288 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">48</td><td>advisory</td><td>polyglot-c-py</td><td>completed</td><td class="num">100 s</td><td class="num">791 s</td><td class="num">477 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">62</td><td>advisory</td><td>polyglot-c-py</td><td>completed</td><td class="num">116 s</td><td class="num">791 s</td><td class="num">482 s</td><td>stray <code>cmain</code></td></tr>
+    <tr><td class="num">25</td><td>advisory</td><td>raman-fitting</td><td>completed</td><td class="num">747 s</td><td class="num">823 s</td><td class="num">831 s</td><td>wrong units (wavelength axis not converted)</td></tr>
+  </table>
+  </div>
+  <p class="muted">* Hand-check correction: <code>collect.py</code> found no write in seq 27. Its step #19, at 628 s, runs a <code>python3 - &lt;&lt;'EOF'</code> script that calls <code>json.dump(res, open('/app/results.json','w'))</code>. The frozen rule counts a script run that the trace shows creating the file, but the regex missed it because the heredoc has no <code>&gt;</code>. The other 13 failed trials agree with <code>collect.py</code>. Times are seconds from the agent's start.</p>
+
+  <h2>What became of the two pilot failures</h2>
+  <ul>
+    <li><b>polyglot-c-py: 0 of 9 in every arm, all for the same reason.</b>
+      <ul>
+        <li>The task says the file can be run with <code>gcc /app/polyglot/main.py.c -o /app/polyglot/cmain</code>. The agents compiled it that way to test it and left <code>cmain</code> in the folder.</li>
+        <li>The first test asserts that <code>/app/polyglot</code> holds only <code>main.py.c</code>. It failed in the 8 trials whose verifier ran, before any Fibonacci check. Whether the programs were correct is therefore not measured.</li>
+        <li>Every agent reported that it had checked Python and C output against each other. All 9 finished well before the warning point (147 s to 706 s), so the budget never warned or stopped one.</li>
+        <li>The pilot's failure on this task was a timeout with no answer. Here the answer was written early in every trial.</li>
+      </ul>
+    </li>
+    <li><b>raman-fitting: off 2/3, strict 1/3, advisory 2/3.</b>
+      <ul>
+        <li>All four failures wrote <code>/app/results.json</code>, and <code>test_result_file_exists</code> passed, but the peak values were wrong.</li>
+        <li>Two (seq 7 and 25) fitted the right peaks on the file's wavelength axis and did not convert to Raman shift.</li>
+        <li>Two (seq 27 and 58) fitted broad background features.</li>
+        <li>Between 1 and 3 failures per arm, this difference is within what the run cannot resolve.</li>
+      </ul>
+    </li>
+    <li><b>Since <code>off</code> changed as much as the budget arms, the change from the pilot is not the budget's doing.</b> It comes from what else differs from the pilot: the solver prompt in this build, the backend, or both. The run was not designed to separate these.</li>
+  </ul>
+
+  <h2>Cost</h2>
+  <table>
+    <tr><th>Arm</th><th class="num">Agent time, total</th><th class="num">Median</th><th class="num">Max</th><th class="num">Prompt tokens</th><th class="num">Cached</th><th class="num">Completion tokens</th><th class="num">Model calls</th><th class="num">Tool calls</th></tr>
+    <tr><td><code>off</code></td><td class="num">8,103 s</td><td class="num">98 s</td><td class="num">900 s</td><td class="num">4,455,383</td><td class="num">4,108,504</td><td class="num">455,605</td><td class="num">384</td><td class="num">335</td></tr>
+    <tr><td><code>strict</code></td><td class="num">6,679 s (−18%)</td><td class="num">119 s</td><td class="num">879 s</td><td class="num">4,315,288 (−3%)</td><td class="num">3,986,863</td><td class="num">368,970 (−19%)</td><td class="num">370</td><td class="num">321</td></tr>
+    <tr><td><code>advisory</code></td><td class="num">6,653 s (−18%)</td><td class="num">76 s</td><td class="num">852 s</td><td class="num">4,791,213 (+8%)</td><td class="num">4,409,736</td><td class="num">369,663 (−19%)</td><td class="num">364</td><td class="num">320</td></tr>
+  </table>
+  <table>
+    <tr><th>Agent time per task, total of 3 trials</th><th class="num"><code>off</code></th><th class="num"><code>strict</code></th><th class="num"><code>advisory</code></th></tr>
+    <tr><td>cobol-modernization</td><td class="num">2,700 s</td><td class="num">2,454 s</td><td class="num">2,353 s</td></tr>
+    <tr><td>raman-fitting</td><td class="num">2,267 s</td><td class="num">1,803 s</td><td class="num">1,980 s</td></tr>
+    <tr><td>polyglot-c-py</td><td class="num">1,997 s</td><td class="num">1,087 s</td><td class="num">1,247 s</td></tr>
+    <tr><td>the other five tasks</td><td class="num">1,139 s</td><td class="num">1,335 s</td><td class="num">1,073 s</td></tr>
+  </table>
+  <ul>
+    <li><b>The budget arms used about 18% less agent time and 19% fewer completion tokens than <code>off</code>, for the same or slightly lower reward.</b> Prompt tokens are within ±8% across the arms, and more than 90% of them are cache hits in every arm.</li>
+    <li><b>Most of the time difference is not the warning or the stop at work.</b>
+      <ul>
+        <li>Strict saved 1,424 s against off. 910 s of that is in polyglot-c-py, where no trial was warned or stopped.</li>
+        <li>The saving that can come from the clock's end is on cobol-modernization and raman-fitting: about 710 s for strict and 630 s for advisory, from trials that ended before Harbor's kill.</li>
+        <li>The <code>off</code> totals for the killed trials stop at 900 s, so they understate what those trials would have used.</li>
+      </ul>
+    </li>
+    <li><b>Per-trial timing is not causal.</b> The same model on one shared GPU varies in speed, and 3 trials per cell are few. The time notes the budget arms see at every step add a short line to each step's prompt, and the effect of that line on behaviour is not isolated here.</li>
+  </ul>
+
+  <h2>Data quality</h2>
+  <ul>
+    <li><b>One <code>infra_error</code> (seq 39, prove-plus-comm, strict).</b> One model call failed with <code>dial tcp 192.168.65.254:18080: i/o timeout</code> after 30 s: the container could not reach the host relay for that call. AOS retried and finished, and the trial passed. The frozen definition counts any backend error as <code>infra_error</code>, and it is reported as such.</li>
+    <li><b>One verifier failure that the frozen classes do not cover (seq 47, polyglot-c-py, strict).</b>
+      <ul>
+        <li>The task's <code>test.sh</code> could not download <code>uv</code> (<code>curl</code> to astral.sh failed), so no test ran and Harbor recorded reward 0 with no exception.</li>
+        <li>Under the frozen definition this is <code>completed</code> with reward 0, and it is counted that way.</li>
+        <li>The trace's last listing of <code>/app/polyglot</code> shows <code>cmain</code> beside <code>main.py.c</code>, so it would have failed like the other eight. The sensitivity test above leaves it out.</li>
+      </ul>
+    </li>
+    <li><b>One malformed model reply (seq 40, cobol-modernization, off).</b> AOS logged <code>malformed_backend_output</code> once and the agent went on. That trial's ending is <code>harbor_timeout</code>, which takes precedence. It passed.</li>
+    <li><b>No other client used phg-gpu.</b>
+      <ul>
+        <li>Four <code>off</code> trials (seq 2, 9, 40 and 66) showed one more server request than relay request, and the trial after each showed one fewer.</li>
+        <li>In each of these four, Harbor killed the agent during a model call. The relay logs a request when its response ends, and those four responses ended just after the next trial's counter check. <code>relay.log</code> holds these four out-of-order lines and no others.</li>
+        <li>Over the run, the server counted 1,124 chat requests and the relay forwarded 1,124.</li>
+      </ul>
+    </li>
+    <li><b>Answer detection in passed trials is not hand-checked.</b> <code>collect.py</code>'s write heuristic misses writes its regex cannot see, such as those made inside scripts and heredocs or by tools like <code>openssl</code>. So <code>answer_status</code> reads "not written" in some passed openssl and prove trials. The plan hand-checks only failed trials, and no measure here uses the answer fields of passed trials.</li>
+    <li><b><code>T_warn</code> in killed trials.</b> In the Harbor-killed <code>off</code> trials the adapter's metadata is missing, so <code>collect.py</code> left <code>T_warn</code> empty. <code>analyze.py</code> uses (900 − 20) × 0.9 = 792 s, the A1 formula.</li>
+  </ul>
+
+  <h2>What this run can and cannot show</h2>
+  <ul>
+    <li>It is a controlled comparison on 8 hand-picked tasks, with one model on one GPU and 3 trials per task and arm. It is not a Terminal-Bench score and does not generalise to TB2.</li>
+    <li>It does not show that the budget leaves reward unchanged, only that any effect is smaller than the run can see.</li>
+    <li>It does show, on these tasks, that the pilot's two failures were not budget problems once the new build was in place: the answers were committed early in every arm. What failed was answer quality (wrong units, wrong peaks) and cleanliness (a stray binary).</li>
+    <li>The budget's visible effects are on how trials end (no Harbor kills) and on a lower token and time total. The time saving is mostly not attributable to the warning or the stop.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/terminal-bench/budget-rerun/PLAN.md</code>: the frozen plan, with amendments A0 and A1.</li>
+    <li><code>results.jsonl</code>: 72 trial records from <code>collect.py</code>.</li>
+    <li><code>handcheck.json</code>: the hand-check of the 14 failed trials.</li>
+    <li><code>analyze.py</code> → <code>analysis.json</code>: every number in this report.</li>
+    <li><code>relay.log</code>: every request forwarded to phg-gpu. <code>logs/</code> has the driver and Harbor output.</li>
+    <li>Job folders with AOS traces, ledgers and verifier output are in <code>reports/terminal-bench/jobs/tb2-budget-*</code> (gitignored, not committed).</li>
+  </ul>
+
+  <h2>Reproduce</h2>
+  <p>Start <code>relay.py</code> as described in A0, then run <code>reports/terminal-bench/budget-rerun/run.sh</code> and <code>python3 -I reports/terminal-bench/budget-rerun/analyze.py</code>.</p>
+</body>
+</html>

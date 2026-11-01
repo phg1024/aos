@@ -1,0 +1,144 @@
+2026-10-31T18:58:55Z seq 1 round 1 cobol-modernization advisory
+  reward 1.0 completed 772.464335s calls 29 answer written contention {'server_requests': 29, 'relay_posts': 29, 'surplus': 0}
+2026-10-31T19:12:09Z seq 2 round 1 cobol-modernization off
+  reward 1.0 harbor_timeout 900.002192s calls 32 answer written contention {'server_requests': 34, 'relay_posts': 33, 'surplus': 1}
+2026-10-31T19:27:33Z seq 3 round 1 cobol-modernization strict
+  reward 1.0 completed 809.913781s calls 28 answer written contention {'server_requests': 28, 'relay_posts': 29, 'surplus': -1}
+2026-10-31T19:41:24Z seq 4 round 1 polyglot-c-py advisory
+  reward 0.0 completed 287.995036s calls 16 answer written contention {'server_requests': 16, 'relay_posts': 16, 'surplus': 0}
+2026-10-31T19:46:54Z seq 5 round 1 polyglot-c-py off
+  reward 0.0 completed 706.323602s calls 28 answer written contention {'server_requests': 28, 'relay_posts': 28, 'surplus': 0}
+2026-10-31T19:59:20Z seq 6 round 1 polyglot-c-py strict
+  reward 0.0 completed 291.738553s calls 13 answer written contention {'server_requests': 13, 'relay_posts': 13, 'surplus': 0}
+2026-10-31T20:04:55Z seq 7 round 1 raman-fitting strict
+  reward 0.0 completed 805.152649s calls 26 answer written contention {'server_requests': 26, 'relay_posts': 26, 'surplus': 0}
+2026-10-31T20:18:39Z seq 8 round 1 raman-fitting advisory
+  reward 1.0 completed 645.869362s calls 21 answer written contention {'server_requests': 21, 'relay_posts': 21, 'surplus': 0}
+2026-10-31T20:29:49Z seq 9 round 1 raman-fitting off
+  reward 1.0 harbor_timeout 900.004176s calls 36 answer written contention {'server_requests': 37, 'relay_posts': 36, 'surplus': 1}
+2026-10-31T20:45:07Z seq 10 round 1 prove-plus-comm strict
+  reward 1.0 completed 143.093752s calls 12 answer written contention {'server_requests': 12, 'relay_posts': 13, 'surplus': -1}
+2026-10-31T20:47:58Z seq 11 round 1 prove-plus-comm advisory
+  reward 1.0 completed 66.056024s calls 11 answer not written contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T20:49:32Z seq 12 round 1 prove-plus-comm off
+  reward 1.0 completed 90.767451s calls 10 answer written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T20:51:32Z seq 13 round 1 nginx-request-logging strict
+  reward 1.0 completed 62.203136s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T20:52:52Z seq 14 round 1 nginx-request-logging advisory
+  reward 1.0 completed 65.890167s calls 10 answer n/a contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T20:54:16Z seq 15 round 1 nginx-request-logging off
+  reward 1.0 completed 117.968194s calls 13 answer n/a contention {'server_requests': 13, 'relay_posts': 13, 'surplus': 0}
+2026-10-31T20:56:38Z seq 16 round 1 vulnerable-secret off
+  reward 1.0 completed 42.0298s calls 10 answer written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T20:57:44Z seq 17 round 1 vulnerable-secret strict
+  reward 1.0 completed 64.843463s calls 10 answer written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T20:59:12Z seq 18 round 1 vulnerable-secret advisory
+  reward 1.0 completed 58.043209s calls 11 answer written contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T21:00:28Z seq 19 round 1 fix-git off
+  reward 1.0 completed 54.078943s calls 7 answer n/a contention {'server_requests': 7, 'relay_posts': 7, 'surplus': 0}
+2026-10-31T21:01:45Z seq 20 round 1 fix-git strict
+  reward 1.0 completed 105.68931s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T21:03:48Z seq 21 round 1 fix-git advisory
+  reward 1.0 completed 59.964084s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T21:05:11Z seq 22 round 1 openssl-selfsigned-cert off
+  reward 1.0 completed 91.694663s calls 8 answer not written contention {'server_requests': 8, 'relay_posts': 8, 'surplus': 0}
+2026-10-31T21:07:02Z seq 23 round 1 openssl-selfsigned-cert strict
+  reward 1.0 completed 91.995543s calls 12 answer not written contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}
+2026-10-31T21:08:52Z seq 24 round 1 openssl-selfsigned-cert advisory
+  reward 1.0 completed 72.965571s calls 8 answer not written contention {'server_requests': 8, 'relay_posts': 8, 'surplus': 0}
+2026-10-31T21:10:24Z seq 25 round 2 raman-fitting advisory
+  reward 0.0 completed 831.205223s calls 27 answer written contention {'server_requests': 27, 'relay_posts': 27, 'surplus': 0}
+2026-10-31T21:24:33Z seq 26 round 2 raman-fitting off
+  reward 1.0 completed 467.01789s calls 17 answer written contention {'server_requests': 17, 'relay_posts': 17, 'surplus': 0}
+2026-10-31T21:32:45Z seq 27 round 2 raman-fitting strict
+  reward 0.0 completed 736.511349s calls 25 answer not written contention {'server_requests': 25, 'relay_posts': 25, 'surplus': 0}
+2026-10-31T21:45:19Z seq 28 round 2 vulnerable-secret strict
+  reward 1.0 completed 51.310213s calls 9 answer written contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T21:46:35Z seq 29 round 2 vulnerable-secret advisory
+  reward 1.0 completed 50.841465s calls 11 answer written contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T21:47:43Z seq 30 round 2 vulnerable-secret off
+  reward 1.0 completed 72.864473s calls 10 answer written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T21:49:14Z seq 31 round 2 fix-git strict
+  reward 1.0 completed 132.900413s calls 11 answer n/a contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T21:51:50Z seq 32 round 2 fix-git advisory
+  reward 1.0 completed 61.535138s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T21:53:12Z seq 33 round 2 fix-git off
+  reward 1.0 completed 53.823908s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T21:54:23Z seq 34 round 2 openssl-selfsigned-cert strict
+  reward 1.0 completed 139.265928s calls 13 answer not written contention {'server_requests': 13, 'relay_posts': 13, 'surplus': 0}
+2026-10-31T21:57:07Z seq 35 round 2 openssl-selfsigned-cert advisory
+  reward 1.0 completed 140.9755s calls 11 answer written contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T21:59:47Z seq 36 round 2 openssl-selfsigned-cert off
+  reward 1.0 completed 78.687766s calls 9 answer not written contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T22:01:25Z seq 37 round 2 prove-plus-comm advisory
+  reward 1.0 completed 37.689112s calls 6 answer not written contention {'server_requests': 6, 'relay_posts': 6, 'surplus': 0}
+2026-10-31T22:02:32Z seq 38 round 2 prove-plus-comm off
+  reward 1.0 completed 25.702615s calls 6 answer written contention {'server_requests': 6, 'relay_posts': 6, 'surplus': 0}
+2026-10-31T22:03:24Z seq 39 round 2 prove-plus-comm strict
+  reward 1.0 infra_error 74.147409s calls 10 answer written contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T22:05:11Z seq 40 round 2 cobol-modernization off
+  reward 1.0 harbor_timeout 900.004791s calls 25 answer written contention {'server_requests': 26, 'relay_posts': 25, 'surplus': 1}
+2026-10-31T22:20:29Z seq 41 round 2 cobol-modernization strict
+  reward 1.0 budget_exit 879.443062s calls 31 answer written contention {'server_requests': 31, 'relay_posts': 32, 'surplus': -1}
+2026-10-31T22:35:30Z seq 42 round 2 cobol-modernization advisory
+  reward 1.0 completed 852.365363s calls 25 answer written contention {'server_requests': 25, 'relay_posts': 25, 'surplus': 0}
+2026-10-31T22:50:00Z seq 43 round 2 nginx-request-logging advisory
+  reward 1.0 completed 66.708961s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T22:51:25Z seq 44 round 2 nginx-request-logging off
+  reward 1.0 completed 105.068139s calls 12 answer n/a contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}
+2026-10-31T22:53:27Z seq 45 round 2 nginx-request-logging strict
+  reward 0.0 completed 84.31825s calls 11 answer n/a contention {'server_requests': 11, 'relay_posts': 11, 'surplus': 0}
+2026-10-31T22:55:10Z seq 46 round 2 polyglot-c-py off
+  reward 0.0 completed 677.667485s calls 22 answer written contention {'server_requests': 22, 'relay_posts': 22, 'surplus': 0}
+2026-10-31T23:06:57Z seq 47 round 2 polyglot-c-py strict
+  reward 0.0 completed 147.15732s calls 12 answer written contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}
+2026-10-31T23:10:02Z seq 48 round 2 polyglot-c-py advisory
+  reward 0.0 completed 476.730015s calls 24 answer written contention {'server_requests': 24, 'relay_posts': 24, 'surplus': 0}
+2026-10-31T23:18:23Z seq 49 round 3 openssl-selfsigned-cert advisory
+  reward 1.0 completed 75.202949s calls 9 answer written contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T23:19:59Z seq 50 round 3 openssl-selfsigned-cert off
+  reward 1.0 completed 73.942711s calls 10 answer not written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T23:21:34Z seq 51 round 3 openssl-selfsigned-cert strict
+  reward 1.0 completed 89.939637s calls 8 answer not written contention {'server_requests': 8, 'relay_posts': 8, 'surplus': 0}
+2026-10-31T23:23:23Z seq 52 round 3 vulnerable-secret advisory
+  reward 1.0 completed 45.907389s calls 10 answer written contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T23:24:33Z seq 53 round 3 vulnerable-secret off
+  reward 1.0 completed 57.632681s calls 12 answer written contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}
+2026-10-31T23:25:56Z seq 54 round 3 vulnerable-secret strict
+  reward 1.0 completed 70.034752s calls 13 answer written contention {'server_requests': 13, 'relay_posts': 13, 'surplus': 0}
+2026-10-31T23:27:24Z seq 55 round 3 fix-git advisory
+  reward 1.0 completed 76.255905s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-10-31T23:28:57Z seq 56 round 3 fix-git off
+  reward 1.0 completed 75.545174s calls 10 answer n/a contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T23:30:36Z seq 57 round 3 fix-git strict
+  reward 1.0 completed 90.397483s calls 10 answer n/a contention {'server_requests': 10, 'relay_posts': 10, 'surplus': 0}
+2026-10-31T23:32:24Z seq 58 round 3 raman-fitting off
+  reward 0.0 harbor_timeout 900.007665s calls 25 answer written contention {'server_requests': 26, 'relay_posts': 26, 'surplus': 0}
+2026-10-31T23:47:42Z seq 59 round 3 raman-fitting strict
+  reward 1.0 completed 260.903805s calls 15 answer written contention {'server_requests': 15, 'relay_posts': 15, 'surplus': 0}
+2026-10-31T23:52:21Z seq 60 round 3 raman-fitting advisory
+  reward 1.0 completed 502.656196s calls 21 answer written contention {'server_requests': 21, 'relay_posts': 21, 'surplus': 0}
+2026-11-01T00:01:02Z seq 61 round 3 polyglot-c-py strict
+  reward 0.0 completed 647.90699s calls 30 answer written contention {'server_requests': 30, 'relay_posts': 30, 'surplus': 0}
+2026-11-01T00:12:30Z seq 62 round 3 polyglot-c-py advisory
+  reward 0.0 completed 482.156419s calls 27 answer written contention {'server_requests': 27, 'relay_posts': 27, 'surplus': 0}
+2026-11-01T00:21:17Z seq 63 round 3 polyglot-c-py off
+  reward 0.0 completed 612.509959s calls 21 answer written contention {'server_requests': 21, 'relay_posts': 21, 'surplus': 0}
+2026-11-01T00:32:09Z seq 64 round 3 cobol-modernization strict
+  reward 1.0 completed 764.733017s calls 34 answer written contention {'server_requests': 34, 'relay_posts': 34, 'surplus': 0}
+2026-11-01T00:45:19Z seq 65 round 3 cobol-modernization advisory
+  reward 1.0 completed 727.871476s calls 30 answer written contention {'server_requests': 30, 'relay_posts': 30, 'surplus': 0}
+2026-11-01T00:57:47Z seq 66 round 3 cobol-modernization off
+  reward 1.0 harbor_timeout 900.000569s calls 30 answer written contention {'server_requests': 32, 'relay_posts': 31, 'surplus': 1}
+2026-11-01T01:13:07Z seq 67 round 3 nginx-request-logging off
+  reward 1.0 completed 75.858007s calls 10 answer n/a contention {'server_requests': 10, 'relay_posts': 11, 'surplus': -1}
+2026-11-01T01:14:47Z seq 68 round 3 nginx-request-logging strict
+  reward 1.0 completed 103.460509s calls 13 answer n/a contention {'server_requests': 13, 'relay_posts': 13, 'surplus': 0}
+2026-11-01T01:16:49Z seq 69 round 3 nginx-request-logging advisory
+  reward 1.0 completed 72.868373s calls 9 answer n/a contention {'server_requests': 9, 'relay_posts': 9, 'surplus': 0}
+2026-11-01T01:18:23Z seq 70 round 3 prove-plus-comm off
+  reward 1.0 completed 123.37197s calls 12 answer written contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}
+2026-11-01T01:21:03Z seq 71 round 3 prove-plus-comm strict
+  reward 1.0 completed 31.73699s calls 6 answer not written contention {'server_requests': 6, 'relay_posts': 6, 'surplus': 0}
+2026-11-01T01:22:06Z seq 72 round 3 prove-plus-comm advisory
+  reward 1.0 completed 122.333897s calls 12 answer written contention {'server_requests': 12, 'relay_posts': 12, 'surplus': 0}

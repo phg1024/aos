@@ -1,0 +1,21 @@
+{
+  "_about": "Hand-check of every failed trial (reward 0), done after the run against each trial's trace, ledger and verifier/ctrf.json, as PLAN.md requires. first_answer_s is seconds from the agent's start to the tool result of the first successful write of every answer path. present_at_end comes from the verifier (test_result_file_exists, or the directory listing in test_fibonacci_polyglot). A correction is listed where the hand-check differs from collect.py.",
+  "trials": [
+    {"seq": 5,  "first_answer_s": 41.1,  "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 46, "first_answer_s": 403.3, "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 63, "first_answer_s": 42.4,  "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 58, "first_answer_s": 715.9, "agrees": true, "present_at_end": true, "cause": "wrong fit: G and 2D peaks fitted at x0 19197 and 33834 (broad background features in wavelength space)"},
+
+    {"seq": 6,  "first_answer_s": 156.1, "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 47, "first_answer_s": 42.5,  "agrees": true, "present_at_end": true, "cause": "verifier did not run: test.sh could not download uv (curl to astral.sh failed), so reward 0 with no test results. The trace's last listing of /app/polyglot shows cmain beside main.py.c, so the directory test would have failed as in the other eight polyglot trials", "verifier_failure": true},
+    {"seq": 61, "first_answer_s": 176.3, "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 7,  "first_answer_s": 641.0, "agrees": true, "present_at_end": true, "cause": "wrong units: peaks fitted in the file's wavelength axis (x0 6327 and 3745), not converted to Raman shift (1580 and 2670)"},
+    {"seq": 27, "first_answer_s": 628.3, "agrees": false, "present_at_end": true, "cause": "wrong fit: G and 2D peaks fitted at x0 10438 and 19196 (broad background features)", "correction": "collect.py found no write (answer_status 'not written'). Step #19 at 628.3 s is a run of `python3 - <<'EOF'` whose script calls json.dump(res, open('/app/results.json','w')) and prints the file back; the frozen rule counts a script run that the trace shows creating the file. The heredoc has no '>' so the regex missed it."},
+    {"seq": 45, "first_answer_s": null,  "agrees": true, "present_at_end": null, "cause": "log format: test_log_file_format looks for a quoted user agent at the end of each log line; the agent's format puts it in the middle and ends with the body size"},
+
+    {"seq": 4,  "first_answer_s": 90.1,  "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 48, "first_answer_s": 100.3, "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 62, "first_answer_s": 115.7, "agrees": true, "present_at_end": true, "cause": "stray build output: /app/polyglot holds cmain besides main.py.c"},
+    {"seq": 25, "first_answer_s": 747.4, "agrees": true, "present_at_end": true, "cause": "wrong units: peaks fitted in the file's wavelength axis (x0 6328 and 3745), not converted to Raman shift"}
+  ]
+}
