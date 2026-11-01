@@ -150,11 +150,17 @@ different.
 
 ## Known Record Gaps
 
+Gaps 1–3 come from the Terminal-Bench rerun's hand-check. Gaps 2–4 are also
+early observations of eval's reconstruction probe
+(`reports/record-reconstruction-probe/PLAN.md` on the eval branch), not yet
+scored; each was checked here against the trial records cited.
+
 | Gap | Needed by | Smallest record change |
 |---|---|---|
 | 1. `run` does not record which files it changed (seq 27: the answer was written by a `python3 - <<'EOF'` heredoc, found only by hand) | (a) and (c). Not (b): it replays the tool result and never touches the world | Snapshot the workspace mount before and after each `run`, as path, size and mtime |
 | 2. A tool refusal shows only as a trace `tool_error` (seq 25: `update_memory` refused an evidence field) | (b) needs the result the agent saw, and it is already durable. (a) needs it findable | Add the call's arguments to the `tool_error` payload. List tool errors in `aos inspect`. Put the artifact ID in the trace record |
-| 3. A model call killed in flight is logged late or not at all (four ±1 request-count pairs) | (a) for usage and for how a run ended. (b) needs it to know whether the record ends mid-call. It does not need it to replay what came before | Split each call record into a start and an outcome |
+| 3. A model call killed in flight is logged late or not at all (four ±1 request-count pairs). A killed trial's ledger and trace stop at the last tool result, and its processes stay `running` | (a) for usage and for how a run ended. (b) needs it to know whether the record ends mid-call. It does not need it to replay what came before | Split each call record into a start and an outcome. Turn a termination signal into a recorded exit |
+| 4. A run's budget (kind and size, such as an 879 s advisory budget) is not recorded in any structured form; it appears only in the text of the budget notes | (b) needs it: the run's budget decides the notes, the warnings and a strict stop. (a) needs it to state the condition a run ran under | Record it in a `run.started` kernel event, with the run's identity |
 
 ### Gap 1: files changed by `run`
 
@@ -198,8 +204,50 @@ model latency.
 The ±1 pairs eval saw came from its relay, which logs a request when the
 reply ends. AOS's own ledger has the same blind spot, and worse: the killed
 call is never logged at all. The killed process also stays `running` in the
-kernel, since nobody records its exit. A reconstruction can infer "killed"
-from a running process plus an unpaired start line.
+kernel, since nobody records its exit. Seq 2 shows both: 32 ledger calls,
+one fewer than the server counted, and both processes still `running`. A
+reconstruction can infer "killed" from a running process plus an unpaired
+start line.
+
+Eval also saw, in seq 2, a model request reach the backend 1.3 s after
+Harbor ended the agent phase. The likeliest reading is that ending the
+phase stopped Harbor's exec session but not `aos` inside the container,
+which went on until the container was removed. No AOS record change can
+capture a call made after Harbor has collected the logs. Two small
+changes make such an ending clean instead:
+
+- **`aos run` handles SIGTERM and SIGINT** by cancelling its context, as a
+  strict budget does. The call in flight gets its outcome line with the
+  error, and each process exits with a recorded, retryable "terminated by
+  signal" and a checkpoint.
+- **The Harbor adapter sends that signal** when its `run` is cancelled by
+  the agent timeout, before re-raising, so `aos` records its ending while
+  the logs can still be collected.
+
+A SIGKILL still leaves running processes and an unpaired start line, and
+reconstruction reads that as "killed".
+
+### Gap 4: the run's budget
+
+The run's budget (`aos run --time-budget/--token-budget
+--strict-time-budget`) is held only by the workflow engine's in-memory
+`run` account. Checked on seq 25: both processes' capability sets have no
+budget, the spawn events carry none, and the summary artifacts do not
+mention it. It survives only as text, in the `budget time=… (strict: …)`
+notes inside requests and checkpoints. A run with an advisory budget that
+never emitted a note would leave no trace of it at all. The Harbor
+adapter's own trial metadata records the flag, but that is outside AOS.
+
+**Smallest change:** a `run.started` kernel event on the run's root
+process, written before the entry agent starts, with:
+
+- `tokens`, `seconds` and `strict_time` of the run's budget;
+- the run identity below: AOS build and the workflow spec's hash;
+- the backend's endpoint and model, and the compaction thresholds.
+
+A kernel event and not a field in the root's capability set: putting the
+budget there would make children inherit it as a second account of their
+own, a behaviour change for the sake of a record.
 
 ### Further gaps, found while writing this
 
@@ -211,8 +259,9 @@ from a running process plus an unpaired start line.
   into the call record links calls to steps, which eval had to work out by
   hand, and gives replay its clock (see Hazards).
 - **Run identity.** Record the AOS build (version and commit) and the hash
-  of the workflow spec in the record. A replay on a different build should
-  diverge, and the report should say that this is why.
+  of the workflow spec in the record, in the `run.started` event (gap 4).
+  A replay on a different build should diverge, and the report should say
+  that this is why.
 
 ## Determinism Hazards
 
@@ -245,7 +294,7 @@ two parts.
    - start and outcome lines;
    - the raw reply in the outcome;
    - step number and elapsed seconds per call;
-   - run identity.
+   - a `run.started` event with the run's budget and identity.
 
    These are small, they help reconstruction on their own, and eval's
    probe can count the gaps closing.
