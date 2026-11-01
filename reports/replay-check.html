@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Replay Check</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ok { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Replay check: three Terminal-Bench trials on ca78ad9</h1>
+    <p><b>All three trials replay identically with <code>aos replay</code> (exit 0), including the one Harbor killed.</b> That trial records the signal path end to end:</p>
+    <ul>
+      <li>both processes exit with <code>terminated by signal (SIGTERM)</code>;</li>
+      <li>there is a final checkpoint;</li>
+      <li>the cut call has an outcome line;</li>
+      <li>no request started after the agent phase ended.</li>
+    </ul>
+    <p><b>On the killed trial, the new records answer the four reconstruction questions that the 72-trial probe had found wrong or unanswerable.</b> Before, the records could not say what stopped the run, missed its in-flight request, ended early and lost its last action. Now they answer all four correctly.</p>
+    <p><b>This is a check, not a measurement.</b> It covers three trials, one of each kind.</p>
+  </div>
+
+  <p class="note"><b>Setup.</b> Plan 78e3ae6 (<code>reports/replay-check/PLAN.md</code>), fixed before anything was replayed or scored.</p>
+  <ul>
+    <li><b>AOS:</b> ca78ad9, exported with <code>git archive</code>, version <code>v0.1.1-4-gca78ad9</code>. The container binary <code>aos-linux-amd64</code> has SHA-256 79501e3c…. <code>aos replay</code> ran with a host build of the same commit, b44f71e6….</li>
+    <li><b>Adapter:</b> ca78ad9's.</li>
+    <li><b>Backend:</b> the phg-gpu Strata, model <code>qwen3.8-flash-next-nvfp4-nvfp4</code>, through <code>relay.py</code>. phg-gpu is now at 10.0.0.71, where <code>phg-gpu.local</code> resolves, instead of 10.0.0.197. The server started at 08:37:03Z. Its previous request was 85 minutes before the first trial, and the server's request count rose by exactly the relay's.</li>
+    <li><b>Harness:</b> Harbor 0.25.0 with default timeouts.</li>
+    <li><b>Time:</b> 18:47:47Z to 19:05:35Z.</li>
+  </ul>
+
+  <h2>Trials and replay verdicts</h2>
+  <table>
+    <tr><th>Job</th><th>Ending</th><th class="num">Reward</th><th class="num">Agent time</th><th class="num">Calls</th><th><code>aos replay</code></th></tr>
+    <tr><td>fix-git, strict</td><td>agent exit, code 0</td><td class="num">1</td><td class="num">51 s</td><td class="num">8</td><td class="ok">exit 0, identical: 8/8 requests, 8 events, 18 artifacts</td></tr>
+    <tr><td>vulnerable-secret, strict</td><td>agent exit, code 0</td><td class="num">1</td><td class="num">48 s</td><td class="num">9</td><td class="ok">exit 0, identical: 9/9 requests, 8 events, 20 artifacts</td></tr>
+    <tr><td>cobol-modernization, off</td><td>Harbor <code>AgentTimeoutError</code> at 900 s; AOS exits on SIGTERM</td><td class="num">0</td><td class="num">900 s</td><td class="num">31</td><td class="ok">exit 0, identical: 31/31 requests, 10 events, 62 artifacts</td></tr>
+  </table>
+  <ul>
+    <li>Every replay notes that it was "recorded by another build" (79501e3c…) and "replayed by" b44f71e6…. Both are ca78ad9: one is the Linux container build, the other the macOS host build.</li>
+    <li>The replays ran on copies of the state folders. A diff afterwards found the copies unchanged.</li>
+    <li>The JSON outputs are in <code>reports/replay-check/replay/</code>.</li>
+    <li>There was no divergence, so there is no first divergence to report.</li>
+  </ul>
+
+  <h2>The killed trial (cobol-modernization, off)</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th><th>Evidence</th></tr>
+    <tr><td>AOS exits with "terminated by signal (SIGTERM)" and a final checkpoint</td><td class="ok">yes</td><td>
+      <ul>
+        <li>At 19:05:19.286Z, pid-000002 has <code>process.exited</code> with code 1, <code>terminated by signal (SIGTERM)</code>, retryable, and checkpoint art-000060.</li>
+        <li>pid-000001 exits 12 ms later with "entry agent solver exited with code 1: terminated by signal (SIGTERM)".</li>
+        <li>Both processes are <code>exited</code>, and art-000060 is a checkpoint.</li>
+        <li>Harbor's agent phase ended at 19:05:19.400Z, about 100 ms after the exit was recorded.</li>
+      </ul>
+    </td></tr>
+    <tr><td>The cut call has an outcome line</td><td class="ok">yes</td><td>
+      <ul>
+        <li>The ledger has 31 start lines and 31 outcome lines. Every start is named by an outcome.</li>
+        <li>The cut call's start (seq 61, step 30, <code>elapsed_s</code> 880.3) has outcome seq 62, with error <code>…: terminated by signal (SIGTERM)</code> and latency 19,574 ms.</li>
+      </ul>
+    </td></tr>
+    <tr><td>No request reaches the relay after the agent phase ends</td><td class="ok">yes</td><td>
+      <ul>
+        <li>The last request started at 19:04:59.709Z, 20 s before the agent phase ended. That is the cut call.</li>
+        <li>No request started later.</li>
+      </ul>
+    </td></tr>
+    <tr><td>It replays (exit 0) or is refused (exit 2)</td><td class="ok">replays, exit 0</td><td>
+      <ul>
+        <li>All 31 requests are identical, including the cut one, and the signal exit is reproduced.</li>
+        <li>The record does not end in flight, because the cut call has its outcome.</li>
+      </ul>
+    </td></tr>
+  </table>
+  <ul>
+    <li><b>Outside AOS: the server went on generating for the cut call.</b>
+      <ul>
+        <li>At 19:05:35Z, after the kill, the Strata server reported <code>in_flight: 1</code>. The relay logged the cut request as finished between 19:05:58Z and 19:06:26Z.</li>
+        <li>So the GPU kept working on an abandoned request for about 40 to 65 s after SIGTERM: AOS cancelled its side, but the relay did not cancel the request upstream.</li>
+        <li>This is why the driver's check at the end of the trial counted 31 requests at the server against 30 at the relay. It is the same late-logging effect as the budget rerun's ±1 pairs.</li>
+        <li>The AOS record is complete. The effect is on the infrastructure side and could delay the first call of a following trial.</li>
+      </ul>
+    </li>
+    <li><b>Refusals in this trial.</b>
+      <ul>
+        <li>There were two capability denials, a <code>write_file</code> and an <code>edit_file</code> with an empty path. Each is recorded as a <code>capability.denied</code> kernel event, a trace <code>capability_denied</code> record, a <code>tool_error</code> artifact, and the error text in the next call.</li>
+        <li><code>capability.denied</code> was a kernel event at v0.1.1 too.</li>
+        <li>The 26 tool errors in the 72-trial probe were all argument or evidence errors, which have no kernel event. None of those occurred in these three trials, so that gap is not re-tested here.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Reconstruction re-check (Q1–Q9b of the frozen probe)</h2>
+  <p>The frozen probe's questions were answered on the three trials in two ways (<code>recheck.py</code>; no frozen script was edited):</p>
+  <ul>
+    <li><b>(a) "as before".</b> The probe's records-only method, reading the two-phase ledger as one call per start line.</li>
+    <li><b>(b) "with the new records".</b> The signal exit, start and outcome lines, <code>run.started</code>, and the <code>changes</code> on run results.</li>
+  </ul>
+  <p>Ground truth follows the probe's rules: Harbor's <code>result.json</code>, this run's relay log, the arm, the verifier, and a hand-read first-write time for Q9.</p>
+  <div class="wrap">
+  <table>
+    <tr><th>Question</th><th>fix-git (a / b)</th><th>vulnerable-secret (a / b)</th><th>cobol, killed (a / b)</th></tr>
+    <tr><td>Q1 How did it end?</td><td>✓ / ✓</td><td>✓ / ✓</td><td><span class="bad">✗</span> / ✓</td></tr>
+    <tr><td>Q2 What stopped it?</td><td>–</td><td>–</td><td>not answerable / ✓ (SIGTERM)</td></tr>
+    <tr><td>Q3 Model requests</td><td>✓ / ✓ (8)</td><td>✓ / ✓ (9)</td><td>✓ / ✓ (31, none in flight)</td></tr>
+    <tr><td>Q4 Tokens (no truth)</td><td>same in a and b</td><td>same</td><td>same; every request has an outcome with usage</td></tr>
+    <tr><td>Q5 Duration (±5 s)</td><td>✓ / ✓</td><td>✓ / ✓</td><td>✓ / ✓ (899.9 against 900.3 s)</td></tr>
+    <tr><td>Q6 Last action</td><td>✓ / ✓</td><td>✓ / ✓</td><td>✓ / ✓</td></tr>
+    <tr><td>Q8 Budget kind</td><td>✓ / ✓</td><td>✓ / ✓</td><td>✓ / ✓</td></tr>
+    <tr><td>Q9 First answer write (±2 s)</td><td>n/a</td><td>✓ / ✓ (36.9 s, hand 37.2)</td><td>✓ / ✓ (305.3 s, hand 305.6)</td></tr>
+    <tr><td>Q9b Write found (passed)</td><td>n/a</td><td>✓ / ✓</td><td>–</td></tr>
+  </table>
+  </div>
+  <p>(a)'s Q1 is wrong on the killed trial because the run now has an exit record. The frozen method reads code 1 without a budget reason as an error exit. (b) reads the signal reason as a stop from outside.</p>
+
+  <h3>The three gaps, before and after</h3>
+  <table>
+    <tr><th>Gap</th><th>Before: 72-trial probe, v0.1.1 records</th><th>After: these trials, ca78ad9 records</th></tr>
+    <tr><td><b>Killed run</b> (Q2, Q3, Q5, Q6)</td>
+      <td>Over the 5 killed trials:
+        <ul>
+          <li>Q2: not answerable in 5/5.</li>
+          <li>Q3: wrong in 5/5; 7 requests missing.</li>
+          <li>Q5: wrong in 4/5.</li>
+          <li>Q6: wrong in 5/5.</li>
+        </ul>
+        Processes stayed "running". In 2 trials the process sent a request after the kill.</td>
+      <td>On the 1 killed trial, Q2, Q3, Q5 and Q6 are all correct:
+        <ul>
+          <li>the exit says SIGTERM;</li>
+          <li>31 of 31 requests are recorded, the cut one with its outcome;</li>
+          <li>the duration is 0.4 s off;</li>
+          <li>no request came after the last recorded one.</li>
+        </ul>
+        Q2 names the signal, not the sender (Harbor's timeout).</td></tr>
+    <tr><td><b>Answer write by <code>run</code></b> (file changes)</td>
+      <td>The frozen rule missed the write in 1/13 failed and 10/41 passed trials.</td>
+      <td><b>Not exercised for an answer.</b> Both answer files were written with <code>write_file</code>, which both methods find.
+        <ul>
+          <li><code>changes</code> are recorded on all 27 <code>run</code> results (7, 6 and 14 per trial). 14 of them list changed files: 5 in fix-git, 0 in vulnerable-secret and 9 in cobol.</li>
+          <li>They show what the old records could not. In cobol, scripts in <code>/tmp</code> (<code>harness.py</code>, <code>compare.py</code>) modified <code>/app/data/*.DAT</code> and <code>/app/src/INPUT.DAT</code> on 9 runs. In fix-git, the <code>.git</code> objects and refs a merge created are listed.</li>
+          <li>Writes outside the workspace mount (<code>/tmp</code>) are not covered, as designed.</li>
+        </ul>
+      </td></tr>
+    <tr><td><b>Budget</b></td>
+      <td>Recovered in 72/72 trials, but only by parsing note text. No structured record existed.</td>
+      <td>Recovered in 3/3 trials from <code>run.started</code>: <code>budget_seconds</code> 879 or 0, and <code>budget_strict_time</code>. The record also holds the build version and SHA-256, the backend, the model and the sampling, and no key.
+        <ul>
+          <li>One flaw: ca78ad9 records <code>retry_attempts: 0</code> and <code>retry_base: 0s</code>, which mean the defaults (12 attempts, 1 s).</li>
+          <li>aos code reports that d9b3514 records the values in effect. That commit is not tested here.</li>
+        </ul>
+      </td></tr>
+  </table>
+
+  <h2>Not covered</h2>
+  <ul>
+    <li>An answer written by <code>run</code> (the seq 27 case) did not occur, so the <code>changes</code> path for answers is untested.</li>
+    <li>No argument-validation tool error occurred, so whether those now reach the kernel log is untested.</li>
+    <li>There was no strict budget exit, no backend retry, and no multi-agent run.</li>
+    <li>The d9b3514 recording changes are not tested.</li>
+    <li>One trial per kind cannot show how often replay diverges.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>reports/replay-check/PLAN.md</code>: the plan.</li>
+    <li><code>run3.sh</code> and <code>run3.out</code>: the driver and its output.</li>
+    <li><code>relay.log</code>: every request forwarded to phg-gpu.</li>
+    <li><code>replay/*.json</code>: the <code>aos replay --json</code> outputs.</li>
+    <li><code>recheck.py</code> → <code>recheck.jsonl</code>: the re-check answers, truth and scores.</li>
+    <li>The job folders are <code>reports/terminal-bench/jobs/tb2-replay-*</code> (gitignored).</li>
+  </ul>
+</body>
+</html>
