@@ -247,6 +247,10 @@ type AgentRuntime struct {
 	// OnCapabilityDenied, when set, receives each capability.denied kernel
 	// event this runtime records.
 	OnCapabilityDenied func(kernel.Event)
+	// NoToolIntents skips the tool.started intent before world tools, as
+	// AOS did before intents existed. Only a replay of such a record sets
+	// it, so the replay records what the original did.
+	NoToolIntents bool
 }
 
 // CompactionPolicy decides when older history is compacted and how much
@@ -409,7 +413,11 @@ type RunOptions struct {
 	// agent to write its working memory and index for a checkpoint it
 	// resumes from; give it a process without tool grants, so only the
 	// memory tools can run.
-	HandoffOnly         bool
+	HandoffOnly bool
+	// Rollback lets Recover start from a checkpoint other than the one the
+	// exit names, such as an earlier one to undo work. The rollback is
+	// recorded on the process.superseded event.
+	Rollback            bool
 	ContinueOnToolError bool
 	OnToolCall          func(ToolCall)
 	OnToolResult        func(tools.Result)
@@ -422,26 +430,35 @@ func (r *AgentRuntime) Resume(ctx context.Context, pid, checkpointID string, app
 	if err != nil {
 		return RunResult{}, err
 	}
-	session.Messages = append(session.Messages, appended...)
 	process, err := r.Kernel.Get(pid)
 	if err != nil {
 		return RunResult{}, err
+	}
+	if process.State == kernel.StateExited {
+		return r.Recover(ctx, pid, checkpointID, appended, options)
 	}
 	if process.State == kernel.StateBlocked || process.State == kernel.StateSleeping {
 		if _, err := r.Kernel.Transition(pid, kernel.StateReady); err != nil {
 			return RunResult{}, err
 		}
 	}
-	if process.State == kernel.StateExited {
-		return r.Recover(ctx, pid, checkpointID, appended, options)
+	if err := r.noteInterrupted(pid, pid, checkpointID, &session); err != nil {
+		return RunResult{}, err
 	}
+	session.Messages = append(session.Messages, appended...)
 	return r.runSession(ctx, pid, session, options, checkpointID)
 }
 
 // Recover runs a new process from an exited one's checkpoint. Only an
 // exited process with a retryable record (runtime- or agent-origin) can be
 // recovered; a live one never can, so two processes never run the same
-// work. The new process takes over the old one's leases.
+// work. It is recovered at most once: the kernel spawns the successor and
+// records it as the old process's superseded_by in one transaction, so a
+// second Recover, sequential or concurrent, is refused and names the
+// successor to recover instead. checkpointID defaults to the checkpoint
+// the exit names; any other is a rollback, refused unless
+// options.Rollback asks for it, and recorded on the process.superseded
+// event. The new process takes over the old one's leases.
 func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, appended []Message, options RunOptions) (RunResult, error) {
 	process, err := r.Kernel.Get(pid)
 	if err != nil {
@@ -450,18 +467,35 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err := recoverable(process); err != nil {
 		return RunResult{}, err
 	}
+	named := process.ExitStatus.Checkpoint
+	if checkpointID == "" {
+		if named == "" {
+			return RunResult{}, fmt.Errorf("%w: %s's exit names no checkpoint; give one to roll back to", ErrNotRecoverable, pid)
+		}
+		checkpointID = named
+	}
+	rollback := checkpointID != named
+	if rollback && !options.Rollback {
+		return RunResult{}, fmt.Errorf("%w: %s's exit names checkpoint %q, not %s; recovering from another checkpoint is a rollback and must be asked for", ErrNotRecoverable, pid, named, checkpointID)
+	}
 	session, err := r.ownedCheckpoint(pid, checkpointID)
 	if err != nil {
 		return RunResult{}, err
 	}
-	session.Messages = append(session.Messages, appended...)
-	recovered, err := r.Kernel.Spawn(kernel.ProcessSpec{
+	superseded := map[string]string{"checkpoint": checkpointID}
+	if rollback {
+		superseded["rollback_from"] = named
+	}
+	recovered, err := r.Kernel.Supersede(pid, kernel.ProcessSpec{
 		ParentPID:     process.ParentPID,
 		Role:          process.Role,
 		Metadata:      recoveredMetadata(process.Metadata, pid),
 		Mounts:        append([]capability.Mount(nil), process.Mounts...),
 		CapabilitySet: process.CapabilitySet,
-	})
+	}, superseded)
+	if errors.Is(err, kernel.ErrSuperseded) {
+		return RunResult{}, fmt.Errorf("%w: %w", ErrNotRecoverable, err)
+	}
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -479,6 +513,14 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 			return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
 		}
 	}
+	// Calls the old process started and never finished are its last acts;
+	// the new one hears of them before anything else.
+	if err := r.noteInterrupted(pid, recovered.PID, checkpointID, &session); err != nil {
+		status := kernel.ExitStatus{Code: 1, Reason: "interrupted calls: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+		_, _ = r.Kernel.Exit(recovered.PID, status)
+		return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+	}
+	session.Messages = append(session.Messages, appended...)
 	return r.runSession(ctx, recovered.PID, session, options, checkpointID)
 }
 
@@ -489,6 +531,9 @@ func recoverable(process kernel.Process) error {
 	}
 	if !process.ExitStatus.Retryable {
 		return fmt.Errorf("%w: %s exited with a non-retryable status: %s", ErrNotRecoverable, process.PID, process.ExitStatus.Reason)
+	}
+	if process.SupersededBy != "" {
+		return fmt.Errorf("%w: %w: %s was superseded by %s", ErrNotRecoverable, kernel.ErrSuperseded, process.PID, process.SupersededBy)
 	}
 	return nil
 }
@@ -983,28 +1028,38 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				})
 				break
 			}
-			toolResult, err := r.executeToolCall(ctx, process, session, checkpointID, *result.Action.ToolCall)
+			toolResult, intent, err := r.executeToolCall(ctx, process, session, checkpointID, *result.Action.ToolCall)
+			if errors.Is(err, errIntentNotRecorded) {
+				return RunResult{}, err
+			}
 			if err != nil {
 				if options.OnToolError != nil {
 					options.OnToolError(*result.Action.ToolCall, err)
 				}
 				if ctx.Err() != nil {
-					session.Messages = append(session.Messages, Message{
-						Role:    "tool",
-						Content: fmt.Sprintf("tool_cancelled name=%s reason=%s", result.Action.ToolCall.Name, cancelReason(ctx)),
-					})
+					content := fmt.Sprintf("tool_cancelled name=%s reason=%s", result.Action.ToolCall.Name, cancelReason(ctx))
+					if intent != "" {
+						// The call started: record its outcome, with the files a
+						// command changed before it was stopped.
+						payload := map[string]any{"tool": result.Action.ToolCall.Name, "reason": cancelReason(ctx)}
+						if toolResult.Changes != nil {
+							payload["changes"] = toolResult.Changes
+						}
+						artifactRecord, recordErr := r.Artifacts.CreateJSON(ToolCancelledType, pid, payload, latest(), outcomeMetadata(result.Action.ToolCall.Name, intent))
+						if recordErr != nil {
+							return RunResult{}, recordErr
+						}
+						session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
+						content += cancelledNote(toolResult.Changes)
+					}
+					session.Messages = append(session.Messages, Message{Role: "tool", Content: content})
 					return stop()
 				}
 				if options.ContinueOnToolError {
 					if session.HandoffSeq != 0 && writesMemory(result.Action) {
 						session.HandoffRefused = true
 					}
-					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, map[string]string{
-						"tool":  result.Action.ToolCall.Name,
-						"error": err.Error(),
-					}, latest(), map[string]string{
-						"tool": result.Action.ToolCall.Name,
-					})
+					artifactRecord, recordErr := r.Artifacts.CreateJSON("tool_error", pid, toolErrorPayload(result.Action.ToolCall.Name, err, toolResult.Changes), latest(), outcomeMetadata(result.Action.ToolCall.Name, intent))
 					if recordErr != nil {
 						return RunResult{}, recordErr
 					}
@@ -1021,6 +1076,12 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					})
 					break
 				}
+				if intent != "" {
+					// The call's outcome is on record before the exit it causes.
+					if _, recordErr := r.Artifacts.CreateJSON("tool_error", pid, toolErrorPayload(result.Action.ToolCall.Name, err, toolResult.Changes), latest(), outcomeMetadata(result.Action.ToolCall.Name, intent)); recordErr != nil {
+						return RunResult{}, recordErr
+					}
+				}
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
 				exitStatus.Checkpoint = lastCheckpoint()
 				if _, exitErr := r.Kernel.Exit(pid, exitStatus); exitErr != nil {
@@ -1028,9 +1089,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				return RunResult{PID: pid, ExitStatus: exitStatus, CheckpointID: lastCheckpoint()}, err
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("tool_result", pid, toolResult, latest(), map[string]string{
-				"tool": toolResult.Tool,
-			})
+			artifactRecord, err := r.Artifacts.CreateJSON("tool_result", pid, toolResult, latest(), outcomeMetadata(toolResult.Tool, intent))
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -2140,12 +2199,21 @@ func (r *AgentRuntime) bindArtifactProducers() {
 	})
 }
 
-func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, error) {
+// executeToolCall authorizes and runs call. A world tool first records its
+// intent, whose event ID it returns for the outcome to name; if the intent
+// cannot be recorded, the tool does not run and the error wraps
+// errIntentNotRecorded.
+func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Process, session Session, checkpointID string, call ToolCall) (tools.Result, string, error) {
 	if err := r.authorize(process, call.Name, call.Name); err != nil {
-		return tools.Result{}, err
+		return tools.Result{}, "", err
 	}
 	if isRuntimeTool(call.Name) {
-		return r.executeRuntimeTool(ctx, process, session, checkpointID, call)
+		result, err := r.executeRuntimeTool(ctx, process, session, checkpointID, call)
+		return result, "", err
+	}
+	intent, err := r.recordIntent(process.PID, call)
+	if err != nil {
+		return tools.Result{}, "", err
 	}
 	result, err := r.Tools.ExecuteContext(ctx, tools.Request{
 		Tool:          call.Name,
@@ -2166,7 +2234,7 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 	case errors.Is(err, tools.ErrRunUnconfined):
 		r.logDenial(process.PID, call.Name, "unconfined_run", "", err.Error())
 	}
-	return result, err
+	return result, intent, err
 }
 
 // authorize is the single capability check shared by tool calls and by the

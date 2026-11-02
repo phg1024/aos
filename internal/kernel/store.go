@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"aos/internal/capability"
 	"aos/internal/filelock"
 )
 
@@ -237,12 +238,45 @@ func applyEvent(record Process, known bool, event Event) (Process, bool, error) 
 		}
 		record.State = StateExited
 		record.ExitStatus = &ExitStatus{Code: code, Reason: event.Data["reason"], Retryable: event.Data["retryable"] == "true", Origin: event.Data["origin"], Checkpoint: event.Data["checkpoint"]}
+	case "process.superseded":
+		if !known {
+			return record, false, nil
+		}
+		record.SupersededBy = event.Data["successor"]
 	default:
 		return record, false, nil
 	}
 	record.LastEventID = event.ID
 	record.UpdatedAt = event.Timestamp
 	return record, true, nil
+}
+
+// spawn adds a new process from spec; its event carries the whole record
+// so the table can be rebuilt.
+func (t *tx) spawn(spec ProcessSpec, now time.Time) (Process, error) {
+	process := Process{
+		PID:           t.allocatePID(),
+		ParentPID:     spec.ParentPID,
+		Role:          spec.Role,
+		State:         StateReady,
+		Metadata:      cloneMap(spec.Metadata),
+		Mounts:        append([]capability.Mount(nil), spec.Mounts...),
+		CapabilitySet: spec.CapabilitySet,
+		Delegable:     spec.Delegable,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	encoded, err := json.Marshal(process)
+	if err != nil {
+		return Process{}, err
+	}
+	event := t.appendEvent(process.PID, "process.spawned", map[string]string{
+		"role":    process.Role,
+		"process": string(encoded),
+	}, now)
+	process.LastEventID = event.ID
+	t.putProcess(process)
+	return process, nil
 }
 
 func (t *tx) allocatePID() string {

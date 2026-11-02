@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/capability"
 )
@@ -75,5 +78,30 @@ func TestFileChangesAreBounded(t *testing.T) {
 	}
 	if states, complete := snapshot(dir, 10); !complete || len(states) != 5 {
 		t.Fatalf("snapshot = %d entries, complete %v", len(states), complete)
+	}
+}
+
+// A command cut off, by its caller or its timeout, returns the files it
+// changed with its error.
+func TestCutOffRunReturnsItsChanges(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	ws := filepath.Join(root, "ws")
+	os.MkdirAll(ws, 0o755)
+	runtime := NewRuntime()
+	request := func(timeout string) Request {
+		return Request{Tool: "run", Args: map[string]string{"command": "echo once >> effects; sleep 30", "timeout": timeout},
+			Mounts:        []capability.Mount{{Name: WorkspaceMount, HostPath: ws}, {Name: "root", HostPath: "/"}},
+			CapabilitySet: capability.Set{Tools: []string{"run"}, ReadPaths: []string{"/"}, WritePaths: []string{"/"}, UnconfinedRun: true}}
+	}
+	result, err := runtime.Execute(request("300ms"))
+	if err == nil || !strings.Contains(err.Error(), "timed out") || result.Changes == nil || strings.Join(result.Changes.Created, ",") != "effects" {
+		t.Fatalf("timed out: %+v, %v", result.Changes, err)
+	}
+	os.Remove(filepath.Join(ws, "effects"))
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	result, err = runtime.ExecuteContext(ctx, request("60s"))
+	if !errors.Is(err, ErrToolCancelled) || result.Changes == nil || strings.Join(result.Changes.Created, ",") != "effects" {
+		t.Fatalf("cancelled: %+v, %v", result.Changes, err)
 	}
 }

@@ -89,6 +89,8 @@ func scriptServer(t *testing.T, script []step) *httptest.Server {
 type options struct {
 	budget     capability.Budget
 	compaction runtime.CompactionPolicy
+	// noIntents records as AOS did before tool.started intents.
+	noIntents bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -168,11 +170,12 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:      agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil)},
-		Compaction:   opts.compaction,
-		BackendRetry: runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
-		Budget:       opts.budget,
-		RunRecord:    map[string]string{"build_version": "test"},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil)},
+		Compaction:    opts.compaction,
+		BackendRetry:  runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
+		Budget:        opts.budget,
+		RunRecord:     map[string]string{"build_version": "test"},
+		NoToolIntents: opts.noIntents,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -548,4 +551,81 @@ func TestReplayRefusesWhatItCannotReplay(t *testing.T) {
 	if _, err := replay.Run(context.Background(), replay.Options{StateDir: stateDir}); err == nil || !strings.Contains(err.Error(), "run.started") {
 		t.Fatalf("a run without run.started: %v", err)
 	}
+}
+
+// A record made before tool.started intents replays as identical: the
+// replay records none either, and says so. A current record has them and
+// is not flagged.
+func TestReplayOfARecordWithoutIntents(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	legacy := recordAt(t, root, context.Background(), func(ws string) []step { return roundTripScript(ws) },
+		options{budget: capability.Budget{Seconds: 600}, compaction: runtime.CompactionPolicy{MaxMessages: 12, KeepMessages: 4, Handoff: true}, noIntents: true})
+	if events := eventTypes(t, legacy); strings.Contains(events, runtime.ToolStartedEvent) {
+		t.Fatalf("the legacy recording has intents: %s", events)
+	}
+	report := replayed(t, legacy, false)
+	if !report.Identical() || !report.LegacyToolIntents || report.Tools != 6 {
+		t.Fatalf("legacy report = %+v", report)
+	}
+
+	current := recordRoundTrip(t)
+	if events := eventTypes(t, current); strings.Count(events, runtime.ToolStartedEvent) != 3 {
+		t.Fatalf("the current recording should have an intent per world tool call (1 write, 2 runs): %s", events)
+	}
+	report = replayed(t, current, false)
+	if !report.Identical() || report.LegacyToolIntents {
+		t.Fatalf("current report = %+v", report)
+	}
+	// An intent removed from a current record is a divergence: the replay
+	// records it.
+	stateDir := copyDir(t, current)
+	path := filepath.Join(stateDir, "kernel", "events.json")
+	var events []kernel.Event
+	raw, _ := os.ReadFile(path)
+	json.Unmarshal(raw, &events)
+	for i := range events {
+		if events[i].Type == runtime.ToolStartedEvent {
+			events[i].Type = "tool.noted"
+			break
+		}
+	}
+	raw, _ = json.Marshal(events)
+	os.WriteFile(path, raw, 0o644)
+	if report := replayed(t, stateDir, false); report.Identical() || report.Divergence.Kind != "kernel" {
+		t.Fatalf("a changed intent should diverge: %+v", report)
+	}
+}
+
+// A command cut off by a strict budget replays as identical, whether the
+// record has its tool_cancelled outcome (current) or only the final
+// checkpoint (before intents).
+func TestReplayOfACommandCutOff(t *testing.T) {
+	for _, noIntents := range []bool{false, true} {
+		root, _ := filepath.EvalSymlinks(t.TempDir())
+		stateDir := recordAt(t, root, context.Background(), func(ws string) []step {
+			return []step{tool("run", map[string]any{"command": "echo once >> " + filepath.Join(ws, "effects") + "; sleep 30", "timeout": "60s"})}
+		}, options{budget: capability.Budget{Seconds: 1, StrictTime: true}, noIntents: noIntents})
+		if !strings.HasPrefix(exitReason(t, stateDir), "time budget exceeded") {
+			t.Fatalf("the recording should end on the strict budget: %q", exitReason(t, stateDir))
+		}
+		cancelled := strings.Contains(artifactTypes(t, stateDir), runtime.ToolCancelledType)
+		if cancelled == noIntents {
+			t.Fatalf("noIntents=%v: tool_cancelled recorded: %v", noIntents, cancelled)
+		}
+		if report := replayed(t, stateDir, false); !report.Identical() || report.Matched != 1 || report.LegacyToolIntents != noIntents {
+			t.Fatalf("noIntents=%v: report = %+v", noIntents, report)
+		}
+	}
+}
+
+func artifactTypes(t *testing.T, stateDir string) string {
+	t.Helper()
+	var index map[string]artifact.Artifact
+	raw, _ := os.ReadFile(filepath.Join(stateDir, "artifacts", "index.json"))
+	json.Unmarshal(raw, &index)
+	var types []string
+	for _, record := range index {
+		types = append(types, record.Type)
+	}
+	return strings.Join(types, ",")
 }

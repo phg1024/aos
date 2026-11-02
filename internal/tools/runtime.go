@@ -67,7 +67,8 @@ type Result struct {
 	Summary string            `json:"summary"`
 	Output  map[string]string `json:"output,omitempty"`
 	// Changes, on a run result, is what the command did to the workspace
-	// mount's files. It is recorded, not shown to the agent.
+	// mount's files. It is recorded, not shown to the agent. A run that was
+	// cancelled or timed out returns its changes with its error.
 	Changes *FileChanges `json:"changes,omitempty"`
 }
 
@@ -424,11 +425,13 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		err = cmd.Run()
 		exitCode := 0
 		if err != nil {
+			// A command cut off may have changed files before it stopped; the
+			// result carries those changes with the error.
 			if ctx.Err() != nil {
-				return Result{}, fmt.Errorf("%w: %w", ErrToolCancelled, ctx.Err())
+				return Result{Tool: req.Tool, Changes: changes()}, fmt.Errorf("%w: %w", ErrToolCancelled, ctx.Err())
 			}
 			if cmdCtx.Err() != nil {
-				return Result{}, fmt.Errorf("command execution timed out after %s", timeout)
+				return Result{Tool: req.Tool, Changes: changes()}, fmt.Errorf("command execution timed out after %s", timeout)
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
 				exitCode = exitErr.ExitCode()

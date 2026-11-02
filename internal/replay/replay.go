@@ -71,9 +71,13 @@ type Report struct {
 	// LegacyRunStarted means the record's run.started predates recording
 	// settings as they take effect, so it was compared by its settings'
 	// meaning rather than byte for byte.
-	LegacyRunStarted bool              `json:"legacy_run_started,omitempty"`
-	RecordedBuild    map[string]string `json:"recorded_build,omitempty"`
-	Divergence       *Divergence       `json:"divergence,omitempty"`
+	LegacyRunStarted bool `json:"legacy_run_started,omitempty"`
+	// LegacyToolIntents means the record ran world tools without
+	// tool.started intents, as AOS did before them, so the replay records
+	// none either.
+	LegacyToolIntents bool              `json:"legacy_tool_intents,omitempty"`
+	RecordedBuild     map[string]string `json:"recorded_build,omitempty"`
+	Divergence        *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -309,6 +313,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		RunRecord:    settings.Record,
 		Sleep:        func(context.Context, time.Duration) {},
 	}
+	engine.NoToolIntents = !recordsIntents(rec)
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call
@@ -318,6 +323,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		engine.StepClock = player.stepClock(origin)
 	}
 	_, runErr := engine.Run(ctx, runSpec.Spec, runSpec.Request)
+	report.LegacyToolIntents = engine.NoToolIntents && player.worldTools > 0
 	if report.Divergence != nil {
 		return report, nil
 	}
@@ -336,6 +342,18 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		compareArtifacts(rec, store, &report)
 	}
 	return report, nil
+}
+
+// recordsIntents reports whether the record has any tool.started intent.
+// One that ran world tools without them predates intents. A record with
+// no world tool calls has none either way.
+func recordsIntents(rec record) bool {
+	for _, event := range rec.events {
+		if event.Type == runtime.ToolStartedEvent {
+			return true
+		}
+	}
+	return false
 }
 
 // sequenceClock returns the recorded events' timestamps one per call, in
@@ -371,6 +389,8 @@ type player struct {
 	queues   map[string][]int // each process's start lines, in order
 	next     map[string]int
 	outcomes map[int]int // start seq to its outcome's index
+	// worldTools counts the world tool calls answered.
+	worldTools int
 }
 
 func newPlayer(rec record, store *artifact.Store, stop context.CancelCauseFunc, report *Report) *player {
@@ -455,6 +475,9 @@ func (p *player) stopCause(pid string, last bool) error {
 func (p *player) tool(ctx context.Context, req tools.Request) (tools.Result, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if runtime.WorldTool(req.Tool) {
+		p.worldTools++
+	}
 	id, err := p.store.NextID()
 	if err != nil {
 		return tools.Result{}, err
@@ -479,17 +502,41 @@ func (p *player) tool(ctx context.Context, req tools.Request) (tools.Result, err
 			return tools.Result{}, err
 		}
 		var failure struct {
-			Error string `json:"error"`
+			Error   string             `json:"error"`
+			Changes *tools.FileChanges `json:"changes"`
 		}
 		if err := json.Unmarshal(raw, &failure); err != nil {
 			return tools.Result{}, err
 		}
 		p.report.Tools++
-		return tools.Result{}, tools.RecordedError(failure.Error)
+		var result tools.Result
+		if failure.Changes != nil {
+			result = tools.Result{Tool: req.Tool, Changes: failure.Changes}
+		}
+		return result, tools.RecordedError(failure.Error)
 	}
-	if cause := p.stopCause(req.PID, p.next[req.PID] == len(p.queues[req.PID])); cause != nil && ok && recorded.Type == "checkpoint" {
-		// The original tool was cut off: its process's final checkpoint
-		// stands where the outcome would have.
+	cause := p.stopCause(req.PID, p.next[req.PID] == len(p.queues[req.PID]))
+	if cause != nil && matches && recorded.Type == runtime.ToolCancelledType {
+		// The original tool was cut off and recorded so, with the files it
+		// had changed.
+		raw, err := p.rec.payload(id)
+		if err != nil {
+			return tools.Result{}, err
+		}
+		var cancelled struct {
+			Changes *tools.FileChanges `json:"changes"`
+		}
+		if err := json.Unmarshal(raw, &cancelled); err != nil {
+			return tools.Result{}, err
+		}
+		p.report.Tools++
+		p.stop(cause)
+		<-ctx.Done()
+		return tools.Result{Tool: req.Tool, Changes: cancelled.Changes}, fmt.Errorf("%w: %w", tools.ErrToolCancelled, ctx.Err())
+	}
+	if cause != nil && ok && recorded.Type == "checkpoint" {
+		// The original tool was cut off before cut-off calls were recorded:
+		// its process's final checkpoint stands where the outcome would have.
 		p.stop(cause)
 		<-ctx.Done()
 		return tools.Result{}, fmt.Errorf("%w: %w", tools.ErrToolCancelled, ctx.Err())

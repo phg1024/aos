@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -197,5 +198,38 @@ func TestExitOriginIsRecordedAndReplayed(t *testing.T) {
 	}
 	if got, err := reopened.Await(other.PID); err != nil || got.Origin != ExitOriginAgent {
 		t.Fatalf("replayed exit lost its origin: %+v %v", got, err)
+	}
+}
+
+// A process.superseded event the table missed is replayed, so a crash
+// between the log and table writes cannot make a process recoverable
+// again.
+func TestSupersededIsReplayed(t *testing.T) {
+	root := t.TempDir()
+	k, err := New(root)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	process, err := k.Spawn(ProcessSpec{Role: "worker"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if _, err := k.Exit(process.PID, ExitStatus{Code: 1, Reason: "transient", Retryable: true}); err != nil {
+		t.Fatalf("exit: %v", err)
+	}
+	event := crashAfterEvent(t, root, process.PID, "process.superseded", map[string]string{"successor": "pid-000099", "checkpoint": "art-000001"})
+	if table := tableOnDisk(t, root); table[process.PID].SupersededBy != "" {
+		t.Fatalf("the simulated crash should leave the table behind the log: %+v", table[process.PID])
+	}
+	reopened, err := New(root)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := reopened.Get(process.PID)
+	if err != nil || got.SupersededBy != "pid-000099" || got.LastEventID != event.ID || got.State != StateExited {
+		t.Fatalf("superseded not replayed: %+v %v", got, err)
+	}
+	if _, err := reopened.Supersede(process.PID, ProcessSpec{Role: "worker"}, nil); !errors.Is(err, ErrSuperseded) {
+		t.Fatalf("a replayed supersession must refuse another: %v", err)
 	}
 }

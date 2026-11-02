@@ -147,7 +147,8 @@ func TestAgentRuntimeCancelStopsRunningTool(t *testing.T) {
 		t.Fatalf("cancel took %s; the running command was not stopped", elapsed)
 	}
 	last := result.Session.Messages[len(result.Session.Messages)-1]
-	if last.Content != "tool_cancelled name=run reason=interrupted_by_user" {
+	// run is a world tool: the note says it started and may have acted.
+	if !strings.HasPrefix(last.Content, "tool_cancelled name=run reason=interrupted_by_user started=true may_have_taken_effect=true changes=") {
 		t.Fatalf("expected a tool_cancelled note last, got %q", last.Content)
 	}
 }

@@ -2,8 +2,14 @@
 
 Status: proposal, 2026-11-01, written at the request of the aos book
 session for Chapter 7 (Supervision, Leases, and Recovery). It covers the
-audit and the design only. Nothing here is built yet, except the audit
-probes in `bench/supervision/audit_test.go`.
+audit and the design.
+
+**Update, 2026-11-01:** steps 1 and 2 of the slice are built (exclusive
+Recover, the exit's checkpoint by default, `tool.started` intents, file
+changes on cancel). N1, N2 and N6 are marked Implemented below, and the
+audit probes for them now assert the fixed behavior. See
+[Implemented: Steps 1 and 2](#implemented-steps-1-and-2). Steps 3 and 4
+are still proposed.
 
 ## Why
 
@@ -32,6 +38,9 @@ go test -tags supervisionaudit -count=1 -v ./bench/supervision/
 
 Each probe logs `FINDING:` lines and fails only when it cannot run. The
 in-tree tests cited below were run with `-count=1` at the same commit.
+Since steps 1 and 2 were built, the N1, N2 and N6 probes also assert the
+fixed behavior and fail if it regresses. The tables below keep the
+`e401e4e` results as the "before" picture.
 
 ## Today's State
 
@@ -43,12 +52,13 @@ in-tree tests cited below were run with `-count=1` at the same commit.
 | 2 | Two lease managers on one state dir both won the lease in 193 of 200 trials | **Fixed** (`f3eef1d`) | Probe A2 repeats the review's experiment: two OS processes, one `Acquire` each at a shared start, 200 trials. In-tree, `TestLeaseExclusiveAcrossProcesses` runs 3 processes × 200 attempts. | A2: both won in **0 of 200**. In-tree: 105 grants, no overlap (an unlocked counter lost no increment), tokens exactly 1..105. |
 | 3 | Nothing releases a lease when its holder exits, so a recovered process is locked out until the TTL | **Fixed for recorded exits.** A dead OS process still holds its leases until reaped (see N4). | Probe A3 | After the holder exited, another process acquired the lease: `lease.taken_over`, reason `owner_exited`, token 2. Recovering a process that held a lease gives the lease to the new process: `lease.transferred`, token 1 → 2. The recovered agent's own `acquire_lease` then renews it. |
 | 4 | There are no fencing tokens | **Half fixed.** Tokens are issued, but nothing checks them (see N3). | Probe A4, in-tree token test | Each grant gets a token that strictly increases per resource and is never reissued. But a holder whose lease expired and was taken over (token 2) still wrote the file afterwards. `acquire_lease` does not show the agent its token: its output keys are `held, resource, owner_pid, expires_at`. |
-| 5 | `Recover` has no state check | **Fixed.** A guarded Recover was built in `f3eef1d`. It is not exclusive (see N1). | Probe A5 | A running process → `ErrNotRecoverable` ("only an exited process can be recovered"). A non-retryable exit → `ErrNotRecoverable`. Another process's checkpoint → `ErrCheckpointNotOwned`. |
+| 5 | `Recover` has no state check | **Fixed.** A guarded Recover was built in `f3eef1d`. It was not exclusive (N1, since fixed by step 1). | Probe A5 | A running process → `ErrNotRecoverable` ("only an exited process can be recovered"). A non-retryable exit → `ErrNotRecoverable`. Another process's checkpoint → `ErrCheckpointNotOwned`. |
 | 6 | `runSession` runs a process that has already exited | **Fixed** (`f3eef1d`) | Probe A6 | `RunWithOptions` on an exited PID → `ErrProcessExited`, with 0 model calls, no new artifacts and no file written. |
 
 ### New findings
 
-- **N1. Recover is not exclusive.** The guard checks the process being
+- **N1. Recover is not exclusive.** *(Implemented by step 1: 1 successor
+  of 20 concurrent Recovers.)* The guard checks the process being
   recovered, but nothing marks it as recovered. Probe A5 recovered the same
   exited process twice in a row, which gave two successors (`pid-000005`,
   `pid-000006`). Twenty concurrent Recovers of one process all succeeded,
@@ -56,7 +66,9 @@ in-tree tests cited below were run with `-count=1` at the same commit.
   of the same work. The README's line "a live one never can, so two
   processes never run the same work" covers the old process only; it does
   not cover its successors.
-- **N2. Recover accepts any checkpoint the process owns.** It does not have
+- **N2. Recover accepts any checkpoint the process owns.** *(Implemented
+  by step 1: refused unless a rollback is asked for, and then recorded.)*
+  It does not have
   to use the one its exit names. A5 recovered from the first of two
   checkpoints while the exit named the second. A recovery can therefore
   quietly roll a process back and repeat steps that already had effects.
@@ -92,7 +104,8 @@ in-tree tests cited below were run with `-count=1` at the same commit.
     backoff and no restart intensity. It never charges a restart to any
     budget, and its scheduler-driven loop is not how agentflow runs agents.
 - **N6. A side effect after the last checkpoint leaves no record of having
-  started.**
+  started.** *(Implemented by step 2: the intent is on record, and the
+  agent and `inspect` are told.)*
   - Each step is checkpointed after its tool returns, so what is at risk is
     the step in flight.
   - A7 (the run is cancelled mid-`run`): the process parks `ready`. Its
@@ -167,13 +180,15 @@ in-tree tests cited below were run with `-count=1` at the same commit.
   process is resumed, not recovered.
 - **At most once.** A process is recovered **at most once**. Recover records
   the successor on the predecessor (`superseded_by`) atomically with the
-  spawn, in one kernel transaction. A second Recover is refused with
-  `ErrNotRecoverable` and names the successor. *(Gap N1: proposed.)*
+  spawn, in one kernel transaction (`Kernel.Supersede`, a
+  `process.superseded` event). A second Recover is refused with
+  `ErrNotRecoverable` and names the successor. *(Gap N1: implemented.)*
 - **Which checkpoint.** By default, recovery uses the checkpoint the exit
-  names. An earlier checkpoint of the same chain is allowed only when the
-  operator explicitly asks for it, and the choice is recorded in the
-  successor's metadata (`recovered_from_checkpoint`, plus
-  `rollback: true`). *(Gap N2: proposed.)*
+  names. Any other checkpoint of the same chain is allowed only when the
+  caller explicitly asks for it (`RunOptions.Rollback`), and the choice is
+  recorded on the `process.superseded` event: `checkpoint` and
+  `rollback_from`. *(Gap N2: implemented. The proposal put this in the
+  successor's metadata; the event keeps it next to the supersession.)*
 - **Who.**
   - The parent agent's engine, under the restart policy below.
   - An operator: through the TUI today, and through a proposed
@@ -249,19 +264,26 @@ The contract for the hard case is **at most one unknown, and it is
 named**:
 
 - Before a world tool runs, the runtime records an intent: a
-  `tool.started` kernel event with the call's tool, a digest of its
-  arguments, and the step.
-- After the tool returns, the outcome refers to that intent.
-- On Recover, an intent with no outcome is shown to the agent as the first
-  message: "`run` <command> may have run before the crash; check its
-  effects before repeating it". `aos inspect` shows it too.
+  `tool.started` kernel event with the call's tool, the command or path
+  (clipped to 200 bytes), and a digest of its arguments.
+- After the tool returns, the outcome refers to that intent (`intent`
+  metadata on the `tool_result`, `tool_error` or `tool_cancelled`).
+- On Resume or Recover, an intent with no outcome gets a
+  `tool_interrupted` outcome, produced by the process that runs next. The
+  agent is told before its next step:
+  "`tool_interrupted name=run target=… note=this call started before the
+  process stopped and has no recorded outcome; it may have taken effect,
+  fully or in part; check before repeating it`". `aos inspect` lists it,
+  first as open and then as interrupted, naming who was told.
 - `run` records file changes on cancel and timeout as well, so a cancelled
-  command's partial writes are on the record (A7).
+  command's partial writes are on the record (A7). A cancelled world tool's
+  note says `started=true may_have_taken_effect=true changes="…"`.
 
 This is a write-ahead intent record. It does not make `run`
 exactly-once, which no runtime can promise for arbitrary shell commands.
 It makes a possible repeat visible, to the agent and to the verifier.
-*(Gap N6: proposed.)*
+A model can still repeat the call after the note: A7's scripted model
+does, and the file gets a second line. *(Gap N6: implemented.)*
 
 ### Prior art, briefly
 
@@ -333,32 +355,34 @@ The book should verify these citations itself.
     another process holds a lease anywhere in the mount, which may be too
     strict for parallel workers. That is a choice to make before building.
 - **Replay compatibility.**
-  - New kernel events (`superseded_by` transitions, `tool.started`,
+  - New kernel events (`process.superseded`, `tool.started`,
     `lease.fenced`, `supervisor.restart`) change the kernel log. Old
     records stay replayable, because their events are compared as
     recorded.
-  - A new build replaying an old record will not emit the new events where
-    the old build didn't, but `tool.started` would be new on every tool
-    call. Replay needs a format check like the `run.started` one
-    (`e401e4e`).
-- **The TUI's `/resume`** recovers the root in place. It must go through the
-  same exclusive Recover, or two terminals on one session directory could
-  both recover. The state-dir lock prevents that today.
+  - Replay never recovers, so `process.superseded` never appears in a
+    replayed run. `tool.started` would be new on every world tool call. A
+    record with no `tool.started` is therefore replayed with
+    `NoToolIntents`, the old behavior, and the report says
+    `legacy_tool_intents`. *(Implemented: eval's three `ca78ad9` trials
+    replay identically.)*
+- **The TUI's `/recover`** goes through the same exclusive Recover, so two
+  terminals on one session directory cannot both recover, lock or not.
 
 ## Recommendation: the Smallest Slice
 
 In order. Each step is small enough for one commit with its tests.
 
-1. **Exclusive, explicit Recover (N1, N2).**
+1. **Exclusive, explicit Recover (N1, N2).** *(Implemented.)*
    - Add a kernel operation that, in one transaction, checks that the
-     process is exited, retryable and not superseded, spawns the
-     successor, and records `superseded_by` on the predecessor with a
-     `process.recovered` event.
+     process is exited and not superseded, spawns the successor, and
+     records `superseded_by` on the predecessor with a
+     `process.superseded` event. (The runtime checks retryable first; an
+     exit never changes, so that check cannot race.)
    - Recover uses the exit's checkpoint by default. An earlier checkpoint
      needs `RunOptions.Rollback`, which is recorded.
    - *Unlocks for the chapter:* the invariant "one runner per unit of
      work", stated as Implemented.
-2. **Intent records for world tools (N6).**
+2. **Intent records for world tools (N6).** *(Implemented.)*
    - Write `tool.started` before each world tool and refer to it from the
      outcome.
    - On Recover or Resume, put the unmatched intent first in the agent's
@@ -440,6 +464,88 @@ so eval can probe recovery without phg-gpu.
   - `TestNonRetryableExitIsFinal`: no restart happens.
 - **Kept:** the audit probes in `bench/supervision` stay as the "before"
   picture. Each step flips one of their findings.
+
+## Implemented: Steps 1 and 2
+
+Built on 2026-11-01, after `d80ed15`.
+
+**Step 1, exclusive Recover:**
+
+- `kernel.Kernel.Supersede(pid, spec, data)`: one transaction under the
+  kernel's file lock. It refuses a process that has not exited
+  (`ErrInvalidTransition`) or already has a successor (`ErrSuperseded`).
+  It spawns the successor, then appends `process.superseded` (`successor`,
+  `checkpoint`, and `rollback_from` for a rollback) and sets
+  `Process.SupersededBy`. A table that missed the event is repaired from
+  the log, like the other `process.*` events.
+- `runtime.Recover`: an empty checkpoint means the one the exit names. Any
+  other needs `RunOptions.Rollback`. A superseded process is refused with
+  `ErrNotRecoverable` wrapping `kernel.ErrSuperseded`, naming the
+  successor.
+- `aos inspect` shows `superseded by pid-…` on the process line.
+
+**Step 2, intents:**
+
+- `runtime.WorldTool` is `run`, `write_file` and `edit_file`. Each records
+  `tool.started` after the capability check and before the tool acts. If
+  the event cannot be written, the tool does not run and the run fails
+  retryably.
+- Outcomes name the intent. The paths are:
+  - success: `tool_result`;
+  - a tool error: `tool_error`, now also when the error ends the run;
+  - a cut-off command: `tool_cancelled`, with the changes;
+  - a timeout: `tool_error` with the changes.
+- `Resume` and `Recover` call `noteInterrupted`. For each open intent of
+  the process being continued, it records a `tool_interrupted` outcome
+  and adds the note before any appended message.
+- `aos inspect` lists every call that started and did not finish
+  (`cut_off_calls`).
+- Replay: `NoToolIntents` for records without intents. The player answers
+  a `tool_cancelled` from the record, with its changes.
+
+**Probes, before (`e401e4e`) and after:**
+
+| Probe | Before | After |
+|---|---|---|
+| A5 sequential double Recover | 2 successors | the second is refused: "pid-000001 was superseded by pid-000005" |
+| A5 20 concurrent Recovers | 20 succeeded, 20 successors | 1 succeeded, 1 successor |
+| A5 Recover from the older of 2 checkpoints | accepted | refused as a rollback; with `Rollback`, accepted and recorded (`rollback_from: art-000003`) |
+| A5 foreign checkpoint | `ErrCheckpointNotOwned` | the same (now asked as a rollback, so ownership is what refuses it) |
+| A7 cancel mid-`run` | no record of the change; note `tool_cancelled name=run reason=interrupted_by_user` | 1 intent; `tool_cancelled(run)` with `created effects`; the note adds `started=true may_have_taken_effect=true changes="created effects"`; the resumed agent's first request carries it |
+| A7 after resume | the scripted model repeats, so the file reads `once\nonce` | the same: the note does not stop a model that repeats |
+| A8 SIGKILL mid-`run`, after reap | only the file shows the command ran | `inspect` lists the `run` as started with no outcome |
+| A8 Recover after reap | the agent is not told | `Recover(pid, "")` uses the exit's checkpoint; the first request has `tool_interrupted name=run target="echo once >> …"`; `inspect` shows it interrupted and names the successor that was told |
+
+**Unit tests:**
+
+- `kernel`:
+  - `TestSupersedeRecordsOneSuccessor`;
+  - `TestSupersedeIsExclusiveAcrossProcesses` (6 OS processes and 6
+    goroutines: 1 successor, 11 refusals);
+  - `TestSupersededIsReplayed`.
+- `runtime`:
+  - `TestRecoverIsExclusive` (sequential, and 20 concurrent);
+  - `TestRecoverUsesTheExitsCheckpoint`;
+  - `TestWorldToolRecordsIntentFirst`;
+  - `TestCancelledCommandRecordsItsChanges`;
+  - `TestTimedOutCommandRecordsItsChanges`;
+  - `TestRecoverReportsInterruptedCalls`;
+  - `TestNoToolIntents`.
+- `tools`: `TestCutOffRunReturnsItsChanges`.
+- `inspect`: `TestLoadShowsCutOffCallsAndSuccessors`.
+- `replay`:
+  - `TestReplayOfARecordWithoutIntents`;
+  - `TestReplayOfACommandCutOff` (a strict budget, with and without
+    intents).
+
+**Changed for existing callers:**
+
+- `Recover` with a checkpoint that is not the exit's now fails unless
+  `Rollback` is set. One existing test rolled back on purpose and now says
+  so.
+- Every world tool call adds one kernel event.
+- A cancelled world tool's note to the agent is longer.
+- A tool error that ends the run now leaves a `tool_error` artifact.
 
 **A live check worth one trial, sketched and not run.** On eval's queue,
 run one Terminal-Bench task with the restart policy on and a step budget.

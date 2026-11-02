@@ -14,6 +14,7 @@ import (
 	"aos/internal/kernel"
 	"aos/internal/lease"
 	"aos/internal/runlog"
+	"aos/internal/runtime"
 	"aos/internal/workflow"
 )
 
@@ -142,5 +143,76 @@ func TestWriters(t *testing.T) {
 	var decoded Report
 	if err := json.Unmarshal(encoded.Bytes(), &decoded); err != nil || decoded.TotalUsage != report.TotalUsage || len(decoded.Processes) != 3 {
 		t.Fatalf("round trip: %v %+v", err, decoded)
+	}
+}
+
+// Inspect lists world tool calls that started and did not finish, with
+// their outcome, and names a recovered process's successor.
+func TestLoadShowsCutOffCallsAndSuccessors(t *testing.T) {
+	stateDir := t.TempDir()
+	k, err := kernel.New(filepath.Join(stateDir, "kernel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := artifact.New(filepath.Join(stateDir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	must := func(_ any, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	worker, err := k.Spawn(kernel.ProcessSpec{Role: "agent:worker", Metadata: map[string]string{"agent_id": "worker"}})
+	must(worker, err)
+	intent := func(target string) string {
+		event, err := k.RecordEvent(worker.PID, runtime.ToolStartedEvent, map[string]string{"tool": "run", "target": target})
+		must(event, err)
+		return event.ID
+	}
+	finished, cancelled, interrupted := intent("make"), intent("make test"), intent("make install")
+	must(store.CreateJSON("tool_result", worker.PID, map[string]string{"tool": "run"}, nil, map[string]string{"tool": "run", "intent": finished}))
+	cancel, err := store.CreateJSON(runtime.ToolCancelledType, worker.PID, map[string]string{"tool": "run"}, nil, map[string]string{"tool": "run", "intent": cancelled})
+	must(cancel, err)
+	open := intent("rm -rf build")
+	must(k.Exit(worker.PID, kernel.ExitStatus{Code: 1, Reason: "orphaned", Retryable: true}))
+	successor, err := k.Supersede(worker.PID, kernel.ProcessSpec{Role: "agent:worker", Metadata: map[string]string{"agent_id": "worker", "resumed_from": worker.PID}}, nil)
+	must(successor, err)
+	note, err := store.CreateJSON(runtime.ToolInterruptedType, successor.PID, map[string]string{"tool": "run"}, nil, map[string]string{"tool": "run", "intent": interrupted})
+	must(note, err)
+
+	report, err := Load(stateDir, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.CutOff) != 3 {
+		t.Fatalf("cut-off calls = %+v", report.CutOff)
+	}
+	got := map[string]CutOffCall{}
+	for _, call := range report.CutOff {
+		got[call.EventID] = call
+	}
+	if call := got[cancelled]; call.Outcome != runtime.ToolCancelledType || call.OutcomeID != cancel.ID || call.Target != "make test" {
+		t.Fatalf("cancelled = %+v", call)
+	}
+	if call := got[interrupted]; call.Outcome != runtime.ToolInterruptedType || call.RecordedBy != successor.PID {
+		t.Fatalf("interrupted = %+v", call)
+	}
+	if call := got[open]; call.Outcome != "" || call.PID != worker.PID {
+		t.Fatalf("open = %+v", call)
+	}
+	if _, ok := got[finished]; ok {
+		t.Fatal("a finished call is not cut off")
+	}
+	if report.Processes[0].SupersededBy != successor.PID {
+		t.Fatalf("processes = %+v", report.Processes)
+	}
+	var text bytes.Buffer
+	report.WriteText(&text)
+	for _, want := range []string{"superseded by " + successor.PID, "tool calls started and not finished (3)", `"rm -rf build"  no outcome`, "interrupted; " + successor.PID + " was told"} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("text lacks %q:\n%s", want, text.String())
+		}
 	}
 }

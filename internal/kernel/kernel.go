@@ -1,13 +1,10 @@
 package kernel
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
-
-	"aos/internal/capability"
 )
 
 type Kernel struct {
@@ -44,36 +41,54 @@ func (k *Kernel) SetClock(now func() time.Time) {
 func (k *Kernel) Spawn(spec ProcessSpec) (Process, error) {
 	var process Process
 	err := k.store.update(func(t *tx) error {
-		now := k.now().UTC()
-		process = Process{
-			PID:           t.allocatePID(),
-			ParentPID:     spec.ParentPID,
-			Role:          spec.Role,
-			State:         StateReady,
-			Metadata:      cloneMap(spec.Metadata),
-			Mounts:        append([]capability.Mount(nil), spec.Mounts...),
-			CapabilitySet: spec.CapabilitySet,
-			Delegable:     spec.Delegable,
-			CreatedAt:     now,
-			UpdatedAt:     now,
-		}
-		// The event carries the whole record so the table can be rebuilt.
-		encoded, err := json.Marshal(process)
-		if err != nil {
-			return err
-		}
-		event := t.appendEvent(process.PID, "process.spawned", map[string]string{
-			"role":    process.Role,
-			"process": string(encoded),
-		}, now)
-		process.LastEventID = event.ID
-		t.putProcess(process)
-		return nil
+		var err error
+		process, err = t.spawn(spec, k.now().UTC())
+		return err
 	})
 	if err != nil {
 		return Process{}, err
 	}
 	return process, nil
+}
+
+// Supersede spawns spec as the successor of pid, an exited process, and
+// records it as pid's superseded_by, in one transaction: of any number of
+// callers, sequential or concurrent, in this OS process or another, one
+// gets the successor and the rest get ErrSuperseded. data is added to the
+// process.superseded event, e.g. the checkpoint the successor starts from.
+func (k *Kernel) Supersede(pid string, spec ProcessSpec, data map[string]string) (Process, error) {
+	var successor Process
+	err := k.store.update(func(t *tx) error {
+		previous, err := t.process(pid)
+		if err != nil {
+			return err
+		}
+		if previous.State != StateExited || previous.ExitStatus == nil {
+			return fmt.Errorf("%w: %s is %s; only an exited process can be superseded", ErrInvalidTransition, pid, previous.State)
+		}
+		if previous.SupersededBy != "" {
+			return fmt.Errorf("%w: %s was superseded by %s", ErrSuperseded, pid, previous.SupersededBy)
+		}
+		now := k.now().UTC()
+		if successor, err = t.spawn(spec, now); err != nil {
+			return err
+		}
+		eventData := cloneMap(data)
+		if eventData == nil {
+			eventData = map[string]string{}
+		}
+		eventData["successor"] = successor.PID
+		event := t.appendEvent(pid, "process.superseded", eventData, now)
+		previous.SupersededBy = successor.PID
+		previous.UpdatedAt = now
+		previous.LastEventID = event.ID
+		t.putProcess(previous)
+		return nil
+	})
+	if err != nil {
+		return Process{}, err
+	}
+	return successor, nil
 }
 
 func (k *Kernel) Transition(pid string, next ProcessState) (Process, error) {

@@ -3,6 +3,7 @@
 package kernel_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -135,5 +136,116 @@ func TestConcurrentWritersShareStateDirectory(t *testing.T) {
 		if perWorker[worker] != cyclesPerWorker {
 			t.Fatalf("worker %s has %d processes, want %d", worker, perWorker[worker], cyclesPerWorker)
 		}
+	}
+}
+
+const supersedeTargetEnv = "AOS_KERNEL_SUPERSEDE_PID"
+
+// TestKernelSupersedeHelper is a subprocess's one attempt to supersede a
+// process; it prints the successor or the refusal.
+func TestKernelSupersedeHelper(t *testing.T) {
+	root, pid := os.Getenv(helperRootEnv), os.Getenv(supersedeTargetEnv)
+	if root == "" || pid == "" {
+		t.Skip("subprocess helper")
+	}
+	k, err := kernel.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	successor, err := k.Supersede(pid, kernel.ProcessSpec{Role: "worker", Metadata: map[string]string{"resumed_from": pid}}, nil)
+	switch {
+	case err == nil:
+		fmt.Println("SUCCESSOR", successor.PID)
+	case errors.Is(err, kernel.ErrSuperseded):
+		fmt.Println("REFUSED")
+	default:
+		t.Fatal(err)
+	}
+}
+
+// Supersede is exclusive across OS processes and in-process goroutines
+// alike: of 6 subprocesses and 6 goroutines racing on one exited process,
+// exactly one gets a successor.
+func TestSupersedeIsExclusiveAcrossProcesses(t *testing.T) {
+	root := t.TempDir()
+	k, err := kernel.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := k.Spawn(kernel.ProcessSpec{Role: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Exit(target.PID, kernel.ExitStatus{Code: 1, Reason: "transient", Retryable: true}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	won, refused := 0, 0
+	errs := make(chan error, 12)
+	for i := 0; i < 6; i++ {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestKernelSupersedeHelper$", "-test.count=1")
+		cmd.Env = append(os.Environ(), helperRootEnv+"="+root, supersedeTargetEnv+"="+target.PID)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				errs <- fmt.Errorf("%v\n%s", err, out)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case strings.Contains(string(out), "SUCCESSOR"):
+				won++
+			case strings.Contains(string(out), "REFUSED"):
+				refused++
+			}
+		}()
+	}
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			local, err := kernel.New(root)
+			if err != nil {
+				errs <- err
+				return
+			}
+			_, err = local.Supersede(target.PID, kernel.ProcessSpec{Role: "worker", Metadata: map[string]string{"resumed_from": target.PID}}, nil)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				won++
+			case errors.Is(err, kernel.ErrSuperseded):
+				refused++
+			default:
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if won != 1 || refused != 11 {
+		t.Fatalf("%d successors and %d refusals, want 1 and 11", won, refused)
+	}
+	processes, err := k.Processes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	successors := 0
+	for _, process := range processes {
+		if process.Metadata["resumed_from"] == target.PID {
+			successors++
+		}
+	}
+	got, _ := k.Get(target.PID)
+	if successors != 1 || got.SupersededBy == "" {
+		t.Fatalf("%d processes name %s resumed_from; superseded_by=%q", successors, target.PID, got.SupersededBy)
 	}
 }

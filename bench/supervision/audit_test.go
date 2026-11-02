@@ -3,8 +3,10 @@
 // Package supervision_test holds the audit probes behind
 // supervision-design.md: each probe runs one claim about supervision,
 // leases or recovery against the code as it is and logs what happened as
-// "FINDING:" lines. They fail only when a probe cannot run. They are kept
-// out of go test ./... by the supervisionaudit tag:
+// "FINDING:" lines. Most fail only when a probe cannot run; the probes of
+// what steps 1 and 2 of the note's slice fixed (N1, N2, N6) also assert
+// the fixed behavior. They are kept out of go test ./... by the
+// supervisionaudit tag:
 //
 //	go test -tags supervisionaudit -count=1 -v ./bench/supervision/
 package supervision_test
@@ -23,6 +25,7 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/inspect"
 	"aos/internal/kernel"
 	"aos/internal/lease"
 	"aos/internal/runtime"
@@ -104,18 +107,23 @@ func exit(code int, retryable bool, reason string) runtime.GenerateResult {
 	return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: code, Reason: reason, Retryable: retryable}}}
 }
 
-// stepBackend replies with steps in order and runs before[i] first.
+// stepBackend replies with steps in order and runs before[i] first. It
+// keeps the history of its first request.
 type stepBackend struct {
 	mu     sync.Mutex
 	steps  []runtime.GenerateResult
 	before map[int]func()
 	calls  int
+	first  []runtime.Message
 }
 
-func (b *stepBackend) Generate(ctx context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+func (b *stepBackend) Generate(ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 	b.mu.Lock()
 	i := b.calls
 	b.calls++
+	if i == 0 {
+		b.first = request.History
+	}
 	b.mu.Unlock()
 	if hook := b.before[i]; hook != nil {
 		hook()
@@ -290,7 +298,18 @@ func keys(m map[string]string) []string {
 	return out
 }
 
-// A5: Recover's state checks, plus what they do not cover.
+// historyText joins a history's contents, one message a line.
+func historyText(messages []runtime.Message) string {
+	var b strings.Builder
+	for _, message := range messages {
+		b.WriteString(message.Content)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// A5: Recover's state checks. N1 (exclusive) and N2 (the exit's
+// checkpoint by default) assert.
 func TestAuditA5RecoverGuards(t *testing.T) {
 	f := newFixture(t)
 	failed, checkpoint := failedRun(t, f)
@@ -305,7 +324,11 @@ func TestAuditA5RecoverGuards(t *testing.T) {
 	_, finalErr := f.runtime(&stepBackend{}).Recover(context.Background(), final.PID, checkpoint, nil, runtime.RunOptions{})
 	other := f.spawn(t, "agent:other")
 	f.kernel.Exit(other.PID, kernel.ExitStatus{Code: 1, Reason: "x", Retryable: true})
-	_, foreignErr := f.runtime(&stepBackend{}).Recover(context.Background(), other.PID, checkpoint, nil, runtime.RunOptions{})
+	// Asked as a rollback, so the ownership check is what refuses it.
+	_, foreignErr := f.runtime(&stepBackend{}).Recover(context.Background(), other.PID, checkpoint, nil, runtime.RunOptions{Rollback: true})
+	if !errors.Is(foreignErr, runtime.ErrCheckpointNotOwned) {
+		t.Errorf("a foreign checkpoint should be refused as not owned: %v", foreignErr)
+	}
 	t.Logf("FINDING: A5 Recover of a running process: %v", liveErr)
 	t.Logf("FINDING: A5 Recover of a non-retryable exit: %v", finalErr)
 	t.Logf("FINDING: A5 Recover from another process's checkpoint: %v", foreignErr)
@@ -314,6 +337,9 @@ func TestAuditA5RecoverGuards(t *testing.T) {
 	first, err1 := f.runtime(&stepBackend{steps: []runtime.GenerateResult{exit(1, true, "again")}}).Recover(context.Background(), failed.PID, checkpoint, nil, runtime.RunOptions{})
 	second, err2 := f.runtime(&stepBackend{}).Recover(context.Background(), failed.PID, checkpoint, nil, runtime.RunOptions{})
 	t.Logf("FINDING: A5 sequential double Recover of %s: first=%s (%v) second=%s (%v)", failed.PID, first.PID, err1, second.PID, err2)
+	if first.PID == "" || second.PID != "" || !errors.Is(err2, kernel.ErrSuperseded) || !strings.Contains(err2.Error(), first.PID) {
+		t.Errorf("N1: the second Recover should be refused, naming %s", first.PID)
+	}
 
 	// Twenty concurrent Recovers of one exited process.
 	g := newFixture(t)
@@ -341,6 +367,9 @@ func TestAuditA5RecoverGuards(t *testing.T) {
 		}
 	}
 	t.Logf("FINDING: A5 20 concurrent Recovers of %s: %d succeeded, %d processes now name it resumed_from", target.PID, succeeded, successors)
+	if succeeded != 1 || successors != 1 {
+		t.Errorf("N1: 20 concurrent Recovers should make one successor")
+	}
 
 	// An older checkpoint than the exit names.
 	h := newFixture(t)
@@ -354,6 +383,15 @@ func TestAuditA5RecoverGuards(t *testing.T) {
 	}
 	_, olderErr := h.runtime(&stepBackend{}).Recover(context.Background(), older.PID, ids[0], nil, runtime.RunOptions{})
 	t.Logf("FINDING: A5 Recover from the first of %d checkpoints while the exit names %s: err=%v", len(ids), older.ExitStatus.Checkpoint, olderErr)
+	if !errors.Is(olderErr, runtime.ErrNotRecoverable) || len(h.events(t, "process.superseded")) != 0 {
+		t.Errorf("N2: an older checkpoint should be refused unless a rollback is asked for")
+	}
+	rolled, rollbackErr := h.runtime(&stepBackend{}).Recover(context.Background(), older.PID, ids[0], nil, runtime.RunOptions{Rollback: true})
+	superseded := h.events(t, "process.superseded")
+	t.Logf("FINDING: A5 the same as an explicit rollback: %s (%v); process.superseded %v", rolled.PID, rollbackErr, superseded[len(superseded)-1].Data)
+	if rollbackErr != nil || superseded[len(superseded)-1].Data["rollback_from"] != older.ExitStatus.Checkpoint {
+		t.Errorf("N2: an explicit rollback should run and be recorded as one")
+	}
 }
 
 // A6: running an exited process.
@@ -399,8 +437,12 @@ func TestAuditA7KilledMidCommand(t *testing.T) {
 		}
 	}
 	effects, _ := os.ReadFile(marker)
+	intents := f.events(t, runtime.ToolStartedEvent)
 	t.Logf("FINDING: A7 cancelled mid-command: err=%v state=%s exit=%+v checkpoint=%s", err, exited.State, exited.ExitStatus, result.CheckpointID)
-	t.Logf("FINDING: A7 non-checkpoint artifacts: %v; the checkpoint's last message: %q; effects so far: %q", kinds, last, effects)
+	t.Logf("FINDING: A7 tool.started intents: %d; non-checkpoint artifacts: %v; the checkpoint's last message: %q; effects so far: %q", len(intents), kinds, last, effects)
+	if len(intents) != 1 || strings.Join(kinds, ",") != "tool_cancelled(run)" || !strings.Contains(last, `may_have_taken_effect=true changes="created effects"`) {
+		t.Errorf("N6: the cancelled command should leave its intent, a tool_cancelled outcome and a note naming the file it created")
+	}
 
 	// Resume (it parked) or Recover (it exited); a model that repeats the
 	// command repeats the effect.
@@ -409,7 +451,11 @@ func TestAuditA7KilledMidCommand(t *testing.T) {
 	recoveredRuntime.Tools.ScratchRoot = t.TempDir()
 	recovered, err := recoveredRuntime.Resume(context.Background(), process.PID, result.CheckpointID, nil, runtime.RunOptions{ContinueOnToolError: true})
 	effects, _ = os.ReadFile(marker)
-	t.Logf("FINDING: A7 continued as %s (%v): effects now %q", recovered.PID, err, effects)
+	told := strings.Contains(historyText(again.first), "may_have_taken_effect=true")
+	t.Logf("FINDING: A7 continued as %s (%v): its first request carries the note: %v; a scripted model that repeats the command anyway makes effects %q", recovered.PID, err, told, effects)
+	if !told {
+		t.Errorf("N6: the resumed agent should see that the command may have acted")
+	}
 }
 
 // A7b: the same command stopped the way aos run stops on SIGTERM.
@@ -480,14 +526,31 @@ func TestAuditA8KilledProcess(t *testing.T) {
 	reaped, err := statedir.Reap(root)
 	process, _ = f.kernel.Get("pid-000001")
 	t.Logf("FINDING: A8 aos reap: reaped %v (%v); exit %+v", reaped, err, process.ExitStatus)
+	state, _ := inspect.Load(root, 0)
+	t.Logf("FINDING: A8 inspect after reap: cut-off calls %+v", state.CutOff)
+	if len(state.CutOff) != 1 || state.CutOff[0].Tool != "run" || state.CutOff[0].Outcome != "" {
+		t.Errorf("N6: inspect should show the killed command as started with no outcome")
+	}
 	session, _ := f.runtime(nil).RestoreCheckpoint(process.ExitStatus.Checkpoint)
 	last := session.Messages[len(session.Messages)-1].Content
 	if len(last) > 120 {
 		last = last[:120]
 	}
 	t.Logf("FINDING: A8 the checkpoint reap names holds %d messages, the last: %q", len(session.Messages), last)
-	recovered, err := f.runtime(&stepBackend{}).Recover(context.Background(), process.PID, process.ExitStatus.Checkpoint, nil, runtime.RunOptions{})
+	backend := &stepBackend{}
+	recovered, err := f.runtime(backend).Recover(context.Background(), process.PID, "", nil, runtime.RunOptions{})
 	transferred := f.events(t, "lease.transferred")
 	effects, _ := os.ReadFile(marker)
-	t.Logf("FINDING: A8 Recover after reap: %s (%v); lease.transferred=%d; effects %q, recorded nowhere but the file", recovered.PID, err, len(transferred), effects)
+	note := ""
+	for _, message := range backend.first {
+		if strings.HasPrefix(message.Content, "tool_interrupted") {
+			note = message.Content
+		}
+	}
+	state, _ = inspect.Load(root, 0)
+	t.Logf("FINDING: A8 Recover after reap (exit's checkpoint by default): %s (%v); lease.transferred=%d; effects %q", recovered.PID, err, len(transferred), effects)
+	t.Logf("FINDING: A8 the recovered agent's first request: %q; inspect now: %+v", note, state.CutOff)
+	if note == "" || len(state.CutOff) != 1 || state.CutOff[0].Outcome != runtime.ToolInterruptedType || state.CutOff[0].RecordedBy != recovered.PID {
+		t.Errorf("N6: the recovered agent should be told of the interrupted command, and inspect should show who was told")
+	}
 }

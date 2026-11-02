@@ -36,6 +36,9 @@ type Report struct {
 	// not-exited processes are orphans that aos reap can close.
 	RunActive bool          `json:"run_active"`
 	Leases    []lease.Lease `json:"leases"`
+	// CutOff is the world tool calls that started (a tool.started intent)
+	// and did not finish: still open, cancelled, or interrupted.
+	CutOff []CutOffCall `json:"cut_off_calls,omitempty"`
 	// Mail is the messages not yet acknowledged, by recipient.
 	Mail         []Mailbox               `json:"mail,omitempty"`
 	Verification *agentflow.Verdict      `json:"verification,omitempty"`
@@ -55,6 +58,7 @@ type Process struct {
 	Role             string             `json:"role"`
 	State            string             `json:"state"`
 	Exit             *kernel.ExitStatus `json:"exit,omitempty"`
+	SupersededBy     string             `json:"superseded_by,omitempty"`
 	LatestCheckpoint string             `json:"latest_checkpoint,omitempty"`
 	// UnconfinedRun marks a process whose run commands skip the sandbox.
 	UnconfinedRun bool `json:"unconfined_run,omitempty"`
@@ -62,6 +66,19 @@ type Process struct {
 	// checkpoint; an exit caused by a budget names it in the reason.
 	Budget capability.Budget `json:"budget,omitzero"`
 	Usage  runtime.Usage     `json:"usage,omitzero"`
+}
+
+// CutOffCall is a world tool call that did not finish. Outcome is
+// runtime.ToolCancelledType (stopped while the run was alive),
+// runtime.ToolInterruptedType (the process died; its recoverer recorded
+// this), or empty: no outcome yet, so the call was in flight when the
+// process died, or still is.
+type CutOffCall struct {
+	runtime.ToolIntent
+	Outcome   string `json:"outcome,omitempty"`
+	OutcomeID string `json:"outcome_id,omitempty"`
+	// RecordedBy is the process that recorded an interruption.
+	RecordedBy string `json:"recorded_by,omitempty"`
 }
 
 // Mailbox counts one recipient's unacknowledged messages: Pending never
@@ -138,6 +155,11 @@ func Load(stateDir string, tail int) (Report, error) {
 				verdictID = record.ID
 			}
 		}
+		events, err := k.Events()
+		if err != nil {
+			return report, err
+		}
+		report.CutOff = cutOffCalls(events, artifacts)
 		if verdictID != "" {
 			var verdict agentflow.Verdict
 			if err := store.ReadJSON(verdictID, &verdict); err != nil {
@@ -230,6 +252,37 @@ func Load(stateDir string, tail int) (Report, error) {
 	return report, nil
 }
 
+// cutOffCalls pairs each intent with its outcome and keeps those that did
+// not finish.
+func cutOffCalls(events []kernel.Event, artifacts []artifact.Artifact) []CutOffCall {
+	outcomes := map[string]artifact.Artifact{}
+	for _, record := range artifacts {
+		if id := record.Metadata["intent"]; id != "" {
+			outcomes[id] = record
+		}
+	}
+	var out []CutOffCall
+	for _, event := range events {
+		if event.Type != runtime.ToolStartedEvent {
+			continue
+		}
+		call := CutOffCall{ToolIntent: runtime.ToolIntent{EventID: event.ID, PID: event.ProcessID, Tool: event.Data["tool"], Target: event.Data["target"], Time: event.Timestamp}}
+		outcome, ok := outcomes[event.ID]
+		switch {
+		case !ok:
+		case outcome.Type == runtime.ToolCancelledType || outcome.Type == runtime.ToolInterruptedType:
+			call.Outcome, call.OutcomeID = outcome.Type, outcome.ID
+			if outcome.Type == runtime.ToolInterruptedType {
+				call.RecordedBy = outcome.ProducerPID
+			}
+		default:
+			continue
+		}
+		out = append(out, call)
+	}
+	return out
+}
+
 func openArtifacts(dir string) (*artifact.Store, error) {
 	if _, err := os.Stat(filepath.Join(dir, "index.json")); errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -262,7 +315,7 @@ func processTree(processes []kernel.Process, checkpoints map[string]string) []Pr
 		out = append(out, Process{
 			PID: process.PID, ParentPID: process.ParentPID, Depth: depth,
 			AgentID: process.Metadata["agent_id"], Role: process.Role, State: string(process.State),
-			Exit: process.ExitStatus, LatestCheckpoint: checkpoints[process.PID],
+			Exit: process.ExitStatus, SupersededBy: process.SupersededBy, LatestCheckpoint: checkpoints[process.PID],
 			UnconfinedRun: process.CapabilitySet.UnconfinedRun,
 			Budget:        process.CapabilitySet.Budget,
 		})
@@ -308,6 +361,9 @@ func (r Report) WriteText(w io.Writer) {
 			}
 			line += fmt.Sprintf(" %q", clip(exit.Reason, 90))
 		}
+		if process.SupersededBy != "" {
+			line += "  superseded by " + process.SupersededBy
+		}
 		if process.LatestCheckpoint != "" {
 			line += "  checkpoint " + process.LatestCheckpoint
 		}
@@ -322,6 +378,19 @@ func (r Report) WriteText(w io.Writer) {
 			fmt.Fprintln(w, "a run holds this state directory; these may still be running")
 		} else {
 			fmt.Fprintf(w, "no run holds this state directory: %d orphaned (run aos reap to close them so they can be recovered)\n", len(r.NotExited))
+		}
+	}
+	if len(r.CutOff) > 0 {
+		fmt.Fprintf(w, "\ntool calls started and not finished (%d); each may have taken effect:\n", len(r.CutOff))
+		for _, call := range r.CutOff {
+			outcome := "no outcome: in flight when the process died, or still running"
+			switch call.Outcome {
+			case runtime.ToolCancelledType:
+				outcome = "cancelled (" + call.OutcomeID + ")"
+			case runtime.ToolInterruptedType:
+				outcome = fmt.Sprintf("interrupted; %s was told (%s)", call.RecordedBy, call.OutcomeID)
+			}
+			fmt.Fprintf(w, "  %s  %s  %s %q  %s\n", call.EventID, call.PID, call.Tool, clip(call.Target, 80), outcome)
 		}
 	}
 	if len(r.Leases) > 0 {

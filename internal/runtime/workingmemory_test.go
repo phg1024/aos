@@ -206,6 +206,8 @@ func TestUpdateMemoryIsIdempotentAcrossRecover(t *testing.T) {
 		}
 		return exitResult("done"), nil
 	}}
+	// before is older than the checkpoint the exit names: a rollback.
+	options.Rollback = true
 	if _, err := agent.Recover(context.Background(), process.PID, before.CheckpointID, nil, options); err != nil {
 		t.Fatalf("recover (first attempt ended %+v): %v", failed.ExitStatus, err)
 	}

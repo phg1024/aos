@@ -48,6 +48,8 @@ var reservedTypes = map[string]bool{
 	"checkpoint":           true,
 	"tool_result":          true,
 	"tool_error":           true,
+	"tool_cancelled":       true,
+	"tool_interrupted":     true,
 	"backend_error":        true,
 	"mailbox_message":      true,
 	"mailbox_publish":      true,

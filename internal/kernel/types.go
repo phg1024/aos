@@ -35,6 +35,10 @@ var ErrExitRequiresStatus = fmt.Errorf("%w: only Exit can move a process to exit
 // the kernel alone, so callers cannot log a false lifecycle event.
 var ErrReservedEventType = errors.New("event type is reserved for the kernel")
 
+// ErrSuperseded: an exited process already has a successor, so it cannot
+// be recovered again; recover the successor instead.
+var ErrSuperseded = errors.New("process already has a successor")
+
 // ReservedEventPrefix marks the kernel's own lifecycle events.
 const ReservedEventPrefix = "process."
 
@@ -77,6 +81,10 @@ type Process struct {
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     time.Time          `json:"updated_at"`
 	ExitStatus    *ExitStatus        `json:"exit_status,omitempty"`
+	// SupersededBy is the process that took over this exited one's work,
+	// set by Supersede in the same transaction that spawned it, so an
+	// exited process has at most one successor.
+	SupersededBy string `json:"superseded_by,omitempty"`
 	// LastEventID is the event that produced this record; the event log is
 	// authoritative and the table is repaired from events after it.
 	LastEventID string `json:"last_event_id,omitempty"`

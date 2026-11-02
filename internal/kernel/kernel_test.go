@@ -3,6 +3,7 @@ package kernel_test
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"aos/internal/capability"
@@ -254,5 +255,54 @@ func TestLogEventRejectsKernelReservedTypes(t *testing.T) {
 	}
 	if got, _ := k.Get(process.PID); got.State != kernel.StateReady {
 		t.Fatalf("process state changed: %s", got.State)
+	}
+}
+
+// Supersede spawns the successor and records it on the exited process in
+// one step, refuses a second successor, and refuses a live process.
+func TestSupersedeRecordsOneSuccessor(t *testing.T) {
+	k, err := kernel.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	live, err := k.Spawn(kernel.ProcessSpec{Role: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Supersede(live.PID, kernel.ProcessSpec{Role: "worker"}, nil); !errors.Is(err, kernel.ErrInvalidTransition) {
+		t.Fatalf("superseding a live process: %v", err)
+	}
+	if _, err := k.Exit(live.PID, kernel.ExitStatus{Code: 1, Reason: "transient", Retryable: true}); err != nil {
+		t.Fatal(err)
+	}
+	successor, err := k.Supersede(live.PID, kernel.ProcessSpec{Role: "worker", Metadata: map[string]string{"resumed_from": live.PID}}, map[string]string{"checkpoint": "art-000003"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if successor.State != kernel.StateReady || successor.Metadata["resumed_from"] != live.PID {
+		t.Fatalf("successor = %+v", successor)
+	}
+	previous, _ := k.Get(live.PID)
+	if previous.SupersededBy != successor.PID || previous.State != kernel.StateExited || previous.ExitStatus == nil {
+		t.Fatalf("previous = %+v", previous)
+	}
+	events, _ := k.Events()
+	last := events[len(events)-1]
+	if last.Type != "process.superseded" || last.ProcessID != live.PID || last.Data["successor"] != successor.PID || last.Data["checkpoint"] != "art-000003" {
+		t.Fatalf("last event = %+v", last)
+	}
+	if events[len(events)-2].Type != "process.spawned" || events[len(events)-2].ProcessID != successor.PID {
+		t.Fatalf("the successor's spawn should come first: %+v", events[len(events)-2])
+	}
+	before := len(events)
+	_, err = k.Supersede(live.PID, kernel.ProcessSpec{Role: "worker"}, nil)
+	if !errors.Is(err, kernel.ErrSuperseded) || !strings.Contains(err.Error(), successor.PID) {
+		t.Fatalf("a second supersede: %v", err)
+	}
+	if events, _ := k.Events(); len(events) != before {
+		t.Fatal("a refused supersede wrote events")
+	}
+	if err := k.LogEvent(live.PID, "process.superseded", nil); !errors.Is(err, kernel.ErrReservedEventType) {
+		t.Fatalf("callers cannot log a supersession: %v", err)
 	}
 }

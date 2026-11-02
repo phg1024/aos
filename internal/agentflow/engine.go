@@ -125,6 +125,10 @@ type Engine struct {
 	// StepClock, when set, gives each agent step's clock reading
 	// (runtime.AgentRuntime.StepClock).
 	StepClock func(pid string, step int) time.Time
+	// NoToolIntents skips tool.started intents
+	// (runtime.AgentRuntime.NoToolIntents), for replaying a record made
+	// before them.
+	NoToolIntents bool
 	// RunRecord is what the run.started event records beyond the engine's
 	// own settings, such as the build and the backend.
 	RunRecord map[string]string
@@ -428,18 +432,19 @@ func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequ
 func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, parentPID string, start func(*runtime.AgentRuntime, runtime.RunOptions) (runtime.RunResult, error)) (AgentRun, error) {
 	var childRuns []AgentRun
 	agentRuntime := &runtime.AgentRuntime{
-		Kernel:       e.Kernel,
-		Artifacts:    e.Artifacts,
-		Tools:        e.Tools,
-		Bus:          e.Bus,
-		Leases:       e.Leases,
-		MaxSteps:     maxSteps(agent),
-		Compaction:   e.Compaction,
-		Recall:       spec.Recall,
-		BackendRetry: e.BackendRetry,
-		Clock:        e.Clock,
-		Sleep:        e.Sleep,
-		StepClock:    e.StepClock,
+		Kernel:        e.Kernel,
+		Artifacts:     e.Artifacts,
+		Tools:         e.Tools,
+		Bus:           e.Bus,
+		Leases:        e.Leases,
+		MaxSteps:      maxSteps(agent),
+		Compaction:    e.Compaction,
+		Recall:        spec.Recall,
+		BackendRetry:  e.BackendRetry,
+		Clock:         e.Clock,
+		Sleep:         e.Sleep,
+		StepClock:     e.StepClock,
+		NoToolIntents: e.NoToolIntents,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

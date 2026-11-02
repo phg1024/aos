@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Exclusive Recover and Tool Intents</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Supervision Steps 1 and 2: Exclusive Recover and Tool Intents</h1>
+    <p>These are steps 1 and 2 of the slice in <code>supervision-design.md</code> (<code>d80ed15</code>), built for Chapter 7. Steps 3 (fencing) and 4 (a restart policy) are still proposed.</p>
+    <ol>
+      <li><b>Exclusive Recover (N1, N2).</b> An exited process is recovered at most once. Recovery starts from the checkpoint the exit names, and any other checkpoint is an explicit, recorded rollback.</li>
+      <li><b>Intents (N6).</b> A world tool records <code>tool.started</code> before it acts, and its outcome names that intent. A call cut off while the run is alive records its file changes. A call whose process died is reported to the next runner and in <code>aos inspect</code>.</li>
+    </ol>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good"><code>go vet ./...</code>, <code>go test ./...</code> and the audit probes all pass.</span></li>
+      <li><span class="good">20 concurrent Recovers now make 1 successor; before, they made 20.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials replay identically.</span></li>
+    </ul>
+  </div>
+
+  <h2>1. Exclusive Recover</h2>
+  <ul>
+    <li><b><code>Kernel.Supersede(pid, spec, data)</code>:</b> one transaction under the kernel's file lock. It does three things:
+      <ul>
+        <li>refuses a process that has not exited (<code>ErrInvalidTransition</code>), or one that already has a successor (<code>ErrSuperseded</code>);</li>
+        <li>spawns the successor (<code>process.spawned</code>);</li>
+        <li>appends <code>process.superseded</code> on the old process and sets its <code>superseded_by</code>. The event carries <code>successor</code>, <code>checkpoint</code> and, for a rollback, <code>rollback_from</code>.</li>
+      </ul>
+      A table that missed the event is repaired from the log, as with the other <code>process.*</code> events.</li>
+    <li><b><code>runtime.Recover</code>:</b>
+      <ul>
+        <li>An empty checkpoint means the one the exit names.</li>
+        <li>Any other checkpoint needs <code>RunOptions.Rollback</code>; without it, the call is refused before anything is spawned.</li>
+        <li>A superseded process gives <code>ErrNotRecoverable</code> wrapping <code>kernel.ErrSuperseded</code>, and the error names the successor to recover instead.</li>
+      </ul>
+    </li>
+    <li><b>The TUI's <code>/recover</code></b> uses the same path.</li>
+    <li><b><code>aos inspect</code></b> shows <code>superseded by pid-…</code>.</li>
+  </ul>
+
+  <h2>2. Tool Intents</h2>
+  <ul>
+    <li><b>Intents:</b> <code>run</code>, <code>write_file</code> and <code>edit_file</code> (<code>runtime.WorldTool</code>) record a <code>tool.started</code> kernel event after the capability check and before they act. The event holds the tool, the command or path (clipped to 200 bytes) and <code>args_sha256</code>. If the event cannot be written, the tool does not run and the run fails retryably.</li>
+    <li><b>Outcomes</b> carry <code>intent</code> metadata:
+      <table>
+        <tr><th>What happened</th><th>Outcome</th></tr>
+        <tr><td>The tool returned</td><td><code>tool_result</code></td></tr>
+        <tr><td>A tool error, including one that ends the run</td><td><code>tool_error</code></td></tr>
+        <tr><td>A timed-out command</td><td><code>tool_error</code>, with the files it changed</td></tr>
+        <tr><td>A cancel, strict budget or SIGTERM during the call</td><td><code>tool_cancelled</code>, with the changes. The agent's note adds <code>started=true may_have_taken_effect=true changes="…"</code>.</td></tr>
+        <tr><td>The process died during the call</td><td>None at first. The next <code>Resume</code> or <code>Recover</code> records <code>tool_interrupted</code>, produced by the process that runs next, and tells the agent before its next step.</td></tr>
+      </table>
+    </li>
+    <li><b><code>aos inspect</code></b> lists every call that started and did not finish: open, cancelled, or interrupted with who was told.</li>
+    <li><b>Limit:</b> the intent and the note make a repeat visible; they do not prevent one. <span class="warn">A model can repeat the call anyway.</span> A7's scripted model does, and its file gets a second line.</li>
+  </ul>
+
+  <h2>3. Old Records</h2>
+  <ul>
+    <li><code>process.superseded</code> never appears in a replay, because replay does not recover.</li>
+    <li>A record with no <code>tool.started</code> event predates intents. It is replayed with <code>NoToolIntents</code>, which records no intents, no intent metadata, no <code>tool_cancelled</code> and the old cancel note. The report sets <code>legacy_tool_intents</code>, and the CLI prints <i>the record predates tool.started intents; replayed without them</i>.</li>
+    <li>A record with intents is replayed with them and compared byte for byte. Changing one intent's type in such a record makes the replay diverge at that kernel event.</li>
+    <li>Tool error payloads keep their old JSON when nothing changed. The <code>changes</code> key is added only for a cut-off command.</li>
+  </ul>
+  <h3>Eval's ca78ad9 trials on this build</h3>
+  <table>
+    <tr><th>Trial</th><th>Replay</th></tr>
+    <tr><td>cobol-modernization, off (killed by Harbor)</td><td class="good">31/31 calls, 10 events, 62 artifacts, identical; legacy run.started and legacy intents noted</td></tr>
+    <tr><td>fix-git, strict</td><td class="good">8/8 calls, 8 events, 18 artifacts, identical</td></tr>
+    <tr><td>vulnerable-secret, strict</td><td class="good">9/9 calls, 8 events, 20 artifacts, identical</td></tr>
+  </table>
+
+  <h2>4. Audit Probes, Before and After</h2>
+  <pre>go test -tags supervisionaudit -count=1 -v ./bench/supervision/</pre>
+  <p>The N1, N2 and N6 probes now assert the fixed behavior; the rest still only log.</p>
+  <table>
+    <tr><th>Probe</th><th>Before (<code>e401e4e</code>)</th><th>After</th></tr>
+    <tr><td>A5 sequential double Recover</td><td class="bad">2 successors</td><td class="good">second refused: "pid-000001 was superseded by pid-000005"</td></tr>
+    <tr><td>A5 20 concurrent Recovers</td><td class="bad">20 succeeded, 20 successors</td><td class="good">1 succeeded, 1 successor</td></tr>
+    <tr><td>A5 older of 2 checkpoints</td><td class="bad">accepted silently</td><td class="good">refused as a rollback; with <code>Rollback</code> accepted, <code>rollback_from: art-000003</code> recorded</td></tr>
+    <tr><td>A7 cancel mid-<code>run</code></td><td class="bad">no record of the file change</td><td class="good">1 intent; <code>tool_cancelled(run)</code> with <code>created effects</code>; the note reaches the resumed agent</td></tr>
+    <tr><td>A7 resume with a repeating model</td><td><code>once\nonce</code></td><td class="warn"><code>once\nonce</code>: the model was told and repeated anyway</td></tr>
+    <tr><td>A8 SIGKILL mid-<code>run</code>, reap</td><td class="bad">only the file shows it ran</td><td class="good"><code>inspect</code>: run started, no outcome</td></tr>
+    <tr><td>A8 Recover after reap</td><td class="bad">agent not told</td><td class="good">exit's checkpoint by default; first request has <code>tool_interrupted name=run target="echo once &gt;&gt; …"</code>; <code>inspect</code> names the successor that was told</td></tr>
+  </table>
+
+  <h2>5. Tests</h2>
+  <table>
+    <tr><th>Package</th><th>Test</th><th>Covers</th></tr>
+    <tr><td>kernel</td><td><code>TestSupersedeRecordsOneSuccessor</code></td><td>Successor spawned, then <code>process.superseded</code>. A second attempt is refused and names the successor, with no events written. A live process is refused, and callers cannot log the event.</td></tr>
+    <tr><td>kernel</td><td><code>TestSupersedeIsExclusiveAcrossProcesses</code></td><td>6 OS processes and 6 goroutines race: 1 successor, 11 refusals.</td></tr>
+    <tr><td>kernel</td><td><code>TestSupersededIsReplayed</code></td><td>A crash between the log and table writes still refuses a second successor.</td></tr>
+    <tr><td>runtime</td><td><code>TestRecoverIsExclusive</code></td><td>Sequential and 20 concurrent Recovers; the successor can itself be recovered.</td></tr>
+    <tr><td>runtime</td><td><code>TestRecoverUsesTheExitsCheckpoint</code></td><td>The default checkpoint, a refused rollback, an explicit rollback (recorded, starting from the older history), and an exit that names no checkpoint.</td></tr>
+    <tr><td>runtime</td><td><code>TestWorldToolRecordsIntentFirst</code></td><td>The intent is on record when the tool acts. Reads have none. A denied write's <code>tool_error</code> names its intent.</td></tr>
+    <tr><td>runtime</td><td><code>TestCancelledCommandRecordsItsChanges</code></td><td>The <code>tool_cancelled</code> payload and note. A resume repeats the note and adds no <code>tool_interrupted</code>.</td></tr>
+    <tr><td>runtime</td><td><code>TestTimedOutCommandRecordsItsChanges</code></td><td>Changes on the <code>tool_error</code>.</td></tr>
+    <tr><td>runtime</td><td><code>TestRecoverReportsInterruptedCalls</code></td><td>An open intent becomes <code>tool_interrupted</code> by the successor, and the note comes before the appended message. A later recovery reports it once, carried in the history.</td></tr>
+    <tr><td>runtime</td><td><code>TestNoToolIntents</code></td><td>The behavior from before intents.</td></tr>
+    <tr><td>tools</td><td><code>TestCutOffRunReturnsItsChanges</code></td><td>Timeout and cancel both return changes.</td></tr>
+    <tr><td>inspect</td><td><code>TestLoadShowsCutOffCallsAndSuccessors</code></td><td>Open, cancelled and interrupted calls are listed, finished ones are not, and <code>superseded by</code> is shown.</td></tr>
+    <tr><td>replay</td><td><code>TestReplayOfARecordWithoutIntents</code></td><td>A legacy record replays identically and is flagged. A current record has 3 intents and is not flagged. A changed intent diverges.</td></tr>
+    <tr><td>replay</td><td><code>TestReplayOfACommandCutOff</code></td><td>A strict budget cuts off <code>run</code>; the record replays identically with and without intents.</td></tr>
+  </table>
+  <p>Two existing tests changed:</p>
+  <ul>
+    <li><code>TestAgentRuntimeCancelStopsRunningTool</code> expects the longer note.</li>
+    <li><code>TestUpdateMemoryIsIdempotentAcrossRecover</code> rolls back on purpose, so it now sets <code>Rollback</code>.</li>
+  </ul>
+
+  <h2>6. Behavior That Changed for Existing Runs</h2>
+  <ul>
+    <li>A <code>Recover</code> with a checkpoint other than the exit's fails unless <code>Rollback</code> is set. <code>Recover(pid, "")</code> now works.</li>
+    <li>Every <code>run</code>, <code>write_file</code> and <code>edit_file</code> call adds one <code>tool.started</code> kernel event, so event counts grow.</li>
+    <li>The outcome artifacts of those tools gain <code>intent</code> metadata.</li>
+    <li>The cancel note for a world tool is longer. This only matters after a cancel.</li>
+    <li>A tool error that ends a run (without <code>ContinueOnToolError</code>) now leaves a <code>tool_error</code> artifact.</li>
+    <li><code>tool_cancelled</code> and <code>tool_interrupted</code> are reserved artifact types.</li>
+    <li><code>Resume</code> and <code>Recover</code> read the event log and the artifact index once, to find open intents.</li>
+  </ul>
+</body>
+</html>
