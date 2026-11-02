@@ -356,6 +356,68 @@ func TestReplayRefusesATamperedRecord(t *testing.T) {
 	}
 }
 
+// legacyRunStarted rewrites the record's run.started in the format before
+// settings were recorded as they take effect: no budget_time, *_source or
+// max_steps_*, and a default setting recorded as zero. edit, if set,
+// changes the result further.
+func legacyRunStarted(t *testing.T, stateDir string, edit func(map[string]string)) {
+	t.Helper()
+	path := filepath.Join(stateDir, "kernel", "events.json")
+	var events []kernel.Event
+	raw, _ := os.ReadFile(path)
+	if err := json.Unmarshal(raw, &events); err != nil {
+		t.Fatal(err)
+	}
+	for i := range events {
+		if events[i].Type != agentflow.RunStartedEvent {
+			continue
+		}
+		data := events[i].Data
+		if data["compaction_source"] == "default" {
+			for _, name := range []string{"compact_max_messages", "compact_max_chars", "compact_keep", "compact_target_chars"} {
+				data[name] = "0"
+			}
+			data["compact_handoff"] = "false"
+		}
+		if data["retry_source"] == "default" {
+			data["retry_attempts"], data["retry_base"], data["retry_max"] = "0", "0s", "0s"
+		}
+		for name := range data {
+			if name == "budget_time" || strings.HasSuffix(name, "_source") || strings.HasPrefix(name, "max_steps_") {
+				delete(data, name)
+			}
+		}
+		if edit != nil {
+			edit(data)
+		}
+	}
+	raw, _ = json.Marshal(events)
+	os.WriteFile(path, raw, 0o644)
+}
+
+// A run.started in the format before settings were recorded as they take
+// effect is compared by meaning: the replay records the current format,
+// with the same settings. Its other fields are still compared exactly.
+func TestReplayOfALegacyRunStarted(t *testing.T) {
+	stateDir := recordRoundTrip(t)
+
+	legacy := copyDir(t, stateDir)
+	legacyRunStarted(t, legacy, nil)
+	report := replayed(t, legacy, false)
+	if !report.Identical() || !report.LegacyRunStarted {
+		t.Fatalf("a legacy run.started should replay identically, compared by meaning: %+v", report.Divergence)
+	}
+	if current := replayed(t, stateDir, false); current.LegacyRunStarted {
+		t.Fatal("a current run.started is compared byte for byte")
+	}
+
+	changed := copyDir(t, stateDir)
+	legacyRunStarted(t, changed, func(data map[string]string) { data["run_spec_sha256"] = strings.Repeat("0", 64) })
+	if d := replayed(t, changed, false).Divergence; d == nil || d.Kind != "kernel" || !strings.Contains(d.Detail, "differs") || !strings.Contains(d.Recorded, `"run.started"`) {
+		t.Fatalf("a legacy run.started with a different field should diverge there: %+v", d)
+	}
+}
+
 // A ledger cut short (a call's outcome missing) replays up to that call
 // as in flight. Here the kernel's log goes on past the cut, unlike a real
 // kill (TestReplayOfAKilledRun), and the replay says where.

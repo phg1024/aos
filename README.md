@@ -111,6 +111,7 @@ On SIGTERM or SIGINT, `aos run` stops the run as a strict budget does. The call 
 - **The record is verified first:** every payload with a recorded sha256 must match the index, as the store requires on each read. A changed payload makes the run not replayable, naming the artifact (`ErrArtifactTampered`), before any call is replayed; otherwise it would surface as a divergence at the first call it feeds. Index entries without a hash predate hashing and are trusted.
 - **Exit codes:** 0 when identical, 1 at the first divergence, which is reported by kind, call, step and message diff. Exit 2 means the run cannot be replayed: a multi-agent run, a ledger from before replies were recorded, no `run.started`, or a payload that no longer matches its hash.
 - **A killed run** replays up to the call in flight and is compared as far as its record goes.
+- **Older records:** a `run.started` from before settings were recorded as they take effect (builds before `d9b3514`, such as `v0.1.1`) has no `*_source`, `budget_time` or `max_steps_*`, and records a default setting as zero. The replay writes the current format, so that one event is compared by meaning: the same budget, the same compaction and retry settings as they take effect, and every other field exactly. The report says so.
 - **Options:** `--json` prints the report as JSON, `--keep DIR` keeps the replay's own state, and `--unpinned-clock` shows what pinning the clock prevents.
 - A replay by a different build says so.
 - The TUI's sessions are not replayable yet.

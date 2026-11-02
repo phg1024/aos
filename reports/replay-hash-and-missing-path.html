@@ -18,11 +18,12 @@
 </head>
 <body>
   <div class="hero">
-    <h1>Replay Verifies Payload Hashes; a Missing Path Is an Argument Error</h1>
+    <h1>Replay Verifies Payload Hashes and Reads Older Records; a Missing Path Is an Argument Error</h1>
     <p>These are two small fixes on <code>main</code> after <code>v0.1.2</code> (<code>bd4a47c</code>). The book session found both in eval's killed cobol trial.</p>
     <ol>
       <li><code>aos replay</code> now checks every recorded payload against the index's sha256 before it replays anything.</li>
       <li><code>write_file</code>, <code>read_file</code> and <code>edit_file</code> called without a path now return <code>&lt;tool&gt; requires path</code>. This is a tool error, with no <code>capability.denied</code> event.</li>
+      <li>A follow-up commit makes replay compare a <code>run.started</code> from before <code>d9b3514</code> by meaning. Eval's three <code>ca78ad9</code> trials replay as identical again.</li>
     </ol>
     <p><b>Result:</b> <span class="good"><code>go vet ./...</code> and <code>go test ./...</code> are clean, and each new test fails on the old code.</span></p>
   </div>
@@ -63,14 +64,37 @@
   <ul>
     <li>All 31 calls matched.</li>
     <li>evt-000007 and evt-000008 came out identical.</li>
-    <li><span class="warn">evt-000003 (<code>run.started</code>) differs.</span> That comes from <code>d9b3514</code>, which records settings as they take effect: it adds <code>budget_time</code>, <code>*_source</code> and <code>max_steps_*</code>, and fills in the default values. It does not come from this change. So records made before <code>d9b3514</code>, including eval's three <code>ca78ad9</code> trials, no longer replay as identical on v0.1.2.</li>
+    <li><span class="warn">evt-000003 (<code>run.started</code>) differed.</span> That came from <code>d9b3514</code>, not from this change. <code>d9b3514</code> records settings as they take effect: it adds <code>budget_time</code>, <code>*_source</code> and <code>max_steps_*</code>, and fills in the default values. So on v0.1.2, records made before it no longer replayed as identical, and that included eval's three <code>ca78ad9</code> trials. Section 3 fixes this.</li>
   </ul>
 
-  <h2>3. Tests</h2>
+  <h2>3. Older run.started Records Are Compared by Meaning</h2>
+  <ul>
+    <li><b>Detected by:</b> a <code>run.started</code> event without <code>compaction_source</code> uses the format from before <code>d9b3514</code>. Its settings are the engine's raw ones, with zero standing for a default.</li>
+    <li><b>Compared:</b>
+      <ul>
+        <li>the budget, exactly;</li>
+        <li>the compaction and retry settings, through <code>Effective()</code>, so a recorded <code>retry_attempts=0</code> equals the replay's <code>12</code> from the default;</li>
+        <li>every field other than the settings, exactly. That covers the build, the backend, the sampling and <code>run_spec_sha256</code>.</li>
+      </ul>
+    </li>
+    <li><b>Left out:</b> the derived fields that the old format lacks. <code>max_steps_*</code> comes from the run spec, and <code>run_spec_sha256</code> already pins the spec.</li>
+    <li><b>Current-format events</b> are still compared byte for byte.</li>
+    <li><b>Visibility:</b> the report sets <code>legacy_run_started</code>, and the CLI prints a line saying so.</li>
+  </ul>
+  <h3>Eval's three ca78ad9 trials on this build</h3>
+  <table>
+    <tr><th>Trial</th><th>Replay</th></tr>
+    <tr><td>cobol-modernization, off (killed by Harbor)</td><td class="good">31/31 calls, 10 events, 62 artifacts, identical</td></tr>
+    <tr><td>fix-git, strict</td><td class="good">8/8 calls, 8 events, 18 artifacts, identical</td></tr>
+    <tr><td>vulnerable-secret, strict</td><td class="good">9/9 calls, 8 events, 20 artifacts, identical</td></tr>
+  </table>
+
+  <h2>4. Tests</h2>
   <table>
     <tr><th>Test</th><th>Covers</th></tr>
     <tr><td><code>replay.TestReplayRefusesATamperedRecord</code> (new)</td><td>A changed run result is <code>ErrNotReplayable</code> plus <code>ErrArtifactTampered</code> and names the artifact, with no call replayed. With its hash removed (a legacy entry), the same change replays as a request divergence.</td></tr>
     <tr><td><code>replay.TestReplayFindsTheFirstDivergence</code> (updated)</td><td>It now rewrites the index hash too (the new <code>rewrite</code> helper), so it still tests a different but consistent record.</td></tr>
+    <tr><td><code>replay.TestReplayOfALegacyRunStarted</code> (new)</td><td>The test rewrites a run.started into the old format, and it replays as identical with <code>LegacyRunStarted</code> set. A current record is not flagged. An old-format event with a different <code>run_spec_sha256</code> still diverges at run.started.</td></tr>
     <tr><td><code>tools.TestMissingPathIsAnArgumentError</code> (new)</td><td><code>write_file</code>, <code>read_file</code> and <code>edit_file</code> with a missing, empty or blank path: the exact error, not <code>ErrPathDenied</code>, and an empty <code>DenialReason</code>. <code>list_dir</code> and <code>find_files</code> with no path still use the mount root.</td></tr>
     <tr><td><code>runtime.TestMissingPathIsNotADenial</code> (new)</td><td>An agent run gets three <code>requires path</code> tool errors and no <code>capability.denied</code> event.</td></tr>
   </table>

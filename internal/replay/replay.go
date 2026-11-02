@@ -67,9 +67,13 @@ type Report struct {
 	// InFlight means the record ends with a call in flight (the run was
 	// killed): the replay reproduces what came before it, and the kernel
 	// and store are compared up to where the record ends.
-	InFlight      bool              `json:"record_ends_in_flight,omitempty"`
-	RecordedBuild map[string]string `json:"recorded_build,omitempty"`
-	Divergence    *Divergence       `json:"divergence,omitempty"`
+	InFlight bool `json:"record_ends_in_flight,omitempty"`
+	// LegacyRunStarted means the record's run.started predates recording
+	// settings as they take effect, so it was compared by its settings'
+	// meaning rather than byte for byte.
+	LegacyRunStarted bool              `json:"legacy_run_started,omitempty"`
+	RecordedBuild    map[string]string `json:"recorded_build,omitempty"`
+	Divergence       *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -606,6 +610,57 @@ func clip(value string, at int) string {
 	return out
 }
 
+// legacyRunStarted reports whether event is a run.started recorded before
+// settings were recorded as they take effect (with *_source, budget_time
+// and max_steps_*): its settings are the engine's raw ones, zero for a
+// default. The replay sets the run up from them and records the current
+// format, so the two are compared by meaning.
+func legacyRunStarted(event kernel.Event) bool {
+	_, current := event.Data["compaction_source"]
+	return event.Type == agentflow.RunStartedEvent && !current
+}
+
+// sameLegacyRunStarted compares a legacy run.started with the replay's: the
+// same budget, the same compaction and retry settings as they take effect,
+// and every other field equal. The derived fields the legacy format lacks
+// (budget_time, *_source, max_steps_*) are left out; max_steps_* comes
+// from the run spec, which run_spec_sha256 already pins.
+func sameLegacyRunStarted(recorded, replayed kernel.Event) bool {
+	want, err := agentflow.ParseRunStarted(recorded.Data)
+	if err != nil {
+		return false
+	}
+	got, err := agentflow.ParseRunStarted(replayed.Data)
+	if err != nil {
+		return false
+	}
+	if want.Budget != got.Budget || want.Compaction.Effective() != got.Compaction.Effective() || want.BackendRetry.Effective() != got.BackendRetry.Effective() {
+		return false
+	}
+	rest := func(event kernel.Event) kernel.Event {
+		data := map[string]string{}
+		for name, value := range event.Data {
+			if !runSetting(name) {
+				data[name] = value
+			}
+		}
+		event.Data = data
+		return event
+	}
+	return reflect.DeepEqual(rest(recorded), rest(replayed))
+}
+
+// runSetting reports whether a run.started field is one of the settings
+// sameLegacyRunStarted compares by meaning, or derived from them.
+func runSetting(name string) bool {
+	for _, prefix := range []string{"budget_", "compact_", "retry_", "max_steps_"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return name == "compaction_source"
+}
+
 // compareKernel compares the replay's events and processes with the
 // record's: all of them, or the record's prefix when it ends in flight.
 func compareKernel(rec record, k *kernel.Kernel, report *Report) {
@@ -618,7 +673,12 @@ func compareKernel(rec record, k *kernel.Kernel, report *Report) {
 		report.Divergence = &Divergence{Kind: "kernel", Detail: fmt.Sprintf("the replay recorded %d kernel events, the record %d", len(events), len(rec.events))}
 	}
 	for i := range min(len(events), len(rec.events)) {
-		if !reflect.DeepEqual(events[i], rec.events[i]) {
+		same := reflect.DeepEqual(events[i], rec.events[i])
+		if !same && legacyRunStarted(rec.events[i]) {
+			same = sameLegacyRunStarted(rec.events[i], events[i])
+			report.LegacyRunStarted = true
+		}
+		if !same {
 			recorded, _ := json.Marshal(rec.events[i])
 			replayed, _ := json.Marshal(events[i])
 			report.Divergence = &Divergence{Kind: "kernel", PID: rec.events[i].ProcessID, Detail: fmt.Sprintf("kernel event %d (%s) differs", i+1, rec.events[i].ID),
