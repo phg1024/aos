@@ -2,7 +2,10 @@ package replay_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -256,6 +259,37 @@ func artifactOf(t *testing.T, stateDir, kind, toolName string) string {
 	return best
 }
 
+// rewrite replaces old with new in an artifact's payload. With rehash the
+// index gets the new payload's sha256, so the record is a consistent one
+// that differs; without it the payload no longer matches the index.
+func rewrite(t *testing.T, stateDir, id, old, new string, rehash bool) {
+	t.Helper()
+	path := filepath.Join(stateDir, "artifacts", "payloads", id+".json")
+	raw, _ := os.ReadFile(path)
+	changed := []byte(strings.Replace(string(raw), old, new, 1))
+	if string(changed) == string(raw) {
+		t.Fatalf("%s has no %q", id, old)
+	}
+	if err := os.WriteFile(path, changed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !rehash {
+		return
+	}
+	indexPath := filepath.Join(stateDir, "artifacts", "index.json")
+	var index map[string]artifact.Artifact
+	raw, _ = os.ReadFile(indexPath)
+	if err := json.Unmarshal(raw, &index); err != nil {
+		t.Fatal(err)
+	}
+	entry := index[id]
+	sum := sha256.Sum256(changed)
+	entry.SHA256 = hex.EncodeToString(sum[:])
+	index[id] = entry
+	raw, _ = json.Marshal(index)
+	os.WriteFile(indexPath, raw, 0o644)
+}
+
 // A changed record shows up at the first call it affects: a tool result
 // at the call after it, the system prompt at the first call.
 func TestReplayFindsTheFirstDivergence(t *testing.T) {
@@ -263,9 +297,7 @@ func TestReplayFindsTheFirstDivergence(t *testing.T) {
 
 	changed := copyDir(t, stateDir)
 	runResult := artifactOf(t, changed, "tool_result", "run")
-	path := filepath.Join(changed, "artifacts", "payloads", runResult+".json")
-	raw, _ := os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(raw), "hello", "HELLO", 1)), 0o644)
+	rewrite(t, changed, runResult, "hello", "HELLO", true)
 	report := replayed(t, changed, false)
 	d := report.Divergence
 	if d == nil || d.Kind != "request" || d.Step != 3 || report.Matched != 2 || !strings.Contains(d.Recorded, "hello") || !strings.Contains(d.Replayed, "HELLO") {
@@ -284,12 +316,43 @@ func TestReplayFindsTheFirstDivergence(t *testing.T) {
 
 	prompt := copyDir(t, stateDir)
 	specID := artifactOf(t, prompt, agentflow.RunSpecArtifact, "")
-	path = filepath.Join(prompt, "artifacts", "payloads", specID+".json")
-	raw, _ = os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(raw), "Solve the task.", "Solve the task carefully.", 1)), 0o644)
+	rewrite(t, prompt, specID, "Solve the task.", "Solve the task carefully.", true)
 	report = replayed(t, prompt, false)
 	if d := report.Divergence; d == nil || d.Kind != "request" || d.Call != 1 || report.Matched != 0 || !strings.Contains(d.Detail, "message 1") {
 		t.Fatalf("a changed prompt should diverge at the first call: %+v", d)
+	}
+}
+
+// A payload that no longer matches the index's sha256 makes the record
+// not replayable, naming the artifact, before any call is replayed; an
+// index entry without a hash predates hashing and is trusted.
+func TestReplayRefusesATamperedRecord(t *testing.T) {
+	stateDir := recordRoundTrip(t)
+
+	tampered := copyDir(t, stateDir)
+	runResult := artifactOf(t, tampered, "tool_result", "run")
+	rewrite(t, tampered, runResult, "hello", "HELLO", false)
+	report, err := replay.Run(context.Background(), replay.Options{StateDir: tampered})
+	if !errors.Is(err, replay.ErrNotReplayable) || !errors.Is(err, artifact.ErrArtifactTampered) || !strings.Contains(err.Error(), runResult) {
+		t.Fatalf("a tampered payload should be named as not replayable: %v", err)
+	}
+	if report.Calls != 0 || report.Matched != 0 || report.Divergence != nil {
+		t.Fatalf("nothing should be replayed: %+v", report)
+	}
+
+	legacy := copyDir(t, stateDir)
+	rewrite(t, legacy, runResult, "hello", "HELLO", false)
+	indexPath := filepath.Join(legacy, "artifacts", "index.json")
+	var index map[string]artifact.Artifact
+	raw, _ := os.ReadFile(indexPath)
+	json.Unmarshal(raw, &index)
+	entry := index[runResult]
+	entry.SHA256 = ""
+	index[runResult] = entry
+	raw, _ = json.Marshal(index)
+	os.WriteFile(indexPath, raw, 0o644)
+	if d := replayed(t, legacy, false).Divergence; d == nil || d.Kind != "request" || !strings.Contains(d.Replayed, "HELLO") {
+		t.Fatalf("a legacy entry is trusted and the change replays as a divergence: %+v", d)
 	}
 }
 

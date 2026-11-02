@@ -60,7 +60,7 @@ A workflow can gate on a verifier with `"verification": {"policy": "required", "
 
 ## Delegation Authority
 
-A delegated agent never gets more than its parent may grant. Each agent's `capabilities` are what it may use, and its optional `delegable` set is authority it may only pass on, so a coordinator without `run` can still delegate to workers that need it. Validation rejects any `allowed_agents` edge where the child asks for more than its parent's capabilities and delegable authority together, naming the edge and the excess. At spawn the engine also narrows the child's tools, paths and mounts to what the parent's kernel record allows. The entry agent's sets, plus the run request, are the trust root. The `delegate` action needs `spawn_agent`, and `send`, `publish` and `subscribe` need `message_agent`; tool calls and actions share one check. Every denial is logged as a `capability.denied` kernel event.
+A delegated agent never gets more than its parent may grant. Each agent's `capabilities` are what it may use, and its optional `delegable` set is authority it may only pass on, so a coordinator without `run` can still delegate to workers that need it. Validation rejects any `allowed_agents` edge where the child asks for more than its parent's capabilities and delegable authority together, naming the edge and the excess. At spawn the engine also narrows the child's tools, paths and mounts to what the parent's kernel record allows. The entry agent's sets, plus the run request, are the trust root. The `delegate` action needs `spawn_agent`, and `send`, `publish` and `subscribe` need `message_agent`; tool calls and actions share one check. Every denial is logged as a `capability.denied` kernel event. A file tool called without a path (`write_file`, `read_file`, `edit_file`) gets an argument error, `<tool> requires path`, like any other missing argument: nothing was refused, so no event is logged. `list_dir` and `find_files` take an empty path as the first mount's root.
 
 ## Kernel State
 
@@ -108,7 +108,8 @@ On SIGTERM or SIGINT, `aos run` stops the run as a strict budget does. The call 
   - the world tools' results, from the run's `tool_result` and `tool_error` artifacts;
   - the clock: each step's recorded `elapsed_s`, and the kernel's and store's recorded timestamps.
 - **The check:** every request must hash to the recorded `request_sha256`, and the kernel events, process table and artifacts must come out the same. A checkpoint's usage seconds are left out, because they come from the wall clock at save time.
-- **Exit codes:** 0 when identical, 1 at the first divergence, which is reported by kind, call, step and message diff. Exit 2 means the run cannot be replayed: a multi-agent run, a ledger from before replies were recorded, or no `run.started`.
+- **The record is verified first:** every payload with a recorded sha256 must match the index, as the store requires on each read. A changed payload makes the run not replayable, naming the artifact (`ErrArtifactTampered`), before any call is replayed; otherwise it would surface as a divergence at the first call it feeds. Index entries without a hash predate hashing and are trusted.
+- **Exit codes:** 0 when identical, 1 at the first divergence, which is reported by kind, call, step and message diff. Exit 2 means the run cannot be replayed: a multi-agent run, a ledger from before replies were recorded, no `run.started`, or a payload that no longer matches its hash.
 - **A killed run** replays up to the call in flight and is compared as far as its record goes.
 - **Options:** `--json` prints the report as JSON, `--keep DIR` keeps the replay's own state, and `--unpinned-clock` shows what pinning the clock prevents.
 - A replay by a different build says so.

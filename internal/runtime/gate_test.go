@@ -115,6 +115,48 @@ func TestPathDenialIsLogged(t *testing.T) {
 	}
 }
 
+// A file tool called without a path gets an argument error, as a missing
+// content does, and no capability.denied event: nothing was refused.
+func TestMissingPathIsNotADenial(t *testing.T) {
+	k, store, process := newCancelFixture(t)
+	steps := []runtime.GenerateResult{
+		toolAction("write_file", map[string]string{"content": "x"}),
+		toolAction("edit_file", map[string]string{"path": " ", "old_text": "a", "new_text": "b"}),
+		toolAction("read_file", map[string]string{}),
+		exitResult("done"),
+	}
+	backend := &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		return steps[call-1], nil
+	}}
+	granted, err := k.Spawn(kernel.ProcessSpec{Role: "writer", Mounts: process.Mounts, CapabilitySet: capability.Set{Tools: []string{"write_file", "edit_file", "read_file"}, ReadPaths: process.CapabilitySet.ReadPaths, WritePaths: process.CapabilitySet.WritePaths}})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	agentRuntime := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 5}
+	result, err := agentRuntime.RunWithOptions(context.Background(), granted.PID, nil, runtime.RunOptions{ContinueOnToolError: true})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var errs []string
+	for _, message := range result.Session.Messages {
+		if strings.HasPrefix(message.Content, "tool_error name=") {
+			errs = append(errs, message.Content)
+		}
+	}
+	want := []string{"write_file requires path", "edit_file requires path", "read_file requires path"}
+	if len(errs) != len(want) {
+		t.Fatalf("expected %d tool errors, got %v", len(want), errs)
+	}
+	for idx, fragment := range want {
+		if !strings.Contains(errs[idx], fragment) || strings.Contains(errs[idx], "denied") {
+			t.Fatalf("tool error %d = %q, want %q and no denial", idx, errs[idx], fragment)
+		}
+	}
+	if events := deniedEvents(t, k, granted.PID); len(events) != 0 {
+		t.Fatalf("a missing path is not a capability decision: %+v", events)
+	}
+}
+
 // In an autonomous run a message is followed by a note that it was
 // recorded, so the agent exits instead of resending it; an interactive run
 // yields to the user instead.

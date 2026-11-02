@@ -416,3 +416,43 @@ func TestRunResultFitsTheResultBound(t *testing.T) {
 		t.Fatalf("stdout under the shared cap should be whole, got %d bytes", len(result.Output["stdout"]))
 	}
 }
+
+// A missing or blank path is an argument error naming the tool, never a
+// path denial; list_dir and find_files take an empty path as the mount
+// root.
+func TestMissingPathIsAnArgumentError(t *testing.T) {
+	workspace := t.TempDir()
+	runtime := tools.NewRuntime()
+	mounts := []capability.Mount{{Name: "workspace", HostPath: workspace}}
+	set := capability.Set{
+		ReadPaths:  []string{workspace},
+		WritePaths: []string{workspace},
+		Tools:      []string{"write_file", "read_file", "edit_file", "list_dir", "find_files"},
+	}
+	for _, tc := range []struct {
+		tool string
+		args map[string]string
+	}{
+		{"write_file", map[string]string{"content": "x"}},
+		{"write_file", map[string]string{"path": "", "content": "x"}},
+		{"read_file", map[string]string{}},
+		{"read_file", map[string]string{"path": "  "}},
+		{"edit_file", map[string]string{"old_text": "a", "new_text": "b"}},
+	} {
+		_, err := runtime.Execute(tools.Request{Tool: tc.tool, Args: tc.args, Mounts: mounts, CapabilitySet: set})
+		if err == nil || err.Error() != tc.tool+" requires path" || errors.Is(err, tools.ErrPathDenied) || tools.DenialReason(err) != "" {
+			t.Fatalf("%s %v: got %v, want an argument error", tc.tool, tc.args, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "note.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := runtime.Execute(tools.Request{Tool: "list_dir", Args: map[string]string{}, Mounts: mounts, CapabilitySet: set})
+	if err != nil || !strings.Contains(listed.Output["entries"], "note.txt") {
+		t.Fatalf("list_dir without a path lists the mount root: %+v %v", listed, err)
+	}
+	found, err := runtime.Execute(tools.Request{Tool: "find_files", Args: map[string]string{"pattern": "note"}, Mounts: mounts, CapabilitySet: set})
+	if err != nil || !strings.Contains(found.Output["matches"], "note.txt") {
+		t.Fatalf("find_files without a root searches the mount root: %+v %v", found, err)
+	}
+}

@@ -216,7 +216,10 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 
 	switch req.Tool {
 	case "write_file":
-		path := filepath.Clean(req.Args["path"])
+		path, err := requiredPath(req)
+		if err != nil {
+			return Result{}, err
+		}
 		content, ok := req.Args["content"]
 		if !ok {
 			return Result{}, errors.New("write_file requires content")
@@ -239,7 +242,10 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 			},
 		}, nil
 	case "read_file":
-		path := filepath.Clean(req.Args["path"])
+		path, err := requiredPath(req)
+		if err != nil {
+			return Result{}, err
+		}
 		if err := r.readDenied(path, req); err != nil {
 			return Result{}, err
 		}
@@ -262,13 +268,13 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 			Output:  output,
 		}, nil
 	case "edit_file":
-		path := filepath.Clean(req.Args["path"])
+		path, err := requiredPath(req)
+		if err != nil {
+			return Result{}, err
+		}
 		oldText := req.Args["old_text"]
 		newText := req.Args["new_text"]
 		replaceAll := strings.EqualFold(strings.TrimSpace(req.Args["replace_all"]), "true")
-		if path == "" {
-			return Result{}, errors.New("edit_file requires path")
-		}
 		if oldText == "" {
 			return Result{}, errors.New("edit_file requires old_text")
 		}
@@ -602,6 +608,18 @@ func (r *Runtime) ExecuteAndRecord(store *artifact.Store, producerPID string, re
 		return Result{}, artifact.Artifact{}, err
 	}
 	return result, record, nil
+}
+
+// requiredPath is the request's path argument, cleaned. A missing or blank
+// path is an argument error, not a capability decision: cleaned, it would
+// be "." and be refused as outside the grants. (list_dir and find_files
+// take an empty path as the mount root.)
+func requiredPath(req Request) (string, error) {
+	path := req.Args["path"]
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("%s requires path", req.Tool)
+	}
+	return filepath.Clean(path), nil
 }
 
 func mountRoot(mounts []capability.Mount) string {

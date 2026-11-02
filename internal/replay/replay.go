@@ -123,7 +123,35 @@ func load(dir string) (record, error) {
 	if err := readJSON(filepath.Join(dir, "artifacts", "index.json"), &rec.artifacts); err != nil {
 		return rec, err
 	}
-	return rec, nil
+	return rec, rec.verify()
+}
+
+// verify checks every recorded payload against the sha256 the index holds
+// for it, as the store does on each read, before anything is replayed: a
+// payload changed on disk would otherwise show up as a divergence at the
+// first call it feeds. Entries without a hash predate hashing and are
+// trusted, as the store trusts them.
+func (r record) verify() error {
+	ids := make([]string, 0, len(r.artifacts))
+	for id := range r.artifacts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		want := r.artifacts[id].SHA256
+		if want == "" {
+			continue
+		}
+		raw, err := r.payload(id)
+		if err != nil {
+			return fmt.Errorf("%w: artifact %s: %v", ErrNotReplayable, id, err)
+		}
+		sum := sha256.Sum256(raw)
+		if got := hex.EncodeToString(sum[:]); got != want {
+			return fmt.Errorf("%w: the record was changed: %w: %s (%s) has sha256 %s, the index records %s", ErrNotReplayable, artifact.ErrArtifactTampered, id, r.artifacts[id].Type, shortHash(got), shortHash(want))
+		}
+	}
+	return nil
 }
 
 func readJSON(path string, target any) error {
@@ -139,6 +167,13 @@ func readJSON(path string, target any) error {
 // from this state directory.
 func (r record) payload(id string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(r.dir, "artifacts", "payloads", id+".json"))
+}
+
+func shortHash(hash string) string {
+	if len(hash) > 12 {
+		return hash[:12]
+	}
+	return hash
 }
 
 // Run replays the run in opts.StateDir.
