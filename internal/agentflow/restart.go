@@ -41,8 +41,9 @@ const RestartIntensityReason = "restart intensity exceeded"
 // record: the supervisor.restart events of the run's process and the
 // processes it was recovered from, so the count holds across a wait and a
 // resume, and across engines on the same state directory. If the policy's
-// max restarts already fall within its window, the run is returned with a final,
-// non-retryable exit naming the intensity, for the delegator to handle;
+// max restarts already fall within its window, or the chain has had its
+// total, the run is returned with a final, non-retryable exit naming the
+// intensity, for the delegator to handle;
 // the engine never restarts the delegator itself. A run whose budget is
 // already spent (steps, tokens or a strict time budget, its own or up the
 // chain) is not restarted either; its exit is returned unchanged.
@@ -65,7 +66,7 @@ func (e *Engine) supervise(ctx context.Context, spec WorkflowSpec, req RunReques
 		attempt := len(restarts) + 1
 		now := e.Kernel.Now()
 		if policy.Exceeded(restarts, now) {
-			return e.escalate(agent, run, policy, policy.Recent(restarts, now)), nil
+			return e.escalate(agent, run, policy, restarts, now), nil
 		}
 		checkpoint := run.ExitStatus.Checkpoint
 		if checkpoint == "" {
@@ -150,14 +151,21 @@ func (e *Engine) recordedRestarts(pid string) ([]time.Time, error) {
 }
 
 // escalate returns run with a final exit naming the restart intensity, and
-// records why.
-func (e *Engine) escalate(agent AgentSpec, run AgentRun, policy supervisor.Policy, restarts int) AgentRun {
-	reason := fmt.Sprintf("%s: %d restarts within %s (max %d); last exit: %s", RestartIntensityReason, restarts, policy.Within, policy.Max, run.ExitStatus.Reason)
+// records why: the window's max, or the chain's total.
+func (e *Engine) escalate(agent AgentSpec, run AgentRun, policy supervisor.Policy, restarts []time.Time, now time.Time) AgentRun {
+	recent := policy.Recent(restarts, now)
+	bound := fmt.Sprintf("%d restarts within %s (max %d)", recent, policy.Within, policy.Max)
+	if recent < policy.Max {
+		bound = fmt.Sprintf("%d restarts in all (total %d)", len(restarts), policy.Total)
+	}
+	reason := fmt.Sprintf("%s: %s; last exit: %s", RestartIntensityReason, bound, run.ExitStatus.Reason)
 	event, _ := e.Kernel.RecordEvent(run.PID, EscalatedEvent, map[string]string{
 		"agent_id":    agent.ID,
-		"restarts":    strconv.Itoa(restarts),
+		"restarts":    strconv.Itoa(recent),
 		"within":      policy.Within.String(),
 		"max":         strconv.Itoa(policy.Max),
+		"in_all":      strconv.Itoa(len(restarts)),
+		"total":       strconv.Itoa(policy.Total),
 		"last_reason": run.ExitStatus.Reason,
 	})
 	e.emitKernelTrace(agent.ID, run.PID, "escalated", reason, event.ID)

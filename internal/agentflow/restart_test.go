@@ -466,3 +466,69 @@ func TestRestartIntensityHoldsAcrossResumes(t *testing.T) {
 		t.Fatalf("%d worker processes, want 3", n)
 	}
 }
+
+// The reviewer's probe: a window shorter than a restart cycle never fills,
+// so on v0.1.3 {max 2, within 1ns} restarted until the step limit (20
+// workers, 19 restarts, no escalation). Such a window is now refused with
+// the spec, naming the agent, and nothing runs.
+func TestWindowTooShortToFillIsRefused(t *testing.T) {
+	f := newRestartFixture(t)
+	worker := &script{}
+	for i := 0; i < 30; i++ {
+		worker.replies = append(worker.replies, exitStep(1, true, "always fails"))
+	}
+	coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "handled")}}
+	engine := agentflow.Engine{Kernel: f.kernel, Artifacts: f.store, Leases: f.leases, Tools: tools.NewRuntime(), Factory: scripts{"worker": worker, "coordinator": coordinator}}
+	for _, policy := range []supervisor.RestartPolicy{
+		{Max: 2, Within: "1ns", Backoff: "0s"},
+		// The backoffs of 3 restarts (1s, 2s, 4s) outlast the window.
+		{Within: "5s"},
+	} {
+		_, err := engine.Run(context.Background(), f.spec(&policy, 20), agentflow.RunRequest{Goal: "go"})
+		if !errors.Is(err, agentflow.ErrWorkflowSpecInvalid) || !strings.Contains(err.Error(), "agent worker") || !strings.Contains(err.Error(), "within") {
+			t.Fatalf("%+v: run: %v", policy, err)
+		}
+	}
+	if processes, _ := f.kernel.Processes(); len(processes) != 0 {
+		t.Fatalf("%d processes ran", len(processes))
+	}
+}
+
+// The total bounds a chain whose restarts come too slowly to fill any
+// window: here the kernel clock moves 2 minutes per reading, so no two
+// restarts fall within the 1 minute window. The default total, 10, stops
+// it, and the coordinator is told which bound was reached.
+func TestTotalBoundsRestartsTheWindowMisses(t *testing.T) {
+	f := newRestartFixture(t)
+	var mu sync.Mutex
+	at := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	f.kernel.SetClocks(func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		at = at.Add(2 * time.Minute)
+		return at
+	}, func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return at.Add(2 * time.Minute)
+	})
+	worker := &script{}
+	for i := 0; i < 30; i++ {
+		worker.replies = append(worker.replies, exitStep(1, true, "always fails"))
+	}
+	coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "handled")}}
+	f.run(t, context.Background(), f.spec(&supervisor.RestartPolicy{Max: 2, Within: "1m", Backoff: "0s"}, 30), scripts{"worker": worker, "coordinator": coordinator})
+	if n := len(f.workers(t)); n != supervisor.DefaultTotal+1 {
+		t.Fatalf("%d worker processes, want %d", n, supervisor.DefaultTotal+1)
+	}
+	if n := len(f.events(t, agentflow.RestartEvent)); n != supervisor.DefaultTotal {
+		t.Fatalf("%d restarts", n)
+	}
+	escalated := f.events(t, agentflow.EscalatedEvent)
+	if len(escalated) != 1 || escalated[0].Data["in_all"] != "10" || escalated[0].Data["total"] != "10" || escalated[0].Data["restarts"] != "0" {
+		t.Fatalf("supervisor.escalated = %+v", escalated)
+	}
+	if note := delegateNote(t, coordinator); !strings.Contains(note, "10 restarts in all (total 10)") || !strings.Contains(note, "exit_retryable=false") {
+		t.Fatalf("the coordinator saw: %s", note)
+	}
+}
