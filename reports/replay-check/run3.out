@@ -1,0 +1,6 @@
+2026-11-01T18:47:47Z start tb2-replay-fix-git-strict status=1793522223 32
+2026-11-01T18:49:05Z end tb2-replay-fix-git-strict status=1793522223 40 relay_posts=8
+2026-11-01T18:49:05Z start tb2-replay-vulnerable-secret-strict status=1793522223 40
+2026-11-01T18:50:15Z end tb2-replay-vulnerable-secret-strict status=1793522223 49 relay_posts=17
+2026-11-01T18:50:15Z start tb2-replay-cobol-modernization-off status=1793522223 49
+2026-11-01T19:05:35Z end tb2-replay-cobol-modernization-off status=1793522223 80 relay_posts=47
