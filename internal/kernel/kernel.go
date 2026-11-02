@@ -9,7 +9,10 @@ import (
 
 type Kernel struct {
 	store *fileStore
-	now   func() time.Time
+	// now is the clock that stamps events, read once per transaction;
+	// peek reads what now would return next without advancing it.
+	now  func() time.Time
+	peek func() time.Time
 }
 
 // New opens the kernel state under root, the only way to reach it. Opening
@@ -26,6 +29,7 @@ func New(root string) (*Kernel, error) {
 	return &Kernel{
 		store: store,
 		now:   time.Now,
+		peek:  time.Now,
 	}, nil
 }
 
@@ -34,8 +38,24 @@ func New(root string) (*Kernel, error) {
 // once per event.
 func (k *Kernel) SetClock(now func() time.Time) {
 	if now != nil {
-		k.now = now
+		k.now, k.peek = now, now
 	}
+}
+
+// SetClocks is SetClock for a clock that advances on every reading, such
+// as a replay's recorded times: next is read once per event, and peek
+// returns what next would return without advancing it.
+func (k *Kernel) SetClocks(next, peek func() time.Time) {
+	if next != nil && peek != nil {
+		k.now, k.peek = next, peek
+	}
+}
+
+// Now is the kernel's clock as the next event would read it, without
+// advancing it: the wall clock in a live run, the next recorded time in a
+// replay. Decisions that depend on time but record no event read it.
+func (k *Kernel) Now() time.Time {
+	return k.peek().UTC()
 }
 
 func (k *Kernel) Spawn(spec ProcessSpec) (Process, error) {
@@ -227,6 +247,33 @@ func (k *Kernel) RecordEvent(pid, eventType string, data map[string]string) (Eve
 	var event Event
 	err := k.store.update(func(t *tx) error {
 		event = t.appendEvent(pid, eventType, data, k.now().UTC())
+		return nil
+	})
+	return event, err
+}
+
+// RecordEventFunc records an event decided at one reading of the
+// kernel's clock: decide gets that reading, and a lookup of the process
+// table as of the same transaction, and returns the event to record,
+// stamped with the same reading. Returning an empty type records nothing;
+// an error records nothing and is returned. A caller whose state depends
+// on the time, such as a lease's expiry, so derives it from the event's
+// own timestamp, which a replay reproduces. decide runs under the
+// kernel's lock and must not call the kernel.
+func (k *Kernel) RecordEventFunc(pid string, decide func(now time.Time, lookup func(pid string) (Process, error)) (string, map[string]string, error)) (Event, error) {
+	var event Event
+	err := k.store.update(func(t *tx) error {
+		now := k.peek().UTC()
+		eventType, data, err := decide(now, t.process)
+		if err != nil || eventType == "" {
+			return err
+		}
+		if strings.HasPrefix(eventType, ReservedEventPrefix) {
+			return fmt.Errorf("%w: %s", ErrReservedEventType, eventType)
+		}
+		// Advance the clock past the reading the event takes.
+		_ = k.now()
+		event = t.appendEvent(pid, eventType, data, now)
 		return nil
 	})
 	return event, err

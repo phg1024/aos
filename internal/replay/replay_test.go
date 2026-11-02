@@ -93,6 +93,9 @@ type options struct {
 	noIntents bool
 	// noFencing records as AOS did before lease fencing.
 	noFencing bool
+	// noLeaseClock records run.started as AOS did before lease expiries
+	// came from the kernel clock.
+	noLeaseClock bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -168,7 +171,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	var spec agentflow.WorkflowSpec
 	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver","agents":[{"id":"solver","system_prompt":"Solve the task.","max_steps":12,
 		"mounts":[{"name":"workspace","host_path":"`+workspace+`"}],
-		"capabilities":{"tools":["write_file","read_file","run"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}]}`), &spec); err != nil {
+		"capabilities":{"tools":["write_file","read_file","run","acquire_lease","release_lease"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}]}`), &spec); err != nil {
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
@@ -179,6 +182,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		RunRecord:      map[string]string{"build_version": "test"},
 		NoToolIntents:  opts.noIntents,
 		NoLeaseFencing: opts.noFencing,
+		NoLeaseClock:   opts.noLeaseClock,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -672,4 +676,73 @@ func runStartedData(t *testing.T, stateDir string) map[string]string {
 	}
 	t.Fatal("no run.started")
 	return nil
+}
+
+// leasedScript acquires a lease, writes under it, lets it expire, takes it
+// over again (lease.taken_over, reason expired), writes, and releases it.
+func leasedScript(ws string) []step {
+	again := tool("acquire_lease", map[string]any{"resource": "a.txt", "ttl": "1h"})
+	again.delay = 400 * time.Millisecond
+	return []step{
+		tool("acquire_lease", map[string]any{"resource": "a.txt", "ttl": "200ms"}),
+		tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "first"}),
+		again,
+		tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "second"}),
+		tool("release_lease", map[string]any{"resource": "a.txt"}),
+		exit("done"),
+	}
+}
+
+// A run that uses leases replays as identical: its lease times come from
+// the kernel clock, which the replay reproduces, so the expiries, the
+// takeover after expiry and the acquire_lease results come out the same.
+func TestReplayOfALeasedRun(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	stateDir := recordAt(t, root, context.Background(), leasedScript, options{budget: capability.Budget{Seconds: 600}})
+	events := eventTypes(t, stateDir)
+	for _, want := range []string{"lease.acquired", "lease.taken_over", "lease.released"} {
+		if !strings.Contains(events, want) {
+			t.Fatalf("the recording should have %s: %s", want, events)
+		}
+	}
+	var recorded []kernel.Event
+	raw, _ := os.ReadFile(filepath.Join(stateDir, "kernel", "events.json"))
+	json.Unmarshal(raw, &recorded)
+	for _, event := range recorded {
+		if event.Type == "lease.taken_over" && event.Data["reason"] != "expired" {
+			t.Fatalf("takeover = %+v", event.Data)
+		}
+		if event.Type == "lease.acquired" {
+			expires, _ := time.Parse(time.RFC3339Nano, event.Data["expires_at"])
+			if got := expires.Sub(event.Timestamp); got != 200*time.Millisecond {
+				t.Fatalf("expires_at should be the event's own time plus the ttl, got +%s", got)
+			}
+		}
+	}
+	if started := runStartedData(t, stateDir); started[agentflow.LeaseClockField] != agentflow.LeaseClockKernel {
+		t.Fatalf("run.started = %v", started)
+	}
+	report := replayed(t, stateDir, false)
+	if !report.Identical() || report.Tools != 2 {
+		t.Fatalf("report = %+v", report)
+	}
+}
+
+// A record that granted leases before lease times came from the kernel
+// clock is refused, naming the first grant: its wall-clock expiries
+// cannot be reproduced. One without leases still replays.
+func TestReplayRefusesLeasesOnTheWallClock(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	stateDir := recordAt(t, root, context.Background(), leasedScript, options{budget: capability.Budget{Seconds: 600}, noLeaseClock: true})
+	_, err := replay.Run(context.Background(), replay.Options{StateDir: stateDir})
+	if !errors.Is(err, replay.ErrNotReplayable) || !strings.Contains(err.Error(), "lease.acquired a.txt") || !strings.Contains(err.Error(), "kernel clock") {
+		t.Fatalf("expected a refusal, got %v", err)
+	}
+	root, _ = filepath.EvalSymlinks(t.TempDir())
+	plain := recordAt(t, root, context.Background(), func(ws string) []step {
+		return []step{tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "x"}), exit("done")}
+	}, options{budget: capability.Budget{Seconds: 600}, noLeaseClock: true})
+	if report := replayed(t, plain, false); !report.Identical() {
+		t.Fatalf("a record without leases: %+v", report)
+	}
 }

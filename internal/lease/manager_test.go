@@ -226,3 +226,42 @@ func TestReadsUnversionedLeaseFile(t *testing.T) {
 		t.Fatalf("legacy lease should still bind: %v", err)
 	}
 }
+
+// With a kernel bound, a lease's expiry is its event's time plus the ttl,
+// and expiry is judged on the kernel's clock: a clock that has not moved
+// keeps the lease held however long the wall clock runs, and one moved
+// past the expiry lets another process take it over.
+func TestLeasesRunOnTheKernelClock(t *testing.T) {
+	root := t.TempDir()
+	k, err := kernel.New(filepath.Join(root, "kernel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	k.SetClock(func() time.Time { return now })
+	manager, _ := lease.New(filepath.Join(root, "leases"), k)
+	first, err := manager.Acquire("a", "pid-1", time.Minute)
+	if err != nil || !first.ExpiresAt.Equal(now.Add(time.Minute)) {
+		t.Fatalf("first = %+v %v", first, err)
+	}
+	events, _ := k.Events()
+	if last := events[len(events)-1]; last.Type != "lease.acquired" || !last.Timestamp.Equal(now) || last.Data["expires_at"] != now.Add(time.Minute).Format(time.RFC3339Nano) {
+		t.Fatalf("event = %+v", last)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if _, err := manager.Acquire("a", "pid-2", time.Minute); err != lease.ErrLeaseHeld {
+		t.Fatalf("the kernel clock has not moved: %v", err)
+	}
+	now = now.Add(2 * time.Minute)
+	if held, ok, _ := manager.Get("a"); ok {
+		t.Fatalf("expired on the kernel clock, still held: %+v", held)
+	}
+	second, err := manager.Acquire("a", "pid-2", time.Minute)
+	if err != nil || second.Token != 2 || !second.ExpiresAt.Equal(now.Add(time.Minute)) {
+		t.Fatalf("takeover = %+v %v", second, err)
+	}
+	events, _ = k.Events()
+	if last := events[len(events)-1]; last.Type != "lease.taken_over" || last.Data["reason"] != "expired" {
+		t.Fatalf("event = %+v", last)
+	}
+}

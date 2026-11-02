@@ -87,7 +87,8 @@ Everything nondeterministic comes from the record:
   `list_dir`, `find_files` and `web_fetch` return their recorded
   `tool_result` or `tool_error` payloads, in order.
 - **Runtime tools run for real:** memory tools, delegation and leases.
-  They are functions of the store, which is what replay tests.
+  They are functions of the store, which is what replay tests. Leases
+  also read the clock; see "Lease clock" under As built.
 - **The clock and retry sleeps** are pinned (see Hazards).
 
 The verdict has three parts:
@@ -276,6 +277,7 @@ own, a behaviour change for the sake of a record.
 | Tool output noise | Durations, PIDs, temporary names and ports in `run` and `web_fetch` results | Not an issue at (b): results are recorded. At (c), normalising rules apply, and replay stops at the first divergence that survives them |
 | Go map order | Tool outputs rendered with `%v`, and JSON | Both sort map keys, so they are deterministic. A round-trip test guards this |
 | Build and spec | A changed prompt, tool or header | Intended to diverge. Run identity names the cause |
+| Lease expiry | `lease.*` events and the `acquire_lease` result carry `expires_at`; takeovers and fencing depend on expiry | Lease decisions read the kernel clock, which replay sets to the recorded event times (since 2026-11-02; see "Lease clock") |
 
 ## Recommendation
 
@@ -412,6 +414,47 @@ changes) and signal handling (gap 3).
   - SIGTERM end to end (`cmd/aos`) and the adapter's SIGTERM path.
   - File changes, including a heredoc write.
   - Ledger phases and torn lines.
+
+### Lease clock (2026-11-02)
+
+Lease expiries came from the wall clock (`time.Now` in
+`lease.Manager`), so a run that acquired a lease diverged at its first
+`lease.acquired` event: the replay's `expires_at` was a few hundred
+milliseconds later. Leases now run on the kernel's clock.
+
+- **`Kernel.RecordEventFunc(pid, decide)`.** `decide` gets one reading of
+  the kernel clock, plus a lookup of the process table in the same
+  transaction, and returns the event to record. The event is stamped with
+  that same reading. `Kernel.Now` reads the clock without advancing it,
+  and `Kernel.SetClocks(next, peek)` installs a clock that advances on
+  each event, as the replay's recorded times do.
+- **Acquire** (grant, renewal, takeover) makes its decision inside
+  `RecordEventFunc`. The decision, the new `expires_at` and the event's
+  timestamp all come from one reading, so `expires_at` is exactly the
+  event's time plus the ttl. A replay hands back the recorded timestamp,
+  so it reproduces `expires_at`, the expiry check, and whether a takeover
+  happens.
+- **Decisions that record no event** read `Kernel.Now`: `Get`, `List`,
+  `Guard`, `Transfer`'s expiry check, and a refused `Acquire`. In a live
+  run that is the wall clock, as before. In a replay it is the time of
+  the next recorded event.
+  - These decisions matter only when another process holds the lease.
+    That needs two agent processes, which replay does not cover.
+- **Live runs:** expiry is judged exactly as before, against the wall
+  clock. The one change is that the time an acquire reads is now also its
+  event's timestamp.
+- **Several processes on one state directory:** each kernel instance
+  reads its own wall clock, and the lease file's lock orders the
+  decisions. So "now" for a lease is the wall clock of whichever process
+  decides, as before. Clock skew between hosts sharing a directory is not
+  handled; AOS assumes one host. Replaying such a run would need the
+  recorded schedule that multi-agent replay lacks.
+- **Old records.** `run.started` now records `lease_clock: kernel`. A
+  record without it that granted a lease is refused as not replayable,
+  naming the first grant. Its wall-clock `expires_at` also reached the
+  model through the `acquire_lease` result, so the requests cannot match
+  either. A record without the field that granted no lease replays as
+  before.
 
 ## Open Questions
 

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Lease Clock</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Leases Run on the Kernel Clock, So Runs with Leases Replay</h1>
+    <p>Lease expiries used to come from the wall clock. As a result, a run that acquired a lease never replayed identically. A lease's expiry now comes from the kernel's clock, at the same reading that stamps its <code>lease.*</code> event. A replay reproduces event times, so it reproduces lease expiries.</p>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good">A scripted run that acquires a lease, writes under it, lets it expire, takes it over and releases it now replays identically.</span></li>
+      <li><span class="good">Expiry in live runs is unchanged.</span></li>
+      <li><span class="good">All 25 packages, the audit probes and eval's three <code>ca78ad9</code> replays pass.</span></li>
+    </ul>
+  </div>
+
+  <h2>1. Before and After</h2>
+  <table>
+    <tr><th>A scripted run with <code>acquire_lease</code> and <code>write_file</code></th><th>Replay</th></tr>
+    <tr><td>Before (<code>785e1ca</code> and earlier)</td><td class="bad">Diverges at kernel event 7 (<code>lease.acquired</code>). The recorded <code>expires_at</code> was <code>…09:28:19.565799Z</code>; the replay's was <code>…09:28:19.821984Z</code>, about 256 ms later, the time the replay took to get there.</td></tr>
+    <tr><td>After</td><td class="good">Identical. The run covers <code>lease.acquired</code>, then <code>lease.taken_over</code> (reason <code>expired</code>, after the 200 ms lease lapsed), then <code>lease.released</code>, with two writes. Each grant's <code>expires_at</code> is exactly its event's timestamp plus the ttl.</td></tr>
+  </table>
+
+  <h2>2. What "Now" Means for a Lease</h2>
+  <ul>
+    <li><b>Acquire</b> (grant, renewal, takeover) decides inside <code>Kernel.RecordEventFunc</code>. It takes one reading of the kernel clock and uses it three ways:
+      <ul>
+        <li>to check whether the current lease has expired;</li>
+        <li>to compute the new <code>expires_at</code>;</li>
+        <li>as the event's timestamp.</li>
+      </ul>
+      The owner-exited check uses the process table from the same kernel transaction.</li>
+    <li><b>Decisions that record no event</b> read <code>Kernel.Now</code>, which does not advance the clock. These are <code>Get</code>, <code>List</code>, <code>Guard</code>'s fence check, <code>Transfer</code>'s expiry check, and a refused <code>Acquire</code>.
+      <ul>
+        <li>In a live run that is the wall clock, as before.</li>
+        <li>In a replay it is the time of the next recorded event.</li>
+        <li>These decisions turn on time only when another process holds the lease, which needs two agents. Replay does not cover that.</li>
+      </ul>
+    </li>
+    <li><b>Live runs.</b> Expiry is judged exactly as before. The only difference is that an acquire's reading is also its event's timestamp.</li>
+    <li><b>Several processes on one state directory.</b> Each process reads its own wall clock, and the lease file's lock orders the decisions. Clock skew between hosts is not handled; AOS assumes one host.</li>
+  </ul>
+
+  <h2>3. Old Records</h2>
+  <ul>
+    <li><code>run.started</code> now records <code>lease_clock: kernel</code>.</li>
+    <li><span class="warn">A record without <code>lease_clock</code> that granted a lease is refused as not replayable (exit 2).</span> The refusal names the first grant: <i>it granted a lease (lease.acquired a.txt at evt-…) before lease expiries were taken from the kernel clock; their wall-clock expires_at cannot be reproduced</i>. Comparing by meaning would not help: the <code>acquire_lease</code> result showed that expiry to the model, so the requests cannot match either.</li>
+    <li>A record without <code>lease_clock</code> that granted no lease replays as before. Eval's three <code>ca78ad9</code> trials are identical (31/31, 8/8, 9/9 calls), and <code>legacy_run_started</code>, <code>legacy_tool_intents</code> and <code>legacy_leases</code> still apply.</li>
+  </ul>
+
+  <h2>4. Tests</h2>
+  <table>
+    <tr><th>Package</th><th>Test</th><th>Covers</th></tr>
+    <tr><td>replay</td><td><code>TestReplayOfALeasedRun</code></td><td>Acquire, write, expiry, takeover, write and release, all identical. Each <code>expires_at</code> equals its event time plus the ttl, and <code>run.started</code> has <code>lease_clock</code>. Ran 5 times.</td></tr>
+    <tr><td>replay</td><td><code>TestReplayRefusesLeasesOnTheWallClock</code></td><td>An old-format leased record is refused, naming the grant; an old-format record without leases replays.</td></tr>
+    <tr><td>kernel</td><td><code>TestRecordEventFuncUsesOneReading</code></td><td>One reading per decision, stamped on the event. A refused decision does not advance the clock. <code>Now</code> peeks, and reserved types are refused.</td></tr>
+    <tr><td>lease</td><td><code>TestLeasesRunOnTheKernelClock</code></td><td>On a fixed kernel clock the lease stays held however long the wall clock runs. Moving the clock past expiry allows a takeover (reason <code>expired</code>, token 2).</td></tr>
+    <tr><td>lease, runtime</td><td>Existing tests</td><td>All the existing tests of wall-clock expiry pass unchanged, including <code>TestGuardFencesWrites</code>, the TTL tests and the cross-process lease test.</td></tr>
+  </table>
+  <p>The scripted spec in the replay tests now grants <code>acquire_lease</code> and <code>release_lease</code>.</p>
+
+  <h2>5. Behavior That Changed</h2>
+  <ul>
+    <li>A lease event's timestamp and the expiry it records come from one reading of the clock. Before, they were two readings microseconds apart.</li>
+    <li><code>run.started</code> has <code>lease_clock</code>.</li>
+    <li>Old records that granted leases are refused by <code>aos replay</code> (exit 2), not reported as a divergence (exit 1).</li>
+    <li>New APIs: <code>Kernel.Now</code>, <code>Kernel.SetClocks</code>, <code>Kernel.RecordEventFunc</code>. <code>Kernel.SetClock</code> keeps its behavior.</li>
+  </ul>
+</body>
+</html>

@@ -204,6 +204,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if started == nil {
 		return report, fmt.Errorf("%w: no %s event (recorded by an older AOS?)", ErrNotReplayable, agentflow.RunStartedEvent)
 	}
+	if started.Data[agentflow.LeaseClockField] == "" {
+		for _, event := range rec.events {
+			if granted, ok := leaseGrant(event); ok {
+				return report, fmt.Errorf("%w: it granted a lease (%s at %s) before lease expiries were taken from the kernel clock; their wall-clock expires_at cannot be reproduced", ErrNotReplayable, granted, event.ID)
+			}
+		}
+	}
 	settings, err := agentflow.ParseRunStarted(started.Data)
 	if err != nil {
 		return report, fmt.Errorf("%w: %v", ErrNotReplayable, err)
@@ -274,7 +281,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		return report, err
 	}
 	// The kernel and the store get the recorded timestamps, in order.
-	k.SetClock(sequenceClock(rec.events))
+	k.SetClocks(sequenceClock(rec.events))
 	store.SetClock(func(id string) time.Time {
 		if recorded, ok := rec.artifacts[id]; ok {
 			return recorded.CreatedAt
@@ -320,6 +327,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// A run.started without lease_fencing predates fencing: replay its file
 	// writes unfenced and its acquire_lease results without the token.
 	engine.NoLeaseFencing = started.Data[agentflow.LeaseFencingField] == ""
+	// A record without lease_clock granted no lease (or it was refused
+	// above); replay it without the field.
+	engine.NoLeaseClock = started.Data[agentflow.LeaseClockField] == ""
 	report.LegacyLeases = engine.NoLeaseFencing
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
@@ -351,6 +361,16 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	return report, nil
 }
 
+// leaseGrant reports whether event grants a lease with an expiry, and
+// names it.
+func leaseGrant(event kernel.Event) (string, bool) {
+	switch event.Type {
+	case "lease.acquired", "lease.renewed", "lease.taken_over", "lease.transferred":
+		return event.Type + " " + event.Data["resource"], true
+	}
+	return "", false
+}
+
 // recordsIntents reports whether the record has any tool.started intent.
 // One that ran world tools without them predates intents. A record with
 // no world tool calls has none either way.
@@ -363,16 +383,13 @@ func recordsIntents(rec record) bool {
 	return false
 }
 
-// sequenceClock returns the recorded events' timestamps one per call, in
-// order, then a millisecond past the last for each call beyond them.
-func sequenceClock(events []kernel.Event) func() time.Time {
+// sequenceClock returns the recorded events' timestamps one per call to
+// next, in order, then a millisecond past the last for each call beyond
+// them; peek returns what next would return without advancing.
+func sequenceClock(events []kernel.Event) (next, peek func() time.Time) {
 	var mu sync.Mutex
-	next := 0
-	return func() time.Time {
-		mu.Lock()
-		defer mu.Unlock()
-		i := next
-		next++
+	n := 0
+	at := func(i int) time.Time {
 		if i < len(events) {
 			return events[i].Timestamp
 		}
@@ -382,6 +399,18 @@ func sequenceClock(events []kernel.Event) func() time.Time {
 		}
 		return last.Add(time.Duration(i-len(events)+1) * time.Millisecond)
 	}
+	next = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		n++
+		return at(n - 1)
+	}
+	peek = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return at(n)
+	}
+	return next, peek
 }
 
 // player answers the replayed run's model calls and tool calls from the

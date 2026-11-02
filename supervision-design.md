@@ -381,9 +381,11 @@ The book should verify these citations itself.
     tool, so its new `token` output and the fence check run during
     replay. `run.started` records `lease_fencing: file_writes`, and a
     record without it is replayed with `NoLeaseFencing` (`legacy_leases`).
-  - A run that acquires a lease has never replayed identically: the
-    `lease.acquired` event and the `acquire_lease` result carry a
-    wall-clock `expires_at`. That predates step 3 and is not fixed by it.
+  - A run that acquired a lease never replayed identically: the
+    `lease.acquired` event and the `acquire_lease` result carried a
+    wall-clock `expires_at`. *(Fixed 2026-11-02: leases run on the kernel
+    clock; see "Lease clock" in replay-design.md. Older records with
+    leases are refused as not replayable.)*
 - **The TUI's `/recover`** goes through the same exclusive Recover, so two
   terminals on one session directory cannot both recover, lock or not.
 

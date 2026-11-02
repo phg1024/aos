@@ -133,6 +133,9 @@ type Engine struct {
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
 	NoLeaseFencing bool
+	// NoLeaseClock leaves lease_clock out of run.started, for replaying a
+	// record made before lease expiries came from the kernel's clock.
+	NoLeaseClock bool
 	// RunRecord is what the run.started event records beyond the engine's
 	// own settings, such as the build and the backend.
 	RunRecord map[string]string

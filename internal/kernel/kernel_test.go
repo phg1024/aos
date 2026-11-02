@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/capability"
 	"aos/internal/kernel"
@@ -304,5 +305,46 @@ func TestSupersedeRecordsOneSuccessor(t *testing.T) {
 	}
 	if err := k.LogEvent(live.PID, "process.superseded", nil); !errors.Is(err, kernel.ErrReservedEventType) {
 		t.Fatalf("callers cannot log a supersession: %v", err)
+	}
+}
+
+// RecordEventFunc decides at one reading of the clock and stamps the
+// event with it; a decision that records nothing does not advance the
+// clock. Now reads the clock without advancing it.
+func TestRecordEventFuncUsesOneReading(t *testing.T) {
+	k, err := kernel.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	n := 0
+	k.SetClocks(func() time.Time { n++; return base.Add(time.Duration(n-1) * time.Second) }, func() time.Time { return base.Add(time.Duration(n) * time.Second) })
+	if got := k.Now(); !got.Equal(base) || n != 0 {
+		t.Fatalf("Now = %s, readings %d", got, n)
+	}
+	var seen time.Time
+	event, err := k.RecordEventFunc("pid-000001", func(now time.Time, lookup func(string) (kernel.Process, error)) (string, map[string]string, error) {
+		seen = now
+		if _, err := lookup("pid-000001"); !errors.Is(err, kernel.ErrProcessNotFound) {
+			t.Errorf("lookup: %v", err)
+		}
+		return "test.decided", map[string]string{"at": now.Format(time.RFC3339Nano)}, nil
+	})
+	if err != nil || !event.Timestamp.Equal(seen) || !seen.Equal(base) || n != 1 {
+		t.Fatalf("event %+v, decided at %s, readings %d: %v", event, seen, n, err)
+	}
+	if _, err := k.RecordEventFunc("pid-000001", func(time.Time, func(string) (kernel.Process, error)) (string, map[string]string, error) {
+		return "", nil, errors.New("refused")
+	}); err == nil || n != 1 {
+		t.Fatalf("a refused decision: %v, readings %d", err, n)
+	}
+	next, err := k.RecordEvent("pid-000001", "test.next", nil)
+	if err != nil || !next.Timestamp.Equal(base.Add(time.Second)) {
+		t.Fatalf("the next event should take the next reading: %+v %v", next, err)
+	}
+	if _, err := k.RecordEventFunc("pid-000001", func(time.Time, func(string) (kernel.Process, error)) (string, map[string]string, error) {
+		return "process.spawned", nil, nil
+	}); !errors.Is(err, kernel.ErrReservedEventType) {
+		t.Fatalf("a reserved type: %v", err)
 	}
 }

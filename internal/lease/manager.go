@@ -123,48 +123,47 @@ func New(root string, k *kernel.Kernel) (*Manager, error) {
 // Acquire grants resource to ownerPID for ttl. The owner of a live lease
 // renews it: the expiry moves and the token stays. A lease that expired or
 // whose owner exited is taken over. Any other live lease is ErrLeaseHeld.
+// With a kernel bound, the decision and the new expiry come from one
+// reading of the kernel's clock, the timestamp of the lease event itself,
+// so a replay, which reproduces event times, decides the same.
 func (m *Manager) Acquire(resource, ownerPID string, ttl time.Duration) (Lease, error) {
 	var granted Lease
-	err := m.update(func(s *state, now time.Time) error {
-		existing, ok := s.Leases[resource]
-		eventType := "lease.acquired"
-		data := map[string]string{"resource": resource}
-		if ok {
-			free, why, err := m.free(existing, now)
-			if err != nil {
-				return err
-			}
-			switch {
-			case !free && existing.OwnerPID == ownerPID:
-				existing.ExpiresAt = now.Add(ttl)
-				granted = existing
-				data["token"] = strconv.FormatInt(granted.Token, 10)
-				data["expires_at"] = granted.ExpiresAt.Format(time.RFC3339Nano)
-				if err := m.record(ownerPID, "lease.renewed", data); err != nil {
-					return err
+	err := m.update(func(s *state, _ time.Time) error {
+		return m.decide(ownerPID, func(now time.Time, exited func(string) (bool, error)) (string, map[string]string, error) {
+			existing, ok := s.Leases[resource]
+			eventType := "lease.acquired"
+			data := map[string]string{"resource": resource}
+			if ok {
+				free, why, err := freeAt(existing, now, exited)
+				if err != nil {
+					return "", nil, err
 				}
-				s.Leases[resource] = granted
-				s.granted(resource, ownerPID, granted.Token)
-				return nil
-			case !free:
-				return ErrLeaseHeld
-			default:
-				eventType = "lease.taken_over"
-				data["previous_owner"] = existing.OwnerPID
-				data["previous_token"] = strconv.FormatInt(existing.Token, 10)
-				data["reason"] = why
+				switch {
+				case !free && existing.OwnerPID == ownerPID:
+					existing.ExpiresAt = now.Add(ttl)
+					granted = existing
+					data["token"] = strconv.FormatInt(granted.Token, 10)
+					data["expires_at"] = granted.ExpiresAt.Format(time.RFC3339Nano)
+					s.Leases[resource] = granted
+					s.granted(resource, ownerPID, granted.Token)
+					return "lease.renewed", data, nil
+				case !free:
+					return "", nil, ErrLeaseHeld
+				default:
+					eventType = "lease.taken_over"
+					data["previous_owner"] = existing.OwnerPID
+					data["previous_token"] = strconv.FormatInt(existing.Token, 10)
+					data["reason"] = why
+				}
 			}
-		}
-		granted = Lease{Resource: resource, OwnerPID: ownerPID, ExpiresAt: now.Add(ttl), Token: s.Tokens[resource] + 1}
-		data["token"] = strconv.FormatInt(granted.Token, 10)
-		data["expires_at"] = granted.ExpiresAt.Format(time.RFC3339Nano)
-		if err := m.record(ownerPID, eventType, data); err != nil {
-			return err
-		}
-		s.Leases[resource] = granted
-		s.Tokens[resource] = granted.Token
-		s.granted(resource, ownerPID, granted.Token)
-		return nil
+			granted = Lease{Resource: resource, OwnerPID: ownerPID, ExpiresAt: now.Add(ttl), Token: s.Tokens[resource] + 1}
+			data["token"] = strconv.FormatInt(granted.Token, 10)
+			data["expires_at"] = granted.ExpiresAt.Format(time.RFC3339Nano)
+			s.Leases[resource] = granted
+			s.Tokens[resource] = granted.Token
+			s.granted(resource, ownerPID, granted.Token)
+			return eventType, data, nil
+		})
 	})
 	if err != nil {
 		return Lease{}, err
@@ -306,7 +305,7 @@ func (m *Manager) Guard(writers []string, covers func(resource string) bool, wri
 		if err != nil {
 			return err
 		}
-		if err := m.fence(s, time.Now().UTC(), writers, covers); err != nil {
+		if err := m.fence(s, m.now(), writers, covers); err != nil {
 			return err
 		}
 		return write()
@@ -370,24 +369,62 @@ func (m *Manager) fence(s state, now time.Time, writers []string, covers func(st
 
 // free reports whether a recorded lease no longer binds, and why.
 func (m *Manager) free(lease Lease, now time.Time) (bool, string, error) {
+	return freeAt(lease, now, func(pid string) (bool, error) {
+		if m.kernel == nil {
+			return false, nil
+		}
+		return ownerExited(m.kernel.Get(pid))
+	})
+}
+
+// freeAt is free with exited telling whether an owner has exited.
+func freeAt(lease Lease, now time.Time, exited func(pid string) (bool, error)) (bool, string, error) {
 	if !now.Before(lease.ExpiresAt) {
 		return true, "expired", nil
 	}
-	if m.kernel == nil {
-		return false, "", nil
-	}
-	owner, err := m.kernel.Get(lease.OwnerPID)
-	if errors.Is(err, kernel.ErrProcessNotFound) {
-		// Not a process this kernel knows; only expiry frees it.
-		return false, "", nil
-	}
+	gone, err := exited(lease.OwnerPID)
 	if err != nil {
 		return false, "", err
 	}
-	if owner.State == kernel.StateExited {
+	if gone {
 		return true, "owner_exited", nil
 	}
 	return false, "", nil
+}
+
+// ownerExited reads a kernel lookup of a lease's owner. A process the
+// kernel does not know never exits; only expiry frees its lease.
+func ownerExited(owner kernel.Process, err error) (bool, error) {
+	if errors.Is(err, kernel.ErrProcessNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return owner.State == kernel.StateExited, nil
+}
+
+// now is the lease clock for decisions that record no event: the kernel's
+// clock without advancing it, or the wall clock with no kernel bound.
+func (m *Manager) now() time.Time {
+	if m.kernel == nil {
+		return time.Now().UTC()
+	}
+	return m.kernel.Now()
+}
+
+// decide makes a decision that records a lease event at one reading of
+// the clock: through the kernel, which stamps the event with that
+// reading, or on the wall clock with no kernel bound, recording nothing.
+func (m *Manager) decide(pid string, fn func(now time.Time, exited func(string) (bool, error)) (string, map[string]string, error)) error {
+	if m.kernel == nil {
+		_, _, err := fn(time.Now().UTC(), func(string) (bool, error) { return false, nil })
+		return err
+	}
+	_, err := m.kernel.RecordEventFunc(pid, func(now time.Time, lookup func(string) (kernel.Process, error)) (string, map[string]string, error) {
+		return fn(now, func(owner string) (bool, error) { return ownerExited(lookup(owner)) })
+	})
+	return err
 }
 
 func (m *Manager) record(pid, eventType string, data map[string]string) error {
@@ -406,7 +443,7 @@ func (m *Manager) update(fn func(*state, time.Time) error) error {
 		if err != nil {
 			return err
 		}
-		if err := fn(&s, time.Now().UTC()); err != nil {
+		if err := fn(&s, m.now()); err != nil {
 			return err
 		}
 		return m.write(s)
@@ -419,7 +456,7 @@ func (m *Manager) view(fn func(*state, time.Time) error) error {
 		if err != nil {
 			return err
 		}
-		return fn(&s, time.Now().UTC())
+		return fn(&s, m.now())
 	})
 }
 
