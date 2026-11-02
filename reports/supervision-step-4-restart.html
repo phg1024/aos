@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Restart Policy</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Supervision Step 4: A Restart Policy in agentflow</h1>
+    <p>This is the last step of the slice in <code>supervision-design.md</code>, for N5 and the review's gap 1.</p>
+    <ul>
+      <li>A workflow agent can carry <code>restart: {max, within, backoff}</code>.</li>
+      <li>A retryable exit is recovered from the checkpoint the exit names, through the exclusive Recover.</li>
+      <li>More than <code>max</code> restarts within <code>within</code> goes to the delegator as a final exit.</li>
+      <li><code>internal/supervisor</code> is now that policy, on <code>aos run</code>'s path.</li>
+    </ul>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good"><code>go vet</code>, <code>go test ./...</code> (25 packages) and the audit probes pass.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials replay identically.</span></li>
+    </ul>
+  </div>
+
+  <h2>1. The Policy</h2>
+  <pre>{"id": "worker", ..., "restart": {"max": 3, "within": "10m", "backoff": "1s..30s"}}</pre>
+  <ul>
+    <li><b>Absent:</b> nothing changes, and a retryable exit goes to the delegator as it is.</li>
+    <li><b>Fields left out</b> take the defaults shown above. <code>"restart": {}</code> is bounded, and no setting removes the bound.</li>
+    <li><b>Backoff</b> doubles from its base on each restart in the window, up to its maximum. A single duration is a fixed wait.</li>
+    <li><b>An invalid policy</b> fails spec validation, naming the agent.</li>
+  </ul>
+
+  <h2>2. What the Engine Does</h2>
+  <p><code>Engine.supervise</code> runs after every <code>runAgent</code> and <code>resumeAgent</code>, so it covers the entry agent and delegated children alike. It acts on a retryable, non-zero exit that is not a wait, and only while the run is live, so a SIGTERM stop is never restarted.</p>
+  <table>
+    <tr><th>Check, in order</th><th>If it fails</th><th>What the delegator sees</th></tr>
+    <tr><td>Intensity: fewer than <code>max</code> restarts within <code>within</code></td><td><code>supervisor.escalated</code></td><td>A final exit: <code>restart intensity exceeded: N restarts within W (max M); last exit: …</code>, <code>exit_retryable=false</code></td></tr>
+    <tr><td>The exit names a checkpoint</td><td><code>supervisor.not_restarted</code> (<code>no_checkpoint</code>)</td><td>The exit, unchanged</td></tr>
+    <tr><td>The budget is not spent (<code>runtime.SpentBudget</code>: the step limit, tokens, or strict time, its own or up the chain)</td><td><code>supervisor.not_restarted</code> (<code>budget_spent</code>)</td><td>The exit, unchanged, for example <code>step limit exceeded</code>, retryable</td></tr>
+    <tr><td>The backoff is waited out (it stops with ctx)</td><td>None; the run was stopped</td><td>The exit, unchanged</td></tr>
+    <tr><td><code>Recover(pid, "")</code> succeeds</td><td><code>supervisor.not_restarted</code> (<code>not_recoverable</code>)</td><td>The exit, unchanged</td></tr>
+  </table>
+  <ul>
+    <li><b>On success</b>, <code>supervisor.restart</code> is recorded on the successor before its first step. It holds <code>predecessor</code>, <code>attempt</code>, <code>checkpoint</code>, <code>backoff</code> and <code>reason</code>. <code>process.superseded</code> links the two processes.</li>
+    <li><b>What the successor continues:</b> the checkpoint's usage, and the same account chain. It also takes over the predecessor's leases and mail, and hears about the calls the predecessor left unfinished.</li>
+    <li><b>Escalation</b> is a final exit reported to the delegator. The last process's kernel record keeps its retryable exit, because an exit is never rewritten. An operator may still Recover it on purpose; the engine will not, and it never restarts the delegator.</li>
+    <li><b>Concurrency:</b> a delegated child runs inside its delegator's <code>delegate</code> step, one at a time. A backoff therefore holds up only the delegator that is already waiting for it.</li>
+  </ul>
+
+  <h2>3. internal/supervisor: Reduced, Not Retired</h2>
+  <ul>
+    <li><b>Deleted:</b> <code>RunChildren</code>, a scheduler-driven loop that respawned fresh processes with no checkpoint, backoff, intensity or budget, and <code>Tree</code>. Nothing imported either.</li>
+    <li><b>Kept:</b> <code>RestartPolicy</code>, its defaults, <code>Backoff</code>, and the intensity window (<code>Recent</code>, <code>Exceeded</code>).</li>
+    <li><b>Why reduce rather than retire:</b> agentflow imports what is left, so the package named "supervisor" is now what supervises agents in <code>aos run</code>.</li>
+    <li><code>internal/scheduler</code> has lost its only importer and is left in place.</li>
+  </ul>
+
+  <h2>4. Probe A9 (N5), Before and After</h2>
+  <pre>go test -tags supervisionaudit -count=1 -v ./bench/supervision/</pre>
+  <table>
+    <tr><th></th><th>Before (<code>e401e4e</code>)</th><th>After</th></tr>
+    <tr><td><code>go list -deps ./cmd/aos</code> names <code>internal/supervisor</code></td><td class="bad">0</td><td class="good">yes</td></tr>
+    <tr><td>A child exits retryably, no policy</td><td>The delegator gets it retryable; there is no restart path</td><td>The same: 1 worker process, 0 restarts</td></tr>
+    <tr><td>The same child with <code>restart: {max: 2, within: 1m, backoff: 0s}</code></td><td class="bad">no such field</td><td class="good">2 worker processes, 1 <code>supervisor.restart</code>; the coordinator gets <code>exit 0 "done after restart"</code></td></tr>
+  </table>
+  <p>A9 asserts the "after" column.</p>
+
+  <h2>5. Replay</h2>
+  <ul>
+    <li>A run with a restart has two processes for one agent, which replay does not handle. Replay refuses it (exit 2), naming the restart: <i>it restarted an agent (supervisor.restart of pid-… as pid-… at evt-…)</i>.</li>
+    <li>So the backoff and the intensity window do not need to be reproduced. They use <code>Engine.Sleep</code> and the kernel clock anyway.</li>
+    <li>Records without restarts replay as before. All the existing legacy handling still applies.</li>
+  </ul>
+
+  <h2>6. Tests</h2>
+  <table>
+    <tr><th>Package</th><th>Test</th><th>Covers</th></tr>
+    <tr><td>supervisor</td><td><code>TestEffectiveAppliesBoundedDefaults</code>, <code>TestBackoffDoublesUpToTheMaximum</code>, <code>TestIntensityCountsTheWindow</code></td><td>Defaults, invalid values, backoff and the window</td></tr>
+    <tr><td>agentflow</td><td><code>TestTransientChildRestartsFromCheckpoint</code></td><td>One restart. The event data; superseded_by and resumed_from; the successor's history continues the checkpoint; the coordinator sees the success; the trace has <code>exit,restart</code>.</td></tr>
+    <tr><td>agentflow</td><td><code>TestRestartIntensityEscalates</code></td><td>2 restarts, then escalation. 3 worker processes; the coordinator sees <code>exit_retryable=false</code>; one coordinator process.</td></tr>
+    <tr><td>agentflow</td><td><code>TestDefaultPolicyIsBounded</code></td><td><code>{}</code> allows exactly 3 restarts</td></tr>
+    <tr><td>agentflow</td><td><code>TestRestartsChargeTheSameAccount</code></td><td>The step count carries across the restart (3 calls for <code>max_steps</code> 3), and a spent budget is not restarted</td></tr>
+    <tr><td>agentflow</td><td><code>TestNonRetryableExitIsFinal</code>, <code>TestNoPolicyNoRestart</code></td><td>No supervision</td></tr>
+    <tr><td>agentflow</td><td><code>TestOpenIntentReachesRestartedChild</code></td><td>Steps 2 and 4: <code>tool_interrupted</code> is in the successor's first request</td></tr>
+    <tr><td>agentflow</td><td><code>TestLeasesTransferOnRestart</code></td><td>Steps 3 and 4: the lease moves (token 2), and the successor's write is not fenced</td></tr>
+    <tr><td>agentflow</td><td><code>TestBackoffWaitsAndStopsWithTheRun</code></td><td>A 300 ms backoff is waited; a run cancelled during a 30 s backoff returns at once without a restart</td></tr>
+    <tr><td>agentflow</td><td><code>TestInvalidRestartPolicyIsRefused</code></td><td>Spec validation</td></tr>
+    <tr><td>replay</td><td><code>TestReplayRefusesARestartedRun</code></td><td>The refusal</td></tr>
+  </table>
+
+  <h2>7. Behavior That Changed for Existing Workflows</h2>
+  <ul>
+    <li>Nothing, for a workflow without <code>restart</code>.</li>
+    <li>The engine's traces and its <code>agent_run</code> follow a recovered successor's PID. This can only happen with a policy.</li>
+    <li><code>internal/supervisor</code>'s old API (<code>Supervisor</code>, <code>RunChildren</code>, <code>Tree</code>) is gone. It had no callers.</li>
+    <li>New runtime APIs: <code>RunOptions.OnRecovered</code> and <code>AgentRuntime.SpentBudget</code>.</li>
+  </ul>
+</body>
+</html>

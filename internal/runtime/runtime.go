@@ -422,7 +422,10 @@ type RunOptions struct {
 	// Rollback lets Recover start from a checkpoint other than the one the
 	// exit names, such as an earlier one to undo work. The rollback is
 	// recorded on the process.superseded event.
-	Rollback            bool
+	Rollback bool
+	// OnRecovered, when set, receives the process Recover spawned, before
+	// it runs a step.
+	OnRecovered         func(kernel.Process)
 	ContinueOnToolError bool
 	OnToolCall          func(ToolCall)
 	OnToolResult        func(tools.Result)
@@ -524,6 +527,9 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 		status := kernel.ExitStatus{Code: 1, Reason: "interrupted calls: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
 		_, _ = r.Kernel.Exit(recovered.PID, status)
 		return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+	}
+	if options.OnRecovered != nil {
+		options.OnRecovered(recovered)
 	}
 	session.Messages = append(session.Messages, appended...)
 	return r.runSession(ctx, recovered.PID, session, options, checkpointID)

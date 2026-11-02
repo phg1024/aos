@@ -255,3 +255,41 @@ func (s Session) warned(kind string) bool {
 func timeBudgetError(limit Limited) error {
 	return fmt.Errorf("%w: %ds strict budget of %s", ErrTimeBudgetExceeded, limit.Limit, limit.Owner)
 }
+
+// SpentBudget says why a process continued from checkpointID could not
+// take a step: its step limit (maxSteps, as AgentRuntime.MaxSteps), its
+// token budget or a strict time budget, its own or one up the account
+// chain in ctx, is already used up. It is empty when a step could run.
+// Advisory time does not stop a run, so it never counts as spent.
+func (r *AgentRuntime) SpentBudget(ctx context.Context, pid, checkpointID string, maxSteps int) (string, error) {
+	process, err := r.Kernel.Get(pid)
+	if err != nil {
+		return "", err
+	}
+	session, err := r.ownedCheckpoint(pid, checkpointID)
+	if err != nil {
+		return "", err
+	}
+	if maxSteps <= 0 {
+		maxSteps = 32
+	}
+	if steps := maxSteps + session.Extended.Steps; session.Usage.Steps-session.StepBase >= steps {
+		return fmt.Sprintf("step limit reached: %d of %d steps used", session.Usage.Steps-session.StepBase, steps), nil
+	}
+	limit := process.CapabilitySet.Budget
+	if limit.Tokens > 0 {
+		limit.Tokens += session.Extended.Tokens
+	}
+	if limit.Seconds > 0 {
+		limit.Seconds += session.Extended.Seconds
+	}
+	account := NewAccount(pid, limit, session.Usage, AccountFrom(ctx))
+	account.SetClock(r.Clock)
+	if tokens := account.tokensLeft(); tokens.ok && tokens.Left <= 0 {
+		return fmt.Sprintf("token budget of %s spent: %d of %d tokens used", tokens.Owner, tokens.Limit-int(tokens.Left), tokens.Limit), nil
+	}
+	if strict := account.timeLeft(true); strict.ok && strict.Left <= 0 {
+		return fmt.Sprintf("strict time budget of %s spent: %ds", strict.Owner, strict.Limit), nil
+	}
+	return "", nil
+}

@@ -4,8 +4,8 @@
 // supervision-design.md: each probe runs one claim about supervision,
 // leases or recovery against the code as it is and logs what happened as
 // "FINDING:" lines. Most fail only when a probe cannot run; the probes of
-// what steps 1 to 3 of the note's slice fixed (N1, N2, N6, and N3 for
-// file writes) also assert the fixed behavior. They are kept out of go test ./... by the
+// what steps 1 to 4 of the note's slice fixed (N1, N2, N6, N3 for file
+// writes, and N5) also assert the fixed behavior. They are kept out of go test ./... by the
 // supervisionaudit tag:
 //
 //	go test -tags supervisionaudit -count=1 -v ./bench/supervision/
@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"aos/internal/agentflow"
 	"aos/internal/artifact"
 	"aos/internal/capability"
 	"aos/internal/inspect"
@@ -31,6 +32,7 @@ import (
 	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/statedir"
+	"aos/internal/supervisor"
 	"aos/internal/tools"
 )
 
@@ -600,4 +602,67 @@ func TestAuditA8KilledProcess(t *testing.T) {
 	if note == "" || len(state.CutOff) != 1 || state.CutOff[0].Outcome != runtime.ToolInterruptedType || state.CutOff[0].RecordedBy != recovered.PID {
 		t.Errorf("N6: the recovered agent should be told of the interrupted command, and inspect should show who was told")
 	}
+}
+
+// agentScripts gives each agent its own stepBackend; a restarted agent's
+// successor continues the same script.
+type agentScripts map[string]*stepBackend
+
+func (s agentScripts) BackendFor(agent agentflow.AgentSpec, _ agentflow.WorkflowSpec) (runtime.Backend, error) {
+	return s[agent.ID], nil
+}
+
+// A9 (N5): a delegated child that exits retryably, in aos run's engine,
+// without and with a restart policy. N5 asserts.
+func TestAuditA9RestartPath(t *testing.T) {
+	deps, _ := exec.Command("go", "list", "-deps", "aos/cmd/aos").Output()
+	t.Logf("FINDING: A9 go list -deps ./cmd/aos names aos/internal/supervisor: %v", strings.Contains(string(deps), "aos/internal/supervisor\n"))
+	for _, policy := range []*supervisor.RestartPolicy{nil, {Max: 2, Within: "1m", Backoff: "0s"}} {
+		f := newFixture(t)
+		spec := agentflow.WorkflowSpec{Name: "a9", EntryAgent: "coordinator", Agents: []agentflow.AgentSpec{
+			{ID: "coordinator", SystemPrompt: "Delegate.", AllowedAgents: []string{"worker"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}},
+			{ID: "worker", SystemPrompt: "Work.", Restart: policy},
+		}}
+		var delegated string
+		coordinator := &stepBackend{steps: []runtime.GenerateResult{
+			{Action: runtime.GenerateAction{Type: "delegate", Delegate: &runtime.DelegateCall{AgentID: "worker", Goal: "work"}}},
+			exit(0, false, "coordinated"),
+		}}
+		worker := &stepBackend{steps: []runtime.GenerateResult{exit(1, true, "transient failure"), exit(0, false, "done after restart")}}
+		engine := agentflow.Engine{Kernel: f.kernel, Artifacts: f.store, Leases: f.leases, Tools: tools.NewRuntime(), Factory: agentScripts{"coordinator": coordinator, "worker": worker}}
+		if _, err := engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		processes, _ := f.kernel.Processes()
+		workers := 0
+		for _, process := range processes {
+			if process.Role == "agent:worker" {
+				workers++
+			}
+		}
+		for _, record := range mustList(t, f) {
+			if record.Type == "delegate_result" {
+				var result runtime.DelegateResult
+				f.store.ReadJSON(record.ID, &result)
+				delegated = fmt.Sprintf("exit %d %q retryable=%v", result.ExitStatus.Code, result.ExitStatus.Reason, result.ExitStatus.Retryable)
+			}
+		}
+		restarts := f.events(t, agentflow.RestartEvent)
+		t.Logf("FINDING: A9 restart policy %+v: %d worker processes, %d supervisor.restart; the coordinator got %s", policy, workers, len(restarts), delegated)
+		if policy != nil && (workers != 2 || len(restarts) != 1 || !strings.Contains(delegated, "done after restart")) {
+			t.Errorf("N5: with a restart policy the worker should be restarted once and the coordinator see its success")
+		}
+		if policy == nil && (workers != 1 || len(restarts) != 0) {
+			t.Errorf("without a policy nothing should change")
+		}
+	}
+}
+
+func mustList(t *testing.T, f fixture) []artifact.Artifact {
+	t.Helper()
+	records, err := f.store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return records
 }

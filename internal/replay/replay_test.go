@@ -746,3 +746,21 @@ func TestReplayRefusesLeasesOnTheWallClock(t *testing.T) {
 		t.Fatalf("a record without leases: %+v", report)
 	}
 }
+
+// A record with a restart has a second agent process, which replay does
+// not handle; it is refused, naming the restart.
+func TestReplayRefusesARestartedRun(t *testing.T) {
+	stateDir := copyDir(t, recordRoundTrip(t))
+	path := filepath.Join(stateDir, "kernel", "events.json")
+	var events []kernel.Event
+	raw, _ := os.ReadFile(path)
+	json.Unmarshal(raw, &events)
+	last := events[len(events)-1]
+	events = append(events, kernel.Event{ID: "evt-999999", ProcessID: "pid-000003", Type: agentflow.RestartEvent, Timestamp: last.Timestamp, Data: map[string]string{"predecessor": "pid-000002"}})
+	raw, _ = json.Marshal(events)
+	os.WriteFile(path, raw, 0o644)
+	_, err := replay.Run(context.Background(), replay.Options{StateDir: stateDir})
+	if !errors.Is(err, replay.ErrNotReplayable) || !strings.Contains(err.Error(), "restarted an agent") || !strings.Contains(err.Error(), "pid-000002") {
+		t.Fatalf("expected a refusal, got %v", err)
+	}
+}

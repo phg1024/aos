@@ -410,9 +410,10 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	}
 	e.emitKernelTrace(agent.ID, process.PID, "start", req.Goal, process.LastEventID)
 	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
-	return e.drive(spec, req, agent, process, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+	run, err := e.drive(spec, req, agent, process, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
 		return agentRuntime.RunWithOptions(ctx, process.PID, initial, options)
 	})
+	return e.supervise(ctx, spec, req, agent, parentPID, run, err)
 }
 
 // resumeAgent continues a child parked in a wait, from its blocked
@@ -428,9 +429,10 @@ func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequ
 	}
 	e.emitKernelTrace(agent.ID, process.PID, "resumed", answer, process.LastEventID)
 	reply := []runtime.Message{{Role: "user", Content: fmt.Sprintf("Answer from %s (%s), who delegated your task: %s", delegator.Metadata["agent_id"], delegator.PID, answer)}}
-	return e.drive(spec, req, agent, process, process.ParentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+	run, err := e.drive(spec, req, agent, process, process.ParentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
 		return agentRuntime.Resume(ctx, process.PID, checkpointID, reply, options)
 	})
+	return e.supervise(ctx, spec, req, agent, process.ParentPID, run, err)
 }
 
 // drive runs one agent process with start (a fresh run or a resume) and
@@ -438,6 +440,9 @@ func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequ
 // exited, any of its children still parked are closed as abandoned.
 func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, parentPID string, start func(*runtime.AgentRuntime, runtime.RunOptions) (runtime.RunResult, error)) (AgentRun, error) {
 	var childRuns []AgentRun
+	// current is the process running: process, or the successor a Recover
+	// spawned in its place.
+	current := process
 	agentRuntime := &runtime.AgentRuntime{
 		Kernel:         e.Kernel,
 		Artifacts:      e.Artifacts,
@@ -457,7 +462,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 			childRuns = append(childRuns, child)
 		}),
 		OnCapabilityDenied: func(event kernel.Event) {
-			e.emitKernelTrace(agent.ID, process.PID, "capability_denied",
+			e.emitKernelTrace(agent.ID, current.PID, "capability_denied",
 				fmt.Sprintf("action=%s capability=%s path=%s reason=%s", event.Data["action"], event.Data["capability"], event.Data["path"], event.Data["reason"]), event.ID)
 		},
 	}
@@ -469,17 +474,20 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 
 	result, err := start(agentRuntime, runtime.RunOptions{
 		ContinueOnToolError: true,
+		OnRecovered: func(successor kernel.Process) {
+			current = successor
+		},
 		OnAssistantMessage: func(message string) {
-			e.emitTrace(agent.ID, process.PID, "message", message)
+			e.emitTrace(agent.ID, current.PID, "message", message)
 		},
 		OnToolCall: func(call runtime.ToolCall) {
-			e.emitTrace(agent.ID, process.PID, "tool_call", formatToolCall(call))
+			e.emitTrace(agent.ID, current.PID, "tool_call", formatToolCall(call))
 		},
 		OnToolResult: func(result tools.Result) {
-			e.emitTrace(agent.ID, process.PID, "tool_result", formatToolResult(result))
+			e.emitTrace(agent.ID, current.PID, "tool_result", formatToolResult(result))
 		},
 		OnToolError: func(call runtime.ToolCall, err error) {
-			e.emitTrace(agent.ID, process.PID, "tool_error", fmt.Sprintf("%s error=%s", formatToolCall(call), err.Error()))
+			e.emitTrace(agent.ID, current.PID, "tool_error", fmt.Sprintf("%s error=%s", formatToolCall(call), err.Error()))
 		},
 	})
 	if errors.Is(err, runtime.ErrAgentBlocked) {
@@ -487,19 +495,19 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		// delegator answers by delegating to it again.
 		run := AgentRun{
 			AgentID:      agent.ID,
-			PID:          process.PID,
+			PID:          current.PID,
 			ParentPID:    parentPID,
 			CheckpointID: result.CheckpointID,
 			Status:       runtime.DelegateWaiting,
 			Question:     runtime.WaitText(result.Session.Messages),
 			Children:     childRuns,
 		}
-		e.emitKernelTrace(agent.ID, process.PID, "waiting", run.Question, e.lastKernelEvent(process.PID))
+		e.emitKernelTrace(agent.ID, current.PID, "waiting", run.Question, e.lastKernelEvent(current.PID))
 		var parents []string
 		if run.CheckpointID != "" {
 			parents = []string{run.CheckpointID}
 		}
-		record, err := e.Artifacts.CreateJSON("agent_run", process.PID, run, parents, map[string]string{
+		record, err := e.Artifacts.CreateJSON("agent_run", current.PID, run, parents, map[string]string{
 			"agent_id": agent.ID,
 			"status":   runtime.DelegateWaiting,
 		})
@@ -510,7 +518,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		return run, nil
 	}
 	if err != nil {
-		e.abandonChildren(process.PID)
+		e.abandonChildren(current.PID)
 		// Close out the child so a later delegation to the same agent is not
 		// rejected as already active.
 		status := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
@@ -519,8 +527,8 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 			status = kernel.ExitStatus{Code: 130, Reason: "cancelled", Retryable: true}
 			kind = "cancelled"
 		}
-		_, _ = e.Kernel.Exit(process.PID, status)
-		e.emitKernelTrace(agent.ID, process.PID, kind, err.Error(), e.lastKernelEvent(process.PID))
+		_, _ = e.Kernel.Exit(current.PID, status)
+		e.emitKernelTrace(agent.ID, current.PID, kind, err.Error(), e.lastKernelEvent(current.PID))
 		return AgentRun{}, err
 	}
 	session := result.Session
@@ -531,15 +539,15 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 	}
 	run := AgentRun{
 		AgentID:       agent.ID,
-		PID:           process.PID,
+		PID:           current.PID,
 		ParentPID:     parentPID,
 		CheckpointID:  result.CheckpointID,
 		ExitStatus:    result.ExitStatus,
 		FinalMessage:  finalAssistantMessage(session.Messages),
 		ToolArtifacts: append([]string(nil), session.ToolArtifactIDs...),
 	}
-	e.emitKernelTrace(agent.ID, process.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable), e.lastKernelEvent(process.PID))
-	e.abandonChildren(process.PID)
+	e.emitKernelTrace(agent.ID, current.PID, "exit", fmt.Sprintf("code=%d reason=%s retryable=%t", run.ExitStatus.Code, run.ExitStatus.Reason, run.ExitStatus.Retryable), e.lastKernelEvent(current.PID))
+	e.abandonChildren(current.PID)
 	run.Delegates = delegateMessages(session.Messages)
 	run.Children = append(run.Children, childRuns...)
 	for _, child := range childRuns {
@@ -549,7 +557,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 	if run.CheckpointID != "" {
 		finalCheckpoint = []string{run.CheckpointID}
 	}
-	artifactRecord, err := e.Artifacts.CreateJSON("agent_run", process.PID, run, finalCheckpoint, map[string]string{
+	artifactRecord, err := e.Artifacts.CreateJSON("agent_run", current.PID, run, finalCheckpoint, map[string]string{
 		"agent_id": agent.ID,
 	})
 	if err != nil {

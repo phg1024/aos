@@ -14,7 +14,14 @@ audit probes for them now assert the fixed behavior. See
 shows the token, and `write_file` and `edit_file` are fenced. N3 and gap 4
 are marked Implemented for file writes, and probe A4 asserts it. `run` is
 still not fenced (probe A4b). See
-[Implemented: Step 3](#implemented-step-3). Step 4 is still proposed.
+[Implemented: Step 3](#implemented-step-3).
+
+**Update, 2026-11-02 (later):** step 4 is built: a per-agent `restart`
+policy in the workflow spec, applied by agentflow through the exclusive
+Recover. `internal/supervisor` is reduced to the policy type and is on
+`aos run`'s path. N5 and gap 1 are marked Implemented, and probe A9
+asserts it. See [Implemented: Step 4](#implemented-step-4). All four
+steps of the slice are now built.
 
 ## Why
 
@@ -53,7 +60,7 @@ fixed behavior and fail if it regresses. The tables below keep the
 
 | # | Review claim (2026-10-28) | At `e401e4e` | How it was checked | Result |
 |---|---|---|---|---|
-| 1 | The supervisor is not on the path that runs real agents | **Still holds** | `go list -deps ./cmd/aos ./cmd/aos-tui \| grep -c aos/internal/supervisor` | `0`. The only importer of `internal/supervisor` is its own test. |
+| 1 | The supervisor is not on the path that runs real agents | **Still held** at `e401e4e`. **Implemented** by step 4: `internal/supervisor` is the restart policy agentflow applies, and `go list -deps ./cmd/aos` names it. | `go list -deps ./cmd/aos ./cmd/aos-tui \| grep -c aos/internal/supervisor` | `0`. The only importer of `internal/supervisor` is its own test. |
 | 2 | Two lease managers on one state dir both won the lease in 193 of 200 trials | **Fixed** (`f3eef1d`) | Probe A2 repeats the review's experiment: two OS processes, one `Acquire` each at a shared start, 200 trials. In-tree, `TestLeaseExclusiveAcrossProcesses` runs 3 processes × 200 attempts. | A2: both won in **0 of 200**. In-tree: 105 grants, no overlap (an unlocked counter lost no increment), tokens exactly 1..105. |
 | 3 | Nothing releases a lease when its holder exits, so a recovered process is locked out until the TTL | **Fixed for recorded exits.** A dead OS process still holds its leases until reaped (see N4). | Probe A3 | After the holder exited, another process acquired the lease: `lease.taken_over`, reason `owner_exited`, token 2. Recovering a process that held a lease gives the lease to the new process: `lease.transferred`, token 1 → 2. The recovered agent's own `acquire_lease` then renews it. |
 | 4 | There are no fencing tokens | **Half fixed** at `e401e4e`: tokens were issued, but nothing checked them (see N3). **Implemented for file writes** by step 3; `run` is not fenced. | Probe A4, in-tree token test | Each grant gets a token that strictly increases per resource and is never reissued. But a holder whose lease expired and was taken over (token 2) still wrote the file afterwards. `acquire_lease` does not show the agent its token: its output keys are `held, resource, owner_pid, expires_at`. |
@@ -99,7 +106,9 @@ fixed behavior and fail if it regresses. The tables below keep the
 
   Reaping is manual. Nothing calls it on its own, and `aos run` does not
   reap a directory before using it.
-- **N5. No restart path in `aos run`.**
+- **N5. No restart path in `aos run`.** *(Implemented by step 4: an agent
+  with a `restart` policy is recovered from its exit's checkpoint; probe
+  A9.)*
   - A delegated child that exits retryably is reported to its parent as
     `DelegateResult.ExitStatus`. The parent can only delegate again, and
     that starts a fresh process with no checkpoint.
@@ -204,6 +213,9 @@ fixed behavior and fail if it regresses. The tables below keep the
     It cannot widen them.
 
 ### Restart policy and its budget
+
+*(Implemented by step 4; the differences from this text are listed under
+[Implemented: Step 4](#implemented-step-4).)*
 
 - The policy is per agent in the workflow spec:
   `restart: {max: N, within: "10m", backoff: "1s..2m"}`. Without it, a
@@ -421,7 +433,7 @@ In order. Each step is small enough for one commit with its tests.
    - *Unlocks:* "leases with fencing tokens" stated as Implemented for file
      writes, with A4 as the demonstration that fails today and passes
      afterwards.
-4. **A restart policy in agentflow (N5, Gap 1).**
+4. **A restart policy in agentflow (N5, Gap 1).** *(Implemented.)*
    - Add `restart` in the workflow spec. The engine recovers a child that
      exits retryably, from its exit's checkpoint, through step 1's Recover.
    - Restart intensity and escalation.
@@ -640,6 +652,104 @@ Built on 2026-11-02, after `84287c1`.
 - `run.started` has `lease_fencing`.
 - Every `write_file` and `edit_file` takes the lease lock and reads
   `leases.json`.
+
+## Implemented: Step 4
+
+Built on 2026-11-02, after `41d61dd`.
+
+- **The policy.** `AgentSpec.Restart` is a `*supervisor.RestartPolicy`
+  with fields `max`, `within` and `backoff`. Absent, nothing changes.
+  - The defaults are max 3, within 10m, backoff `1s..30s`. An empty
+    policy (`"restart": {}`) is bounded, and no setting removes the
+    bound.
+  - Backoff doubles from its base on each restart in the window, up to
+    its maximum. A single duration is a fixed wait.
+  - An invalid policy fails spec validation.
+- **`internal/supervisor`: reduced to the policy, not retired.** The
+  package was `RunChildren`, a scheduler-driven loop that respawned
+  fresh processes, plus `Tree`. Nothing imported either, and neither fit
+  agentflow. Both are deleted. What remains is the policy type with its
+  defaults, backoff and intensity window. agentflow imports it, so the
+  package is on `aos run`'s path, and its name now matches what it does.
+  `internal/scheduler` lost its only importer and is left alone.
+- **The engine** (`agentflow.Engine.supervise`) applies the policy after
+  every `runAgent` and `resumeAgent`, so to the entry agent and to
+  delegated children alike.
+  - It acts on a retryable, non-zero exit that is not a wait, as long as
+    the run's ctx is live: a SIGTERM stop is never restarted.
+  - It checks, in order:
+    1. the intensity;
+    2. that the exit names a checkpoint;
+    3. that the budget is not spent (`runtime.SpentBudget`).
+  - Then it waits the backoff and calls
+    `Recover(pid, "", …)`, which uses the exit's checkpoint and makes one
+    successor.
+  - `drive` follows the successor through `RunOptions.OnRecovered`, so
+    traces and the `agent_run` name the process that actually ran.
+- **Events.**
+  - `supervisor.restart` is recorded on the successor before its first
+    step, with `predecessor`, `attempt`, `checkpoint`, `backoff` and
+    `reason`.
+  - `supervisor.escalated` is recorded when the intensity is exceeded.
+  - `supervisor.not_restarted` is recorded when a retryable exit is not
+    restarted. Its `cause` is one of `budget_spent`, `no_checkpoint`,
+    `not_recoverable` or `error`.
+- **What the delegator sees.**
+  - A successful restart: the successor's result.
+  - The intensity exceeded: a final exit, `restart intensity exceeded: N
+    restarts within W (max M); last exit: …`, with `exit_retryable=false`.
+    The last process's kernel record keeps its retryable exit, because an
+    exit is never rewritten. An operator can still Recover it on purpose;
+    the engine will not.
+  - The budget spent: the child's own exit unchanged, for example `step
+    limit exceeded`, retryable. The parent decides what to do, as it does
+    today.
+- **Budget.** The successor continues the checkpoint's usage and the
+  same account chain, so the step limit, tokens and strict time carry
+  over. A restart that would start with any of them spent is not made.
+  Backoff waits run on the delegator's time, as any other wait does.
+- **Backoff and replay.** The backoff goes through `Engine.Sleep` when it
+  is set, as backend retries do, and otherwise through a timer that
+  respects ctx. The intensity window reads the kernel clock and the
+  `supervisor.restart` timestamps. Replay does not need to reproduce any
+  of this: a restarted run has two agent processes, so it is refused with
+  a reason naming the restart (`TestReplayRefusesARestartedRun`). Records
+  without restarts replay as before.
+- **Concurrency.** The engine runs a delegated child inside the
+  delegator's `delegate` step, one at a time. A backoff therefore holds up
+  only the delegator that is already waiting for that child. There are no
+  other children running alongside it to block.
+- **Differences from the contract text above.**
+  - Escalation is a non-retryable exit reported to the delegator, not a
+    rewritten kernel exit.
+  - A budget-spent child's exit is passed on as it is.
+
+**Probe A9 (N5), before and after:**
+
+| | Before (`e401e4e`) | After |
+|---|---|---|
+| `go list -deps ./cmd/aos` names `internal/supervisor` | no (0) | yes |
+| A child exits retryably, no policy | the parent gets it retryable; there is no restart path | the same: 1 worker process, 0 restarts |
+| The same child, `restart: {max: 2, within: 1m, backoff: 0s}` | no such field | 2 worker processes, 1 `supervisor.restart`; the coordinator gets `exit 0 "done after restart"` |
+
+**Tests:**
+
+- `supervisor`:
+  - `TestEffectiveAppliesBoundedDefaults`;
+  - `TestBackoffDoublesUpToTheMaximum`;
+  - `TestIntensityCountsTheWindow`.
+- `agentflow`:
+  - `TestTransientChildRestartsFromCheckpoint`;
+  - `TestRestartIntensityEscalates`;
+  - `TestDefaultPolicyIsBounded`;
+  - `TestRestartsChargeTheSameAccount`;
+  - `TestNonRetryableExitIsFinal`;
+  - `TestNoPolicyNoRestart`;
+  - `TestOpenIntentReachesRestartedChild` (steps 2 and 4);
+  - `TestLeasesTransferOnRestart` (steps 3 and 4);
+  - `TestBackoffWaitsAndStopsWithTheRun`;
+  - `TestInvalidRestartPolicyIsRefused`.
+- `replay`: `TestReplayRefusesARestartedRun`.
 
 **A live check worth one trial, sketched and not run.** On eval's queue,
 run one Terminal-Bench task with the restart policy on and a step budget.

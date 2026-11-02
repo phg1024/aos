@@ -230,6 +230,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		return report, fmt.Errorf("%w: run spec: %v", ErrNotReplayable, err)
 	}
 	report.Workflow = runSpec.Spec.Name
+	for _, event := range rec.events {
+		if event.Type == agentflow.RestartEvent {
+			return report, fmt.Errorf("%w: it restarted an agent (%s of %s as %s at %s), and a restarted run has more than one agent process; replay handles single-agent runs", ErrNotReplayable, event.Type, event.Data["predecessor"], event.ProcessID, event.ID)
+		}
+	}
 	agents := 0
 	for _, process := range rec.processes {
 		if strings.HasPrefix(process.Role, "agent:") {

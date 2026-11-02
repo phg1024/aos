@@ -7,6 +7,7 @@ import (
 
 	"aos/internal/capability"
 	"aos/internal/runtime"
+	"aos/internal/supervisor"
 	"aos/internal/workflow"
 )
 
@@ -47,6 +48,10 @@ type AgentSpec struct {
 	// workers need it.
 	Delegable capability.Set    `json:"delegable,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+	// Restart, when set, restarts the agent after a retryable exit, from
+	// its exit's checkpoint (see Engine.supervise). Absent, an exit goes
+	// to the delegator as it is.
+	Restart *supervisor.RestartPolicy `json:"restart,omitempty"`
 }
 
 func (s WorkflowSpec) Validate() error {
@@ -60,6 +65,11 @@ func (s WorkflowSpec) Validate() error {
 			return ErrWorkflowSpecInvalid
 		}
 		seen[agent.ID] = true
+		if agent.Restart != nil {
+			if _, err := agent.Restart.Effective(); err != nil {
+				return fmt.Errorf("%w: agent %s: %v", ErrWorkflowSpecInvalid, agent.ID, err)
+			}
+		}
 		if agent.ID == s.EntryAgent {
 			hasEntry = true
 		}
