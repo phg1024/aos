@@ -715,6 +715,14 @@ Built on 2026-11-02, after `41d61dd`.
   of this: a restarted run has two agent processes, so it is refused with
   a reason naming the restart (`TestReplayRefusesARestartedRun`). Records
   without restarts replay as before.
+- **The intensity window is read from the record.** Each check counts
+  the `supervisor.restart` events on the process and on the processes it
+  was recovered from (its `resumed_from` chain). So the count holds
+  across a wait and a resume, and across a new engine on the same state
+  directory. A fresh delegation after an escalation spawns a new process,
+  which starts a new chain; that is the delegator's choice, not a
+  restart. *(Fixed after review: `c578edf` kept the count in a local
+  slice, so each resume started a fresh window.)*
 - **Concurrency.** The engine runs a delegated child inside the
   delegator's `delegate` step, one at a time. A backoff therefore holds up
   only the delegator that is already waiting for that child. There are no
@@ -748,6 +756,10 @@ Built on 2026-11-02, after `41d61dd`.
   - `TestOpenIntentReachesRestartedChild` (steps 2 and 4);
   - `TestLeasesTransferOnRestart` (steps 3 and 4);
   - `TestBackoffWaitsAndStopsWithTheRun`;
+  - `TestRestartIntensityHoldsAcrossResumes`: fail, restart, wait,
+    resume, repeated: 2 restarts in all, then escalation;
+  - `TestRestartCountSurvivesANewEngine`: a second engine on the same
+    state directory continues the count. Both tests fail on `c578edf`;
   - `TestInvalidRestartPolicyIsRefused`.
 - `replay`: `TestReplayRefusesARestartedRun`.
 

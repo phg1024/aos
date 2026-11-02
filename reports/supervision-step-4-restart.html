@@ -57,6 +57,7 @@
     <li><b>On success</b>, <code>supervisor.restart</code> is recorded on the successor before its first step. It holds <code>predecessor</code>, <code>attempt</code>, <code>checkpoint</code>, <code>backoff</code> and <code>reason</code>. <code>process.superseded</code> links the two processes.</li>
     <li><b>What the successor continues:</b> the checkpoint's usage, and the same account chain. It also takes over the predecessor's leases and mail, and hears about the calls the predecessor left unfinished.</li>
     <li><b>Escalation</b> is a final exit reported to the delegator. The last process's kernel record keeps its retryable exit, because an exit is never rewritten. An operator may still Recover it on purpose; the engine will not, and it never restarts the delegator.</li>
+    <li><b>The intensity window</b> counts the <code>supervisor.restart</code> events on the process's <code>resumed_from</code> chain, as recorded. It therefore holds across a wait and a resume, and across a new engine on the same directory. A fresh delegation starts a new chain. <span class="warn">Fixed after review:</span> <code>c578edf</code> kept the count in a local slice, so each resume started a fresh window. Both new tests fail on <code>c578edf</code>.</li>
     <li><b>Concurrency:</b> a delegated child runs inside its delegator's <code>delegate</code> step, one at a time. A backoff therefore holds up only the delegator that is already waiting for it.</li>
   </ul>
 
@@ -98,6 +99,8 @@
     <tr><td>agentflow</td><td><code>TestLeasesTransferOnRestart</code></td><td>Steps 3 and 4: the lease moves (token 2), and the successor's write is not fenced</td></tr>
     <tr><td>agentflow</td><td><code>TestBackoffWaitsAndStopsWithTheRun</code></td><td>A 300 ms backoff is waited; a run cancelled during a 30 s backoff returns at once without a restart</td></tr>
     <tr><td>agentflow</td><td><code>TestInvalidRestartPolicyIsRefused</code></td><td>Spec validation</td></tr>
+    <tr><td>agentflow</td><td><code>TestRestartIntensityHoldsAcrossResumes</code> (added after review)</td><td>Fail, restart, wait, resume, repeated: 2 restarts in all, then escalation, and the coordinator is told</td></tr>
+    <tr><td>agentflow</td><td><code>TestRestartCountSurvivesANewEngine</code> (added after review)</td><td>A second engine on the same state directory continues the count</td></tr>
     <tr><td>replay</td><td><code>TestReplayRefusesARestartedRun</code></td><td>The refusal</td></tr>
   </table>
 

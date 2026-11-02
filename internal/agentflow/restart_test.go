@@ -429,3 +429,40 @@ func TestInvalidRestartPolicyIsRefused(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 }
+
+func waitStep(question string) func(runtime.GenerateRequest) runtime.GenerateResult {
+	return reply(runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: question}})
+}
+
+// The intensity counts restarts across waits: a worker that fails, is
+// restarted, waits for its coordinator, is resumed and fails again, is
+// restarted max times within the window in all, not max times per
+// resume, then escalates, and the coordinator is told. (A fresh delegation
+// after that starts a new process chain: the coordinator's choice.)
+func TestRestartIntensityHoldsAcrossResumes(t *testing.T) {
+	f := newRestartFixture(t)
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		exitStep(1, true, "fails after each answer"), waitStep("which way?"),
+		exitStep(1, true, "fails after each answer"), waitStep("which way?"),
+		exitStep(1, true, "fails after each answer"), waitStep("which way?"),
+		exitStep(0, false, "never"),
+	}}
+	coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		delegateStep("worker"), delegateStep("worker"), delegateStep("worker"), exitStep(0, false, "done"),
+	}}
+	f.run(t, context.Background(), f.spec(&supervisor.RestartPolicy{Max: 2, Within: "1m", Backoff: "0s"}, 30), scripts{"worker": worker, "coordinator": coordinator})
+	restarts := f.events(t, agentflow.RestartEvent)
+	if len(restarts) != 2 || restarts[0].Data["attempt"] != "1" || restarts[1].Data["attempt"] != "2" {
+		t.Fatalf("restarts across resumes = %+v, want attempts 1 and 2", restarts)
+	}
+	if escalated := f.events(t, agentflow.EscalatedEvent); len(escalated) != 1 || escalated[0].Data["restarts"] != "2" || escalated[0].ProcessID != restarts[1].ProcessID {
+		t.Fatalf("supervisor.escalated = %+v", escalated)
+	}
+	requests := coordinator.requests()
+	if len(requests) != 4 || !strings.Contains(historyText(requests[3]), agentflow.RestartIntensityReason) {
+		t.Fatalf("the coordinator's last request: %s", historyText(requests[len(requests)-1]))
+	}
+	if n := len(f.workers(t)); n != 3 {
+		t.Fatalf("%d worker processes, want 3", n)
+	}
+}

@@ -37,8 +37,11 @@ const RestartIntensityReason = "restart intensity exceeded"
 // cancelled with ctx is returned as it is, and so is every run of an
 // agent without a policy.
 //
-// Before a restart the intensity is checked: if the policy's max restarts
-// already fall within its window, the run is returned with a final,
+// Before a restart the intensity is checked against the restarts on the
+// record: the supervisor.restart events of the run's process and the
+// processes it was recovered from, so the count holds across a wait and a
+// resume, and across engines on the same state directory. If the policy's
+// max restarts already fall within its window, the run is returned with a final,
 // non-retryable exit naming the intensity, for the delegator to handle;
 // the engine never restarts the delegator itself. A run whose budget is
 // already spent (steps, tokens or a strict time budget, its own or up the
@@ -51,11 +54,15 @@ func (e *Engine) supervise(ctx context.Context, spec WorkflowSpec, req RunReques
 	if policyErr != nil {
 		return run, policyErr
 	}
-	var restarts []time.Time
-	for attempt := 1; ; attempt++ {
+	for {
 		if err != nil || run.Status == runtime.DelegateWaiting || run.ExitStatus.Code == 0 || !run.ExitStatus.Retryable || ctx.Err() != nil {
 			return run, err
 		}
+		restarts, recordErr := e.recordedRestarts(run.PID)
+		if recordErr != nil {
+			return run, recordErr
+		}
+		attempt := len(restarts) + 1
 		now := e.Kernel.Now()
 		if policy.Exceeded(restarts, now) {
 			return e.escalate(agent, run, policy, policy.Recent(restarts, now)), nil
@@ -84,12 +91,14 @@ func (e *Engine) supervise(ctx context.Context, spec WorkflowSpec, req RunReques
 		if getErr != nil {
 			return predecessor, getErr
 		}
-		var restartedAt time.Time
+		restarted := false
 		run, err = e.drive(spec, req, agent, previous, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
 			track := options.OnRecovered
 			options.OnRecovered = func(successor kernel.Process) {
 				track(successor)
-				event, recordErr := e.Kernel.RecordEvent(successor.PID, RestartEvent, map[string]string{
+				// The window counts recorded restarts. A kernel that cannot
+				// record this event cannot record the successor's run either.
+				event, _ := e.Kernel.RecordEvent(successor.PID, RestartEvent, map[string]string{
 					"agent_id":    agent.ID,
 					"predecessor": predecessor.PID,
 					"attempt":     strconv.Itoa(attempt),
@@ -97,15 +106,12 @@ func (e *Engine) supervise(ctx context.Context, spec WorkflowSpec, req RunReques
 					"backoff":     backoff.String(),
 					"reason":      predecessor.ExitStatus.Reason,
 				})
-				restartedAt = e.Kernel.Now()
-				if recordErr == nil {
-					restartedAt = event.Timestamp
-				}
+				restarted = true
 				e.emitKernelTrace(agent.ID, successor.PID, "restart", fmt.Sprintf("attempt=%d of=%s checkpoint=%s backoff=%s reason=%s", attempt, predecessor.PID, checkpoint, backoff, predecessor.ExitStatus.Reason), event.ID)
 			}
 			return agentRuntime.Recover(ctx, predecessor.PID, "", nil, options)
 		})
-		if restartedAt.IsZero() {
+		if !restarted {
 			// Recover refused before a successor existed, e.g. another
 			// process recovered it first: the exit stands.
 			if err != nil && errors.Is(err, runtime.ErrNotRecoverable) {
@@ -114,8 +120,33 @@ func (e *Engine) supervise(ctx context.Context, spec WorkflowSpec, req RunReques
 			}
 			return run, err
 		}
-		restarts = append(restarts, restartedAt)
 	}
+}
+
+// recordedRestarts returns when pid's process chain was restarted: the
+// supervisor.restart events recorded on pid and on each process it was
+// recovered from, oldest first.
+func (e *Engine) recordedRestarts(pid string) ([]time.Time, error) {
+	chain := map[string]bool{}
+	for current, hops := pid, 0; current != "" && hops < 64; hops++ {
+		chain[current] = true
+		process, err := e.Kernel.Get(current)
+		if err != nil {
+			return nil, err
+		}
+		current = process.Metadata["resumed_from"]
+	}
+	events, err := e.Kernel.Events()
+	if err != nil {
+		return nil, err
+	}
+	var restarts []time.Time
+	for _, event := range events {
+		if event.Type == RestartEvent && chain[event.ProcessID] {
+			restarts = append(restarts, event.Timestamp)
+		}
+	}
+	return restarts, nil
 }
 
 // escalate returns run with a final exit naming the restart intensity, and
