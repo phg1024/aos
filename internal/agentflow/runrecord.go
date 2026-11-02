@@ -18,6 +18,13 @@ import (
 // in Engine.RunRecord (the build and the backend).
 const RunStartedEvent = "run.started"
 
+// LeaseFencingField is the run.started field that says file writes were
+// fenced by leases, with the value LeaseFencingFileWrites.
+const (
+	LeaseFencingField      = "lease_fencing"
+	LeaseFencingFileWrites = "file_writes"
+)
+
 // RunSpecArtifact is the artifact type holding a run's workflow spec, as
 // the engine ran it, and its request.
 const RunSpecArtifact = "run_spec"
@@ -56,6 +63,11 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	for _, agent := range spec.Agents {
 		data["max_steps_"+agent.ID] = strconv.Itoa(maxSteps(agent))
+	}
+	if !e.NoLeaseFencing {
+		// Marks a run whose file writes are fenced by leases, so a replay
+		// knows to fence them too; records made before have no such field.
+		data[LeaseFencingField] = LeaseFencingFileWrites
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

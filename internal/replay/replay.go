@@ -75,9 +75,12 @@ type Report struct {
 	// LegacyToolIntents means the record ran world tools without
 	// tool.started intents, as AOS did before them, so the replay records
 	// none either.
-	LegacyToolIntents bool              `json:"legacy_tool_intents,omitempty"`
-	RecordedBuild     map[string]string `json:"recorded_build,omitempty"`
-	Divergence        *Divergence       `json:"divergence,omitempty"`
+	LegacyToolIntents bool `json:"legacy_tool_intents,omitempty"`
+	// LegacyLeases means the record predates lease fencing, so the replay
+	// neither fenced file writes nor showed lease tokens.
+	LegacyLeases  bool              `json:"legacy_leases,omitempty"`
+	RecordedBuild map[string]string `json:"recorded_build,omitempty"`
+	Divergence    *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -314,6 +317,10 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Sleep:        func(context.Context, time.Duration) {},
 	}
 	engine.NoToolIntents = !recordsIntents(rec)
+	// A run.started without lease_fencing predates fencing: replay its file
+	// writes unfenced and its acquire_lease results without the token.
+	engine.NoLeaseFencing = started.Data[agentflow.LeaseFencingField] == ""
+	report.LegacyLeases = engine.NoLeaseFencing
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

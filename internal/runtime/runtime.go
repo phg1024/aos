@@ -251,6 +251,11 @@ type AgentRuntime struct {
 	// AOS did before intents existed. Only a replay of such a record sets
 	// it, so the replay records what the original did.
 	NoToolIntents bool
+	// NoLeaseFencing turns off what came with lease fencing: write_file and
+	// edit_file are not checked against leases, and acquire_lease does not
+	// show the token. Only a replay of a record made before fencing sets
+	// it.
+	NoLeaseFencing bool
 }
 
 // CompactionPolicy decides when older history is compacted and how much
@@ -2211,17 +2216,39 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 		result, err := r.executeRuntimeTool(ctx, process, session, checkpointID, call)
 		return result, "", err
 	}
-	intent, err := r.recordIntent(process.PID, call)
-	if err != nil {
-		return tools.Result{}, "", err
+	var result tools.Result
+	var intent string
+	var err error
+	// The intent and the tool run as one: for a fenced write, both under
+	// the lease lock after the lease check, so a refused write records no
+	// intent and no grant comes between the check and the write.
+	run := func() error {
+		var intentErr error
+		if intent, intentErr = r.recordIntent(process.PID, call); intentErr != nil {
+			return intentErr
+		}
+		result, err = r.Tools.ExecuteContext(ctx, tools.Request{
+			Tool:          call.Name,
+			Args:          call.Args,
+			CapabilitySet: process.CapabilitySet,
+			Mounts:        process.Mounts,
+			PID:           process.PID,
+		})
+		return nil
 	}
-	result, err := r.Tools.ExecuteContext(ctx, tools.Request{
-		Tool:          call.Name,
-		Args:          call.Args,
-		CapabilitySet: process.CapabilitySet,
-		Mounts:        process.Mounts,
-		PID:           process.PID,
-	})
+	var guardErr error
+	if r.fencedWrite(call) {
+		guardErr = r.Leases.Guard(r.writers(process.PID), leaseCovers(process, call.Args["path"]), run)
+	} else {
+		guardErr = run()
+	}
+	if errors.Is(guardErr, lease.ErrLeaseFenced) {
+		r.logFence(process.PID, call, guardErr)
+		return tools.Result{}, "", guardErr
+	}
+	if guardErr != nil {
+		return tools.Result{}, "", guardErr
+	}
 	switch {
 	case errors.Is(err, tools.ErrPathDenied):
 		path := call.Args["path"]
@@ -2553,15 +2580,21 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 			}
 			return tools.Result{}, err
 		}
+		output := map[string]string{
+			"resource":   leaseRecord.Resource,
+			"owner_pid":  leaseRecord.OwnerPID,
+			"expires_at": leaseRecord.ExpiresAt.Format(time.RFC3339),
+			"held":       "false",
+		}
+		if !r.NoLeaseFencing {
+			// The fencing token: write_file and edit_file accept this
+			// process's writes under the lease only while it is current.
+			output["token"] = strconv.FormatInt(leaseRecord.Token, 10)
+		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "lease acquired",
-			Output: map[string]string{
-				"resource":   leaseRecord.Resource,
-				"owner_pid":  leaseRecord.OwnerPID,
-				"expires_at": leaseRecord.ExpiresAt.Format(time.RFC3339),
-				"held":       "false",
-			},
+			Output:  output,
 		}, nil
 	case "release_lease":
 		if r.Leases == nil {

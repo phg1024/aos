@@ -4,8 +4,8 @@
 // supervision-design.md: each probe runs one claim about supervision,
 // leases or recovery against the code as it is and logs what happened as
 // "FINDING:" lines. Most fail only when a probe cannot run; the probes of
-// what steps 1 and 2 of the note's slice fixed (N1, N2, N6) also assert
-// the fixed behavior. They are kept out of go test ./... by the
+// what steps 1 to 3 of the note's slice fixed (N1, N2, N6, and N3 for
+// file writes) also assert the fixed behavior. They are kept out of go test ./... by the
 // supervisionaudit tag:
 //
 //	go test -tags supervisionaudit -count=1 -v ./bench/supervision/
@@ -259,7 +259,7 @@ func reason(events []kernel.Event) string {
 }
 
 // A4: fencing tokens exist; does anything check them where the effect
-// happens?
+// happens? N3, for write_file and edit_file, asserts.
 func TestAuditA4FencingAtThePointOfEffect(t *testing.T) {
 	f := newFixture(t)
 	writer := f.spawn(t, "agent:writer", "acquire_lease", "write_file")
@@ -288,7 +288,48 @@ func TestAuditA4FencingAtThePointOfEffect(t *testing.T) {
 	}
 	content, _ := os.ReadFile(target)
 	_, hasToken := outputs[0]["token"]
+	fenced := f.events(t, "lease.fenced")
 	t.Logf("FINDING: A4 %s; the writer's lease expired and was taken over, then its write_file wrote %q; acquire_lease output shows a token: %v (keys %v)", acquired, content, hasToken, keys(outputs[0]))
+	t.Logf("FINDING: A4 lease.fenced events: %d %v", len(fenced), eventData(fenced))
+	if len(content) != 0 || outputs[0]["token"] != "1" || len(fenced) != 1 || fenced[0].Data["holder"] != thief.PID || fenced[0].Data["reason"] != "held_by_other" {
+		t.Errorf("N3: the stale holder's write should be fenced, with a lease.fenced event, and acquire_lease should show token 1")
+	}
+}
+
+func eventData(events []kernel.Event) []map[string]string {
+	var out []map[string]string
+	for _, event := range events {
+		out = append(out, event.Data)
+	}
+	return out
+}
+
+// A4b: what fencing leaves open. run is not fenced (the note's hazard:
+// what a command writes is known only after it ran), so the same stale
+// holder still writes the file through a command.
+func TestAuditA4bRunIsNotFenced(t *testing.T) {
+	f := newFixture(t)
+	writer := f.spawn(t, "agent:writer", "acquire_lease", "run")
+	thief := f.spawn(t, "agent:thief")
+	target := filepath.Join(f.workspace, "a.txt")
+	backend := &stepBackend{
+		steps: []runtime.GenerateResult{
+			tool("acquire_lease", map[string]string{"resource": target, "ttl": "1ms"}),
+			tool("run", map[string]string{"command": "printf 'stale holder via run' > " + target}),
+			exit(0, false, "done"),
+		},
+		before: map[int]func(){1: func() {
+			time.Sleep(5 * time.Millisecond)
+			f.leases.Acquire(target, thief.PID, time.Hour)
+		}},
+	}
+	agent := f.runtime(backend)
+	agent.Tools.ScratchRoot = t.TempDir()
+	if _, err := agent.RunWithOptions(context.Background(), writer.PID, []runtime.Message{{Role: "user", Content: "work"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := os.ReadFile(target)
+	t.Logf("FINDING: A4b under the thief's lease, the stale holder's run wrote %q; lease.fenced events: %d", content, len(f.events(t, "lease.fenced")))
 }
 
 func keys(m map[string]string) []string {

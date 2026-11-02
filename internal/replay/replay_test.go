@@ -91,6 +91,8 @@ type options struct {
 	compaction runtime.CompactionPolicy
 	// noIntents records as AOS did before tool.started intents.
 	noIntents bool
+	// noFencing records as AOS did before lease fencing.
+	noFencing bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -170,12 +172,13 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil)},
-		Compaction:    opts.compaction,
-		BackendRetry:  runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
-		Budget:        opts.budget,
-		RunRecord:     map[string]string{"build_version": "test"},
-		NoToolIntents: opts.noIntents,
+		Factory:        agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil)},
+		Compaction:     opts.compaction,
+		BackendRetry:   runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
+		Budget:         opts.budget,
+		RunRecord:      map[string]string{"build_version": "test"},
+		NoToolIntents:  opts.noIntents,
+		NoLeaseFencing: opts.noFencing,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -628,4 +631,45 @@ func artifactTypes(t *testing.T, stateDir string) string {
 		types = append(types, record.Type)
 	}
 	return strings.Join(types, ",")
+}
+
+// A record made before lease fencing has no lease_fencing in run.started;
+// it replays as identical without fencing, and says so. A current record
+// has the field and is not flagged.
+func TestReplayOfARecordWithoutFencing(t *testing.T) {
+	// With and without intents: builds 8c744ea to 84287c1 recorded intents
+	// but not fencing; older builds neither.
+	for _, noIntents := range []bool{false, true} {
+		root, _ := filepath.EvalSymlinks(t.TempDir())
+		legacy := recordAt(t, root, context.Background(), func(ws string) []step { return roundTripScript(ws) },
+			options{budget: capability.Budget{Seconds: 600}, compaction: runtime.CompactionPolicy{MaxMessages: 12, KeepMessages: 4, Handoff: true}, noIntents: noIntents, noFencing: true})
+		if started := runStartedData(t, legacy); started[agentflow.LeaseFencingField] != "" {
+			t.Fatalf("the legacy run.started has %s", agentflow.LeaseFencingField)
+		}
+		report := replayed(t, legacy, false)
+		if !report.Identical() || !report.LegacyLeases || report.LegacyToolIntents != noIntents {
+			t.Fatalf("noIntents=%v: legacy report = %+v", noIntents, report)
+		}
+	}
+	current := recordRoundTrip(t)
+	if started := runStartedData(t, current); started[agentflow.LeaseFencingField] != agentflow.LeaseFencingFileWrites {
+		t.Fatalf("a current run.started should say %s=%s: %v", agentflow.LeaseFencingField, agentflow.LeaseFencingFileWrites, started)
+	}
+	if report := replayed(t, current, false); !report.Identical() || report.LegacyLeases {
+		t.Fatalf("current report = %+v", report)
+	}
+}
+
+func runStartedData(t *testing.T, stateDir string) map[string]string {
+	t.Helper()
+	var events []kernel.Event
+	raw, _ := os.ReadFile(filepath.Join(stateDir, "kernel", "events.json"))
+	json.Unmarshal(raw, &events)
+	for _, event := range events {
+		if event.Type == agentflow.RunStartedEvent {
+			return event.Data
+		}
+	}
+	t.Fatal("no run.started")
+	return nil
 }

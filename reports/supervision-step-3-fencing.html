@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Lease Fencing for File Writes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Supervision Step 3: Lease Fencing for File Writes</h1>
+    <p>This is step 3 of the slice in <code>supervision-design.md</code>, built for Chapter 7. It covers gap N3 and the review's gap 4, for <code>write_file</code> and <code>edit_file</code>. <code>run</code> stays unfenced, as the note decided.</p>
+    <ul>
+      <li><code>acquire_lease</code> shows its fencing token.</li>
+      <li>A write under another process's live lease is refused, and so is a write with a stale token. The refusal is <code>ErrLeaseFenced</code>, a <code>lease.fenced</code> kernel event and a tool error.</li>
+      <li>The check, the <code>tool.started</code> intent and the write all run under the lease lock, so there is no window between check and write.</li>
+    </ul>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good"><code>go vet</code>, <code>go test ./...</code> (25 packages) and the audit probes pass.</span></li>
+      <li><span class="good">Probe A4's stale holder no longer writes.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials replay identically.</span></li>
+    </ul>
+  </div>
+
+  <h2>1. The Rule</h2>
+  <ul>
+    <li><b>Which leases cover a write.</b> A lease's resource names a path. An absolute resource is used as is; a relative one is joined to the workspace mount (else the first mount). It covers that path and everything below it, within the process's mounts. A name such as <code>build-lock</code> covers only <code>&lt;workspace&gt;/build-lock</code>, and <code>src</code> does not cover <code>srcfile</code>.</li>
+    <li><b>The checks</b>, for each covering lease in name order:
+      <ul>
+        <li><code>held_by_other</code>: a live lease held by a process that is not the writer, or a process the writer was recovered from.</li>
+        <li><code>stale_token</code>: the writer held the resource once, and it has since been granted again. To write, the agent must acquire it again. A writer whose own lease lapsed, with no one granted it since, still holds the current token.</li>
+      </ul>
+    </li>
+    <li><b>What the agent sees</b> is a tool error with no times in it, so it reads the same in a replay. For example: <code>write fenced by a lease: your token 1 for "c.go" is stale; it was granted again with token 2 (no one holds it now); acquire_lease again before writing</code>.</li>
+    <li><b>Renewal.</b> Nothing renews leases automatically, so there is no failed renewal to report. An <code>acquire_lease</code> that loses to another holder already returns <code>held: true</code> and the holder.</li>
+  </ul>
+
+  <h2>2. Order and Window</h2>
+  <ul>
+    <li><b>Order: fence, then intent, then write.</b> All three run inside <code>lease.Manager.Guard</code>. A refused write records no <code>tool.started</code>, so it leaves no open intent and needs no outcome.</li>
+    <li><b>No window between check and write.</b> Every grant, renewal, takeover and transfer takes the same file lock that <code>Guard</code> holds, across OS processes too. <code>TestGuardHoldsTheLockThroughTheWrite</code> starts a takeover during the write, from a second manager; it completes only after the write.</li>
+    <li><b>What stays open</b> is writes that do not go through <code>Guard</code>:
+      <ul>
+        <li><span class="warn"><code>run</code>.</span> Probe A4b: the same stale holder still writes the file with a command, and no <code>lease.fenced</code> is recorded.</li>
+        <li>Anything outside AOS's tools.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>3. Probe A4, Before and After</h2>
+  <pre>go test -tags supervisionaudit -count=1 -v ./bench/supervision/</pre>
+  <table>
+    <tr><th></th><th>Before (<code>e401e4e</code>)</th><th>After</th></tr>
+    <tr><td>The stale holder's <code>write_file</code> after a takeover</td><td class="bad">wrote <code>"stale holder"</code></td><td class="good">fenced; the file is empty; one <code>lease.fenced</code> (<code>held_by_other</code>, holder the thief, token 2)</td></tr>
+    <tr><td>The <code>acquire_lease</code> output</td><td class="bad">keys <code>held, resource, owner_pid, expires_at</code></td><td class="good">adds <code>token: 1</code></td></tr>
+    <tr><td>A4b: the same holder through <code>run</code></td><td>not probed</td><td class="warn">writes the file: <code>run</code> is unfenced</td></tr>
+  </table>
+  <p>A4 now asserts the fixed behavior; A4b only logs.</p>
+
+  <h2>4. Replay</h2>
+  <ul>
+    <li>Two changes reach replay, because <code>acquire_lease</code> and the fence check run live there:
+      <ul>
+        <li><code>acquire_lease</code> is a runtime tool, so its new <code>token</code> output is written during replay;</li>
+        <li>the fence check runs during replay too.</li>
+      </ul>
+      Recorded tool results do not cover either.</li>
+    <li><b>The marker.</b> <code>run.started</code> now records <code>lease_fencing: file_writes</code>. A record without it is replayed with <code>NoLeaseFencing</code>: no fence check and no token. The report sets <code>legacy_leases</code>, and the CLI says <i>the record predates lease fencing; replayed without it</i>.</li>
+    <li><code>lease.fenced</code> only happens with fencing on. An unfenced replay never records it.</li>
+    <li><span class="warn">A run that acquires a lease has never replayed identically, before this change or after.</span> <code>lease.acquired</code> and the <code>acquire_lease</code> result carry an <code>expires_at</code> from the wall clock, so replay diverges at that kernel event. A throwaway probe showed this both with and without fencing. It dates from <code>f3eef1d</code> and is not fixed here.</li>
+  </ul>
+  <h3>Old records on this build</h3>
+  <table>
+    <tr><th>Record</th><th>Replay</th></tr>
+    <tr><td>Eval's cobol-modernization (<code>ca78ad9</code>)</td><td class="good">31/31 calls, 10 events, 62 artifacts, identical; legacy run.started, intents and leases noted</td></tr>
+    <tr><td>Eval's fix-git (<code>ca78ad9</code>)</td><td class="good">8/8 calls, 8 events, 18 artifacts, identical</td></tr>
+    <tr><td>Eval's vulnerable-secret (<code>ca78ad9</code>)</td><td class="good">9/9 calls, 8 events, 20 artifacts, identical</td></tr>
+    <tr><td>Scripted record with intents but no fencing (the <code>8c744ea</code>–<code>84287c1</code> format)</td><td class="good">identical, <code>legacy_leases</code></td></tr>
+    <tr><td>Scripted record with neither</td><td class="good">identical, <code>legacy_leases</code> and <code>legacy_tool_intents</code></td></tr>
+    <tr><td>Scripted record from this build</td><td class="good">identical; it has <code>lease_fencing</code> and is not flagged</td></tr>
+  </table>
+
+  <h2>5. Tests</h2>
+  <table>
+    <tr><th>Package</th><th>Test</th><th>Covers</th></tr>
+    <tr><td>lease</td><td><code>TestGuardFencesWrites</code></td><td>The holder writes; another process is refused. A lapsed lease that no one took still works for its owner. A takeover refuses the old holder, and after the new holder releases, the old token is still stale (with the exact message). A process that never held the lease writes when it is free. Acquiring again makes the token current.</td></tr>
+    <tr><td>lease</td><td><code>TestGuardFollowsTransfers</code></td><td>A recovered successor writes; its predecessor alone is refused.</td></tr>
+    <tr><td>lease</td><td><code>TestGuardReadsOlderLeaseFiles</code></td><td>A <code>leases.json</code> without <code>holders</code> still fences.</td></tr>
+    <tr><td>lease</td><td><code>TestGuardHoldsTheLockThroughTheWrite</code></td><td>A takeover started during the write waits for it.</td></tr>
+    <tr><td>runtime</td><td><code>TestStaleHolderIsFenced</code></td><td>A4 inverted, then stale after the release, then a re-acquire and the write. Two <code>lease.fenced</code> events. Only the write that went through has an intent.</td></tr>
+    <tr><td>runtime</td><td><code>TestLeaseTokenIsShown</code></td><td>The token; a renewal keeps it.</td></tr>
+    <tr><td>runtime</td><td><code>TestForeignLeaseBlocksWrite</code></td><td>A directory lease, an absolute resource, a non-path name, a sibling path, <code>edit_file</code>, and the holder's own edit.</td></tr>
+    <tr><td>runtime</td><td><code>TestRecoveredProcessWritesUnderItsLease</code></td><td>Recover, then a write under the transferred lease.</td></tr>
+    <tr><td>runtime</td><td><code>TestNoLeaseFencing</code></td><td>The behavior from before fencing.</td></tr>
+    <tr><td>replay</td><td><code>TestReplayOfARecordWithoutFencing</code></td><td>Both legacy formats, and the current format.</td></tr>
+  </table>
+
+  <h2>6. Behavior That Changed for Existing Runs</h2>
+  <ul>
+    <li>A <code>write_file</code> or <code>edit_file</code> under another live process's lease, or with a stale token, is now a tool error. Without <code>ContinueOnToolError</code> it ends the run, as a denial does.</li>
+    <li><code>acquire_lease</code> output has <code>token</code>.</li>
+    <li><code>run.started</code> has <code>lease_fencing</code>.</li>
+    <li>Every <code>write_file</code> and <code>edit_file</code> takes the lease file's lock and reads <code>leases.json</code>, even when no leases exist.</li>
+    <li><code>leases.json</code> gains <code>holders</code>.</li>
+    <li>Runs that never acquire a lease behave as before, apart from the lock and the <code>run.started</code> field.</li>
+  </ul>
+</body>
+</html>

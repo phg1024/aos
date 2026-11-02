@@ -8,8 +8,13 @@ audit and the design.
 Recover, the exit's checkpoint by default, `tool.started` intents, file
 changes on cancel). N1, N2 and N6 are marked Implemented below, and the
 audit probes for them now assert the fixed behavior. See
-[Implemented: Steps 1 and 2](#implemented-steps-1-and-2). Steps 3 and 4
-are still proposed.
+[Implemented: Steps 1 and 2](#implemented-steps-1-and-2).
+
+**Update, 2026-11-02:** step 3 is built for file writes: `acquire_lease`
+shows the token, and `write_file` and `edit_file` are fenced. N3 and gap 4
+are marked Implemented for file writes, and probe A4 asserts it. `run` is
+still not fenced (probe A4b). See
+[Implemented: Step 3](#implemented-step-3). Step 4 is still proposed.
 
 ## Why
 
@@ -51,7 +56,7 @@ fixed behavior and fail if it regresses. The tables below keep the
 | 1 | The supervisor is not on the path that runs real agents | **Still holds** | `go list -deps ./cmd/aos ./cmd/aos-tui \| grep -c aos/internal/supervisor` | `0`. The only importer of `internal/supervisor` is its own test. |
 | 2 | Two lease managers on one state dir both won the lease in 193 of 200 trials | **Fixed** (`f3eef1d`) | Probe A2 repeats the review's experiment: two OS processes, one `Acquire` each at a shared start, 200 trials. In-tree, `TestLeaseExclusiveAcrossProcesses` runs 3 processes × 200 attempts. | A2: both won in **0 of 200**. In-tree: 105 grants, no overlap (an unlocked counter lost no increment), tokens exactly 1..105. |
 | 3 | Nothing releases a lease when its holder exits, so a recovered process is locked out until the TTL | **Fixed for recorded exits.** A dead OS process still holds its leases until reaped (see N4). | Probe A3 | After the holder exited, another process acquired the lease: `lease.taken_over`, reason `owner_exited`, token 2. Recovering a process that held a lease gives the lease to the new process: `lease.transferred`, token 1 → 2. The recovered agent's own `acquire_lease` then renews it. |
-| 4 | There are no fencing tokens | **Half fixed.** Tokens are issued, but nothing checks them (see N3). | Probe A4, in-tree token test | Each grant gets a token that strictly increases per resource and is never reissued. But a holder whose lease expired and was taken over (token 2) still wrote the file afterwards. `acquire_lease` does not show the agent its token: its output keys are `held, resource, owner_pid, expires_at`. |
+| 4 | There are no fencing tokens | **Half fixed** at `e401e4e`: tokens were issued, but nothing checked them (see N3). **Implemented for file writes** by step 3; `run` is not fenced. | Probe A4, in-tree token test | Each grant gets a token that strictly increases per resource and is never reissued. But a holder whose lease expired and was taken over (token 2) still wrote the file afterwards. `acquire_lease` does not show the agent its token: its output keys are `held, resource, owner_pid, expires_at`. |
 | 5 | `Recover` has no state check | **Fixed.** A guarded Recover was built in `f3eef1d`. It was not exclusive (N1, since fixed by step 1). | Probe A5 | A running process → `ErrNotRecoverable` ("only an exited process can be recovered"). A non-retryable exit → `ErrNotRecoverable`. Another process's checkpoint → `ErrCheckpointNotOwned`. |
 | 6 | `runSession` runs a process that has already exited | **Fixed** (`f3eef1d`) | Probe A6 | `RunWithOptions` on an exited PID → `ErrProcessExited`, with 0 model calls, no new artifacts and no file written. |
 
@@ -73,7 +78,8 @@ fixed behavior and fail if it regresses. The tables below keep the
   checkpoints while the exit named the second. A recovery can therefore
   quietly roll a process back and repeat steps that already had effects.
 - **N3. Leases are advisory names, and tokens are never checked where the
-  effect happens.**
+  effect happens.** *(Implemented for `write_file` and `edit_file` by
+  step 3: the A4 write is fenced. `run` is still unfenced, A4b.)*
   - A lease's resource is a free string.
   - `write_file`, `edit_file` and `run` never consult leases.
   - The agent never sees its token, so it has nothing to present.
@@ -230,17 +236,21 @@ fixed behavior and fail if it regresses. The tables below keep the
 - An owner that dies without a record holds its leases until `aos reap`
   records its exit or the TTL lapses. *(Implemented, and documented as a
   limit. Automatic reaping and heartbeat renewal are proposed.)*
-- **Fencing is checked at the point of effect.** *(Gap N3: proposed.)*
+- **Fencing is checked at the point of effect.** *(Gap N3: implemented
+  for `write_file` and `edit_file`; `run` proposed.)*
   - A lease on a path under a mount covers writes to that path and below
-    it.
-  - `write_file`, `edit_file` and `run` (for the workspace mount) check, in
-    the tool runtime, two things:
-    - (a) no live lease on the target is held by another process;
-    - (b) if the caller has ever held a lease on the target, its token is
-      still the current one.
+    it. A relative resource is under the workspace mount.
+  - `write_file` and `edit_file` check two things, under the lease lock,
+    before the write:
+    - (a) no live lease on the target, or on a directory above it, is held
+      by another process;
+    - (b) if the caller, or a process it was recovered from, has ever held
+      a lease on the target, its token is still the current one.
   - A failed check is `ErrLeaseFenced`, a `lease.fenced` kernel event, and
-    a tool error. The agent sees its token in the `acquire_lease` result
-    and is told when a renewal fails.
+    a tool error. The agent sees its token in the `acquire_lease` result.
+    There is no automatic renewal, so there is no failed renewal to report.
+    A renewal the agent asks for that loses to another holder already
+    returns `held: true` and the holder.
 
   This follows Chubby's sequencers and the fencing-token practice: the
   resource, not the lock service, rejects the stale holder. AOS can do this
@@ -354,6 +364,8 @@ The book should verify these citations itself.
     writes checked after the fact. The coarse rule is to refuse `run` while
     another process holds a lease anywhere in the mount, which may be too
     strict for parallel workers. That is a choice to make before building.
+    *(Still open after step 3; probe A4b shows the stale holder writing
+    through `run`.)*
 - **Replay compatibility.**
   - New kernel events (`process.superseded`, `tool.started`,
     `lease.fenced`, `supervisor.restart`) change the kernel log. Old
@@ -365,6 +377,13 @@ The book should verify these citations itself.
     `NoToolIntents`, the old behavior, and the report says
     `legacy_tool_intents`. *(Implemented: eval's three `ca78ad9` trials
     replay identically.)*
+  - Fencing changes what replay runs live: `acquire_lease` is a runtime
+    tool, so its new `token` output and the fence check run during
+    replay. `run.started` records `lease_fencing: file_writes`, and a
+    record without it is replayed with `NoLeaseFencing` (`legacy_leases`).
+  - A run that acquires a lease has never replayed identically: the
+    `lease.acquired` event and the `acquire_lease` result carry a
+    wall-clock `expires_at`. That predates step 3 and is not fixed by it.
 - **The TUI's `/recover`** goes through the same exclusive Recover, so two
   terminals on one session directory cannot both recover, lock or not.
 
@@ -391,7 +410,8 @@ In order. Each step is small enough for one commit with its tests.
    - Record `run`'s file changes on cancel and timeout.
    - *Unlocks:* the "what a recovered process may repeat" section, with
      the hard case named and on the record.
-3. **Fencing at the point of effect (N3).**
+3. **Fencing at the point of effect (N3).** *(Implemented for file
+   writes.)*
    - Return the token from `acquire_lease`.
    - Path leases are checked by `write_file` and `edit_file` (the holder
      check and the stale-token check), with `lease.fenced` events.
@@ -546,6 +566,78 @@ Built on 2026-11-01, after `d80ed15`.
 - Every world tool call adds one kernel event.
 - A cancelled world tool's note to the agent is longer.
 - A tool error that ends the run now leaves a `tool_error` artifact.
+
+## Implemented: Step 3
+
+Built on 2026-11-02, after `84287c1`.
+
+- **`lease.Manager.Guard(writers, covers, write)`.**
+  - Under the lease file's lock, it checks every resource that covers
+    the target, in name order.
+  - It returns a `*lease.FenceError` (`ErrLeaseFenced`, reason
+    `held_by_other` or `stale_token`) without calling `write`, or runs
+    `write` with the lock still held.
+  - `leases.json` gains `holders`: per resource, the last token each
+    owner was granted. Older files have none. For them, the current owner
+    counts as holding the current token.
+- **The runtime.** For `write_file` and `edit_file` with a path, the
+  runtime runs the intent and the tool inside `Guard`.
+  - **Order: fence, then intent, then write.** A refused write records
+    no `tool.started`, so it leaves no open intent and needs no outcome.
+    Recording the intent first would put an intent on record for a write
+    that never started.
+  - The writers are the process and its `resumed_from` chain, so a
+    recovered process writes under the lease it took over.
+  - The resource-to-path rule is `leaseCovers`.
+  - A refusal logs `lease.fenced` with `tool`, `path`, `resource`,
+    `reason`, `holder`, `token` and `held_token`.
+  - The error names no time, so it reads the same in a replay.
+- **`acquire_lease`** shows `token`.
+- **The window.** None is left between the check and a fenced write.
+  - Every grant, renewal, takeover and transfer takes the same lock.
+    It is a file lock, so this holds across OS processes as well
+    (`TestGuardHoldsTheLockThroughTheWrite`: a takeover started during
+    the write completes only after it).
+  - What is left open is writes that do not go through `Guard`: `run`
+    (A4b), and anything outside AOS's tools.
+  - An owner's exit is read from the kernel and can only free a lease,
+    never grant one, so it opens no gap either.
+
+**Probe A4, before and after:**
+
+| | Before (`e401e4e`) | After |
+|---|---|---|
+| The stale holder's `write_file` after a takeover | wrote `"stale holder"` | fenced; the file is empty; one `lease.fenced` (`held_by_other`, holder the thief, token 2) |
+| The `acquire_lease` output | keys `held, resource, owner_pid, expires_at` | also `token: 1` |
+| A4b: the same holder through `run` | not probed | writes the file; no `lease.fenced` (`run` is unfenced) |
+
+**Tests:**
+
+- `lease`:
+  - `TestGuardFencesWrites`;
+  - `TestGuardFollowsTransfers`;
+  - `TestGuardReadsOlderLeaseFiles`;
+  - `TestGuardHoldsTheLockThroughTheWrite`.
+- `runtime`:
+  - `TestStaleHolderIsFenced`: A4 inverted, then stale after the release,
+    then a re-acquire and the write;
+  - `TestLeaseTokenIsShown`;
+  - `TestForeignLeaseBlocksWrite`: a directory lease, an absolute
+    resource, a non-path name, a sibling `srcfile` not covered by `src`,
+    `edit_file`, and the holder's own edit;
+  - `TestRecoveredProcessWritesUnderItsLease`;
+  - `TestNoLeaseFencing`.
+- `replay`: `TestReplayOfARecordWithoutFencing`, with and without
+  intents.
+
+**Changed for existing runs:**
+
+- A write under another live process's lease, or with a stale token, is
+  now a tool error.
+- `acquire_lease` output has `token`.
+- `run.started` has `lease_fencing`.
+- Every `write_file` and `edit_file` takes the lease lock and reads
+  `leases.json`.
 
 **A live check worth one trial, sketched and not run.** On eval's queue,
 run one Terminal-Bench task with the restart policy on and a step budget.

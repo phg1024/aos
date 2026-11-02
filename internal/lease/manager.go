@@ -7,7 +7,8 @@
 //
 // Every grant carries a fencing token, strictly increasing per resource
 // across all managers, so a write site can reject a holder whose lease was
-// since taken over. With a kernel bound, grants, renewals, releases,
+// since taken over. Guard is that check, run under the lease lock with the
+// write itself. With a kernel bound, grants, renewals, releases,
 // takeovers and transfers are logged as lease.* kernel events, each before
 // the lease file changes.
 package lease
@@ -15,6 +16,7 @@ package lease
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,6 +30,44 @@ import (
 
 var ErrLeaseHeld = errors.New("resource lease already held")
 var ErrLeaseOwnerMismatch = errors.New("lease owner mismatch")
+
+// ErrLeaseFenced: a write was refused by a lease on its target. The error
+// is a *FenceError saying which lease and why.
+var ErrLeaseFenced = errors.New("write fenced by a lease")
+
+// Why Guard refused a write.
+const (
+	// FenceHeldByOther: another process holds a live lease on the target.
+	FenceHeldByOther = "held_by_other"
+	// FenceStaleToken: the writer held a lease on the target, and the
+	// resource has since been granted again, so its token is not current.
+	FenceStaleToken = "stale_token"
+)
+
+// FenceError is a write Guard refused. It names no time, so the same
+// refusal reads the same whenever it happens.
+type FenceError struct {
+	Resource string
+	Reason   string
+	// Holder holds the resource now, if anyone does; Token is the current
+	// token. HeldToken is the writer's own, stale token.
+	Holder    string
+	Token     int64
+	HeldToken int64
+}
+
+func (e *FenceError) Error() string {
+	if e.Reason == FenceStaleToken {
+		current := "no one holds it now"
+		if e.Holder != "" {
+			current = "held by " + e.Holder
+		}
+		return fmt.Sprintf("%s: your token %d for %q is stale; it was granted again with token %d (%s); acquire_lease again before writing", ErrLeaseFenced, e.HeldToken, e.Resource, e.Token, current)
+	}
+	return fmt.Sprintf("%s: %q, which covers this path, is held by %s (token %d); wait for its release or acquire it when free", ErrLeaseFenced, e.Resource, e.Holder, e.Token)
+}
+
+func (e *FenceError) Is(target error) bool { return target == ErrLeaseFenced }
 
 type Lease struct {
 	Resource  string    `json:"resource"`
@@ -53,6 +93,21 @@ type state struct {
 	// Tokens is the last token issued per resource. It outlives the lease,
 	// so a token is never issued twice.
 	Tokens map[string]int64 `json:"tokens"`
+	// Holders is, per resource, the last token each owner was granted. It
+	// outlives the lease, so Guard can tell a former holder whose token
+	// went stale. Files written before it have none.
+	Holders map[string]map[string]int64 `json:"holders,omitempty"`
+}
+
+// granted records that owner holds resource with token.
+func (s *state) granted(resource, owner string, token int64) {
+	if s.Holders == nil {
+		s.Holders = map[string]map[string]int64{}
+	}
+	if s.Holders[resource] == nil {
+		s.Holders[resource] = map[string]int64{}
+	}
+	s.Holders[resource][owner] = token
 }
 
 // New opens the leases under root. k, if not nil, is the kernel whose
@@ -89,6 +144,7 @@ func (m *Manager) Acquire(resource, ownerPID string, ttl time.Duration) (Lease, 
 					return err
 				}
 				s.Leases[resource] = granted
+				s.granted(resource, ownerPID, granted.Token)
 				return nil
 			case !free:
 				return ErrLeaseHeld
@@ -107,6 +163,7 @@ func (m *Manager) Acquire(resource, ownerPID string, ttl time.Duration) (Lease, 
 		}
 		s.Leases[resource] = granted
 		s.Tokens[resource] = granted.Token
+		s.granted(resource, ownerPID, granted.Token)
 		return nil
 	})
 	if err != nil {
@@ -180,6 +237,7 @@ func (m *Manager) Transfer(fromPID, toPID string) ([]Lease, error) {
 			}
 			s.Leases[resource] = next
 			s.Tokens[resource] = next.Token
+			s.granted(resource, toPID, next.Token)
 			moved = append(moved, next)
 		}
 		return nil
@@ -227,6 +285,87 @@ func (m *Manager) List() ([]Lease, error) {
 	})
 	sort.Slice(live, func(i, j int) bool { return live[i].Resource < live[j].Resource })
 	return live, err
+}
+
+// Guard runs write under the lease lock if writers may write the target,
+// so no grant, takeover or transfer can come between the check and the
+// write. writers is the writing process and the processes it was recovered
+// from; covers reports whether a resource's lease covers the target. Every
+// covering resource is checked, in name order, and the first refusal is
+// returned as a *FenceError without calling write:
+//
+//   - a live lease held by a process not among writers (FenceHeldByOther);
+//   - a lease a writer was granted whose token is no longer the resource's
+//     current one (FenceStaleToken). A writer whose own lease lapsed with
+//     no one granted it since still has the current token.
+//
+// write's error is returned as is.
+func (m *Manager) Guard(writers []string, covers func(resource string) bool, write func() error) error {
+	return m.locked(func() error {
+		s, err := m.read()
+		if err != nil {
+			return err
+		}
+		if err := m.fence(s, time.Now().UTC(), writers, covers); err != nil {
+			return err
+		}
+		return write()
+	})
+}
+
+func (m *Manager) fence(s state, now time.Time, writers []string, covers func(string) bool) error {
+	resources := make([]string, 0, len(s.Tokens))
+	for resource := range s.Tokens {
+		resources = append(resources, resource)
+	}
+	for resource := range s.Leases {
+		if _, counted := s.Tokens[resource]; !counted {
+			resources = append(resources, resource)
+		}
+	}
+	sort.Strings(resources)
+	isWriter := func(pid string) bool {
+		for _, writer := range writers {
+			if writer == pid {
+				return true
+			}
+		}
+		return false
+	}
+	for _, resource := range resources {
+		if !covers(resource) {
+			continue
+		}
+		current := s.Tokens[resource]
+		holder := ""
+		existing, ok := s.Leases[resource]
+		if ok {
+			free, _, err := m.free(existing, now)
+			if err != nil {
+				return err
+			}
+			if !free {
+				holder = existing.OwnerPID
+			}
+			if existing.Token > current {
+				current = existing.Token
+			}
+		}
+		if holder != "" && !isWriter(holder) {
+			return &FenceError{Resource: resource, Reason: FenceHeldByOther, Holder: holder, Token: current}
+		}
+		var held int64
+		for _, writer := range writers {
+			held = max(held, s.Holders[resource][writer])
+		}
+		if ok && isWriter(existing.OwnerPID) {
+			held = max(held, existing.Token)
+		}
+		if held > 0 && held != current {
+			return &FenceError{Resource: resource, Reason: FenceStaleToken, Holder: holder, Token: current, HeldToken: held}
+		}
+	}
+	return nil
 }
 
 // free reports whether a recorded lease no longer binds, and why.

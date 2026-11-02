@@ -60,6 +60,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacyToolIntents {
 		fmt.Fprintln(w, "  the record predates tool.started intents; replayed without them")
 	}
+	if report.LegacyLeases {
+		fmt.Fprintln(w, "  the record predates lease fencing; replayed without it")
+	}
 	if report.Identical() {
 		fmt.Fprintf(w, "  kernel: %d events and the process table identical\n", report.Events)
 		fmt.Fprintf(w, "  artifacts: %d identical (checkpoint usage seconds not compared)\n", report.Artifacts)
