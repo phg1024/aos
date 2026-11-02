@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -380,6 +381,11 @@ func TestAuditA5RecoverGuards(t *testing.T) {
 		if record.Type == "checkpoint" && record.ProducerPID == older.PID {
 			ids = append(ids, record.ID)
 		}
+	}
+	// List iterates the index map: sort, so ids[0] is the oldest.
+	slices.Sort(ids)
+	if len(ids) < 2 || ids[0] == older.ExitStatus.Checkpoint {
+		t.Fatalf("need an older checkpoint than the exit's %s: %v", older.ExitStatus.Checkpoint, ids)
 	}
 	_, olderErr := h.runtime(&stepBackend{}).Recover(context.Background(), older.PID, ids[0], nil, runtime.RunOptions{})
 	t.Logf("FINDING: A5 Recover from the first of %d checkpoints while the exit names %s: err=%v", len(ids), older.ExitStatus.Checkpoint, olderErr)
