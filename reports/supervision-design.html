@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Supervision Design Audit</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Supervision, Leases and Recovery: Audit and Design</h1>
+    <p>This is the design note <code>supervision-design.md</code> for Chapter 7. It is design only: no runtime code changed.</p>
+    <p>The audit ran at <code>e401e4e</code>, using probes in <code>bench/supervision/audit_test.go</code> (build tag <code>supervisionaudit</code>, no model needed):</p>
+    <pre>go test -tags supervisionaudit -count=1 -v ./bench/supervision/</pre>
+    <p><b>Headline:</b></p>
+    <ul>
+      <li><span class="good">Four of the review's six gaps were closed by <code>f3eef1d</code> on 2026-10-28.</span></li>
+      <li><span class="warn">One gap is half closed: fencing tokens are issued but never checked.</span></li>
+      <li><span class="bad">One gap still holds: the supervisor is not on the main path.</span></li>
+      <li><span class="bad">The audit found that Recover is not exclusive: 20 concurrent Recovers made 20 successors.</span></li>
+    </ul>
+  </div>
+
+  <h2>1. The Review's Gaps at e401e4e</h2>
+  <table>
+    <tr><th>Claim (2026-10-28)</th><th>Now</th><th>Evidence</th></tr>
+    <tr><td>Supervisor not on the <code>aos run</code> path</td><td class="bad">Holds</td><td><code>go list -deps ./cmd/aos ./cmd/aos-tui</code> has 0 matches; the only importer is its own test</td></tr>
+    <tr><td>Two managers both won the lease in 193/200 trials</td><td class="good">Fixed</td><td>A2: 0 of 200. In-tree: 105 grants across 3 processes with no overlap, tokens 1..105</td></tr>
+    <tr><td>No release on holder exit</td><td class="good">Fixed for recorded exits</td><td>A3: <code>lease.taken_over</code> with reason <code>owner_exited</code>; Recover gives <code>lease.transferred</code>, token 1 → 2</td></tr>
+    <tr><td>No fencing tokens</td><td class="warn">Issued, not checked</td><td>A4: after a takeover (token 2), the stale holder still wrote the file. The agent never sees its token.</td></tr>
+    <tr><td><code>Recover</code> has no state check</td><td class="good">Guarded</td><td>A5: running, non-retryable and foreign-checkpoint cases are all refused</td></tr>
+    <tr><td><code>runSession</code> runs an exited process</td><td class="good">Fixed</td><td>A6: <code>ErrProcessExited</code>, 0 model calls, no artifacts</td></tr>
+  </table>
+
+  <h2>2. New Findings</h2>
+  <ul>
+    <li><b>N1:</b> <span class="bad">Recover is not exclusive.</span> Two sequential Recovers gave two successors, and 20 concurrent ones gave 20.</li>
+    <li><b>N2:</b> Recover accepts any checkpoint the process owns, not only the one its exit names.</li>
+    <li><b>N3:</b> Leases are advisory names. The file tools and <code>run</code> never check them, and nothing renews them.</li>
+    <li><b>N4:</b> After SIGKILL, the holder looks <code>running</code>. Its lease stays held and Recover is refused until <code>aos reap</code>. After the reap, Recover works and moves the lease.</li>
+    <li><b>N5:</b> <code>aos run</code> has no restart path, and <code>supervisor.RunChildren</code> restarts fresh, with no budget charge or intensity limit.</li>
+    <li><b>N6:</b> A command cut off mid-flight leaves no record that it started.
+      <ul>
+        <li>A7 (cancel): the checkpoint ends <code>tool_cancelled</code>, nothing records the file change, and resuming repeats the effect.</li>
+        <li>A8 (SIGKILL): only the file shows that the command ran.</li>
+      </ul>
+    </li>
+    <li><b>N7:</b> A plain cancel parks the process <code>ready</code> (next: Resume); SIGTERM exits it retryably (next: Recover).</li>
+    <li><b>N8:</b> Reap labels cleanly parked processes as "orphaned".</li>
+  </ul>
+
+  <h2>3. Contract (summary)</h2>
+  <ul>
+    <li><b>Who and when:</b> only an exited, retryable process is recovered, and at most once (<code>superseded_by</code>, in one kernel transaction). Recovery uses the checkpoint the exit names, unless a rollback is explicit and recorded. Capabilities never widen.</li>
+    <li><b>Restart policy:</b> per agent, with <code>max</code>, <code>within</code> and <code>backoff</code>. Retryable exits restart through Recover. Exceeding the intensity limit gives a final exit, and the failure goes to the parent. Restarts are charged to the same account.</li>
+    <li><b>Leases:</b> exclusive across processes, and freed on a recorded exit (both implemented). Fencing is checked at the point of effect by the file tools, and a failed check is a <code>lease.fenced</code> event (proposed).</li>
+    <li><b>Repeats:</b> at most the step in flight. For world tools, a <code>tool.started</code> intent is recorded before the effect. An intent with no outcome is shown to the recovered agent and in <code>inspect</code>. File changes are recorded on cancel too.</li>
+  </ul>
+
+  <h2>4. Smallest Slice, in Order</h2>
+  <table>
+    <tr><th>#</th><th>Step</th><th>Unlocks for the chapter</th></tr>
+    <tr><td>1</td><td>Exclusive Recover that uses the exit's checkpoint by default</td><td>"One runner per unit of work" as Implemented</td></tr>
+    <tr><td>2</td><td><code>tool.started</code> intents; file changes on cancel</td><td>"What a recovered process may repeat", with the hard case on the record</td></tr>
+    <tr><td>3</td><td>Fencing for file writes; the token returned to the agent</td><td>Leases with fencing as Implemented (A4 inverted)</td></tr>
+    <tr><td>4</td><td>A restart policy in agentflow, built on step 1</td><td>The supervisor on the main path; the OTP comparison against running code</td></tr>
+  </table>
+  <p><b>Stays Proposed:</b></p>
+  <ul>
+    <li><code>aos recover</code>;</li>
+    <li>automatic reaping;</li>
+    <li>heartbeat leases;</li>
+    <li>fencing <code>run</code> per file;</li>
+    <li>N8;</li>
+    <li>recovery inside replay;</li>
+    <li>verifier changes.</li>
+  </ul>
+  <p>Every proposed test runs with a scripted backend. The note sketches one live trial, which has not been run.</p>
+</body>
+</html>
