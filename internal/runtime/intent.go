@@ -115,11 +115,28 @@ func OpenIntents(events []kernel.Event, artifacts []artifact.Artifact) []ToolInt
 	return open
 }
 
-// noteInterrupted finds previousPID's open intents and, for each, records
-// a tool_interrupted outcome produced by pid and tells the agent in
-// session, before it takes its next step. previousPID is pid itself on a
-// resume, or the process it recovers.
+// noteInterrupted tells the agent in session, before its next step, of
+// the calls its process chain started and never finished: the intents of
+// previousPID and of the processes it was recovered from that no outcome
+// but tool_interrupted answers. previousPID is pid itself on a resume, or
+// the process it recovers. The chain, not previousPID alone, because a
+// Recover whose handover failed leaves a successor that exited before it
+// was told, and its predecessor, superseded, is never recovered again.
+//
+// Each intent gets one tool_interrupted record, produced by pid the first
+// time; a later note reuses it. The note goes into session unless session
+// already holds that record, so it reaches the history the agent continues
+// once: a successor that failed before checkpointing its note exits at the
+// checkpoint it was recovered from, and the next one is told again.
 func (r *AgentRuntime) noteInterrupted(previousPID, pid, checkpointID string, session *Session) error {
+	lineage, err := r.lineage(previousPID)
+	if err != nil {
+		return err
+	}
+	chain := map[string]bool{}
+	for _, ancestor := range lineage {
+		chain[ancestor] = true
+	}
 	events, err := r.Kernel.Events()
 	if err != nil {
 		return err
@@ -128,20 +145,43 @@ func (r *AgentRuntime) noteInterrupted(previousPID, pid, checkpointID string, se
 	if err != nil {
 		return err
 	}
-	for _, intent := range OpenIntents(events, artifacts) {
-		if intent.PID != previousPID {
+	answered := map[string]bool{}
+	told := map[string]string{}
+	for _, record := range artifacts {
+		if id := record.Metadata["intent"]; id != "" {
+			if record.Type == ToolInterruptedType {
+				told[id] = record.ID
+			} else {
+				answered[id] = true
+			}
+		}
+	}
+	held := map[string]bool{}
+	for _, id := range session.ToolArtifactIDs {
+		held[id] = true
+	}
+	for _, event := range events {
+		if event.Type != ToolStartedEvent || !chain[event.ProcessID] || answered[event.ID] {
 			continue
 		}
-		record, err := r.Artifacts.CreateJSON(ToolInterruptedType, pid, map[string]string{
-			"tool":   intent.Tool,
-			"intent": intent.EventID,
-			"pid":    intent.PID,
-			"target": intent.Target,
-		}, nonEmpty(checkpointID), map[string]string{"tool": intent.Tool, "intent": intent.EventID})
-		if err != nil {
-			return err
+		intent := ToolIntent{EventID: event.ID, PID: event.ProcessID, Tool: event.Data["tool"], Target: event.Data["target"], Time: event.Timestamp}
+		recordID, recorded := told[intent.EventID]
+		if recorded && held[recordID] {
+			continue
 		}
-		session.ToolArtifactIDs = append(session.ToolArtifactIDs, record.ID)
+		if !recorded {
+			record, err := r.Artifacts.CreateJSON(ToolInterruptedType, pid, map[string]string{
+				"tool":   intent.Tool,
+				"intent": intent.EventID,
+				"pid":    intent.PID,
+				"target": intent.Target,
+			}, nonEmpty(checkpointID), map[string]string{"tool": intent.Tool, "intent": intent.EventID})
+			if err != nil {
+				return err
+			}
+			recordID = record.ID
+		}
+		session.ToolArtifactIDs = append(session.ToolArtifactIDs, recordID)
 		session.Messages = append(session.Messages, Message{Role: "tool", Content: interruptedMessage(intent)})
 	}
 	return nil

@@ -507,22 +507,35 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	if err != nil {
 		return RunResult{}, err
 	}
-	if r.Bus != nil {
-		if _, err := r.Bus.Transfer(pid, recovered.PID); err != nil {
-			status := kernel.ExitStatus{Code: 1, Reason: "mail transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
-			_, _ = r.Kernel.Exit(recovered.PID, status)
-			return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+	// Only the supersede is atomic: a handover below can fail, or the
+	// process die, after the successor exists. That successor exits
+	// retryably and is the one to recover next, so each step takes what
+	// the whole chain left, not pid's alone; steps that completed left
+	// nothing behind to take twice.
+	lineage, err := r.lineage(pid)
+	if err != nil {
+		status := kernel.ExitStatus{Code: 1, Reason: "process chain: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+		_, _ = r.Kernel.Exit(recovered.PID, status)
+		return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+	}
+	for i := len(lineage) - 1; i >= 0; i-- {
+		if r.Bus != nil {
+			if _, err := r.Bus.Transfer(lineage[i], recovered.PID); err != nil {
+				status := kernel.ExitStatus{Code: 1, Reason: "mail transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+				_, _ = r.Kernel.Exit(recovered.PID, status)
+				return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+			}
+		}
+		if r.Leases != nil {
+			if _, err := r.Leases.Transfer(lineage[i], recovered.PID); err != nil {
+				status := kernel.ExitStatus{Code: 1, Reason: "lease transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+				_, _ = r.Kernel.Exit(recovered.PID, status)
+				return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+			}
 		}
 	}
-	if r.Leases != nil {
-		if _, err := r.Leases.Transfer(pid, recovered.PID); err != nil {
-			status := kernel.ExitStatus{Code: 1, Reason: "lease transfer: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
-			_, _ = r.Kernel.Exit(recovered.PID, status)
-			return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
-		}
-	}
-	// Calls the old process started and never finished are its last acts;
-	// the new one hears of them before anything else.
+	// Calls the old processes started and never finished are their last
+	// acts; the new one hears of them before anything else.
 	if err := r.noteInterrupted(pid, recovered.PID, checkpointID, &session); err != nil {
 		status := kernel.ExitStatus{Code: 1, Reason: "interrupted calls: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
 		_, _ = r.Kernel.Exit(recovered.PID, status)
@@ -2178,6 +2191,21 @@ func (r *AgentRuntime) ownedCheckpoint(pid, id string) (Session, error) {
 		return Session{}, err
 	}
 	return r.RestoreCheckpoint(id)
+}
+
+// lineage returns pid and the processes it was recovered or resumed from,
+// newest first.
+func (r *AgentRuntime) lineage(pid string) ([]string, error) {
+	var chain []string
+	for current, hops := pid, 0; current != "" && hops < maxResumeChain; hops++ {
+		chain = append(chain, current)
+		process, err := r.Kernel.Get(current)
+		if err != nil {
+			return nil, err
+		}
+		current = process.Metadata["resumed_from"]
+	}
+	return chain, nil
 }
 
 // ownedBy reports whether record was produced by pid or its resumed_from

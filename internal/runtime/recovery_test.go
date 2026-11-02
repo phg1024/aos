@@ -13,7 +13,9 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/ipc"
 	"aos/internal/kernel"
+	"aos/internal/lease"
 	"aos/internal/runtime"
 	"aos/internal/tools"
 )
@@ -461,6 +463,206 @@ func TestRecoverReportsInterruptedCalls(t *testing.T) {
 	}
 	if n := strings.Count(joinContents(again), "tool_interrupted"); n != 1 {
 		t.Fatalf("the note appears %d times after a second recovery, want 1 (carried in history)", n)
+	}
+}
+
+// orphanedCall parks process at a checkpoint, records the intent of a run
+// call, and exits it retryably, as if it died in the command. Mail, when
+// given, arrives while it is parked and stays unread.
+func (f recoveryFixture) orphanedCall(t *testing.T, agent *runtime.AgentRuntime, process kernel.Process, mail string) kernel.Event {
+	t.Helper()
+	agent.Backend = steps(messageResult("about to run"))
+	result, err := agent.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{StopOnAssistantMessage: true})
+	if err != nil || !result.Yielded {
+		t.Fatalf("park = %+v %v", result, err)
+	}
+	if mail != "" {
+		if _, err := agent.Bus.Send("operator", process.PID, mail); err != nil {
+			t.Fatal(err)
+		}
+	}
+	intent, err := f.kernel.RecordEvent(process.PID, runtime.ToolStartedEvent, map[string]string{"tool": "run", "target": "echo once >> effects"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.kernel.Exit(process.PID, kernel.ExitStatus{Code: 1, Reason: "orphaned", Retryable: true, Checkpoint: result.CheckpointID}); err != nil {
+		t.Fatal(err)
+	}
+	return intent
+}
+
+// interruptedRecords returns the tool_interrupted artifacts.
+func (f recoveryFixture) interruptedRecords(t *testing.T) []artifact.Artifact {
+	t.Helper()
+	records, err := f.store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []artifact.Artifact
+	for _, record := range records {
+		if record.Type == runtime.ToolInterruptedType {
+			out = append(out, record)
+		}
+	}
+	return out
+}
+
+// firstHistory is a backend that keeps its first request's history, then
+// exits.
+func firstHistory(history *[]runtime.Message) *funcBackend {
+	return &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			*history = request.History
+		}
+		return exitResult("done"), nil
+	}}
+}
+
+// A Recover whose handover fails after the successor exists (the mail or
+// the lease transfer) leaves that successor exited retryably before it
+// heard of the predecessor's interrupted call, and maybe before it took
+// its mail. The predecessor is superseded and cannot be recovered again,
+// so recovering the successor must pick up what the failed handover left:
+// the call is reported to the next agent, once, and the mail reaches it.
+func TestFailedHandoverIsPickedUpByTheNextRecover(t *testing.T) {
+	for _, broken := range []struct{ store, file, reason string }{
+		{"leases", "leases.json", "lease transfer"},
+		{"ipc", "subscriptions.json", "mail transfer"},
+	} {
+		t.Run(broken.store, func(t *testing.T) {
+			f := newRecoveryFixture(t)
+			root := t.TempDir()
+			leases, err := lease.New(filepath.Join(root, "leases"), f.kernel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bus, err := ipc.New(filepath.Join(root, "ipc"), f.kernel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			agent := f.runtime(nil)
+			agent.Leases, agent.Bus = leases, bus
+			process := f.spawn(t)
+			intent := f.orphanedCall(t, agent, process, "a note for whoever runs this")
+
+			statePath := filepath.Join(root, broken.store, broken.file)
+			saved, readErr := os.ReadFile(statePath)
+			if err := os.WriteFile(statePath, []byte("{not json"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			agent.Backend = &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				t.Error("the successor ran after a failed handover")
+				return exitResult("done"), nil
+			}}
+			failed, err := agent.Recover(context.Background(), process.PID, "", nil, runtime.RunOptions{})
+			if err == nil || !strings.Contains(failed.ExitStatus.Reason, broken.reason) || !failed.ExitStatus.Retryable {
+				t.Fatalf("recover with a broken %s store = %+v, %v", broken.store, failed, err)
+			}
+			if readErr == nil {
+				err = os.WriteFile(statePath, saved, 0o644)
+			} else {
+				err = os.Remove(statePath)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var history []runtime.Message
+			agent.Backend = firstHistory(&history)
+			if _, err := agent.Recover(context.Background(), failed.PID, "", nil, runtime.RunOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			text := joinContents(history)
+			if n := strings.Count(text, `tool_interrupted name=run target="echo once >> effects"`); n != 1 {
+				t.Fatalf("the predecessor's call is reported %d times to the next agent, want 1:\n%s", n, text)
+			}
+			if interrupted := f.interruptedRecords(t); len(interrupted) != 1 || interrupted[0].Metadata["intent"] != intent.ID {
+				t.Fatalf("tool_interrupted = %+v", interrupted)
+			}
+			events, _ := f.kernel.Events()
+			records, _ := f.store.List()
+			if open := runtime.OpenIntents(events, records); len(open) != 0 {
+				t.Fatalf("open intents = %+v", open)
+			}
+			// The next agent reads the predecessor's mail; none is left behind.
+			if n := strings.Count(text, "a note for whoever runs this"); n != 1 {
+				t.Fatalf("the predecessor's mail reached the next agent %d times:\n%s", n, text)
+			}
+			if pending, _ := bus.Pending(); len(pending[process.PID]) != 0 || len(pending[failed.PID]) != 0 {
+				t.Fatalf("mail left with exited processes: %+v", pending)
+			}
+		})
+	}
+}
+
+// A note is recorded once per intent but must reach the history the agent
+// continues: a successor that fails before its first checkpoint exits at
+// the checkpoint it was recovered from, which never held the note, so the
+// next recovery tells the agent again from the same tool_interrupted
+// record. One that checkpointed the note carries it, and is not told twice.
+func TestInterruptedCallReachesTheHistoryOnce(t *testing.T) {
+	f := newRecoveryFixture(t)
+	agent := f.runtime(nil)
+	process := f.spawn(t)
+	f.orphanedCall(t, agent, process, "")
+
+	agent.Backend = &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		return runtime.GenerateResult{}, errors.New("connection reset")
+	}}
+	second, err := agent.Recover(context.Background(), process.PID, "", nil, runtime.RunOptions{})
+	if err == nil || !second.ExitStatus.Retryable || second.ExitStatus.Checkpoint != second.CheckpointID {
+		t.Fatalf("the successor's failed first call = %+v, %v", second, err)
+	}
+	var history []runtime.Message
+	agent.Backend = firstHistory(&history)
+	third, err := agent.Recover(context.Background(), second.PID, "", nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(joinContents(history), "tool_interrupted"); n != 1 {
+		t.Fatalf("the note appears %d times in the third process's first request, want 1:\n%s", n, joinContents(history))
+	}
+	if interrupted := f.interruptedRecords(t); len(interrupted) != 1 || interrupted[0].ProducerPID != second.PID {
+		t.Fatalf("tool_interrupted = %+v, want one, by %s", interrupted, second.PID)
+	}
+	_ = third
+}
+
+// A resume keeps the PID: a parked process with an open intent is told
+// once, and a resume from a later checkpoint, which holds the note, is not
+// told again.
+func TestResumeReportsAnInterruptedCallOnce(t *testing.T) {
+	f := newRecoveryFixture(t)
+	agent := f.runtime(steps(messageResult("about to run")))
+	process := f.spawn(t)
+	parked, err := agent.RunWithOptions(context.Background(), process.PID, nil, runtime.RunOptions{StopOnAssistantMessage: true})
+	if err != nil || !parked.Yielded {
+		t.Fatalf("park = %+v %v", parked, err)
+	}
+	if _, err := f.kernel.RecordEvent(process.PID, runtime.ToolStartedEvent, map[string]string{"tool": "write_file", "target": "a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	var first, second []runtime.Message
+	agent.Backend = &funcBackend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		first = request.History
+		return messageResult("checked"), nil
+	}}
+	again, err := agent.Resume(context.Background(), process.PID, parked.CheckpointID, nil, runtime.RunOptions{StopOnAssistantMessage: true})
+	if err != nil || !again.Yielded {
+		t.Fatalf("first resume = %+v %v", again, err)
+	}
+	agent.Backend = firstHistory(&second)
+	if _, err := agent.Resume(context.Background(), process.PID, again.CheckpointID, nil, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(joinContents(first), "tool_interrupted name=write_file"); n != 1 {
+		t.Fatalf("the first resume told the call %d times", n)
+	}
+	if n := strings.Count(joinContents(second), "tool_interrupted name=write_file"); n != 1 {
+		t.Fatalf("the note appears %d times after the second resume, want 1 (carried in history)", n)
+	}
+	if interrupted := f.interruptedRecords(t); len(interrupted) != 1 || interrupted[0].ProducerPID != process.PID {
+		t.Fatalf("tool_interrupted = %+v", interrupted)
 	}
 }
 
