@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Supervision Review Fixes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Supervision: Two Fixes After the Chapter 7 Review</h1>
+    <p>An independent review of Chapter 7 found two defects in <code>v0.1.3</code> (<code>ae7bea8</code>). Both are fixed on local main, after the tag.</p>
+    <ul>
+      <li><b>The restart bound:</b> a short window turned the restart intensity off. Every valid policy now also has a total.</li>
+      <li><b>Interrupted calls:</b> a failed handover in <code>Recover</code> could lose an interrupted call. The note and the transfers now walk the process chain.</li>
+    </ul>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good"><code>go vet</code>, <code>go test ./...</code> and the audit probes pass.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials replay identically (31/31, 8/8, 9/9).</span></li>
+    </ul>
+  </div>
+
+  <h2>1. A Window Is a Rate, Not a Bound</h2>
+  <p><code>Exceeded</code> counted only the restarts within <code>within</code>. A window shorter than one restart cycle never fills, so <code>max</code> never triggers. A large backoff can keep a long window from filling too, as can a slow agent.</p>
+  <table>
+    <tr><th>Probe (worker always fails retryably, step limit 30)</th><th>Before (<code>ae7bea8</code>)</th><th>After</th></tr>
+    <tr><td><code>{max: 2, within: "1ns", backoff: "0s"}</code></td><td class="bad">30 workers, 29 restarts, 0 escalated; stopped by <code>budget_spent</code></td><td class="good">Refused: <code>invalid workflow spec: agent worker: invalid restart policy: within 1ns is shorter than 1s</code>; nothing runs</td></tr>
+    <tr><td><code>{max: 2, within: "1m", backoff: "0s"}</code>, kernel clock +2 min per reading</td><td class="bad">30 workers, 29 restarts, 0 escalated</td><td class="good">11 workers, 10 restarts, 1 escalated: <code>10 restarts in all (total 10)</code></td></tr>
+  </table>
+  <p><b>The choice:</b></p>
+  <ul>
+    <li><b><code>total</code></b> is the bound: the most restarts a process chain may have in all, whatever the timing. It defaults to 10, or <code>max</code> if that is larger. It is counted from the same recorded <code>supervisor.restart</code> events as the window.</li>
+    <li><b>Why not a window floor alone:</b> no floor can outlast a restart cycle of unknown length, because a model step can take any time.</li>
+    <li><b>The floor still exists:</b> a window must be at least 1s, and longer than the backoffs of <code>max</code> restarts. Otherwise <code>max</code> could never be reached, which makes it dead configuration.</li>
+    <li><b>A huge max:</b> capped. <code>max</code> and <code>total</code> are at most 100 (<code>supervisor.MaxRestarts</code>), and <code>total</code> cannot be below <code>max</code>. An agent restarted a hundred times is not failing transiently.</li>
+    <li><b>Validation names the agent</b>, through <code>agent worker: …</code>.</li>
+  </ul>
+
+  <h2>2. A Failed Handover Lost the Interrupted Call</h2>
+  <p>In <code>Recover</code>, only <code>Kernel.Supersede</code> is atomic. The mail transfer, the lease transfer and <code>noteInterrupted</code> follow it as separate writes. If one of them failed, the successor exited retryably before it was told. The predecessor, now superseded, could never be recovered again. Recovering the successor looked only at the successor's own intents.</p>
+  <p><b>Reproduced first.</b> On <code>ae7bea8</code>, with a broken lease store and then a broken mail store:</p>
+  <ul>
+    <li>the next agent's first request had 0 <code>tool_interrupted</code> notes, while <code>aos inspect</code> still listed the call as open;</li>
+    <li>when the mail transfer was the one that failed, the predecessor's unread mail never reached any agent either;</li>
+    <li>a related, wider case: a successor whose first model call fails exits at the checkpoint it was recovered from, which never held the note. The next recovery was not told either.</li>
+  </ul>
+  <p><b>The fix:</b></p>
+  <ul>
+    <li><code>Recover</code> transfers mail and leases from every process on the <code>resumed_from</code> chain, oldest first. A completed transfer leaves nothing behind, so it is not repeated.</li>
+    <li><code>noteInterrupted</code> looks at the intents of the whole chain that no outcome answers, other than <code>tool_interrupted</code>.</li>
+  </ul>
+  <p><b>How a call is never reported twice:</b></p>
+  <ul>
+    <li><b>One record per intent:</b> the first note creates the <code>tool_interrupted</code> record. A later note finds it by its <code>intent</code> metadata and reuses it.</li>
+    <li><b>One message per history:</b> the message is added only if the session being continued does not already hold that record in <code>ToolArtifactIDs</code>, which only grows. A successor that checkpointed the note carries it, and is not told again.</li>
+    <li><b>Resume:</b> keeps the PID. Its chain is the process and its ancestors, so it follows the same rule.</li>
+  </ul>
+
+  <h2>3. Tests</h2>
+  <table>
+    <tr><th>Package</th><th>Test</th><th>On <code>ae7bea8</code></th></tr>
+    <tr><td>supervisor</td><td><code>TestEffectiveAppliesBoundedDefaults</code>: default total, a 1ns, 999ms or 7s window, backoffs that outlast the window, counts out of range, a total below max</td><td>n/a (new fields)</td></tr>
+    <tr><td>supervisor</td><td><code>TestIntensityCountsTheWindow</code>: the total exceeds with no restart in the window</td><td>n/a</td></tr>
+    <tr><td>agentflow</td><td><code>TestWindowTooShortToFillIsRefused</code>: the reviewer's probe</td><td class="bad">runs 20+ workers</td></tr>
+    <tr><td>agentflow</td><td><code>TestTotalBoundsRestartsTheWindowMisses</code></td><td class="bad">no escalation</td></tr>
+    <tr><td>runtime</td><td><code>TestFailedHandoverIsPickedUpByTheNextRecover</code> (lease, mail): the note and the mail reach the next agent, once</td><td class="bad">fails; the mail subtest also loses the mail</td></tr>
+    <tr><td>runtime</td><td><code>TestInterruptedCallReachesTheHistoryOnce</code>: a successor fails before its first checkpoint; one record, one note</td><td class="bad">fails</td></tr>
+    <tr><td>runtime</td><td><code>TestResumeReportsAnInterruptedCallOnce</code>: two resumes, one note</td><td>passes</td></tr>
+    <tr><td>runtime</td><td><code>TestRecoverReportsInterruptedCalls</code> (existing): two recoveries, one note</td><td>passes</td></tr>
+  </table>
+  <p>Replay is unchanged for existing records. It never runs <code>Recover</code>, and the chain walk adds no events when there is nothing left to move. The three eval trials replay identically.</p>
+
+  <h2>4. Confirmed, Not Fixed: A Delegate in Flight</h2>
+  <ul>
+    <li>A <code>delegate</code> call records no intent.</li>
+    <li>A recovered parent has a new PID, so <code>Children(newPID)</code> is empty, and delegating again spawns a fresh child.</li>
+    <li>What happens to the old child depends on how the parent stopped:
+      <ul>
+        <li>in a live engine, <code>abandonChildren</code> closes it, retryably, when the parent's run ends;</li>
+        <li>after a crash, it stays live in the kernel until a reap.</li>
+      </ul>
+    </li>
+    <li>Either way its checkpoint is not continued, and its open intents reach no agent, because the fresh child is not on its chain.</li>
+    <li>A fix would record the delegation as an intent that the recovered parent can match.</li>
+  </ul>
+</body>
+</html>

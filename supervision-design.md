@@ -224,9 +224,9 @@ fixed behavior and fail if it regresses. The tables below keep the
   exit names. This is the equivalent of Erlang's "transient" child.
 - A **non-retryable** exit is final and goes to the parent.
 - **Restart intensity:**
-  - More than `max` restarts within `within` ends the child with a final,
-    non-retryable exit (`restart intensity exceeded`), and the parent is
-    told.
+  - More than `max` restarts within `within`, or more than `total` in
+    all, ends the child with a final, non-retryable exit (`restart
+    intensity exceeded`), and the parent is told.
   - Escalation is to the parent, as in Erlang/OTP. The engine does not
     restart the parent on its own: the parent is an agent and decides what
     to do with the failure.
@@ -369,6 +369,9 @@ The book should verify these citations itself.
 - **A restart loop on a deterministic failure.** A retryable exit that
   fails the same way every time burns budget until intensity stops it.
   Intensity limits must be on by default whenever a restart policy is set.
+  *(After review: a window alone is a rate, and a rate never stops
+  restarts that come more slowly than it. Every valid policy now also has
+  a total, so this holds for all of them; see step 4.)*
 - **Fencing false positives.**
   - A lease on a directory fences every write below it.
   - `run` cannot be fenced per file before it runs. It can only be refused
@@ -530,8 +533,33 @@ Built on 2026-11-01, after `d80ed15`.
   - a cut-off command: `tool_cancelled`, with the changes;
   - a timeout: `tool_error` with the changes.
 - `Resume` and `Recover` call `noteInterrupted`. For each open intent of
-  the process being continued, it records a `tool_interrupted` outcome
-  and adds the note before any appended message.
+  the process being continued and of the processes it was recovered from,
+  it records a `tool_interrupted` outcome and adds the note before any
+  appended message.
+- **Fixed after review: a failed handover lost the call.** Only
+  `Kernel.Supersede` is atomic. The mail transfer, the lease transfer and
+  the note follow as separate writes. If one failed (or the process
+  died) the successor exited retryably before it was told, and the
+  predecessor, superseded, could never be recovered again. Recovering the
+  successor looked only at the successor's own intents, so the call never
+  reached an agent, while `aos inspect` still listed it as open. The same
+  failure in the mail transfer left the predecessor's mail behind for
+  good. Now:
+  - `Recover` transfers mail and leases from every process on the chain,
+    oldest first. A completed transfer leaves nothing behind, so it is
+    not repeated.
+  - `noteInterrupted` walks the chain. Each intent gets one
+    `tool_interrupted` record, made the first time. A later note reuses
+    it, and adds the message only if the session being continued does
+    not already hold that record. So the call reaches the history the
+    agent continues exactly once. This also covers a successor that
+    failed before its first checkpoint: it exits at the checkpoint it was
+    recovered from, which never held the note, and the next one is told.
+  - `TestFailedHandoverIsPickedUpByTheNextRecover` breaks the lease store
+    and then the mail store. `TestInterruptedCallReachesTheHistoryOnce`
+    covers the failed first call. `TestResumeReportsAnInterruptedCallOnce`
+    covers a resume. The first two fail on `ae7bea8`; the mail subtest
+    also loses the mail there.
 - `aos inspect` lists every call that started and did not finish
   (`cut_off_calls`).
 - Replay: `NoToolIntents` for records without intents. The player answers
@@ -658,10 +686,24 @@ Built on 2026-11-02, after `84287c1`.
 Built on 2026-11-02, after `41d61dd`.
 
 - **The policy.** `AgentSpec.Restart` is a `*supervisor.RestartPolicy`
-  with fields `max`, `within` and `backoff`. Absent, nothing changes.
-  - The defaults are max 3, within 10m, backoff `1s..30s`. An empty
-    policy (`"restart": {}`) is bounded, and no setting removes the
-    bound.
+  with fields `max`, `within`, `backoff` and `total`. Absent, nothing
+  changes.
+  - The defaults are max 3, within 10m, backoff `1s..30s`, and total 10
+    (or `max`, if larger). An empty policy (`"restart": {}`) is bounded,
+    and no setting removes the bound.
+  - **Two bounds, fixed after review.** `max` within `within` is a rate.
+    A rate stops a fast loop but never a slow one: a window shorter than
+    one restart cycle never fills. On `v0.1.3`, `{max: 2, within: 1ns}`
+    restarted until the step limit with no escalation. `total` is the
+    bound that holds whatever the timing: the most restarts a process
+    chain may have in all. Both `max` and `total` are capped at 100
+    (`supervisor.MaxRestarts`), so a huge value cannot stand in for no
+    bound; an agent restarted a hundred times is not failing
+    transiently. `total` below `max` is refused.
+  - A window must be at least 1s and outlast the backoffs of `max`
+    restarts, or `max` could never be reached in it. This floor makes
+    `max` meaningful; the bound itself is `total`, since no floor can
+    outlast a restart cycle of unknown length.
   - Backoff doubles from its base on each restart in the window, up to
     its maximum. A single duration is a fixed wait.
   - An invalid policy fails spec validation.
@@ -678,7 +720,7 @@ Built on 2026-11-02, after `41d61dd`.
   - It acts on a retryable, non-zero exit that is not a wait, as long as
     the run's ctx is live: a SIGTERM stop is never restarted.
   - It checks, in order:
-    1. the intensity;
+    1. the intensity: `max` within the window, then `total`;
     2. that the exit names a checkpoint;
     3. that the budget is not spent (`runtime.SpentBudget`).
   - Then it waits the backoff and calls
@@ -697,7 +739,8 @@ Built on 2026-11-02, after `41d61dd`.
 - **What the delegator sees.**
   - A successful restart: the successor's result.
   - The intensity exceeded: a final exit, `restart intensity exceeded: N
-    restarts within W (max M); last exit: …`, with `exit_retryable=false`.
+    restarts within W (max M); last exit: …`, or `… N restarts in all
+    (total T); …`, with `exit_retryable=false`.
     The last process's kernel record keeps its retryable exit, because an
     exit is never rewritten. An operator can still Recover it on purpose;
     the engine will not.
@@ -727,6 +770,15 @@ Built on 2026-11-02, after `41d61dd`.
   delegator's `delegate` step, one at a time. A backoff therefore holds up
   only the delegator that is already waiting for that child. There are no
   other children running alongside it to block.
+- **Not covered: a delegate in flight.** A `delegate` call records no
+  intent. A recovered parent has a new PID, so `Children(newPID)` is
+  empty, and delegating again spawns a fresh child. The old child's
+  lineage is left as it was: closed by `abandonChildren` when the parent's
+  run ended in a live engine, or left live in the kernel until a reap
+  after a crash. Its checkpoint is not continued, and its open intents
+  reach no agent, because the fresh child is not on its chain. Not fixed;
+  it would need the delegation recorded as an intent the recovered parent
+  can match.
 - **Differences from the contract text above.**
   - Escalation is a non-retryable exit reported to the delegator, not a
     rewritten kernel exit.
@@ -745,7 +797,7 @@ Built on 2026-11-02, after `41d61dd`.
 - `supervisor`:
   - `TestEffectiveAppliesBoundedDefaults`;
   - `TestBackoffDoublesUpToTheMaximum`;
-  - `TestIntensityCountsTheWindow`.
+  - `TestIntensityCountsTheWindow`, with the total.
 - `agentflow`:
   - `TestTransientChildRestartsFromCheckpoint`;
   - `TestRestartIntensityEscalates`;
@@ -760,7 +812,12 @@ Built on 2026-11-02, after `41d61dd`.
     resume, repeated: 2 restarts in all, then escalation;
   - `TestRestartCountSurvivesANewEngine`: a second engine on the same
     state directory continues the count. Both tests fail on `c578edf`;
-  - `TestInvalidRestartPolicyIsRefused`.
+  - `TestInvalidRestartPolicyIsRefused`;
+  - `TestWindowTooShortToFillIsRefused`: the reviewer's probe. The spec
+    is refused, naming the agent, and nothing runs;
+  - `TestTotalBoundsRestartsTheWindowMisses`: the kernel clock moves 2
+    minutes per reading, so no two restarts share the 1 minute window;
+    the default total stops it at 10 restarts.
 - `replay`: `TestReplayRefusesARestartedRun`.
 
 **A live check worth one trial, sketched and not run.** On eval's queue,

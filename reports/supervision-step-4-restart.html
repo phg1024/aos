@@ -58,6 +58,7 @@
     <li><b>What the successor continues:</b> the checkpoint's usage, and the same account chain. It also takes over the predecessor's leases and mail, and hears about the calls the predecessor left unfinished.</li>
     <li><b>Escalation</b> is a final exit reported to the delegator. The last process's kernel record keeps its retryable exit, because an exit is never rewritten. An operator may still Recover it on purpose; the engine will not, and it never restarts the delegator.</li>
     <li><b>The intensity window</b> counts the <code>supervisor.restart</code> events on the process's <code>resumed_from</code> chain, as recorded. It therefore holds across a wait and a resume, and across a new engine on the same directory. A fresh delegation starts a new chain. <span class="warn">Fixed after review:</span> <code>c578edf</code> kept the count in a local slice, so each resume started a fresh window. Both new tests fail on <code>c578edf</code>.</li>
+    <li><b>Review of v0.1.3:</b> <span class="warn">fixed after review:</span> a short window disabled the bound, and a failed handover could lose an interrupted call. Every policy now also has a <code>total</code>. See <a href="supervision-review-fixes.html">supervision-review-fixes.html</a>.</li>
     <li><b>Concurrency:</b> a delegated child runs inside its delegator's <code>delegate</code> step, one at a time. A backoff therefore holds up only the delegator that is already waiting for it.</li>
   </ul>
 
