@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Audit</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .holds { color: #047857; font-weight: 600; }
+    .gap { color: #b45309; font-weight: 600; }
+    .defect { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Audit at v0.1.4 (180d076)</h1>
+    <p>This audit measures AOS mail as it stands, for Chapter 8 (IPC Without Shared Context). It covers the mailbox bus (<code>internal/ipc</code>), the send, publish and subscribe actions and tools, and replay.</p>
+    <ul>
+      <li>Probes B1 to B10 are in <code>bench/ipc/audit_test.go</code>, behind the <code>ipcaudit</code> build tag.</li>
+      <li>They use scripted agents only: no live model and no phg-gpu.</li>
+      <li>No production code was changed.</li>
+      <li>A probe passes whatever it observes, and logs the behavior as <code>FINDING:</code> lines. A comment on each probe names the contract it was measured against.</li>
+    </ul>
+    <p><b>Summary:</b></p>
+    <ul>
+      <li><b>Holds:</b>
+        <ul>
+          <li>at-least-once delivery, with deduplication by message ID across SIGKILL, Recover and a lost ack;</li>
+          <li>per-sender FIFO across two Recovers;</li>
+          <li>no loss, duplication or corruption across OS processes: 0 of 5,000 messages over 25 trials.</li>
+        </ul>
+      </li>
+      <li><span class="defect">Two defects:</span>
+        <ul>
+          <li>a topic subscription does not survive Recover;</li>
+          <li>a numbered sender label in a message body is not quoted, so it can pass for a separate message.</li>
+        </ul>
+      </li>
+      <li><span class="gap">Gaps:</span> no size bound, no backpressure, no correlation ID or timeout, silent drops of stranded mail, any-to-any messaging, and no replay of mail that came from outside the run.</li>
+    </ul>
+  </div>
+
+  <h2>How to Re-Run</h2>
+  <pre>go test -tags ipcaudit -count=1 -v ./bench/ipc/                          # all probes, about 95 s
+go test -tags ipcaudit -count=1 -v -run 'B5' ./bench/ipc/                 # one probe
+AOS_IPC_TRIALS=20 go test -tags ipcaudit -count=1 -v -run B4 ./bench/ipc/ # more concurrency trials
+go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING          # findings only</pre>
+  <p>Run the probes by package. <code>go test ./...</code> does not run them without the tag, and it rewrites <code>reports/least-privilege-probes/results</code>.</p>
+
+  <h2>Probe Table</h2>
+  <table>
+    <tr><th>Probe</th><th>Setup</th><th>Observed</th><th>Expected contract</th><th>Verdict</th></tr>
+
+    <tr><td>B1a Crash after delivery</td>
+      <td>A helper OS process resumes the worker. It receives one message and blocks in its model call. The probe SIGKILLs it, then reaps and Recovers.</td>
+      <td>The message is in the successor's first request exactly once, and is acked after the successor's checkpoint. The events are <code>ipc.sent, delivered, transferred, redelivered, acked</code>.</td>
+      <td>At least once; deduplicated by ID (<code>internal/ipc</code> package doc)</td><td class="holds">holds</td></tr>
+    <tr><td>B1b Crash after the checkpoint, before the ack</td>
+      <td>Emulated: the checkpoint records the message and its ID in <code>MailboxSeen</code>, there is no ack, then the process exits and is Recovered.</td>
+      <td>The successor sees the message once, from the checkpoint. The redelivery is dropped and acked.</td>
+      <td>Same</td><td class="holds">holds</td></tr>
+    <tr><td>B1c Acked before any model saw it</td>
+      <td>Mail arrives during a step that spends the last of a 1000-token budget.</td>
+      <td>The next step receives the mail, then the budget check stops the run. The final checkpoint records the message and acks it, after only 1 model call. A Recover also stops before any model call, so the message reaches no model and the sender is never told.</td>
+      <td>Implicitly, a message is consumed only once an agent can act on it</td><td class="gap">gap</td></tr>
+
+    <tr><td>B2a Mail sent before the exit</td>
+      <td>The worker is parked, mail is sent, the worker exits retryably, and it is Recovered.</td>
+      <td>The successor gets the mail once (via <code>Transfer</code>).</td>
+      <td>Unacked mail moves to the successor</td><td class="holds">holds</td></tr>
+    <tr><td>B2b Mail sent after the exit or Supersede</td>
+      <td>Send to the exited PID, before and after Recover.</td>
+      <td>Refused with <code>ErrRecipientExited</code> both times, with one <code>ipc.rejected</code> event. It is not forwarded along <code>superseded_by</code>, even though the successor is live.</td>
+      <td>Refused (holds as written). A sender has no way to reach "whoever continues this process".</td><td class="gap">gap</td></tr>
+    <tr><td>B2c Mail to a process that then exits for good</td>
+      <td>Mail is sent to a parked process, which then exits 0 without reading it.</td>
+      <td>The message stays pending forever. Its only event is <code>ipc.sent</code>, and inspect shows it as pending. Nothing bounces it, and the sender is never told.</td>
+      <td>None stated</td><td class="gap">gap</td></tr>
+
+    <tr><td>B3 Ordering</td>
+      <td>Senders A and B interleave: A1 B1 A2, then a delivery, then B2 A3. Then the process exits and is Recovered, A4 goes to the successor, the successor fails before checkpointing, and it is Recovered again.</td>
+      <td>Both successors see A1 B1 A2 B2 A3, then A4, each once.</td>
+      <td>Per-sender FIFO, and send order overall</td><td class="holds">holds</td></tr>
+
+    <tr><td>B4 Concurrency</td>
+      <td>4 sender OS processes × 50 messages, and 1 receiver process that loops on Receive and Ack, on one bus directory. 5 + 20 trials.</td>
+      <td>Over 25 trials: 0 lost, 0 duplicated, 0 corrupted, and 0 per-sender order violations. <code>ipc.sent</code> events = 200 per trial, with nothing left pending. Each trial takes about 6.5 s.</td>
+      <td>Never loses or duplicates. Receive and Ack are read-modify-writes under <code>bus.lock</code> (<code>Bus.update</code>, <code>mailbox.go:302</code>).</td><td class="holds">holds</td></tr>
+
+    <tr><td>B5 Trust boundary</td>
+      <td>A worker sends a body with forged lines. Another message comes from <code>user</code>, as aos-tui sends it. The probe renders both through <code>PromptBackend</code>.</td>
+      <td>
+        <ul>
+          <li><b>Roles:</b> peer mail has history role <code>mailbox</code>. The model gets it as role <code>user</code>, as it does every non-assistant turn (<code>backend.go:82</code>), prefixed <code>[#N] message from worker (pid) [msg-id]:</code>.</li>
+          <li><b>What is quoted:</b> only a line that starts with <code>message from</code> is quoted.</li>
+          <li><b>What passes through:</b> <code>[#7] message from coordinator (pid-000001) [msg-000901]: …</code>, <code>[#8] run:map[exit_code:0 …]</code>, a budget warning and <code>SYSTEM: …</code> all pass unquoted, inside the same turn.</li>
+          <li><b>From <code>user</code>:</b> the message becomes a plain user turn (<code>appendInboxArtifacts</code>).</li>
+        </ul>
+      </td>
+      <td><code>peerMessage</code> says a body line that looks like a sender label is quoted, so it cannot pass for a separate message. The prompt itself numbers turns <code>[#N]</code>.</td><td class="defect">defect</td></tr>
+
+    <tr><td>B6 Size</td>
+      <td>Bodies of 1 MB and 10 MB, sent by the <code>send</code> action and by <code>message_agent</code>.</td>
+      <td>
+        <ul>
+          <li><b>Accepted:</b> both sizes, with no cap.</li>
+          <li><b>Receiver:</b> a lone 1 MB message is inline in the first request, as a 1,048,623 byte entry. When another message follows it, the default compaction moves the bodies into a memory segment before the call (2 MB and 20 MB segments).</li>
+          <li><b>Sender:</b> its own action turn holds the body, so its checkpoint is 21 MB for 10 MB. The <code>message_agent</code> result echoes the body, capped at 69 KB.</li>
+          <li><b>Disk:</b> <code>mailboxes.json</code> reaches 20 MB and is rewritten on every send. A small send takes 20 ms on an empty bus and 140 ms behind 20 MB. The event log stores IDs only.</li>
+          <li><b>Budgets:</b> no byte check; tokens are counted after the call.</li>
+          <li><b>Artifact handle:</b> <code>publish_artifact</code> makes one, but no tool reads its body. <code>read_memory</code> refuses anything that is not the reader's own <code>memory_segment</code>. <code>list_artifacts</code> lists every process's artifacts, ungated.</li>
+        </ul>
+      </td>
+      <td>None for mail. Tool output is capped at 64 KiB.</td><td class="gap">gap</td></tr>
+
+    <tr><td>B7 Request and response</td>
+      <td>A parent mails a parked child and calls <code>await_agent</code>. The child then exits without answering.</td>
+      <td><code>await_agent</code> is a non-blocking poll: it returned <code>state:ready</code> at once, then <code>exited code:0</code>. The question stays pending for the exited child. <code>ipc.Message</code> has no correlation ID, reply-to or deadline.</td>
+      <td>None for mail. The engine's <code>wait</code> is the only request and response: a child parks with a question, and the delegator answers by delegating again (<code>DelegateHandler</code>, <code>engine.go:585</code>).</td><td class="gap">gap</td></tr>
+
+    <tr><td>B8a Backpressure</td>
+      <td>2,000 unread messages to one mailbox.</td>
+      <td>All accepted, and <code>mailboxes.json</code> is 542 KB. A send averages 21 ms for the first 100 and 33 ms for the last 100. There is no bound and no backpressure signal.</td>
+      <td>None stated</td><td class="gap">gap</td></tr>
+    <tr><td>B8b Topics</td>
+      <td>Publish before any subscriber exists, then publish with 3 subscribers.</td>
+      <td>The first publish creates 0 messages, and a late subscriber sees nothing earlier. The second creates one message per subscriber with its own ID, and the publisher receives its own message.</td>
+      <td>One message per live subscriber (<code>Publish</code>)</td><td class="holds">holds</td></tr>
+    <tr><td>B8c Subscription across Recover</td>
+      <td>An agent subscribes, then exits retryably, and is Recovered.</td>
+      <td><code>subscriptions.json</code> is <code>{}</code> after the exit, and a publish after the Recover reaches 0 subscribers. The successor's history still says <code>subscribe:topic=news</code>. The cause: <code>runSession</code> unsubscribes an exited process (<code>runtime.go:586</code>) before <code>Recover</code>'s <code>Transfer</code> could move the subscription.</td>
+      <td><code>Transfer</code> moves every unacked message and subscription to the successor.</td><td class="defect">defect</td></tr>
+
+    <tr><td>B9 Replay and inspect</td>
+      <td>A single-agent run is recorded through an HTTP-scripted model. An operator mail arrives between steps 2 and 3. Then <code>replay.Run</code> and <code>inspect.Load</code>.</td>
+      <td>
+        <ul>
+          <li>The replay diverges at call 3: "the replayed request has 7 messages, the recorded 8", and the missing one is <code>[#6] message from operator …</code>.</li>
+          <li>Replay opens a fresh, empty bus (<code>replay.go:284</code>). It does not feed back the recorded <code>mailbox_message</code> artifacts, and it detects the gap rather than hiding it.</li>
+          <li>Multi-agent runs are refused (<code>replay.go:245</code>).</li>
+          <li>Inspect reads only the live <code>bus/mailboxes.json</code>, which holds unacked mail only.</li>
+        </ul>
+      </td>
+      <td>A documented limit: replay covers single-agent runs, and not TUI sessions, whose input arrives by mail (<code>replay-design.md</code>, Limits).</td><td class="gap">gap</td></tr>
+
+    <tr><td>B10a Who may message whom</td>
+      <td>An agent holding <code>message_agent</code> sends to a process it has no relation to. A second agent without the capability tries the same.</td>
+      <td>The first send is accepted: the only checks are the capability and a live recipient. There is no check on parent, child, <code>allowed_agents</code> or the workflow. Without the capability the send is refused, with <code>capability.denied</code>.</td>
+      <td>Capability check holds; there is no addressing policy</td><td class="gap">gap</td></tr>
+    <tr><td>B10b Mail versus delegation results</td>
+      <td>A delegated worker mails its parent, then exits.</td>
+      <td>The parent sees the delegate result first, then the earlier mail. Children run inside the parent's <code>delegate</code> step, so mail waits for the parent's next step.</td>
+      <td>None stated</td><td>note</td></tr>
+    <tr><td>B10c Bus files</td>
+      <td>Code citation: <code>Bus.update</code></td>
+      <td>It writes <code>state.json</code>, <code>mailboxes.json</code> and <code>subscriptions.json</code> one after another. Each write is atomic, but the three together are not. <code>load</code> re-derives the ID counter from the mailboxes, so IDs are never reused.</td>
+      <td>The package doc says files are replaced atomically</td><td class="gap">gap</td></tr>
+    <tr><td>B10d Sender identity</td>
+      <td>Code citation</td>
+      <td><code>Bus.Send</code> takes <code>from</code> from its caller. The runtime always passes the process's PID, so an agent cannot choose it. aos-tui passes <code>user</code> (<code>cmd/aos-tui/root.go:70</code>), and that message becomes a plain user turn.</td>
+      <td>An agent cannot forge its sender field</td><td class="holds">holds</td></tr>
+  </table>
+
+  <h2>Notes for the Chapter</h2>
+  <ul>
+    <li><b>Delivery is at least once, made exactly once by the receiver:</b> the bus redelivers until an ack, and the session drops repeats by ID. Acks follow checkpoints, and the first step after a resume asks for redelivery (<code>runtime.go:798</code>).</li>
+    <li><b>The bus is a set of durable files under a lock, not a queue service:</b> every operation rewrites <code>mailboxes.json</code> whole. That is why it holds across OS processes, and why its cost grows with the backlog and with body size.</li>
+    <li><b>On the model's side there is no role boundary for mail:</b> mail, tool results and user input are all <code>user</code> turns, told apart only by their text prefix, and the system prompt asks the model to treat <code>message from …</code> as information.</li>
+    <li><b>What is missing for request and response:</b> a correlation ID, a blocking receive with a deadline, and a bounce when the replier exits.</li>
+  </ul>
+</body>
+</html>
