@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Design</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .holds { color: #047857; font-weight: 600; }
+    .gap { color: #b45309; font-weight: 600; }
+    .defect { color: #b91c1c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Design for Chapter 8</h1>
+    <p>This is a proposal, written after the IPC audit (<a href="ipc-audit.html">ipc-audit.html</a>, <code>8a75465</code>). The full text is <code>ipc-design.md</code> at the repo root. <b>Nothing in it is built.</b> Its commit changes no production code.</p>
+    <p><b>The chapter's question:</b> when should supervised processes use mailboxes, events, or artifact handles?</p>
+    <p><b>The answer, as rules the runtime enforces:</b></p>
+    <ul>
+      <li><b>Mail</b> carries control and short data: questions, replies, notices, pointers. Bodies are capped at 16 KiB.</li>
+      <li><b>Artifact handles</b> carry anything over the cap, and anything that is a claim someone should check.</li>
+      <li><b>The event log</b> holds state changes. Only the runtime writes it.</li>
+    </ul>
+  </div>
+
+  <h2>1. How Strongly Each Rule Is Enforced</h2>
+  <table>
+    <tr><th>Rule</th><th>Enforced by</th><th>Strength</th></tr>
+    <tr><td>Large data goes by handle</td><td>The bus refuses a body over 16 KiB, and the refusal names <code>publish_artifact</code></td><td class="holds">Full</td></tr>
+    <tr><td>State goes in the event log</td><td>No tool lets an agent append a kernel event, so "I hold the lease" in a message changes nothing</td><td class="holds">Full</td></tr>
+    <tr><td>Claims go by handle</td><td>The runtime cannot tell a claim from a question. The verdict comes from the verifier's recorded exit (<code>agentflow/verification.go</code>), never from mail or a summary, so a claim sent only by mail cannot pass a run.</td><td class="gap">At the verdict, not at the send</td></tr>
+  </table>
+
+  <h2>2. Today's State (from the audit at <code>180d076</code>)</h2>
+  <table>
+    <tr><th>Probe</th><th>Finding</th><th>Verdict</th></tr>
+    <tr><td>B1a, B1b</td><td>At least once, deduplicated by ID, across SIGKILL, Recover and a lost ack</td><td class="holds">holds</td></tr>
+    <tr><td>B1c</td><td>Mail acked in a step that a spent budget stops; no model sees it, and the sender is not told</td><td class="gap">gap</td></tr>
+    <tr><td>B2a</td><td>Mail moves to the recovered successor</td><td class="holds">holds</td></tr>
+    <tr><td>B2b</td><td>A send to a superseded PID is refused, not forwarded</td><td class="gap">gap</td></tr>
+    <tr><td>B2c</td><td>Mail to a process that exits without reading it stays pending forever</td><td class="gap">gap</td></tr>
+    <tr><td>B3, B4</td><td>FIFO across Recovers; 0 of 5,000 lost, duplicated or corrupted across OS processes</td><td class="holds">holds</td></tr>
+    <tr><td>B5</td><td><code>[#N] message from …</code>, a forged tool result, a budget note and a <code>SYSTEM:</code> line all pass unquoted</td><td class="defect">defect</td></tr>
+    <tr><td>B6</td><td>No size cap (10 MB accepted); no tool reads a handle; <code>list_artifacts</code> is ungated</td><td class="gap">gap</td></tr>
+    <tr><td>B7</td><td>No correlation ID or deadline; <code>await_agent</code> is a poll</td><td class="gap">gap</td></tr>
+    <tr><td>B8a</td><td>Unbounded mailboxes</td><td class="gap">gap</td></tr>
+    <tr><td>B8b</td><td>One message per live subscriber; a late subscriber gets nothing earlier</td><td class="holds">holds</td></tr>
+    <tr><td>B8c</td><td>A subscription is dropped at exit, before Recover's <code>Transfer</code> could move it</td><td class="defect">defect</td></tr>
+    <tr><td>B9</td><td>Replay diverges at model call 3 (ledger seq 5, the log's <code>call=5</code>), because operator mail is not fed back</td><td class="gap">gap</td></tr>
+    <tr><td>B10a</td><td>Any agent with <code>message_agent</code> can message any live process</td><td class="gap">gap</td></tr>
+    <tr><td>B10b</td><td>A delegate result arrives before the child's earlier mail</td><td>note</td></tr>
+    <tr><td>B10c</td><td>The three bus files are not written together atomically</td><td class="gap">gap</td></tr>
+    <tr><td>B10d</td><td>An agent cannot choose its sender field</td><td class="holds">holds</td></tr>
+  </table>
+  <p><b>On numbering:</b> replay's <code>Divergence.Call</code> is the ledger seq of the call's start line. Each call writes a start line and an outcome line, so model call 3 starts at seq 5. The doc counts model calls.</p>
+
+  <h2>3. The Contract Decisions</h2>
+  <table>
+    <tr><th>#</th><th>Question</th><th>Decision</th><th>Why, in one line</th></tr>
+    <tr><td>1</td><td>Consumed vs delivered (B1c)</td><td>Consumed means a model request included it (<code>MailboxShown</code>). The ack still follows the checkpoint. Mail never shown when the chain ends becomes a dead letter with reason <code>not_shown</code>.</td><td>A successor after a spent budget would never make the call either, so waiting is just slower silence.</td></tr>
+    <tr><td>2</td><td>Sender outcomes (B2c, B1c, B7)</td><td>When the chain ends: an <code>ipc.dead_letter</code> event for each message, and one runtime notice to the sender's chain. A new <code>Kernel.Close</code> marks a retryable exit as final.</td><td>Erlang sends silently and gives outcomes through monitors. AOS refuses a send to an ended chain at once, and reports per message, because the agent cares about its question.</td></tr>
+    <tr><td>3</td><td>Addressing across recovery (B2b)</td><td>A PID names its chain. A send follows <code>superseded_by</code> (<code>ipc.forwarded</code>). Mail for an open, retryably exited end is held. A send is refused only when the chain has ended.</td><td>Temporal's Workflow ID vs Run ID. The PIDs that agents know go stale on every restart.</td></tr>
+    <tr><td>4</td><td>Subscriptions (B8c)</td><td>A subscription is owned by the chain and dropped when the chain ends, not at exit. <code>ipc.subscribed</code> and <code>ipc.unsubscribed</code> are events. A late subscriber gets nothing earlier.</td><td>A topic is a notification, not a store. Anything a late joiner needs is an event or an artifact.</td></tr>
+    <tr><td>5</td><td>Trust boundary (B5)</td><td>A runtime header line, then every body line prefixed <code>| </code>. <code>Bus.Send</code> refuses the sender <code>user</code>, and only <code>SendAsOperator</code> (aos-tui) can use it. A message never widens the receiver's authority.</td><td>Framing reduces injection but does not stop it (Spotlighting). The boundary is the capability set (CaMeL's approach), which no message can change.</td></tr>
+    <tr><td>6</td><td>Request and response (B7)</td><td>Messages gain <code>correlation_id</code>, <code>reply_to</code> and <code>deadline</code>. <code>await_reply</code> returns a reply, <code>timeout</code>, <code>recipient_ended</code> or <code>no_reply</code>. The default timeout is 5 min, within the time budget. An await on the asker's own parked child is refused because it would deadlock.</td><td><code>gen_server:call</code> and Temporal Update have the same shape. Erlang's 5 s default suits an in-memory server, not a model.</td></tr>
+    <tr><td>7</td><td>Size and handles (B6)</td><td>A 16 KiB inline cap. <code>message_agent</code> can attach artifacts, and <code>read_artifact</code> reads them in 64 KiB pages. A process can read its own chain's artifacts, attached ones and its descendants' published ones. <code>list_artifacts</code> is gated the same way.</td><td>A message is a turn read in full. A sub-agent's summary is a claim, which the Chapter 11 verdict never trusts.</td></tr>
+    <tr><td>8</td><td>Backpressure (B8a)</td><td>A mailbox holds at most 256 messages or 1 MiB. A send beyond that is refused with <code>ErrMailboxFull</code>. A publish skips full subscribers and reports them.</td><td>Blocking risks deadlock, and dropping breaks at-least-once. Erlang has no bound, and Akka's bound is opt-in.</td></tr>
+    <tr><td>9</td><td>Addressing policy (B10a)</td><td>A <code>MessageTargets</code> capability, attenuated. It defaults to the delegation edges (the parent and <code>allowed_agents</code>). A received request grants one reply.</td><td>The same attenuation as Chapter 4. It also covers runs with no workflow.</td></tr>
+    <tr><td>10</td><td>Bus durability (B10c)</td><td>One <code>bus.json</code>, written in one atomic replace.</td><td>One transaction already. The caps bound each send's whole-file rewrite at tens of milliseconds.</td></tr>
+    <tr><td>11</td><td>Replay (B9)</td><td>Replay feeds the recorded <code>mailbox_message</code> artifacts back at their recorded step. Multi-agent replay is out of scope.</td><td>The record already holds the mail and the step it arrived at.</td></tr>
+  </table>
+
+  <h2>4. The Smallest Slice</h2>
+  <table>
+    <tr><th>Step</th><th>What</th><th>Probes that flip to asserting</th></tr>
+    <tr><td>1</td><td>Structural framing; the reserved operator sender (B5)</td><td>B5</td></tr>
+    <tr><td>2</td><td>Chain-owned delivery: <code>Kernel.Close</code>, forwarding, and subscriptions dropped at chain end (B8c, B2b)</td><td>B8c, B2b</td></tr>
+    <tr><td>3</td><td>Dead letters, bounces and <code>MailboxShown</code> (B2c, B1c)</td><td>B2c, B1c</td></tr>
+    <tr><td>4</td><td><code>correlation_id</code>, <code>reply_to</code>, <code>deadline</code> and <code>await_reply</code> (B7)</td><td>B7</td></tr>
+    <tr><td>5</td><td>The 16 KiB cap, the mailbox bound, handles, <code>read_artifact</code>, a gated <code>list_artifacts</code> (B6, B8a)</td><td>B6, B8a</td></tr>
+    <tr><td>Later</td><td><code>MessageTargets</code> (B10a), one <code>bus.json</code> (B10c), the replay bus (B9), topic scoping, framing of tool outputs, multi-agent replay</td><td>B10a, B10c, B9</td></tr>
+  </table>
+  <p><b>Why this order:</b></p>
+  <ul>
+    <li><b>The defects come first.</b></li>
+    <li><b>B2b goes with B8c.</b> If B8c is fixed alone, a publish made during a restart's backoff is still lost, because <code>Publish</code> drops exited subscribers.</li>
+    <li><b>Outcomes come before request and response.</b> A failed request is a dead letter that someone is waiting on.</li>
+    <li><b>The caps come last, with the handle path.</b> They are the only step that refuses something that works today.</li>
+  </ul>
+
+  <h2>5. Hazards</h2>
+  <ul>
+    <li><b>Forwarding races Recover:</b> both run under the bus lock, with the kernel read inside it.</li>
+    <li><b>Mail on open chains:</b> it is held until the chain is closed. The engine must close every exit it declines to restart.</li>
+    <li><b>Bounce storms:</b> one notice per ended chain per sender, and a bounce is never bounced.</li>
+    <li><b>Framing changes prompts:</b> it is recorded as <code>peer_framing</code>, and older records replay with the legacy rendering.</li>
+    <li><b>The cap breaks large sends that work today:</b> the refusal names the remedy.</li>
+    <li><b>Deadlocks:</b> only the asker's own parked child is detected. A cycle between separate processes ends by timeout.</li>
+    <li><b>Handles cannot be revoked:</b> sending a handle is like sending the bytes.</li>
+  </ul>
+
+  <h2>6. Prior Art Cited (URLs in the doc)</h2>
+  <ul>
+    <li><b>Erlang:</b>
+      <ul>
+        <li>sending to a pid "never fails, even if the pid identifies a non-existing process";</li>
+        <li>monitors send <code>'DOWN'</code>, with reason <code>noproc</code> for a process that does not exist;</li>
+        <li><code>gen_server:call/2</code> has a 5000 ms default;</li>
+        <li>no stated bound on the message queue.</li>
+      </ul>
+    </li>
+    <li><b>Temporal:</b>
+      <ul>
+        <li>a Workflow ID versus a Run ID;</li>
+        <li><code>SignalWorkflow</code> with an empty run ID picks the running execution;</li>
+        <li>an Update returns a result or a failure, and is deduplicated by Update ID per run.</li>
+      </ul>
+    </li>
+    <li><b>Akka:</b>
+      <ul>
+        <li>the default mailbox is unbounded;</li>
+        <li>bounded mailboxes are opt-in, and messages that arrive when one is full go to dead letters.</li>
+      </ul>
+    </li>
+    <li><b>Spotlighting</b> (Hines et al. 2024) and <b>CaMeL</b> (Debenedetti et al. 2025).</li>
+  </ul>
+</body>
+</html>

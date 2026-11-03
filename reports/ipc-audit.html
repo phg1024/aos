@@ -25,6 +25,7 @@
       <li>Probes B1 to B10 are in <code>bench/ipc/audit_test.go</code>, behind the <code>ipcaudit</code> build tag.</li>
       <li>They use scripted agents only: no live model and no phg-gpu.</li>
       <li>No production code was changed.</li>
+      <li>The design that answers these findings is <a href="ipc-design.html">ipc-design.html</a> (<code>ipc-design.md</code>).</li>
       <li>A probe passes whatever it observes, and logs the behavior as <code>FINDING:</code> lines. A comment on each probe names the contract it was measured against.</li>
     </ul>
     <p><b>Summary:</b></p>
