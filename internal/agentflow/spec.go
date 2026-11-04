@@ -58,6 +58,9 @@ func (s WorkflowSpec) Validate() error {
 	if s.Name == "" || s.EntryAgent == "" || len(s.Agents) == 0 {
 		return ErrWorkflowSpecInvalid
 	}
+	if s.Recall.NoPromptFraming {
+		return fmt.Errorf("%w: the prompt framing cannot be turned off for a workflow", ErrWorkflowSpecInvalid)
+	}
 	seen := map[string]bool{}
 	hasEntry := false
 	for _, agent := range s.Agents {

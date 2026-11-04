@@ -14,6 +14,7 @@ package framing
 import (
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -78,11 +79,18 @@ func Compose(o Opener, text string) string {
 	return o.text + text
 }
 
-// reserved reports whether line, without the indentation and backslashes
-// escaping may have left in front of it, begins like a runtime line.
+// maxOpening is how much of a line reserved looks at, in visible bytes: more
+// than any opener, and than any tool name in a result's opening.
+const maxOpening = 128
+
+// reserved reports whether line reads like a runtime line.
 func reserved(line string) bool {
-	line = strings.TrimLeft(line, `\`)
-	line = strings.TrimLeft(line, " \t")
+	// With and without what looks like a terminal sequence: "ESC[t" is one,
+	// and also a hidden ESC before "[tool result truncated:".
+	return opensReserved(visibleOpening(line, true)) || opensReserved(visibleOpening(line, false))
+}
+
+func opensReserved(line string) bool {
 	if line == "" {
 		return false
 	}
@@ -95,6 +103,99 @@ func reserved(line string) bool {
 		}
 	}
 	return false
+}
+
+// visibleOpening is the start of line as a reader sees it: no invisible
+// characters and no terminal escape sequences anywhere, no indentation or
+// backslashes in front, and any space character as a plain space. A zero-width
+// space before "runtime notice:" still reads as "runtime notice:".
+func visibleOpening(line string, dropSequences bool) string {
+	var out strings.Builder
+	for i := 0; i < len(line) && out.Len() < maxOpening; {
+		if n := terminalSequence(line[i:]); dropSequences && n > 0 {
+			i += n
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(line[i:])
+		chunk := line[i : i+size]
+		i += size
+		switch {
+		case unicode.IsSpace(r):
+			if out.Len() > 0 {
+				out.WriteByte(' ')
+			}
+		case Invisible(r):
+		case r == '\\' && out.Len() == 0:
+		default:
+			out.WriteString(chunk)
+		}
+	}
+	return out.String()
+}
+
+// terminalSequence is the length of the ANSI control sequence (ESC [ ... )
+// at the start of s, or 0.
+func terminalSequence(s string) int {
+	if !strings.HasPrefix(s, "\x1b[") {
+		return 0
+	}
+	i := 2
+	for i < len(s) && s[i] >= 0x30 && s[i] <= 0x3f { // parameters
+		i++
+	}
+	for i < len(s) && s[i] >= 0x20 && s[i] <= 0x2f { // intermediates
+		i++
+	}
+	if i < len(s) && s[i] >= 0x40 && s[i] <= 0x7e { // the final byte
+		return i + 1
+	}
+	return 0
+}
+
+// Invisible reports a character with no mark of its own: a control or format
+// character, a variation selector, or another default-ignorable one, such as
+// a Hangul filler. Space characters are not included; they read as spaces.
+func Invisible(r rune) bool {
+	return unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) ||
+		unicode.Is(unicode.Variation_Selector, r) || unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r)
+}
+
+// PlainLine reports whether text is one line a reader sees all of: valid
+// UTF-8, no invisible characters, and no space character but the plain one.
+func PlainLine(text string) bool {
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if r == utf8.RuneError && size == 1 {
+			return false
+		}
+		if Invisible(r) || (unicode.IsSpace(r) && r != ' ') {
+			return false
+		}
+		i += size
+	}
+	return true
+}
+
+// Inline writes text so that it stays on one line and shows everything in
+// it, for a name that goes in a line the runtime writes.
+func Inline(text string) string {
+	if PlainLine(text) {
+		return text
+	}
+	var out strings.Builder
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			fmt.Fprintf(&out, `\x%02x`, text[i])
+		case Invisible(r) || (unicode.IsSpace(r) && r != ' '):
+			fmt.Fprintf(&out, `\u%04X`, r)
+		default:
+			out.WriteString(text[i : i+size])
+		}
+		i += size
+	}
+	return out.String()
 }
 
 // isTurnNumber matches "[#7]".

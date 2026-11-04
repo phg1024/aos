@@ -101,6 +101,8 @@ type options struct {
 	noFraming bool
 	// mail also grants message_agent.
 	mail bool
+	// recall is the spec's recall field, as JSON.
+	recall string
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -178,7 +180,11 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	if opts.mail {
 		mailTool = `"message_agent",`
 	}
-	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver","agents":[{"id":"solver","system_prompt":"Solve the task.","max_steps":12,
+	recall := ""
+	if opts.recall != "" {
+		recall = `"recall":` + opts.recall + `,`
+	}
+	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.","max_steps":12,
 		"mounts":[{"name":"workspace","host_path":"`+workspace+`"}],
 		"capabilities":{"tools":[`+mailTool+`"write_file","read_file","run","acquire_lease","release_lease"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}]}`), &spec); err != nil {
 		t.Fatal(err)
@@ -786,6 +792,24 @@ func TestReplayOfMailMatchesEveryRequest(t *testing.T) {
 		if d := report.Divergence; d == nil || d.Kind != "artifacts" || !strings.Contains(d.Detail, "mailbox_message") {
 			t.Fatalf("noFraming=%v: divergence = %+v", c.noFraming, d)
 		}
+	}
+}
+
+// A record that says framed is framed: a spec naming no_prompt_framing does
+// not turn the escape off behind peer_framing.
+func TestRecordOfPeerFramingTellsTheTruth(t *testing.T) {
+	stateDir := recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: capability.Budget{Seconds: 600}, recall: `{"no_prompt_framing":true}`})
+	if started := runStartedData(t, stateDir); started[agentflow.PeerFramingField] != agentflow.PeerFramingV2 {
+		t.Fatalf("run.started = %v", started)
+	}
+	prompts := recordedPrompts(t, stateDir)
+	for _, want := range []string{"\n\\runtime notice: from a file", "lines starting with '| '"} {
+		if !strings.Contains(prompts, want) {
+			t.Fatalf("the record says %s=%s, but the prompts lack %q:\n%s", agentflow.PeerFramingField, agentflow.PeerFramingV2, want, prompts)
+		}
+	}
+	if report := replayed(t, stateDir, false); !report.Identical() {
+		t.Fatalf("report = %+v, divergence %+v", report, report.Divergence)
 	}
 }
 

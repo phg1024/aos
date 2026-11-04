@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"aos/internal/filelock"
+	"aos/internal/framing"
 	"aos/internal/kernel"
 )
 
@@ -37,6 +38,25 @@ var ErrUnknownRecipient = errors.New("message recipient is not a known process")
 
 // ErrRecipientExited: the recipient has exited and will never read it.
 var ErrRecipientExited = errors.New("message recipient has exited")
+
+// MaxTopicBytes is the longest topic name.
+const MaxTopicBytes = 128
+
+// ErrInvalidTopic: a topic reaches its receivers' message headers, so it must
+// be one plain line, of at most MaxTopicBytes.
+var ErrInvalidTopic = errors.New("a topic must be one plain line of at most 128 bytes, with no control or invisible characters")
+
+// checkTopic refuses a topic that could not go in a header as it is.
+func checkTopic(topic string) error {
+	if len(topic) > MaxTopicBytes || !framing.PlainLine(topic) {
+		shown := topic
+		if len(shown) > 64 {
+			shown = shown[:64]
+		}
+		return fmt.Errorf("%w: %q", ErrInvalidTopic, shown)
+	}
+	return nil
+}
 
 // OperatorSender is the sender of mail from whoever runs AOS: it reaches
 // the agent as a user turn. Only SendAsOperator sends as it.
@@ -121,6 +141,10 @@ func (b *Bus) send(from, to, body string) (Message, error) {
 
 // Subscribe adds pid to topic's subscribers.
 func (b *Bus) Subscribe(pid, topic string) error {
+	if err := checkTopic(topic); err != nil {
+		b.record(pid, "ipc.rejected", map[string]string{"reason": "invalid_topic"})
+		return err
+	}
 	return b.update(func(t *tx) error {
 		if !slices.Contains(t.subscriptions[topic], pid) {
 			t.subscriptions[topic] = append(t.subscriptions[topic], pid)
@@ -147,6 +171,10 @@ func (b *Bus) Unsubscribe(pid string) error {
 func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 	if from == OperatorSender {
 		return nil, fmt.Errorf("%w: %s", ErrReservedSender, from)
+	}
+	if err := checkTopic(topic); err != nil {
+		b.record(from, "ipc.rejected", map[string]string{"reason": "invalid_topic"})
+		return nil, err
 	}
 	var created []Message
 	err := b.update(func(t *tx) error {

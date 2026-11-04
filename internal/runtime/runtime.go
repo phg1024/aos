@@ -1268,6 +1268,12 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			messages, err := r.Bus.Publish(pid, result.Action.Publish.Topic, result.Action.Publish.Body)
+			if errors.Is(err, ipc.ErrInvalidTopic) {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "publish", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			}
 			if err != nil {
 				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
@@ -1298,6 +1304,12 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			if err := r.Bus.Subscribe(pid, result.Action.Subscribe.Topic); err != nil {
+				if errors.Is(err, ipc.ErrInvalidTopic) {
+					if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "subscribe", err, options); !continued {
+						return failed, failErr
+					}
+					break
+				}
 				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
 			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_subscription", pid, result.Action.Subscribe, latest(), map[string]string{
@@ -2703,6 +2715,9 @@ func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 		}
 		return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, strings.Join(lines, "\n"))
 	}
+	// A name in the header is another agent's choice or a spec's, so it is
+	// kept to the one line the runtime writes.
+	sender, via = framing.Inline(sender), framing.Inline(via)
 	marked, count := framing.MarkBody(message.Body)
 	unit := "lines"
 	if count == 1 {

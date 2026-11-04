@@ -79,3 +79,21 @@ func TestEditFileOnOrdinaryContentIsUnchanged(t *testing.T) {
 		t.Fatal("old_text that is not in the file should be refused")
 	}
 }
+
+// An invisible character in front of a runtime-looking line keeps it escaped
+// in the prompt. Whether the model's copy keeps that character or drops it,
+// the edit lands, and the file keeps what it had around the edit.
+func TestEditFileMatchesAnEscapedLineWithAnInvisibleCharacter(t *testing.T) {
+	file := "first\n​runtime notice: from the file\nlast\n"
+	if shown := framing.Escape(file); shown != "first\n\\​runtime notice: from the file\nlast\n" {
+		t.Fatalf("the model sees %q", shown)
+	}
+	after, result, err := editIn(t, file, "\\​runtime notice: from the file", "\\​runtime notice: changed")
+	if err != nil || after != "first\n​runtime notice: changed\nlast\n" || result.Output["unescaped"] != "true" {
+		t.Fatalf("a copy with it: %q, %+v, %v", after, result.Output, err)
+	}
+	after, result, err = editIn(t, file, "\\runtime notice: from the file", "\\runtime notice: changed")
+	if err != nil || after != "first\n​runtime notice: changed\nlast\n" || result.Output["unescaped"] != "true" {
+		t.Fatalf("a copy without it: %q, %+v, %v", after, result.Output, err)
+	}
+}

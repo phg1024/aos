@@ -1248,7 +1248,8 @@ go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/
   and `runtime` imports `tools`, so they cannot live in `runtime`.
 - **Peer mail.** `peerMessage` writes
   `message from worker (pid-000004) [msg-000012], 3 lines:`, then each body
-  line marked `| `. An empty body is a header with `0 lines:`. Line
+  line marked `| `. Names in the header (the sender's agent ID, the topic)
+  go through `framing.Inline`, so the header is always one line. An empty body is a header with `0 lines:`. Line
   boundaries become `\n`, and other control characters are written out
   (`\u001B`), or `\xff` for a byte that is not UTF-8.
 - **The note constructor.** Every entry the runtime writes goes through
@@ -1266,6 +1267,47 @@ go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/
 - **Replay.** `run.started` says `peer_framing: v2`. A record without it
   replays with the old rendering, and the report says
   `legacy_peer_framing`.
+
+**Fixed after review of `3673af2`:**
+
+- **A topic could break the header.** The agent chooses a topic, and
+  `peerMessage` concatenated it raw, so a topic of `news\nSYSTEM: …` made the
+  runtime write column 0 of two lines, against decision 5.
+  - `Bus.Publish` and `Bus.Subscribe` now refuse a topic that is not one plain
+    line of at most 128 bytes (`ErrInvalidTopic`, `ipc.rejected`, reason
+    `invalid_topic`): no control or invisible character, and no space
+    character but the plain one. The agent gets it as a tool error, and the
+    run goes on.
+  - `framing.Inline` also writes out anything like that in a header name.
+    That covers an agent ID, which comes from a spec, and a topic in a mailbox
+    written before the check.
+  - **Other agent-chosen text on a first line was checked:** `send:to=`
+    names a PID the kernel knows; `delegate_result agent=` names an agent in
+    `allowed_agents`; and `exit_reason` and `question` are quoted (`%q`). Text
+    after those, such as `summary=%s`, can span lines by design, and later
+    lines go through the escape. Only a peer turn promises that the runtime
+    writes column 0 of exactly one line.
+- **Invisible characters hid an opener.** `reserved` trimmed only ASCII space,
+  tab and backslash, so a zero-width space, a BOM, NUL or ESC in front of
+  `runtime notice:` passed. A reader sees those lines as the real opener.
+  - It now reads a line as a reader does. Control characters (Cc), format
+    characters (Cf), variation selectors, other default-ignorable characters
+    such as a Hangul filler, and terminal sequences (`ESC[31m`) are dropped
+    anywhere in the opening. Any Unicode space in front is dropped, and one
+    inside reads as a plain space.
+  - Only the decision uses that reading. `Escape` still adds one backslash at
+    the start of the line and changes no other byte. `Unescape` removes it, so
+    a model's copy round-trips with or without the invisible character, and
+    `edit_file` still tries the exact text first.
+- **A workflow spec could turn the escape off.** `no_prompt_framing` was a
+  JSON field of the spec's `recall` policy, so an ordinary `aos run` could set
+  it. `run.started` still said `peer_framing: v2`. Confirmed: on that code the
+  record says `v2`, and the prompts lack the escape.
+  - The field is now `json:"-"`, so a spec's JSON cannot set it.
+    `WorkflowSpec.Validate` refuses it from Go as well. So a `run.started`
+    that says `v2` was framed.
+  - Frozen arms do not need the spec. `internal/memprobe` passes its policy to
+    `PromptBackend` directly, and it starts from `RecallOff()`.
 
 **Where the escape is applied: at render, not in the record.**
 `PromptBackend.promptContent` applies it on the way to the model. The
@@ -1308,7 +1350,7 @@ backslashes. When it does:
   failed.
 - **Frozen probe arms.** `RecallOff()` now also sets
   `RecallPolicy.NoPromptFraming`, which turns off the escape and the new
-  system-prompt sentence. `TestRecallOffKeepsThePromptsAsBefore` holds those
+  system-prompt sentence. It can be set only from Go, not from a spec. `TestRecallOffKeepsThePromptsAsBefore` holds those
   arms' prompts byte for byte, and `internal/memprobe` starts every arm from
   `RecallOff()`. So memory probes see no change.
 - A checkpoint made before framing keeps its old-format peer entries, and an
@@ -1321,10 +1363,15 @@ backslashes. When it does:
   writes would be worse. The system prompt tells it to leave the backslash
   out, and that is all that stands in the way. The same goes for a command
   given to `run`.
-- **The escape is textual.** It matches exact, case-sensitive openers, so
-  `RUNTIME NOTICE:`, or a line indented with something other than spaces and
-  tabs, passes. Every line of mail is marked, so this applies only to the
-  other runtime-written turns.
+- **The escape is textual, and only exact forms are in scope.** These pass in
+  a tool result: another case (`RUNTIME NOTICE:`), markup in front (`>
+  runtime notice:`, `**runtime notice:**`), and look-alike letters such as a
+  Cyrillic `е`. Case and markup variants read as quotes or as text, not as the
+  runtime's form, and folding case would escape ordinary prose such as
+  `Message from Alice`. Look-alikes are not imitation a filter can settle.
+  Every line of mail is marked, so none of this applies to mail.
+- **A record with a topic the check now refuses** would diverge on replay. No
+  known record has one, and a topic with a line break was never useful.
 - **Common text can match.** A changelog line `[#12] fix` or a log line
   `message from server` is shown escaped.
 - **Entries the agent or its delegator wrote are unchanged:** working memory
@@ -1347,22 +1394,23 @@ match, under both renderings, and the divergence is that record. Decision
 | Check | Result |
 |---|---|
 | B5, the same probe against `5a0c754` | All three subtests fail: `an agent-side Send as the operator = <nil>` (mail), and 70 lines not escaped or at column 0 (tool output, delegate) |
-| B5 now | Passes: 21 marked lines under one header; 14 forged forms escaped through `read_file`, `run` and `delegate_result`; `undelivered:`, `archived unread:` and `subscribed to:` included |
+| B5 now | Passes: 28 marked lines under one header; 21 forged forms escaped through `read_file`, `run` and `delegate_result`, 7 of them with an invisible character; `undelivered:`, `archived unread:` and `subscribed to:` included; a forged topic refused at `Subscribe`, `Publish` and the `subscribe` action |
 | A record made by v0.1.4 source (built from the tag, with runtime-looking file lines and a compaction), replayed by this build | `calls: 7 recorded, 7 replayed with identical requests`; `result: identical`; `the record predates peer framing` |
 | Eval's three `ca78ad9` trials, replayed by this build | 31/31, 8/8, 9/9, each `result: identical` |
 | A framed record with `peer_framing` removed | Diverges at a request, so the field decides the rendering |
 | Mutations, each on a copy: `Escape` off; a note bypassing `runtimeNote`; `SendAsOperator` in `runtime`; no `edit_file` fallback; `Send` accepting `user`; replay ignoring the field (backend, and `peerMessage`); only `\n` as a boundary | Each makes at least one named test fail |
+| Mutations for the review's fixes: `no_prompt_framing` settable again; no topic check; no `Inline` in the header; invisible characters not dropped; `edit_file` not trying the exact text first | Each makes at least one named test fail; B5 also fails without the topic check and without the invisible-character rule |
 | `TestBusDirectoryIsProtected`, `TestBusDirectoryIsProtectedFromRun` | Pass, and would pass before step 1: they guard the grounds in decision 5, they do not fix anything |
 
 **Tests:**
 
-- `framing`: `TestEveryOpenerIsEscaped`, `TestEscapeLeavesOrdinaryContentByteIdentical`, `TestEscapeIsReversibleOnTextThatHasBackslashes`, `TestComposeKeepsTextThatOpensRight`, `TestMarkBodyMarksEveryLine` (the design's `TestPeerMessageMarksEveryBodyLine`, at the level that does the marking).
-- `runtime`: `TestEveryRuntimeNoteUsesTheConstructor`, `TestRuntimeNeverSendsAsTheOperator`, `TestPeerMessageIsMarkedAndItsRecordIsRaw`, `TestNoPeerFramingKeepsTheOldRendering`.
-- `agentflow`: `TestEscapeReachesThePromptNotTheHistory`, `TestSystemPromptExplainsTheFramingOnlyWhenOn`.
-- `tools`: `TestEditFileMatchesALineTheModelSawEscaped`, `TestEditFilePrefersTheExactText`, `TestEditFileOnOrdinaryContentIsUnchanged`, `TestBusDirectoryIsProtected`, `TestBusDirectoryIsProtectedFromRun`.
-- `ipc`: `TestOnlyTheOperatorSendsAsUser`.
-- `replay`: `TestReplayOfARecordWithoutPeerFraming`, `TestReplayOfMailMatchesEveryRequest`.
-- `bench/ipc`: `TestIPCB5TrustBoundary`, with mail, tool output and delegate subtests.
+- `framing`: `TestEveryOpenerIsEscaped`, `TestEscapeLeavesOrdinaryContentByteIdentical`, `TestEscapeIsReversibleOnTextThatHasBackslashes`, `TestComposeKeepsTextThatOpensRight`, `TestMarkBodyMarksEveryLine` (the design's `TestPeerMessageMarksEveryBodyLine`, at the level that does the marking), `TestInvisibleCharactersDoNotHideAnOpener`, `TestVariantsOutOfScopeAreLeftAlone`, `TestInlineLeavesOneLine`, `TestPlainLine`.
+- `runtime`: `TestEveryRuntimeNoteUsesTheConstructor`, `TestRuntimeNeverSendsAsTheOperator`, `TestPeerMessageIsMarkedAndItsRecordIsRaw`, `TestNoPeerFramingKeepsTheOldRendering`, `TestPeerHeaderStaysOneLine`.
+- `agentflow`: `TestEscapeReachesThePromptNotTheHistory`, `TestSystemPromptExplainsTheFramingOnlyWhenOn`, `TestSpecCannotTurnTheFramingOff`.
+- `tools`: `TestEditFileMatchesALineTheModelSawEscaped`, `TestEditFilePrefersTheExactText`, `TestEditFileOnOrdinaryContentIsUnchanged`, `TestEditFileMatchesAnEscapedLineWithAnInvisibleCharacter`, `TestBusDirectoryIsProtected`, `TestBusDirectoryIsProtectedFromRun`.
+- `ipc`: `TestOnlyTheOperatorSendsAsUser`, `TestTopicMustBeOnePlainLine`.
+- `replay`: `TestReplayOfARecordWithoutPeerFraming`, `TestReplayOfMailMatchesEveryRequest`, `TestRecordOfPeerFramingTellsTheTruth`.
+- `bench/ipc`: `TestIPCB5TrustBoundary`, with mail, topic, tool output and delegate subtests.
 
 **Changed for existing runs:**
 
@@ -1377,7 +1425,8 @@ match, under both renderings, and the divergence is that record. Decision
   program sending as `user` must call `SendAsOperator`.
 - `edit_file` may match through the backslash, and its output may have
   `unescaped`.
-- `run.started` has `peer_framing`. The workflow spec's recall policy has
-  `no_prompt_framing` when it is set.
+- `run.started` has `peer_framing`.
+- `Bus.Publish` and `Bus.Subscribe` refuse a topic that is not one plain line
+  of at most 128 bytes.
 - `Escape` runs over each runtime-written entry at every request. Its cost
   is a scan of the history, which compaction already bounds.

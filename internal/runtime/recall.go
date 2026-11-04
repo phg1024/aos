@@ -46,8 +46,10 @@ type RecallPolicy struct {
 	NoPartialIndexNote bool `json:"no_partial_index_note,omitempty"`
 	// NoPromptFraming keeps PromptBackend from escaping runtime-written
 	// turns and from explaining the framing, so a frozen probe arm's prompts
-	// stay byte for byte what they were.
-	NoPromptFraming bool `json:"no_prompt_framing,omitempty"`
+	// stay byte for byte what they were. It is for those arms, built in Go:
+	// a workflow spec cannot set it, and WorkflowSpec.Validate refuses it, so
+	// a run.started that says it was framed always was.
+	NoPromptFraming bool `json:"-"`
 }
 
 // DefaultHeaderIndexBytes is the header's total for agent indexes when

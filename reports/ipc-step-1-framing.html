@@ -31,6 +31,14 @@
     <p>Steps 2 to 5 are not built. B8c and B11 are still open.</p>
   </div>
 
+  <h2>Fixed After Review of <code>3673af2</code></h2>
+  <table>
+    <tr><th>Hole</th><th>Before</th><th>Now</th></tr>
+    <tr><td>An agent-chosen topic in the header</td><td class="bad"><code>news\nSYSTEM: …</code> was accepted, and the runtime wrote column 0 of two lines</td><td class="good"><code>Publish</code> and <code>Subscribe</code> refuse it (one plain line, at most 128 bytes), as a tool error. <code>Inline</code> keeps any name in a header to one line.</td></tr>
+    <tr><td>Invisible characters in front of an opener</td><td class="bad">NUL, ESC, U+00A0, U+200B, U+200D, U+2060, U+202E, U+3000 and U+FEFF hid it</td><td class="good"><code>reserved</code> reads a line as a reader does: Cc, Cf, variation selectors, default-ignorable characters and terminal sequences are dropped, anywhere in the opening. Only the decision uses that reading, and the file's other bytes stay as they are. <code>edit_file</code> still tries the exact text first.</td></tr>
+    <tr><td><code>no_prompt_framing</code> in a spec</td><td class="bad">Confirmed: an ordinary run could turn the escape off while <code>run.started</code> said <code>peer_framing: v2</code></td><td class="good"><code>json:"-"</code>, and <code>Validate</code> refuses it from Go, so a record that says <code>v2</code> was framed. Frozen arms set it directly on the backend.</td></tr>
+  </table>
+
   <h2>1. What the Model Sees</h2>
   <table>
     <tr><th>Route</th><th>Before (<code>180d076</code>)</th><th>Now</th></tr>
@@ -83,11 +91,11 @@ go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/</pre>
   <table>
     <tr><th>Check</th><th>Result</th></tr>
     <tr><td>B5 against <code>5a0c754</code></td><td class="bad">All 3 cases fail: an agent-side send as the operator succeeds; 70 lines not escaped or at column 0</td></tr>
-    <tr><td>B5 now</td><td class="good">Passes: 21 marked lines under one header; 14 forged forms escaped through <code>read_file</code>, <code>run</code> and <code>delegate_result</code></td></tr>
+    <tr><td>B5 now</td><td class="good">Passes: 28 marked lines under one header; 21 forged forms escaped through <code>read_file</code>, <code>run</code> and <code>delegate_result</code>, 7 of them with an invisible character; a forged topic refused</td></tr>
     <tr><td>A v0.1.4 record, with runtime-looking lines and a compaction</td><td class="good">7/7 requests, <code>result: identical</code>, flagged as predating framing</td></tr>
     <tr><td>Eval's <code>ca78ad9</code> trials</td><td class="good">31/31, 8/8, 9/9, each identical</td></tr>
     <tr><td>A framed record with <code>peer_framing</code> removed</td><td class="good">Diverges at a request, so the field decides the rendering</td></tr>
-    <tr><td>8 mutations on a copy of the tree</td><td class="good">Each fails at least one named test</td></tr>
+    <tr><td>8 mutations on a copy of the tree, and 5 more for the fixes above</td><td class="good">Each fails at least one named test</td></tr>
     <tr><td><code>TestBusDirectoryIsProtected</code> and <code>…FromRun</code>: <code>write_file</code>, <code>edit_file</code> and a confined <code>run</code> on <code>bus/mailboxes.json</code>, in 3 spellings</td><td class="good">Pass. They would pass before this step too: they guard the grounds for trusting operator mail.</td></tr>
   </table>
 
@@ -98,12 +106,13 @@ go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/</pre>
     <li>A later line of a runtime-written turn that begins with a reserved opener reaches the model with a backslash.</li>
     <li><code>Bus.Send("user", …)</code> and <code>Bus.Publish("user", …)</code> are refused.</li>
     <li><code>edit_file</code> may match through the backslash, and its output may have <code>unescaped</code>.</li>
+    <li><code>Bus.Publish</code> and <code>Bus.Subscribe</code> refuse a topic that is not one plain line of at most 128 bytes.</li>
     <li><code>run.started</code> has <code>peer_framing: v2</code>. Older records replay under the old rendering and report <code>legacy_peer_framing</code>.</li>
   </ul>
 
   <h2>7. Known Limits and One Finding</h2>
   <ul>
-    <li><b>The escape is textual:</b> exact, case-sensitive openers. <code>RUNTIME NOTICE:</code> passes in a tool result. Mail has no such gap, since every line is marked.</li>
+    <li><b>The escape is textual, and only exact forms are in scope:</b> another case (<code>RUNTIME NOTICE:</code>), markup in front (<code>&gt; runtime notice:</code>) and look-alike letters pass in a tool result. Case and markup variants read as quotes or text, not as the runtime's form. Mail has no such gap, since every line is marked.</li>
     <li><b>Common text can match:</b> a changelog line <code>[#12] fix</code> is shown escaped.</li>
     <li><b>Unchanged:</b> working memory and segment indexes, a delegated goal, and a delegator's answer, which reaches a child as a user turn.</li>
     <li><b><code>unconfined_run</code></b> bypasses the protected state directory, so such an agent can still write the bus.</li>

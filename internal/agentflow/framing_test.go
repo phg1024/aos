@@ -1,6 +1,8 @@
 package agentflow
 
 import (
+	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -55,5 +57,32 @@ func TestSystemPromptExplainsTheFramingOnlyWhenOn(t *testing.T) {
 		if got := backend.promptContent(tool); got != "[#1] "+tool.Content {
 			t.Errorf("%s: escaped %q", name, got)
 		}
+	}
+}
+
+// Turning the framing off is for a frozen probe arm, built in Go. A workflow
+// cannot ask for it, under a memory option or any other way.
+func TestSpecCannotTurnTheFramingOff(t *testing.T) {
+	var spec WorkflowSpec
+	raw := `{"name":"x","entry_agent":"a","recall":{"no_prompt_framing":true,"no_agent_index":true},"agents":[{"id":"a","system_prompt":"s"}]}`
+	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
+		t.Fatal(err)
+	}
+	if spec.Recall.NoPromptFraming || !spec.Recall.NoAgentIndex {
+		t.Fatalf("recall from JSON = %+v", spec.Recall)
+	}
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	encoded, err := json.Marshal(runtime.RecallOff())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "framing") {
+		t.Fatalf("the policy's JSON names the framing: %s", encoded)
+	}
+	spec.Recall = runtime.RecallOff()
+	if err := spec.Validate(); !errors.Is(err, ErrWorkflowSpecInvalid) {
+		t.Fatalf("Validate with the framing off = %v", err)
 	}
 }
