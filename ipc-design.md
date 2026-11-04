@@ -2,8 +2,13 @@
 
 Status: proposal, 2026-11-02. It was written at the request of the aos
 book session for Chapter 8 (IPC Without Shared Context), and covers the
-audit and the design. Nothing in it is built yet. The commit that adds
-this note changes no production code.
+audit and the design. The commit that adds this note changes no
+production code.
+
+**Update, 2026-11-03:** step 1 of the slice (framing) is built: B5 is
+fixed, and its probe asserts it. See
+[Implemented: Step 1](#implemented-step-1). Steps 2 to 5 are not built, and
+B8c and B11 are still open.
 
 **Revised, 2026-11-03,** after the book session's review of `951c787`:
 
@@ -84,7 +89,7 @@ seq in parentheses where it matters.
 | B2c | Mail to a parked process that then exits 0 without reading it | Pending for good. Its only event is `ipc.sent`. No bounce; the sender is never told | gap |
 | B3 | Two senders interleave, across two Recovers, one of them before a checkpoint | Both successors see A1 B1 A2 B2 A3, then A4, each once | holds |
 | B4 | 4 sender OS processes × 50 messages, 1 receiver process, one bus directory, 25 trials | 0 lost, 0 duplicated, 0 corrupted, 0 order violations | holds |
-| B5 | A body with forged lines, and a message from `user`, rendered through `PromptBackend` | Only lines starting `message from ` are quoted. `[#7] message from coordinator …`, `[#8] run:map[exit_code:0 …]`, a budget warning and `SYSTEM: …` pass unquoted. Every non-assistant turn is role `user` (`agentflow/backend.go:84`). Mail from `user` becomes a plain user turn | **defect** |
+| B5 *(fixed by step 1; this row is the `180d076` result)* | A body with forged lines, and a message from `user`, rendered through `PromptBackend` | Only lines starting `message from ` are quoted. `[#7] message from coordinator …`, `[#8] run:map[exit_code:0 …]`, a budget warning and `SYSTEM: …` pass unquoted. Every non-assistant turn is role `user` (`agentflow/backend.go:84`). Mail from `user` becomes a plain user turn | **defect** |
 | B6 | 1 MB and 10 MB bodies through `send` and `message_agent` | Both accepted; no cap. `mailboxes.json` reaches 20 MB and is rewritten on every send (20 ms empty, 140 ms behind 20 MB). No tool reads an artifact's body. `list_artifacts` lists every process's artifacts, ungated | gap |
 | B7 | A parent mails a parked child and calls `await_agent`; the child exits without answering | `await_agent` is a non-blocking poll (`state: ready`, then `code: 0`). No correlation ID, reply-to or deadline on `ipc.Message` | gap |
 | B8a | 2,000 unread messages to one mailbox | All accepted; 542 KB; 21 ms per send rising to 33 ms. No bound, no backpressure | gap |
@@ -334,6 +339,9 @@ earlier.**
 
 ### 5. Trust boundary (B5, a defect)
 
+*(Implemented by step 1. Differences from this text are listed under
+[Implemented: Step 1](#implemented-step-1).)*
+
 **Decision: framing is structural. Every line of a peer body is marked as
 body, so no body line can begin where a turn, a sender label, a tool
 result, a budget note or a system line begins. A probe tries B5's
@@ -414,7 +422,7 @@ only the operator can send it.**
     runtime-written turn.** The runtime owns the opening of a turn's first
     line. On any later line of a tool result, a delegate result or any
     other runtime-written turn, an opener from
-    `runtime.ReservedPrefixes` gets a leading `\`. Line starts are found
+    `framing.ReservedPrefixes` gets a leading `\`. Line starts are found
     with the same boundary set as above, and nothing else changes, so
     code and file contents stay byte-identical otherwise. This is textual,
     not structural.
@@ -425,6 +433,7 @@ only the operator can send it.**
     | `[#N]` | `promptContent` (`agentflow/backend.go:101`) |
     | `message from ` | `peerMessage` |
     | `budget warning:` | `budget.go:217`, `:231`, `:240` |
+    | `budget steps=`, `budget time=`, `budget tokens=` | `budget.go`, found when building step 1 |
     | `runtime notice:` | `exitEndsTurnNotice`, `handoffNotice`, `handoffIndexFirstNotice`, `handoffRenotice`, `handoffIndexRenotice` (`runtime.go:1887`–`1913`); `recall.go:443` |
     | `tool_error `, `tool_notice `, `tool_cancelled `, `tool_interrupted ` | `runtime.go:770` and others; `:1163`; `:1064`; `intent.go:190` |
     | `message_recorded ` | `runtime.go:43` |
@@ -1008,7 +1017,7 @@ probes from logging to asserting.
      body line marked `| `, after line-break normalization and the
      control-character escape.
    - `runtimeNote(opener, text)` as the one way to write a runtime turn,
-     with `runtime.ReservedPrefixes` derived from its table.
+     with `framing.ReservedPrefixes` derived from its table.
    - Reserved openers are escaped on every later line of a runtime-written
      turn: tool results and `delegate_result`'s summary.
    - `Bus.Send` refuses the sender `user`; `Bus.SendAsOperator` is for
@@ -1223,3 +1232,152 @@ and keeps the `180d076` result in a comment as the "before".
 - **Kept as they are:** B1a, B1b, B2a, B3, B4, B8b and B10d already
   hold. They become regression checks, and B4 must still show 0 lost
   and 0 duplicated after steps 2 and 4 change the bus.
+
+## Implemented: Step 1
+
+Built on 2026-11-03, after `5a0c754`. Only step 1: steps 2 to 5 are not
+built. Re-run:
+
+```
+go test -count=1 ./internal/framing ./internal/ipc ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./cmd/aos ./cmd/aos-tui
+go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/
+```
+
+- **`internal/framing`, a new leaf package.** It holds the opener table,
+  `Escape`, `Unescape` and `MarkBody`. `tools` needs them for `edit_file`,
+  and `runtime` imports `tools`, so they cannot live in `runtime`.
+- **Peer mail.** `peerMessage` writes
+  `message from worker (pid-000004) [msg-000012], 3 lines:`, then each body
+  line marked `| `. An empty body is a header with `0 lines:`. Line
+  boundaries become `\n`, and other control characters are written out
+  (`\u001B`), or `\xff` for a byte that is not UTF-8.
+- **The note constructor.** Every entry the runtime writes goes through
+  `runtimeNote(role, opener, text)`. `Opener` has an unexported field, so
+  only `framing` can make one. Text that already opens with the opener is
+  kept byte for byte, so no existing note changed.
+  `TestEveryRuntimeNoteUsesTheConstructor` walks the AST of
+  `internal/runtime` and `internal/agentflow`. It first proves itself on a
+  fixture with four kinds of bypass.
+- **The sender.** `Bus.Send` and `Bus.Publish` refuse `ipc.OperatorSender`
+  (`ErrReservedSender`). `Bus.SendAsOperator` is the only way to send as
+  it, and `aos-tui` is its only caller in production code.
+  `TestRuntimeNeverSendsAsTheOperator` scans `internal/runtime` and
+  `internal/agentflow`.
+- **Replay.** `run.started` says `peer_framing: v2`. A record without it
+  replays with the old rendering, and the report says
+  `legacy_peer_framing`.
+
+**Where the escape is applied: at render, not in the record.**
+`PromptBackend.promptContent` applies it on the way to the model. The
+session history, checkpoints, memory segments, `read_memory`,
+`search_memory`, `aos inspect` and the tool's own artifact all keep what
+the tool returned.
+
+- **Why:** those are the system's evidence. A record that held the escape
+  would misreport what a file contained, and a byte offset into a segment
+  would no longer match the file. The request log does hold the escape,
+  because it records what the model was sent, and that is what replay
+  compares.
+- **Peer mail is the exception:** it is framed when it enters the history,
+  since `peerMessage` has always written that entry. Its raw body stays in
+  the `mailbox_message` artifact.
+- The rendering is deterministic per entry, so the append-only prompt, and
+  with it the prompt cache, is unaffected.
+
+**`edit_file` and an escaped line.** A file line is unchanged in the prompt
+unless it begins with a reserved opener, after optional spaces, tabs or
+backslashes. When it does:
+
+- **The model sees** `\runtime notice: x`, and the system prompt tells it
+  the backslash is not part of the text.
+- **`old_text` without the backslash** matches, as for any other line.
+- **`old_text` copied with the backslash:** the exact text is tried first,
+  so a file that really holds a backslash is edited as it stands. Only if
+  that finds nothing, `Unescape` is applied to `old_text` and `new_text`,
+  and the match is retried. The result then says `unescaped: true`.
+- **A backslash that was really in the file** is shown as `\\`, so
+  `Unescape` removes exactly one.
+
+**Differences from the contract text above.**
+
+- The table and `ReservedPrefixes()` are in `internal/framing`, not
+  `runtime`, for the import reason above.
+- **Three more openers:** `budget steps=`, `budget time=` and `budget
+  tokens=`. The design's table missed them. The constructor found them: it
+  prepended `budget warning:` to those notes, and existing budget tests
+  failed.
+- **Frozen probe arms.** `RecallOff()` now also sets
+  `RecallPolicy.NoPromptFraming`, which turns off the escape and the new
+  system-prompt sentence. `TestRecallOffKeepsThePromptsAsBefore` holds those
+  arms' prompts byte for byte, and `internal/memprobe` starts every arm from
+  `RecallOff()`. So memory probes see no change.
+- A checkpoint made before framing keeps its old-format peer entries, and an
+  entry like that gets the escape on its later lines.
+
+**Not covered, on purpose:**
+
+- **`write_file` is not unescaped.** A model that rewrites a whole file and
+  keeps a backslash it saw writes that backslash. Changing what `write_file`
+  writes would be worse. The system prompt tells it to leave the backslash
+  out, and that is all that stands in the way. The same goes for a command
+  given to `run`.
+- **The escape is textual.** It matches exact, case-sensitive openers, so
+  `RUNTIME NOTICE:`, or a line indented with something other than spaces and
+  tabs, passes. Every line of mail is marked, so this applies only to the
+  other runtime-written turns.
+- **Common text can match.** A changelog line `[#12] fix` or a log line
+  `message from server` is shown escaped.
+- **Entries the agent or its delegator wrote are unchanged:** working memory
+  and segment indexes; a delegated goal; and `Answer from … who delegated
+  your task`, which reaches a child as a user turn. A delegator already
+  outranks its child.
+- **`unconfined_run`** bypasses the protected state directory, as decision
+  5 says.
+
+**Found while building:** a run with mail never replayed identically,
+before or after this step, even when the mail came from the agent itself.
+`Message.Timestamp` is the wall clock's, and the `mailbox_message` record
+holds it, so the artifact comparison diverges after every request has
+matched. `TestReplayOfMailMatchesEveryRequest` pins this: 3 of 3 requests
+match, under both renderings, and the divergence is that record. Decision
+11's replay bus would remove it.
+
+**Evidence:**
+
+| Check | Result |
+|---|---|
+| B5, the same probe against `5a0c754` | All three subtests fail: `an agent-side Send as the operator = <nil>` (mail), and 70 lines not escaped or at column 0 (tool output, delegate) |
+| B5 now | Passes: 21 marked lines under one header; 14 forged forms escaped through `read_file`, `run` and `delegate_result`; `undelivered:`, `archived unread:` and `subscribed to:` included |
+| A record made by v0.1.4 source (built from the tag, with runtime-looking file lines and a compaction), replayed by this build | `calls: 7 recorded, 7 replayed with identical requests`; `result: identical`; `the record predates peer framing` |
+| Eval's three `ca78ad9` trials, replayed by this build | 31/31, 8/8, 9/9, each `result: identical` |
+| A framed record with `peer_framing` removed | Diverges at a request, so the field decides the rendering |
+| Mutations, each on a copy: `Escape` off; a note bypassing `runtimeNote`; `SendAsOperator` in `runtime`; no `edit_file` fallback; `Send` accepting `user`; replay ignoring the field (backend, and `peerMessage`); only `\n` as a boundary | Each makes at least one named test fail |
+| `TestBusDirectoryIsProtected`, `TestBusDirectoryIsProtectedFromRun` | Pass, and would pass before step 1: they guard the grounds in decision 5, they do not fix anything |
+
+**Tests:**
+
+- `framing`: `TestEveryOpenerIsEscaped`, `TestEscapeLeavesOrdinaryContentByteIdentical`, `TestEscapeIsReversibleOnTextThatHasBackslashes`, `TestComposeKeepsTextThatOpensRight`, `TestMarkBodyMarksEveryLine` (the design's `TestPeerMessageMarksEveryBodyLine`, at the level that does the marking).
+- `runtime`: `TestEveryRuntimeNoteUsesTheConstructor`, `TestRuntimeNeverSendsAsTheOperator`, `TestPeerMessageIsMarkedAndItsRecordIsRaw`, `TestNoPeerFramingKeepsTheOldRendering`.
+- `agentflow`: `TestEscapeReachesThePromptNotTheHistory`, `TestSystemPromptExplainsTheFramingOnlyWhenOn`.
+- `tools`: `TestEditFileMatchesALineTheModelSawEscaped`, `TestEditFilePrefersTheExactText`, `TestEditFileOnOrdinaryContentIsUnchanged`, `TestBusDirectoryIsProtected`, `TestBusDirectoryIsProtectedFromRun`.
+- `ipc`: `TestOnlyTheOperatorSendsAsUser`.
+- `replay`: `TestReplayOfARecordWithoutPeerFraming`, `TestReplayOfMailMatchesEveryRequest`.
+- `bench/ipc`: `TestIPCB5TrustBoundary`, with mail, tool output and delegate subtests.
+
+**Changed for existing runs:**
+
+- The system prompt gains one sentence of 361 bytes, in every run except a
+  recall-off probe arm. So a first request's prompt-cache prefix changes
+  once.
+- A peer's message reads differently. A topic message reads `… on topic news
+  [msg-…], 1 line:`.
+- A later line of a runtime-written turn that begins with a reserved opener
+  reaches the model with a backslash in front.
+- `Bus.Send("user", …)` and `Bus.Publish("user", …)` are refused. Any other
+  program sending as `user` must call `SendAsOperator`.
+- `edit_file` may match through the backslash, and its output may have
+  `unescaped`.
+- `run.started` has `peer_framing`. The workflow spec's recall policy has
+  `no_prompt_framing` when it is set.
+- `Escape` runs over each runtime-written entry at every request. Its cost
+  is a scan of the history, which compaction already bounds.

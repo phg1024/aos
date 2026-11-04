@@ -581,7 +581,7 @@ func TestAdoptionRequiresIdenticalMessages(t *testing.T) {
 	first := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		if call == 1 {
 			for _, name := range []string{"inbox-one", "inbox-two"} {
-				if _, err := bus.Send("user", process.PID, body(name)); err != nil {
+				if _, err := bus.SendAsOperator(process.PID, body(name)); err != nil {
 					t.Fatal(err)
 				}
 			}

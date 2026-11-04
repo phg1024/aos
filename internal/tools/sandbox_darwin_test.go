@@ -234,3 +234,26 @@ func TestRunTimeoutIsClampedToTheBound(t *testing.T) {
 		t.Fatalf("default bound = %+v", defaulted.Output)
 	}
 }
+
+// A confined command cannot write the bus either, however the path is
+// spelled, so it cannot forge mail from the user. The sandbox denies the
+// write; the command fails, which is all a confined run reports.
+func TestBusDirectoryIsProtectedFromRun(t *testing.T) {
+	f := newConfinedFixture(t)
+	mailboxes := filepath.Join(f.state, "bus", "mailboxes.json")
+	const original = `{"pid-000002":[]}`
+	if err := os.MkdirAll(filepath.Dir(mailboxes), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(mailboxes, []byte(original), 0o644)
+	for _, spelling := range []string{".aos-state", ".AOS-STATE", ".Aos-State"} {
+		path := filepath.Join(f.ws, spelling, "bus", "mailboxes.json")
+		result := f.run(t, f.set, "echo forged > "+path)
+		if result.Output["exit_code"] == "0" {
+			t.Errorf("%s: the write succeeded: %+v", spelling, result.Output)
+		}
+		if raw, _ := os.ReadFile(mailboxes); string(raw) != original {
+			t.Fatalf("%s: mailboxes.json changed: %s", spelling, raw)
+		}
+	}
+}

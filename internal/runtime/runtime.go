@@ -19,6 +19,7 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/framing"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/lease"
@@ -251,6 +252,10 @@ type AgentRuntime struct {
 	// AOS did before intents existed. Only a replay of such a record sets
 	// it, so the replay records what the original did.
 	NoToolIntents bool
+	// NoPeerFraming renders a peer's message as AOS did before framing: only
+	// a line that starts like a sender label is quoted. It is for replaying a
+	// record made before framing; the prompt backend has its own switch.
+	NoPeerFraming bool
 	// NoLeaseFencing turns off what came with lease fencing: write_file and
 	// edit_file are not checked against leases, and acquire_lease does not
 	// show the token. Only a replay of a record made before fencing sets
@@ -766,10 +771,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return false, recordErr
 			}
 			session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, Message{
-				Role:    "tool",
-				Content: "tool_error name=backend error=malformed_backend_output try_different_strategy=true",
-			})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, "tool_error name=backend error=malformed_backend_output try_different_strategy=true"))
 			return true, nil
 		}
 		return false, nil
@@ -789,9 +791,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			stepNow = r.StepClock(pid, session.Usage.Steps)
 		}
 		_, stepElapsed := account.top().UsedAt(stepNow)
-		for _, note := range budgetNotes(account, &session, maxSteps, stepNow) {
-			session.Messages = append(session.Messages, Message{Role: "tool", Content: note})
-		}
+		session.Messages = append(session.Messages, budgetNotes(account, &session, maxSteps, stepNow)...)
 		if r.Bus != nil {
 			// The first step also takes messages handed out before but never
 			// acknowledged: a crash or an interruption left them unrecorded.
@@ -913,10 +913,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					return RunResult{}, recordErr
 				}
 				session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
-				session.Messages = append(session.Messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("tool_error name=backend error=%s try_different_strategy=true", err.Error()),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=backend error=%s try_different_strategy=true", err.Error())))
 				continue
 			}
 			exitStatus := kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: true}
@@ -967,7 +964,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			// Nobody answers a message in an autonomous run. Without this
 			// note, agents told to "return X in a message, then exit" kept
 			// resending the message until their step limit.
-			session.Messages = append(session.Messages, Message{Role: "tool", Content: messageRecordedNote})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MessageRecorded, messageRecordedNote))
 		case "tool":
 			if result.Action.ToolCall == nil || result.Action.ToolCall.Name == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -1006,10 +1003,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					Useful:    false,
 					Error:     repeatErr.Error(),
 				})
-				session.Messages = append(session.Messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error()),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error())))
 				if loopWarningIssued {
 					exitStatus := kernel.ExitStatus{Code: 1, Reason: repeatErr.Error(), Retryable: false}
 					artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "loop_retry_suppressed", &unacked)
@@ -1046,10 +1040,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					Useful:    false,
 					Error:     repeatErr.Error(),
 				})
-				session.Messages = append(session.Messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error()),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, repeatErr.Error())))
 				break
 			}
 			toolResult, intent, err := r.executeToolCall(ctx, process, session, checkpointID, *result.Action.ToolCall)
@@ -1076,7 +1067,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 						session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
 						content += cancelledNote(toolResult.Changes)
 					}
-					session.Messages = append(session.Messages, Message{Role: "tool", Content: content})
+					session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolCancelled, content))
 					return stop()
 				}
 				if options.ContinueOnToolError {
@@ -1094,10 +1085,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 						Useful:    false,
 						Error:     err.Error(),
 					})
-					session.Messages = append(session.Messages, Message{
-						Role:    "tool",
-						Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, err.Error()),
-					})
+					session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, err.Error())))
 					break
 				}
 				if intent != "" {
@@ -1127,10 +1115,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Signature: signature,
 				Useful:    useful,
 			})
-			resultMessage := Message{
-				Role:    "tool",
-				Content: toolResultMessage(toolResult),
-			}
+			resultMessage := runtimeNote("tool", framing.ToolResult(toolResult.Tool), toolResultMessage(toolResult))
 			switch {
 			case toolResult.Tool == "read_memory" && toolResult.Output["artifact_id"] == "":
 				resultMessage.ArchiveAs = rangeReadReference(toolResult.Output["from"], toolResult.Output["to"])
@@ -1159,10 +1144,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}
 			session.Messages = append(session.Messages, resultMessage)
 			if !useful {
-				session.Messages = append(session.Messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("tool_notice name=%s useful=false reason=%s try_different_strategy=true", toolResult.Tool, reason),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolNotice, fmt.Sprintf("tool_notice name=%s useful=false reason=%s try_different_strategy=true", toolResult.Tool, reason)))
 			}
 		case "delegate":
 			if result.Action.Delegate == nil || result.Action.Delegate.AgentID == "" {
@@ -1189,10 +1171,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}
 			delegateResult, err := r.DelegateHandler(ctx, process, *result.Action.Delegate, session)
 			if err != nil && ctx.Err() != nil {
-				session.Messages = append(session.Messages, Message{
-					Role:    "tool",
-					Content: fmt.Sprintf("delegate_cancelled agent=%s reason=%s", result.Action.Delegate.AgentID, cancelReason(ctx)),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.DelegateCancelled, fmt.Sprintf("delegate_cancelled agent=%s reason=%s", result.Action.Delegate.AgentID, cancelReason(ctx))))
 				return stop()
 			}
 			if err != nil {
@@ -1212,31 +1191,25 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}
 			session.DelegateArtifactIDs = append(session.DelegateArtifactIDs, delegateArtifact.ID)
 			if delegateResult.Status == DelegateWaiting {
-				session.Messages = append(session.Messages, Message{
-					Role: "tool",
-					Content: fmt.Sprintf(
-						"delegate_result agent=%s pid=%s status=waiting question=%q checkpoint=%s note=%q",
-						delegateResult.AgentID, delegateResult.PID, delegateResult.Question, delegateResult.CheckpointID,
-						"The agent paused to ask you this and has not exited. Answer by delegating to "+delegateResult.AgentID+
-							" again with your answer as the goal: that resumes the same process. If you exit without answering, it is closed as abandoned.",
-					),
-				})
+				session.Messages = append(session.Messages, runtimeNote("tool", framing.DelegateResult, fmt.Sprintf(
+					"delegate_result agent=%s pid=%s status=waiting question=%q checkpoint=%s note=%q",
+					delegateResult.AgentID, delegateResult.PID, delegateResult.Question, delegateResult.CheckpointID,
+					"The agent paused to ask you this and has not exited. Answer by delegating to "+delegateResult.AgentID+
+						" again with your answer as the goal: that resumes the same process. If you exit without answering, it is closed as abandoned.",
+				)))
 				break
 			}
-			session.Messages = append(session.Messages, Message{
-				Role: "tool",
-				Content: fmt.Sprintf(
-					"delegate_result agent=%s pid=%s exit_code=%d exit_reason=%q exit_retryable=%t summary=%s result_artifact=%s checkpoint=%s",
-					delegateResult.AgentID,
-					delegateResult.PID,
-					delegateResult.ExitStatus.Code,
-					delegateResult.ExitStatus.Reason,
-					delegateResult.ExitStatus.Retryable,
-					delegateResult.Summary,
-					delegateResult.ResultID,
-					delegateResult.CheckpointID,
-				),
-			})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.DelegateResult, fmt.Sprintf(
+				"delegate_result agent=%s pid=%s exit_code=%d exit_reason=%q exit_retryable=%t summary=%s result_artifact=%s checkpoint=%s",
+				delegateResult.AgentID,
+				delegateResult.PID,
+				delegateResult.ExitStatus.Code,
+				delegateResult.ExitStatus.Reason,
+				delegateResult.ExitStatus.Retryable,
+				delegateResult.Summary,
+				delegateResult.ResultID,
+				delegateResult.CheckpointID,
+			)))
 		case "send":
 			if result.Action.Send == nil || result.Action.Send.To == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -1275,10 +1248,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, Message{
-				Role:    "tool",
-				Content: fmt.Sprintf("send:to=%s id=%s", message.To, message.ID),
-			})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSent, fmt.Sprintf("send:to=%s id=%s", message.To, message.ID)))
 		case "publish":
 			if result.Action.Publish == nil || result.Action.Publish.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -1308,10 +1278,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, Message{
-				Role:    "tool",
-				Content: fmt.Sprintf("publish:topic=%s count=%d", result.Action.Publish.Topic, len(messages)),
-			})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailPublished, fmt.Sprintf("publish:topic=%s count=%d", result.Action.Publish.Topic, len(messages))))
 		case "subscribe":
 			if result.Action.Subscribe == nil || result.Action.Subscribe.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -1340,10 +1307,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, Message{
-				Role:    "tool",
-				Content: "subscribe:topic=" + result.Action.Subscribe.Topic,
-			})
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSubscribed, "subscribe:topic="+result.Action.Subscribe.Topic))
 		case "wait":
 			// A question asked while waiting is the agent's reply to the user.
 			if result.Action.Message != "" {
@@ -1373,7 +1337,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if options.ExitEndsTurn {
 				ended := *result.Action.ExitStatus
 				ended.Origin = kernel.ExitOriginAgent
-				session.Messages = append(session.Messages, Message{Role: "notice", Content: fmt.Sprintf(exitEndsTurnNotice, ended.Reason)})
+				session.Messages = append(session.Messages, runtimeNote("notice", framing.RuntimeNotice, fmt.Sprintf(exitEndsTurnNotice, ended.Reason)))
 				artifactRecord, err := r.saveCheckpoint(pid, synced(), latest(), "yield", &unacked)
 				if err != nil {
 					return RunResult{}, err
@@ -1659,7 +1623,7 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 		var wait, renotice bool
 		wait, renotice, end = r.handoffContinues(&session)
 		if renotice {
-			session.Messages = append(session.Messages, Message{Role: "notice", Content: r.renotice(session)})
+			session.Messages = append(session.Messages, runtimeNote("notice", framing.RuntimeNotice, r.renotice(session)))
 			session = numberMessages(session)
 			if err := r.noteRecall(process.PID, NoticeRenotice, map[string]string{"through_seq": strconv.Itoa(session.HandoffSeq)}); err != nil {
 				return Session{}, err
@@ -1776,7 +1740,7 @@ func (r *AgentRuntime) beginHandoff(process kernel.Process, session Session) (Se
 		from := session.Messages[0].Seq
 		notice = fmt.Sprintf(handoffIndexFirstNotice, through, from, through, from, through, SegmentIndexCap(cut))
 	}
-	session.Messages = append(session.Messages, Message{Role: "notice", Content: notice})
+	session.Messages = append(session.Messages, runtimeNote("notice", framing.RuntimeNotice, notice))
 	session = numberMessages(session)
 	session = endHandoff(session)
 	session.HandoffSeq = through
@@ -2332,10 +2296,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 	if options.OnToolError != nil {
 		options.OnToolError(ToolCall{Name: action}, err)
 	}
-	session.Messages = append(session.Messages, Message{
-		Role:    "tool",
-		Content: fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", action, err.Error()),
-	})
+	session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", action, err.Error())))
 	if options.ContinueOnToolError {
 		return true, RunResult{}, nil
 	}
@@ -2695,7 +2656,7 @@ func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, message
 		}
 		session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
 		session.MailboxSeen = append(session.MailboxSeen, message.ID)
-		if message.From == "user" {
+		if message.From == ipc.OperatorSender {
 			session.Messages = append(session.Messages, Message{Role: "user", Content: message.Body})
 			continue
 		}
@@ -2705,10 +2666,21 @@ func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, message
 }
 
 // PeerMessagePrefix starts every message from another agent in the history.
-const PeerMessagePrefix = "message from "
+var PeerMessagePrefix = framing.PeerHeader.String()
+
+// runtimeNote is a history entry the runtime writes, and the only way to
+// write one, so every such turn opens with a reserved opener and the prompt
+// can escape anything else that begins like one. The text is kept byte for
+// byte when it already opens with opener.
+func runtimeNote(role string, opener framing.Opener, text string) Message {
+	return Message{Role: role, Content: framing.Compose(opener, text)}
+}
 
 // peerMessage is how a message from another agent reads in the history:
-// sender first, so it is never mistaken for the user.
+// a header with its sender first, so it is never mistaken for the user, and
+// the number of lines, then every line of the body marked, so none of them
+// can pass for a turn, a tool result or a note. The raw body stays in the
+// mailbox_message record.
 func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 	sender := message.From
 	if r.Kernel != nil {
@@ -2720,15 +2692,27 @@ func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 	if message.Topic != "" {
 		via = " on topic " + message.Topic
 	}
-	// A body line that looks like a sender label is quoted, so it cannot pass
-	// for a separate message from someone else.
-	lines := strings.Split(message.Body, "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimLeft(line, " \t"), PeerMessagePrefix) {
-			lines[i] = "> " + line
+	if r.NoPeerFraming {
+		// A body line that looks like a sender label is quoted, so it cannot
+		// pass for a separate message from someone else.
+		lines := strings.Split(message.Body, "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(strings.TrimLeft(line, " \t"), PeerMessagePrefix) {
+				lines[i] = "> " + line
+			}
 		}
+		return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, strings.Join(lines, "\n"))
 	}
-	return fmt.Sprintf("%s%s%s [%s]: %s", PeerMessagePrefix, sender, via, message.ID, strings.Join(lines, "\n"))
+	marked, count := framing.MarkBody(message.Body)
+	unit := "lines"
+	if count == 1 {
+		unit = "line"
+	}
+	header := fmt.Sprintf("%s%s%s [%s], %d %s:", PeerMessagePrefix, sender, via, message.ID, count, unit)
+	if count == 0 {
+		return header
+	}
+	return header + "\n" + marked
 }
 
 // nonEmpty is a one-element parent list, or nil for no parent.

@@ -245,7 +245,7 @@ func TestContinueEndedOnlyReplacesFinalExits(t *testing.T) {
 
 	// No checkpoint yet: even a retryable exit cannot be recovered.
 	unread, _ := f.spawn()
-	if _, err := f.bus.Send("user", unread.PID, "first line"); err != nil {
+	if _, err := f.bus.SendAsOperator(unread.PID, "first line"); err != nil {
 		t.Fatal(err)
 	}
 	f.kernel.Exit(unread.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})

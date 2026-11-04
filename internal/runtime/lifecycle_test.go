@@ -273,7 +273,7 @@ func TestExitEndsTurnKeepsTheProcess(t *testing.T) {
 	}}
 	r := f.runtime(backend)
 	options := runtime.RunOptions{StopOnAssistantMessage: true, ExitEndsTurn: true}
-	if _, err := f.bus.Send("user", f.process.PID, "find the host running Uptime Kuma"); err != nil {
+	if _, err := f.bus.SendAsOperator(f.process.PID, "find the host running Uptime Kuma"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := r.RunWithOptions(context.Background(), f.process.PID, nil, options)
@@ -291,7 +291,7 @@ func TestExitEndsTurnKeepsTheProcess(t *testing.T) {
 		t.Fatalf("the turn's end should be checkpointed: %s", result.CheckpointID)
 	}
 
-	if _, err := f.bus.Send("user", f.process.PID, "and its port?"); err != nil {
+	if _, err := f.bus.SendAsOperator(f.process.PID, "and its port?"); err != nil {
 		t.Fatalf("a parked process takes mail: %v", err)
 	}
 	next, err := r.Resume(context.Background(), f.process.PID, result.CheckpointID, nil, options)

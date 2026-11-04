@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"aos/internal/artifact"
+	"aos/internal/framing"
 	"aos/internal/kernel"
 	"aos/internal/tools"
 )
@@ -182,7 +183,7 @@ func (r *AgentRuntime) noteInterrupted(previousPID, pid, checkpointID string, se
 			recordID = record.ID
 		}
 		session.ToolArtifactIDs = append(session.ToolArtifactIDs, recordID)
-		session.Messages = append(session.Messages, Message{Role: "tool", Content: interruptedMessage(intent)})
+		session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolInterrupted, interruptedMessage(intent)))
 	}
 	return nil
 }

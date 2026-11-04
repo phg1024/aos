@@ -25,6 +25,14 @@ const (
 	LeaseFencingFileWrites = "file_writes"
 )
 
+// PeerFramingField is the run.started field that says peer messages and
+// runtime-written turns reach the model framed, with the value
+// PeerFramingV2. Records without it used the older rendering.
+const (
+	PeerFramingField = "peer_framing"
+	PeerFramingV2    = "v2"
+)
+
 // LeaseClockField is the run.started field that says lease expiries come
 // from the kernel's clock, with the value LeaseClockKernel, so a replay
 // reproduces them. Records without it took expiries from the wall clock.
@@ -79,6 +87,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 		// Marks a run whose file writes are fenced by leases, so a replay
 		// knows to fence them too; records made before have no such field.
 		data[LeaseFencingField] = LeaseFencingFileWrites
+	}
+	if !e.NoPeerFraming {
+		data[PeerFramingField] = PeerFramingV2
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

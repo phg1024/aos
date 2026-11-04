@@ -340,7 +340,7 @@ func TestAgentRuntimeSupportsMailboxWaitAndResume(t *testing.T) {
 	if !result.Blocked {
 		t.Fatalf("expected blocked result %#v", result)
 	}
-	if _, err := bus.Send("user", process.PID, "resume"); err != nil {
+	if _, err := bus.SendAsOperator(process.PID, "resume"); err != nil {
 		t.Fatalf("send user message: %v", err)
 	}
 

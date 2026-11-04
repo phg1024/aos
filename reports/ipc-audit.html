@@ -40,7 +40,7 @@
       <li><span class="defect">Three defects:</span>
         <ul>
           <li>a topic subscription does not survive Recover;</li>
-          <li>a numbered sender label in a message body is not quoted, so it can pass for a separate message.</li>
+          <li>a numbered sender label in a message body is not quoted, so it can pass for a separate message. <b>Fixed 2026-11-03 by step 1: see <a href="ipc-step-1-framing.html">ipc-step-1-framing.html</a>. This report keeps the <code>180d076</code> result.</b></li>
           <li>added 2026-11-03 (B11): a rollback loses mail that was acked after its target checkpoint, with no record of the loss.</li>
         </ul>
       </li>

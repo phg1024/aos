@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"aos/internal/capability"
+	"aos/internal/framing"
 )
 
 // ErrTimeBudgetExceeded is the cause of a run stopped by a strict time
@@ -205,16 +206,16 @@ func (m *TokenMeter) Total() int     { return int(m.total.Load()) }
 // last step is always in that stretch, so a limit under ten steps still
 // gets the warning. Time is read once, at now, so the notes depend only on
 // that reading, which the step's model calls record.
-func budgetNotes(account *Account, session *Session, maxSteps int, now time.Time) []string {
-	var notes []string
+func budgetNotes(account *Account, session *Session, maxSteps int, now time.Time) []Message {
+	var notes []Message
 	if maxSteps > 0 {
 		used := session.Usage.Steps - session.StepBase - 1
 		left := maxSteps - used
 		if float64(left) <= max(float64(maxSteps)*budgetWarningFraction, 1) {
-			notes = append(notes, fmt.Sprintf("budget steps=%d used=%d left=%d (strict: the run is stopped after the last step)", maxSteps, used, left))
+			notes = append(notes, runtimeNote("tool", framing.BudgetSteps, fmt.Sprintf("budget steps=%d used=%d left=%d (strict: the run is stopped after the last step)", maxSteps, used, left)))
 			if !session.warned("steps") {
 				session.BudgetWarned = append(session.BudgetWarned, "steps")
-				notes = append(notes, fmt.Sprintf("budget warning: %d of %d steps are left, this one included. Commit your best answer now: write or submit what you have, then exit.", left, maxSteps))
+				notes = append(notes, runtimeNote("tool", framing.BudgetWarning, fmt.Sprintf("budget warning: %d of %d steps are left, this one included. Commit your best answer now: write or submit what you have, then exit.", left, maxSteps)))
 			}
 		}
 	}
@@ -225,19 +226,19 @@ func budgetNotes(account *Account, session *Session, maxSteps int, now time.Time
 		if account.timeLeftAt(true, now).ok {
 			note += " (strict: the run is stopped when it runs out)"
 		}
-		notes = append(notes, note)
+		notes = append(notes, runtimeNote("tool", framing.BudgetTime, note))
 		if left <= float64(time.Limit)*budgetWarningFraction && !session.warned("time") {
 			session.BudgetWarned = append(session.BudgetWarned, "time")
-			notes = append(notes, "budget warning: less than 10% of the time is left. Commit your best answer now: write or submit what you have, then exit.")
+			notes = append(notes, runtimeNote("tool", framing.BudgetWarning, "budget warning: less than 10% of the time is left. Commit your best answer now: write or submit what you have, then exit."))
 		}
 	}
 	tokens := account.tokensLeft()
 	if tokens.ok {
 		left := max(tokens.Left, 0)
-		notes = append(notes, fmt.Sprintf("budget tokens=%d used=%d left=%d", tokens.Limit, tokens.Limit-int(left), int(left)))
+		notes = append(notes, runtimeNote("tool", framing.BudgetTokens, fmt.Sprintf("budget tokens=%d used=%d left=%d", tokens.Limit, tokens.Limit-int(left), int(left))))
 		if left <= float64(tokens.Limit)*budgetWarningFraction && !session.warned("tokens") {
 			session.BudgetWarned = append(session.BudgetWarned, "tokens")
-			notes = append(notes, "budget warning: less than 10% of the tokens are left. Commit your best answer now: write or submit what you have, then exit.")
+			notes = append(notes, runtimeNote("tool", framing.BudgetWarning, "budget warning: less than 10% of the tokens are left. Commit your best answer now: write or submit what you have, then exit."))
 		}
 	}
 	return notes

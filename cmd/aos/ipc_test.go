@@ -73,7 +73,7 @@ func TestWorkflowAgentsMessageEachOther(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	leadAfter := prompts[4]
-	if !strings.Contains(leadAfter, runtime.PeerMessagePrefix+"worker (pid-000003) [msg-000001]: hello lead") {
+	if !strings.Contains(leadAfter, runtime.PeerMessagePrefix+`worker (pid-000003) [msg-000001], 1 line:\n| hello lead`) {
 		t.Fatalf("the lead should read the worker's message with its sender:\n%s", leadAfter)
 	}
 	bus, _ := ipc.New(filepath.Join(stateDir, "bus"), nil)

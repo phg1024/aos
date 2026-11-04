@@ -34,6 +34,8 @@ type BackendFactory interface {
 type StaticBackendFactory struct {
 	Completer JSONCompleter
 	Skills    skills.Registry
+	// NoPeerFraming is PromptBackend.NoPeerFraming for every backend.
+	NoPeerFraming bool
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -42,11 +44,12 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		return nil, err
 	}
 	return PromptBackend{
-		Completer: f.Completer,
-		Workflow:  workflow,
-		Agent:     agent,
-		Skills:    loadedSkills,
-		Recall:    workflow.Recall,
+		Completer:     f.Completer,
+		Workflow:      workflow,
+		Agent:         agent,
+		Skills:        loadedSkills,
+		Recall:        workflow.Recall,
+		NoPeerFraming: f.NoPeerFraming,
 	}, nil
 }
 
@@ -129,6 +132,10 @@ type Engine struct {
 	// (runtime.AgentRuntime.NoToolIntents), for replaying a record made
 	// before them.
 	NoToolIntents bool
+	// NoPeerFraming renders a peer's message as AOS did before framing
+	// (runtime.AgentRuntime.NoPeerFraming), for replaying a record made
+	// before it. With framing on, run.started says so (peer_framing).
+	NoPeerFraming bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -458,6 +465,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		StepClock:      e.StepClock,
 		NoToolIntents:  e.NoToolIntents,
 		NoLeaseFencing: e.NoLeaseFencing,
+		NoPeerFraming:  e.NoPeerFraming,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

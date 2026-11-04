@@ -22,6 +22,7 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/framing"
 	"aos/internal/sandbox"
 )
 
@@ -292,6 +293,18 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		}
 		content := string(contentBytes)
 		count := strings.Count(content, oldText)
+		unescaped := false
+		if count == 0 {
+			// The prompt shows a file line that looks like a runtime line with
+			// a backslash in front (framing.Escape). A model that copies it
+			// means the line as the file has it. The exact text is tried
+			// first, so a file that really holds the backslash still matches.
+			if plain := framing.Unescape(oldText); plain != oldText {
+				if count = strings.Count(content, plain); count > 0 {
+					oldText, newText, unescaped = plain, framing.Unescape(newText), true
+				}
+			}
+		}
 		if count == 0 {
 			return Result{}, errors.New("edit_file old_text not found")
 		}
@@ -307,15 +320,15 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
 			return Result{}, err
 		}
-		return Result{
-			Tool:    req.Tool,
-			Summary: "edited file",
-			Output: map[string]string{
-				"path":        path,
-				"occurrences": fmt.Sprintf("%d", count),
-				"bytes":       fmt.Sprintf("%d", len(updated)),
-			},
-		}, nil
+		output := map[string]string{
+			"path":        path,
+			"occurrences": fmt.Sprintf("%d", count),
+			"bytes":       fmt.Sprintf("%d", len(updated)),
+		}
+		if unescaped {
+			output["unescaped"] = "true"
+		}
+		return Result{Tool: req.Tool, Summary: "edited file", Output: output}, nil
 	case "list_dir":
 		path := filepath.Clean(req.Args["path"])
 		if path == "." || path == "" {

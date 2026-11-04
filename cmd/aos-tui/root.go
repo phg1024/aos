@@ -67,7 +67,7 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 // deliver puts line in the root's mailbox. A root that exited cannot take
 // mail; its recovery carries the line instead, as appended.
 func deliver(bus *ipc.Bus, root *tuiRoot, line string) (appended []runtime.Message, err error) {
-	if _, err := bus.Send("user", root.process.PID, line); errors.Is(err, ipc.ErrRecipientExited) {
+	if _, err := bus.SendAsOperator(root.process.PID, line); errors.Is(err, ipc.ErrRecipientExited) {
 		return []runtime.Message{{Role: "user", Content: line}}, nil
 	} else if err != nil {
 		return nil, err

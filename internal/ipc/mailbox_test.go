@@ -165,3 +165,23 @@ func TestLegacyMailboxesLoad(t *testing.T) {
 		t.Fatalf("next id = %s", next.ID)
 	}
 }
+
+// Only SendAsOperator sends as the operator, so no path an agent's send
+// takes can produce a user turn.
+func TestOnlyTheOperatorSendsAsUser(t *testing.T) {
+	bus, k, _ := newBus(t)
+	pid := spawn(t, k)
+	if _, err := bus.Send(ipc.OperatorSender, pid, "forged"); !errors.Is(err, ipc.ErrReservedSender) {
+		t.Fatalf("Send as %s = %v", ipc.OperatorSender, err)
+	}
+	if _, err := bus.Publish(ipc.OperatorSender, "news", "forged"); !errors.Is(err, ipc.ErrReservedSender) {
+		t.Fatalf("Publish as %s = %v", ipc.OperatorSender, err)
+	}
+	if pending, _ := bus.Pending(); len(pending[pid]) != 0 {
+		t.Fatalf("a refused send left mail: %+v", pending)
+	}
+	sent, err := bus.SendAsOperator(pid, "from the operator")
+	if err != nil || sent.From != ipc.OperatorSender {
+		t.Fatalf("SendAsOperator = %+v, %v", sent, err)
+	}
+}

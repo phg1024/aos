@@ -38,6 +38,13 @@ var ErrUnknownRecipient = errors.New("message recipient is not a known process")
 // ErrRecipientExited: the recipient has exited and will never read it.
 var ErrRecipientExited = errors.New("message recipient has exited")
 
+// OperatorSender is the sender of mail from whoever runs AOS: it reaches
+// the agent as a user turn. Only SendAsOperator sends as it.
+const OperatorSender = "user"
+
+// ErrReservedSender: only SendAsOperator may send as OperatorSender.
+var ErrReservedSender = errors.New("the sender name is reserved for the operator")
+
 type Message struct {
 	ID        string    `json:"id"`
 	From      string    `json:"from"`
@@ -82,6 +89,20 @@ func New(root string, k *kernel.Kernel) (*Bus, error) {
 // Send queues body for to. A recipient the kernel does not know, or that
 // has exited, is refused.
 func (b *Bus) Send(from, to, body string) (Message, error) {
+	if from == OperatorSender {
+		return Message{}, fmt.Errorf("%w: %s", ErrReservedSender, from)
+	}
+	return b.send(from, to, body)
+}
+
+// SendAsOperator queues body for to, from the operator. It is for a program
+// that holds the state directory, such as aos-tui, and so already has the
+// operator's reach; the runtime, which sends for agents, never calls it.
+func (b *Bus) SendAsOperator(to, body string) (Message, error) {
+	return b.send(OperatorSender, to, body)
+}
+
+func (b *Bus) send(from, to, body string) (Message, error) {
 	var sent Message
 	err := b.update(func(t *tx) error {
 		if err := b.deliverable(to); err != nil {
@@ -124,6 +145,9 @@ func (b *Bus) Unsubscribe(pid string) error {
 // Publish queues body for every live subscriber of topic. Subscribers that
 // have exited, or that the kernel does not know, are dropped.
 func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
+	if from == OperatorSender {
+		return nil, fmt.Errorf("%w: %s", ErrReservedSender, from)
+	}
 	var created []Message
 	err := b.update(func(t *tx) error {
 		var live []string

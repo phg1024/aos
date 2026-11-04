@@ -44,6 +44,10 @@ type RecallPolicy struct {
 	// and, when a segment's index is shortened, how to read the rest. It
 	// matters only with the agent index on.
 	NoPartialIndexNote bool `json:"no_partial_index_note,omitempty"`
+	// NoPromptFraming keeps PromptBackend from escaping runtime-written
+	// turns and from explaining the framing, so a frozen probe arm's prompts
+	// stay byte for byte what they were.
+	NoPromptFraming bool `json:"no_prompt_framing,omitempty"`
 }
 
 // DefaultHeaderIndexBytes is the header's total for agent indexes when
@@ -60,7 +64,7 @@ func (p RecallPolicy) IndexBudget() int {
 
 // RecallOff is the policy with every aid off: the behaviour from before.
 func RecallOff() RecallPolicy {
-	return RecallPolicy{NoOverwriteWarning: true, NoPointerPrompt: true, NoHandoffRenotice: true, NoAgentIndex: true, NoPartialIndexNote: true}
+	return RecallPolicy{NoOverwriteWarning: true, NoPointerPrompt: true, NoHandoffRenotice: true, NoAgentIndex: true, NoPartialIndexNote: true, NoPromptFraming: true}
 }
 
 // Recall-notice items, as memory.notice events name them.

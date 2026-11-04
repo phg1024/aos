@@ -78,9 +78,12 @@ type Report struct {
 	LegacyToolIntents bool `json:"legacy_tool_intents,omitempty"`
 	// LegacyLeases means the record predates lease fencing, so the replay
 	// neither fenced file writes nor showed lease tokens.
-	LegacyLeases  bool              `json:"legacy_leases,omitempty"`
-	RecordedBuild map[string]string `json:"recorded_build,omitempty"`
-	Divergence    *Divergence       `json:"divergence,omitempty"`
+	LegacyLeases bool `json:"legacy_leases,omitempty"`
+	// LegacyPeerFraming means the record predates framing, so the replay
+	// rendered peer messages and prompts the way it did then.
+	LegacyPeerFraming bool              `json:"legacy_peer_framing,omitempty"`
+	RecordedBuild     map[string]string `json:"recorded_build,omitempty"`
+	Divergence        *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -319,8 +322,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Leases:    leases,
 		Tools:     toolRuntime,
 		Factory: agentflow.StaticBackendFactory{
-			Completer: backend,
-			Skills:    skills.NewRegistry(runSpec.Spec.SkillRoots),
+			Completer:     backend,
+			Skills:        skills.NewRegistry(runSpec.Spec.SkillRoots),
+			NoPeerFraming: started.Data[agentflow.PeerFramingField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -336,6 +340,10 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// above); replay it without the field.
 	engine.NoLeaseClock = started.Data[agentflow.LeaseClockField] == ""
 	report.LegacyLeases = engine.NoLeaseFencing
+	// A run.started without peer_framing predates framing: its requests hold
+	// the older rendering, so the replay must produce it too.
+	engine.NoPeerFraming = started.Data[agentflow.PeerFramingField] == ""
+	report.LegacyPeerFraming = engine.NoPeerFraming
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

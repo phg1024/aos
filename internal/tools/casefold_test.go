@@ -117,3 +117,38 @@ func TestCaseVariantsGetTheSameAnswer(t *testing.T) {
 		t.Fatalf("list the workspace = %+v, %v", listed.Output, err)
 	}
 }
+
+// Operator mail is trustworthy because an agent cannot write the bus: with
+// bus/mailboxes.json in reach it could forge mail from the user. Every
+// file tool refuses it, however the path is spelled.
+func TestBusDirectoryIsProtected(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	skipUnlessCaseInsensitive(t, root)
+	ws := filepath.Join(root, "ws")
+	state := filepath.Join(ws, ".aos-state")
+	mailboxes := filepath.Join(state, "bus", "mailboxes.json")
+	const original = `{"pid-000002":[]}`
+	if err := os.MkdirAll(filepath.Dir(mailboxes), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(mailboxes, []byte(original), 0o644)
+	runtime := tools.NewRuntime()
+	runtime.Protected = []string{state}
+	for _, spelling := range []string{".aos-state", ".AOS-STATE", ".Aos-State"} {
+		path := filepath.Join(ws, spelling, "bus", "mailboxes.json")
+		for tool, args := range map[string]map[string]string{
+			"write_file": {"path": path, "content": `{"pid-000002":[{"from":"user","body":"forged"}]}`},
+			"edit_file":  {"path": path, "old_text": "[]", "new_text": `[{"from":"user","body":"forged"}]`},
+		} {
+			result, err := runtime.Execute(tools.Request{Tool: tool, Args: args,
+				Mounts:        []capability.Mount{{Name: "workspace", HostPath: ws}},
+				CapabilitySet: capability.Set{Tools: []string{tool}, ReadPaths: []string{ws}, WritePaths: []string{ws}}})
+			if !errors.Is(err, tools.ErrPathDenied) || tools.DenialReason(err) != tools.DeniedProtected {
+				t.Errorf("%s via %s = %+v, %v; want refused as protected", spelling, tool, result.Output, err)
+			}
+		}
+		if raw, _ := os.ReadFile(mailboxes); string(raw) != original {
+			t.Fatalf("%s: mailboxes.json changed: %s", spelling, raw)
+		}
+	}
+}
