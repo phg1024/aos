@@ -40,7 +40,10 @@ type Report struct {
 	// and did not finish: still open, cancelled, or interrupted.
 	CutOff []CutOffCall `json:"cut_off_calls,omitempty"`
 	// Mail is the messages not yet acknowledged, by recipient.
-	Mail         []Mailbox               `json:"mail,omitempty"`
+	Mail []Mailbox `json:"mail,omitempty"`
+	// DeadLetters is the mail no model is known to have read when its
+	// recipient's chain ended.
+	DeadLetters  []DeadLetter            `json:"dead_letters,omitempty"`
 	Verification *agentflow.Verdict      `json:"verification,omitempty"`
 	VerdictID    string                  `json:"verification_id,omitempty"`
 	Usage        []Usage                 `json:"usage"`
@@ -84,6 +87,15 @@ type CutOffCall struct {
 
 // Mailbox counts one recipient's unacknowledged messages: Pending never
 // handed out, Delivered handed out but not yet recorded by a checkpoint.
+// DeadLetter is one ipc.dead_letter event.
+type DeadLetter struct {
+	ID     string `json:"id"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Reason string `json:"reason"`
+	Detail string `json:"detail,omitempty"`
+}
+
 type Mailbox struct {
 	PID       string `json:"pid"`
 	Pending   int    `json:"pending"`
@@ -206,6 +218,13 @@ func Load(stateDir string, tail int) (Report, error) {
 			report.Mail = append(report.Mail, box)
 		}
 		sort.Slice(report.Mail, func(i, j int) bool { return report.Mail[i].PID < report.Mail[j].PID })
+	}
+	if events, err := k.Events(); err == nil {
+		for _, event := range events {
+			if event.Type == ipc.DeadLetterEvent {
+				report.DeadLetters = append(report.DeadLetters, DeadLetter{ID: event.Data["id"], From: event.Data["from"], To: event.Data["to"], Reason: event.Data["reason"], Detail: event.Data["detail"]})
+			}
+		}
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "leases", "leases.json")); err == nil {
 		leases, err := lease.New(filepath.Join(stateDir, "leases"), k)
@@ -407,6 +426,16 @@ func (r Report) WriteText(w io.Writer) {
 		fmt.Fprintln(w, "\nmail not yet acknowledged:")
 		for _, box := range r.Mail {
 			fmt.Fprintf(w, "  %s  %d pending, %d delivered but not checkpointed\n", box.PID, box.Pending, box.Delivered)
+		}
+	}
+	if len(r.DeadLetters) > 0 {
+		fmt.Fprintln(w, "\ndead letters (no model is known to have read these):")
+		for _, letter := range r.DeadLetters {
+			reason := letter.Reason
+			if letter.Detail != "" {
+				reason += ", " + letter.Detail
+			}
+			fmt.Fprintf(w, "  %s  from %s to %s  %s\n", letter.ID, letter.From, letter.To, reason)
 		}
 	}
 	if v := r.Verification; v != nil {

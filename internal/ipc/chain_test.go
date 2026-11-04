@@ -132,9 +132,10 @@ func TestSendToAnEndedChainIsRefused(t *testing.T) {
 	}
 }
 
-// Step 2 does not say what became of mail left in an ended chain: that is
-// step 3's dead letter. It stays where it was, unacknowledged and on record.
-func TestMailInAClosedChainStaysPending(t *testing.T) {
+// Without a Sweep, nothing has happened to mail left in an ended chain: it
+// stays where it was, unacknowledged and on record, and Close alone does not
+// reach it, since the kernel cannot import the bus.
+func TestMailInAClosedChainStaysPendingUntilASweep(t *testing.T) {
 	bus, k, _ := newBus(t)
 	sender, worker := spawn(t, k), spawn(t, k)
 	unread, _ := bus.Send(sender, worker, "unread")

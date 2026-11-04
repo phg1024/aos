@@ -141,6 +141,10 @@ type Engine struct {
 	// caller sets Bus.NoSubscriptionEvents with it. When it is off,
 	// run.started says so (chain_delivery).
 	NoChainDelivery bool
+	// NoSenderOutcomes is AgentRuntime.NoSenderOutcomes, for replaying a record
+	// made before dead letters. When it is off, run.started says so
+	// (sender_outcomes).
+	NoSenderOutcomes bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -388,6 +392,9 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 	if _, err := e.Kernel.Exit(root.PID, summary.ExitStatus); err != nil {
 		return RunSummary{}, err
 	}
+	if e.Bus != nil && !e.NoSenderOutcomes {
+		_ = e.Bus.Sweep()
+	}
 	return summary, nil
 }
 
@@ -456,21 +463,22 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 	// spawned in its place.
 	current := process
 	agentRuntime := &runtime.AgentRuntime{
-		Kernel:         e.Kernel,
-		Artifacts:      e.Artifacts,
-		Tools:          e.Tools,
-		Bus:            e.Bus,
-		Leases:         e.Leases,
-		MaxSteps:       maxSteps(agent),
-		Compaction:     e.Compaction,
-		Recall:         spec.Recall,
-		BackendRetry:   e.BackendRetry,
-		Clock:          e.Clock,
-		Sleep:          e.Sleep,
-		StepClock:      e.StepClock,
-		NoToolIntents:  e.NoToolIntents,
-		NoLeaseFencing: e.NoLeaseFencing,
-		NoPeerFraming:  e.NoPeerFraming,
+		Kernel:           e.Kernel,
+		Artifacts:        e.Artifacts,
+		Tools:            e.Tools,
+		Bus:              e.Bus,
+		Leases:           e.Leases,
+		MaxSteps:         maxSteps(agent),
+		Compaction:       e.Compaction,
+		Recall:           spec.Recall,
+		BackendRetry:     e.BackendRetry,
+		Clock:            e.Clock,
+		Sleep:            e.Sleep,
+		StepClock:        e.StepClock,
+		NoToolIntents:    e.NoToolIntents,
+		NoLeaseFencing:   e.NoLeaseFencing,
+		NoPeerFraming:    e.NoPeerFraming,
+		NoSenderOutcomes: e.NoSenderOutcomes,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),

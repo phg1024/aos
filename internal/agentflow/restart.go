@@ -193,8 +193,9 @@ func (e *Engine) notRestarted(agent AgentSpec, run AgentRun, cause, detail strin
 // closeChain ends the chain of a retryable exit the policy will not restart:
 // the engine, as its supervisor, says no successor is coming, for this
 // process's chain alone, whoever delegated to it. Its subscriptions go, and
-// its unread mail stays in the mailbox. A process another engine recovered
-// first is refused, since its chain goes on.
+// its unread mail becomes dead letters at the next sweep: the delegator's next
+// step, or the end of the run. A process another engine recovered first is
+// refused, since its chain goes on.
 func (e *Engine) closeChain(pid, reason string) {
 	if e.NoChainDelivery {
 		return

@@ -102,6 +102,8 @@ type options struct {
 	noFraming bool
 	// noChain records as AOS did before chain-owned delivery.
 	noChain bool
+	// noOutcomes records as AOS did before sender outcomes.
+	noOutcomes bool
 	// restart is the agent's restart policy, as JSON, and maxSteps its steps
 	// if not the default.
 	restart  string
@@ -206,16 +208,17 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:         agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming},
-		NoPeerFraming:   opts.noFraming,
-		NoChainDelivery: opts.noChain,
-		Compaction:      opts.compaction,
-		BackendRetry:    runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
-		Budget:          opts.budget,
-		RunRecord:       map[string]string{"build_version": "test"},
-		NoToolIntents:   opts.noIntents,
-		NoLeaseFencing:  opts.noFencing,
-		NoLeaseClock:    opts.noLeaseClock,
+		Factory:          agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming},
+		NoPeerFraming:    opts.noFraming,
+		NoChainDelivery:  opts.noChain,
+		NoSenderOutcomes: opts.noOutcomes,
+		Compaction:       opts.compaction,
+		BackendRetry:     runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
+		Budget:           opts.budget,
+		RunRecord:        map[string]string{"build_version": "test"},
+		NoToolIntents:    opts.noIntents,
+		NoLeaseFencing:   opts.noFencing,
+		NoLeaseClock:     opts.noLeaseClock,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -897,6 +900,69 @@ func TestChainDeliveryAddsNoEventToAPlainRun(t *testing.T) {
 	legacy := eventTypes(t, recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: budget, noChain: true}))
 	if current != legacy {
 		t.Fatalf("the events differ:\n%s\n%s", current, legacy)
+	}
+}
+
+// unreadScript sends itself mail with its last step, and the step limit stops
+// it before it reads that. The restart policy declines, which ends the chain.
+func unreadScript(workspace string) []step {
+	return []step{
+		tool("run", map[string]any{"command": "ls"}),
+		{action: map[string]any{"type": "send", "send": map[string]any{"to": "pid-000002", "body": "to myself"}}},
+	}
+}
+
+// A run with no mail adds nothing: its events and its prompts are what a build
+// before sender outcomes records, and it replays identically either way.
+func TestSenderOutcomesAddNothingToAPlainRun(t *testing.T) {
+	budget := capability.Budget{Seconds: 600}
+	current := recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: budget})
+	legacy := recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: budget, noOutcomes: true})
+	if a, b := eventTypes(t, current), eventTypes(t, legacy); a != b {
+		t.Fatalf("the events differ:\n%s\n%s", a, b)
+	}
+	// Only the root directory and the wall clock's budget line can differ
+	// between two runs.
+	clock := regexp.MustCompile(`budget time=\S+ used=\S+ left=\S+`)
+	normal := func(stateDir string) string {
+		return clock.ReplaceAllString(strings.ReplaceAll(recordedPrompts(t, stateDir), filepath.Dir(stateDir), "ROOT"), "")
+	}
+	if a, b := normal(current), normal(legacy); a != b {
+		t.Fatalf("the prompts differ:\n%s\n%s", a, b)
+	}
+	if started := runStartedData(t, current); started[agentflow.SenderOutcomesField] != agentflow.SenderOutcomesV1 {
+		t.Fatalf("run.started = %v", started)
+	}
+	if started := runStartedData(t, legacy); started[agentflow.SenderOutcomesField] != "" {
+		t.Fatalf("the legacy run.started = %v", started)
+	}
+	if report := replayed(t, current, false); !report.Identical() || report.LegacySenderOutcomes {
+		t.Fatalf("current report = %+v, divergence %+v", report, report.Divergence)
+	}
+	if report := replayed(t, legacy, false); !report.Identical() || !report.LegacySenderOutcomes {
+		t.Fatalf("legacy report = %+v, divergence %+v", report, report.Divergence)
+	}
+}
+
+// With mail, the new events exist, so a record without the field replays without
+// them. Every request still matches, under both. Mail never replays identically:
+// a message's timestamp is the wall clock's.
+func TestReplayOfARecordWithoutSenderOutcomes(t *testing.T) {
+	unread := options{budget: capability.Budget{Seconds: 600}, mail: true, restart: `{"max":3,"backoff":"0s"}`, maxSteps: 2}
+	current := recordAt(t, newRoot(t), context.Background(), unreadScript, unread)
+	if events := eventTypes(t, current); !strings.Contains(events, "ipc.dead_letter") {
+		t.Fatalf("the record should hold a dead letter: %s", events)
+	}
+	if report := replayed(t, current, false); report.LegacySenderOutcomes || report.Calls == 0 || report.Matched != report.Calls {
+		t.Fatalf("current report = %+v", report)
+	}
+	unread.noOutcomes = true
+	legacy := recordAt(t, newRoot(t), context.Background(), unreadScript, unread)
+	if events := eventTypes(t, legacy); strings.Contains(events, "ipc.dead_letter") {
+		t.Fatalf("the legacy record should not: %s", events)
+	}
+	if report := replayed(t, legacy, false); !report.LegacySenderOutcomes || report.Calls == 0 || report.Matched != report.Calls {
+		t.Fatalf("legacy report = %+v", report)
 	}
 }
 

@@ -6,9 +6,9 @@
 // subscribe actions, and replay against the code as it is, with scripted
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
-// comment names the contract it was measured against. B2b, B5, B8c and B11
-// assert instead, since those are fixed; their comments keep the result from
-// before. They are kept out of go test ./... by the ipcaudit tag:
+// comment names the contract it was measured against. B1c, B2b, B2c, B5, B8c
+// and B11 assert instead, since those are fixed; their comments keep the result
+// from before. They are kept out of go test ./... by the ipcaudit tag:
 //
 //	go test -tags ipcaudit -count=1 -v ./bench/ipc/
 //
@@ -386,13 +386,14 @@ func TestIPCB1CrashWindows(t *testing.T) {
 			strings.Count(text(next.first()), "recorded but not acked"), len(f.pending(t)))
 	})
 
-	t.Run("acked_before_any_model_saw_it", func(t *testing.T) {
-		// A step receives mail before its budget check. If the check stops
-		// the run, the final checkpoint records the message and acks it,
-		// and no model call ever carried it.
+	// B1c asserts, since step 3 of the slice (ipc-design.md, decisions 1 and 2).
+	// Before, at 180d076: the budget check stopped the run after the message was
+	// received, and the final checkpoint recorded and acked it. No model call
+	// carried it, a Recover could not either, and the sender was not told.
+	t.Run("not_shown_at_the_budget", func(t *testing.T) {
 		f := newFixture(t)
 		worker := f.spawnWith(t, "worker", capability.Set{Budget: capability.Budget{Tokens: 1000}})
-		lead := f.spawn(t, "lead")
+		lead := f.spawn(t, "lead", "message_agent")
 		var sentID string
 		model := &backend{fn: func(call int, ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 			if call == 1 {
@@ -411,14 +412,33 @@ func TestIPCB1CrashWindows(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		session, _ := f.agent(nil).RestoreCheckpoint(result.ExitStatus.Checkpoint)
-		inCheckpoint := strings.Count(text(session.Messages), "arrives as the budget runs out")
-		finding(t, "a message received in the step a token budget stops: model calls %d; the exit %q (retryable=%t); the final checkpoint holds it %d time(s); acked (pending %d); %s never reached a model",
-			model.calls(), result.ExitStatus.Reason, result.ExitStatus.Retryable, inCheckpoint, len(f.pending(t)[worker.PID]), sentID)
-		retry := script()
-		recovered, err := f.agent(retry).Recover(context.Background(), worker.PID, "", nil, runtime.RunOptions{})
-		finding(t, "recovering it: %d model calls, exit %q, err %v: the budget is still spent, so the message reaches no model there either, and the sender is not told",
-			retry.calls(), recovered.ExitStatus.Reason, err)
+		if model.calls() != 1 {
+			t.Fatalf("model calls = %d", model.calls())
+		}
+		if box := f.pending(t)[worker.PID]; len(box) != 1 || box[0].ID != sentID || box[0].Deliveries == 0 {
+			t.Fatalf("it should be delivered and not acknowledged: %+v", box)
+		}
+		if _, err := f.kernel.Close(worker.PID, "budget_spent"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.bus.Sweep(); err != nil {
+			t.Fatal(err)
+		}
+		letters := f.events(t, ipc.DeadLetterEvent)
+		if len(letters) != 1 || letters[0].Data["id"] != sentID || letters[0].Data["reason"] != ipc.ReasonNotShown {
+			t.Fatalf("ipc.dead_letter = %+v", letters)
+		}
+		if left := f.pending(t); len(left) != 0 {
+			t.Fatalf("left pending: %+v", left)
+		}
+		telling := script()
+		if _, err := f.agent(telling).Run(context.Background(), lead.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(text(telling.first()), "undelivered: "+sentID) {
+			t.Fatalf("the sender's next request:\n%s", text(telling.first()))
+		}
+		finding(t, "%s reached no model before the budget stopped the run (%q): ipc.dead_letter reason=not_shown; the sender's next request carries the notice", sentID, result.ExitStatus.Reason)
 	})
 }
 
@@ -494,23 +514,38 @@ func TestIPCB2ExitedAndSuperseded(t *testing.T) {
 	}
 	finding(t, "a send to an ended chain is refused, naming its final exit: %v", refused)
 
-	// Mail left unread by a process that exits for good.
+	// B2c asserts, since step 3 of the slice (ipc-design.md, decision 2). Before,
+	// at 180d076: mail to a process that exited 0 without reading it stayed
+	// pending for good, with ipc.sent its only event, and the sender was told
+	// nothing.
 	g := newFixture(t)
 	reader := g.spawn(t, "reader")
-	sender := g.spawn(t, "sender")
+	sender := g.spawn(t, "sender", "message_agent")
 	g.park(t, reader)
 	stranded, _ := g.bus.Send(sender.PID, reader.PID, "never read")
 	g.exit(t, reader.PID, kernel.ExitStatus{Code: 0, Reason: "done"})
-	var after []string
-	for _, event := range g.events(t, "ipc.") {
-		if event.ID > "" && event.Data["id"] == stranded.ID {
-			after = append(after, event.Type)
-		}
+	if err := g.bus.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	letters := g.events(t, ipc.DeadLetterEvent)
+	if len(letters) != 1 || letters[0].Data["id"] != stranded.ID || letters[0].Data["reason"] != ipc.ReasonUnread || letters[0].Data["exit_reason"] != "done" {
+		t.Fatalf("B2c: ipc.dead_letter = %+v", letters)
+	}
+	if left := g.pending(t); len(left) != 0 {
+		t.Fatalf("B2c: left pending: %+v", left)
 	}
 	report, _ := inspect.Load(g.root, 0)
-	finding(t, "mail to a process that then exits 0 without reading it: still pending=%d for %s, ipc events for %s: %v (nothing bounces; the sender is told nothing); inspect lists mail=%+v",
-		len(g.pending(t)[reader.PID]), reader.PID, stranded.ID, after, report.Mail)
-	finding(t, "the sender learns an outcome only from Send's error (exited/unknown at send time); delivery, ack and drop are recorded on the receiver's pid, never reported to the sender")
+	if len(report.DeadLetters) != 1 || len(report.Mail) != 0 {
+		t.Fatalf("B2c: inspect lists mail=%+v, dead letters=%+v", report.Mail, report.DeadLetters)
+	}
+	telling := script()
+	if _, err := g.agent(telling).Run(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text(telling.first()), "undelivered: "+stranded.ID) {
+		t.Fatalf("B2c: the sender's next request:\n%s", text(telling.first()))
+	}
+	finding(t, "mail to a process that exits 0 without reading it: ipc.dead_letter reason=unread, nothing pending, inspect lists it, the sender's next request carries the notice")
 }
 
 // B3 Ordering. Contract (assumed for a mailbox): per-sender FIFO, and the
@@ -1296,6 +1331,55 @@ func TestIPCB11Rollback(t *testing.T) {
 	}
 	finding(t, "Recover with Rollback to %s (the exit names %s): successor %s has %s once, with its ID, then %s once; ipc.redelivered cause=rollback record=%s; notice %q",
 		first, result.ExitStatus.Checkpoint, recovered.PID, acked.ID, pending.ID, redelivered[0].Data["record"], note.Content)
+}
+
+// B12 Cost. What sender outcomes add to a step, against a kernel log already
+// holding 20,000 events: a kernel write is the unit, since a step makes several.
+func TestIPCB12OutcomeCost(t *testing.T) {
+	root := t.TempDir()
+	kernelDir := filepath.Join(root, "kernel")
+	if err := os.MkdirAll(kernelDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	events := make([]kernel.Event, 20000)
+	for i := range events {
+		events[i] = kernel.Event{ID: fmt.Sprintf("evt-%06d", i+1), ProcessID: "pid-999999", Type: "padding", Timestamp: time.Now().UTC(), Data: map[string]string{"key": "value"}}
+	}
+	raw, _ := json.Marshal(events)
+	if err := os.WriteFile(filepath.Join(kernelDir, "events.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := openFixture(t, root)
+	worker := f.spawn(t, "worker")
+	peer := f.spawn(t, "peer")
+	measure := func(what string, fn func()) time.Duration {
+		const rounds = 20
+		start := time.Now()
+		for i := 0; i < rounds; i++ {
+			fn()
+		}
+		elapsed := time.Since(start) / rounds
+		finding(t, "%s: %s", what, elapsed.Round(10*time.Microsecond))
+		return elapsed
+	}
+	finding(t, "events.json is %d bytes", fileSize(filepath.Join(kernelDir, "events.json")))
+	measure("one kernel write on this log, the unit", func() { f.kernel.RecordEvent(worker.PID, "padding", nil) })
+	measure("Receive, which every step already does", func() { f.bus.Receive(worker.PID, false) })
+	step := func() {
+		f.bus.Sweep()
+		f.bus.DeadLetters(0)
+	}
+	measure("added to a step: no mail on the bus, no dead letter", step)
+	f.bus.Send(worker.PID, peer.PID, "pending for a live peer")
+	measure("added to a step: mail pending for a live peer", step)
+	f.exit(t, peer.PID, kernel.ExitStatus{Code: 0, Reason: "done"})
+	f.bus.Sweep()
+	measure("added to a step: a dead letter not yet read, which reads the log", step)
+	_, latest, _ := f.bus.DeadLetters(0)
+	measure("added to a step: every dead letter already read", func() {
+		f.bus.Sweep()
+		f.bus.DeadLetters(latest)
+	})
 }
 
 type agentScripts map[string]*backend

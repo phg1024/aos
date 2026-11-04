@@ -156,27 +156,47 @@ func (k *Kernel) Close(pid, reason string) (Process, error) {
 func (k *Kernel) ChainEnd(pid string) (Process, error) {
 	var end Process
 	err := k.store.view(func(t *tx) error {
-		visited := map[string]bool{}
-		for current := pid; ; {
-			process, err := t.process(current)
-			if err != nil && current == pid {
-				return err
-			}
-			if err != nil {
-				return fmt.Errorf("%w: following %s, the successor %s is unknown", ErrBrokenChain, pid, current)
-			}
-			if visited[current] {
-				return fmt.Errorf("%w: following %s, %s comes round again", ErrBrokenChain, pid, current)
-			}
-			visited[current] = true
-			if process.SupersededBy == "" {
-				end = process
-				return nil
-			}
-			current = process.SupersededBy
-		}
+		var err error
+		end, err = t.chainEnd(pid)
+		return err
 	})
 	return end, err
+}
+
+func (t *tx) chainEnd(pid string) (Process, error) {
+	visited := map[string]bool{}
+	for current := pid; ; {
+		process, err := t.process(current)
+		if err != nil && current == pid {
+			return Process{}, err
+		}
+		if err != nil {
+			return Process{}, fmt.Errorf("%w: following %s, the successor %s is unknown", ErrBrokenChain, pid, current)
+		}
+		if visited[current] {
+			return Process{}, fmt.Errorf("%w: following %s, %s comes round again", ErrBrokenChain, pid, current)
+		}
+		visited[current] = true
+		if process.SupersededBy == "" {
+			return process, nil
+		}
+		current = process.SupersededBy
+	}
+}
+
+// ChainEnds is ChainEnd for several PIDs, in one reading of the table. A PID
+// whose walk fails has no entry.
+func (k *Kernel) ChainEnds(pids []string) (map[string]Process, error) {
+	ends := map[string]Process{}
+	err := k.store.view(func(t *tx) error {
+		for _, pid := range pids {
+			if end, err := t.chainEnd(pid); err == nil {
+				ends[pid] = end
+			}
+		}
+		return nil
+	})
+	return ends, err
 }
 
 func (k *Kernel) Transition(pid string, next ProcessState) (Process, error) {
@@ -318,6 +338,22 @@ func (k *Kernel) RecordEvent(pid, eventType string, data map[string]string) (Eve
 		return nil
 	})
 	return event, err
+}
+
+// RecordEvents records several caller events on pid in one transaction, so a
+// reader of the log sees all of them or none. It returns them in order.
+func (k *Kernel) RecordEvents(pid, eventType string, data []map[string]string) ([]Event, error) {
+	if strings.HasPrefix(eventType, ReservedEventPrefix) {
+		return nil, fmt.Errorf("%w: %s", ErrReservedEventType, eventType)
+	}
+	var events []Event
+	err := k.store.update(func(t *tx) error {
+		for _, item := range data {
+			events = append(events, t.appendEvent(pid, eventType, item, k.now().UTC()))
+		}
+		return nil
+	})
+	return events, err
 }
 
 // RecordEventFunc records an event decided at one reading of the

@@ -42,6 +42,14 @@ const (
 	ChainDeliveryV1    = "v1"
 )
 
+// SenderOutcomesField is the run.started field that says mail no model was
+// shown is tracked and dead-lettered, with the value SenderOutcomesV1. Records
+// without it acknowledged every recorded message, and hold no dead letters.
+const (
+	SenderOutcomesField = "sender_outcomes"
+	SenderOutcomesV1    = "v1"
+)
+
 // LeaseClockField is the run.started field that says lease expiries come
 // from the kernel's clock, with the value LeaseClockKernel, so a replay
 // reproduces them. Records without it took expiries from the wall clock.
@@ -102,6 +110,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoChainDelivery {
 		data[ChainDeliveryField] = ChainDeliveryV1
+	}
+	if !e.NoSenderOutcomes {
+		data[SenderOutcomesField] = SenderOutcomesV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

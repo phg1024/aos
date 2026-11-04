@@ -84,9 +84,12 @@ type Report struct {
 	LegacyPeerFraming bool `json:"legacy_peer_framing,omitempty"`
 	// LegacyChainDelivery means the record predates chain-owned delivery, so
 	// the replay records no process.closed, ipc.subscribed or ipc.unsubscribed.
-	LegacyChainDelivery bool              `json:"legacy_chain_delivery,omitempty"`
-	RecordedBuild       map[string]string `json:"recorded_build,omitempty"`
-	Divergence          *Divergence       `json:"divergence,omitempty"`
+	LegacyChainDelivery bool `json:"legacy_chain_delivery,omitempty"`
+	// LegacySenderOutcomes means the record predates dead letters, so the
+	// replay tracks no shown mail and acknowledges every recorded message.
+	LegacySenderOutcomes bool              `json:"legacy_sender_outcomes,omitempty"`
+	RecordedBuild        map[string]string `json:"recorded_build,omitempty"`
+	Divergence           *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -352,6 +355,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	engine.NoChainDelivery = started.Data[agentflow.ChainDeliveryField] == ""
 	bus.NoSubscriptionEvents = engine.NoChainDelivery
 	report.LegacyChainDelivery = engine.NoChainDelivery
+	engine.NoSenderOutcomes = started.Data[agentflow.SenderOutcomesField] == ""
+	report.LegacySenderOutcomes = engine.NoSenderOutcomes
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

@@ -68,7 +68,7 @@ func (f chainFixture) lastWorker(t *testing.T) kernel.Process {
 
 // Who closes: the engine, as the worker's supervisor, when it escalates. The
 // worker's chain ends, and only the worker's: its subscriptions go, its unread
-// mail stays, and its delegator is told and goes on with its own.
+// mail becomes dead letters, and its delegator is told and goes on with its own.
 func TestEscalationClosesTheChildsChain(t *testing.T) {
 	f := newChainFixture(t)
 	var lastAttempt string
@@ -105,8 +105,12 @@ func TestEscalationClosesTheChildsChain(t *testing.T) {
 		t.Fatalf("its topics = %v", topics)
 	}
 	pending, _ := f.bus.Pending()
-	if box := pending[lastAttempt]; len(box) != 1 || box[0].Body != "unread at the end" {
-		t.Fatalf("its mail should stay for step 3's dead letter: %+v", pending)
+	if len(pending) != 0 {
+		t.Fatalf("nothing should be left: %+v", pending)
+	}
+	letters := f.events(t, ipc.DeadLetterEvent)
+	if len(letters) != 1 || letters[0].ProcessID != lastAttempt || letters[0].Data["reason"] != ipc.ReasonUnread || letters[0].Data["closed"] != "true" {
+		t.Fatalf("ipc.dead_letter = %+v", letters)
 	}
 	// A send to any PID of the chain is refused from now on, and Recover too.
 	first := f.workers(t)[0].PID
@@ -248,5 +252,70 @@ func TestRestartKeepsSubscriptionsAcrossBackoff(t *testing.T) {
 	requests := worker.requests()
 	if !strings.Contains(historyText(requests[2]), "in the backoff") {
 		t.Fatalf("the successor's first request: %s", historyText(requests[2]))
+	}
+}
+
+// A parent's mail a delegated child never read: the child's exit 0 ends its
+// chain, and the parent hears at its next step, after the delegate result it
+// was waiting on. Nothing is left, and the child's exit is untouched.
+func TestParentHearsOfUnreadMailAfterTheDelegateResult(t *testing.T) {
+	f := newChainFixture(t)
+	var parent string
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			if _, err := f.bus.Send(parent, request.Process.PID, "arrives as the child finishes"); err != nil {
+				t.Error(err)
+			}
+			return exitStep(0, false, "finished")(request)
+		},
+	}}
+	coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			parent = request.Process.PID
+			return delegateStep("worker")(request)
+		},
+		exitStep(0, false, "done"),
+	}}
+	engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+	if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	requests := coordinator.requests()
+	history := historyText(requests[1])
+	result, notice := strings.Index(history, "delegate_result"), strings.Index(history, "undelivered:")
+	if result < 0 || notice < result {
+		t.Fatalf("the parent's next request should hold the delegate result, then the notice:\n%s", history)
+	}
+	if !strings.Contains(history, `its chain ended with exit code 0 "finished"`) {
+		t.Fatalf("history:\n%s", history)
+	}
+	if pending, _ := f.bus.Pending(); len(pending) != 0 {
+		t.Fatalf("left pending: %+v", pending)
+	}
+}
+
+// A chain nobody closes has no outcome: a sender's held mail just waits, and
+// the sender has only the held on its send result. This is the stated limit.
+func TestAChainNobodyClosesProducesNoOutcome(t *testing.T) {
+	f := newChainFixture(t)
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails")}}
+	coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "done")}}
+	engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+	if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	process := f.lastWorker(t)
+	message, err := f.bus.Send("pid-000001", process.PID, "held")
+	if err != nil || !message.Held {
+		t.Fatalf("send = %+v, %v", message, err)
+	}
+	if err := f.bus.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if letters := f.events(t, ipc.DeadLetterEvent); len(letters) != 0 {
+		t.Fatalf("ipc.dead_letter = %+v", letters)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[process.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
 	}
 }

@@ -202,6 +202,8 @@ func runTUI() []string {
 		Leases:     leaseManager,
 		MaxSteps:   maxSteps(agent),
 		Compaction: compaction,
+		// A new root moves on what an ended one left: see continueEnded.
+		KeepMailAtExit: true,
 	}
 	loadedSkills, err := skills.NewRegistry(spec.SkillRoots).LoadMany(agent.Skills)
 	if err != nil {

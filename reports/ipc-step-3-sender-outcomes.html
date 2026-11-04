@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Step 3: Sender Outcomes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Step 3: Sender Outcomes</h1>
+    <p>This is step 3 of the slice in <code>ipc-design.md</code>, for gaps B1c and B2c. When a process chain ends with mail no model is known to have read, each message becomes an <code>ipc.dead_letter</code> event, the mailbox empties, and a sender whose chain is live is told in one line.</p>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good">B1c and B2c now assert, and pass.</span></li>
+      <li><span class="good">B1, B2a, B3, B4, B8 and B11 still hold.</span> B4 over 25 trials: 0 lost, 0 duplicated, 0 corrupted, 0 out of order.</li>
+      <li><span class="good">A sender in another OS process hears, through the kernel's log.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials (31/31, 8/8, 9/9) and a v0.1.4 record (7/7) replay identically.</span> A run with no mail adds no event and changes no prompt.</li>
+    </ul>
+    <p><b>What this does not close:</b> <span class="bad">a chain nobody closes still produces no outcome.</span> That covers an agent with no restart policy, which is the default, an abandoned child, a run that returned an error or was cancelled, and cause <code>error</code>. Its mail waits, and its sender has only the <code>held</code> on its send result.</p>
+    <p>Steps 4 and 5 are not built. There were no live runs: everything here used scripted agents.</p>
+  </div>
+
+  <h2>1. What a Sender Sees</h2>
+  <table>
+    <tr><th>Case</th><th>Before (<code>180d076</code>)</th><th>Now</th></tr>
+    <tr><td>Mail to a process that exits 0 without reading it (B2c)</td><td class="bad">Pending for good, with <code>ipc.sent</code> its only event</td><td class="good"><code>ipc.dead_letter</code>, reason <code>unread</code>; nothing pending; the sender's next request has the notice</td></tr>
+    <tr><td>Mail in the step a budget stops (B1c)</td><td class="bad">Acked, no model saw it, and the sender was not told</td><td class="good">Stays unacknowledged; at the chain's end, <code>not_shown</code>, and the notice</td></tr>
+    <tr><td>Held, then the chain closed</td><td>Refused at the send</td><td class="good"><code>held=true</code> on the send, then <code>undelivered:</code> on the next request</td></tr>
+    <tr><td>Mail compaction archived before any call</td><td class="bad">Only a segment reference, which says nothing about mail</td><td class="good"><code>archived unread:</code> line; unshown until a <code>read_memory</code> result holds it; otherwise <code>not_shown</code>, detail <code>archived</code></td></tr>
+    <tr><td class="warn">A chain nobody closes</td><td class="warn">Nothing</td><td class="warn">Nothing more than <code>held</code></td></tr>
+  </table>
+  <pre>undelivered: msg-000001, msg-000002 and 5 more to worker (pid-000004): no record that a model read this; its chain ended with exit code 1 "crashed", closed
+archived unread: msg-000012 from worker (pid-000004), seq 14 in art-000031; read_memory to read it</pre>
+
+  <h2>2. Three Design Choices to Check</h2>
+  <table>
+    <tr><th>Choice</th><th>Why</th><th>Cost</th></tr>
+    <tr><td><b>An ack waits for a model call.</b> Decision 1 kept it at the checkpoint</td><td>Mail not shown stays on the bus, so <code>Bus.Sweep</code> reads no checkpoint. A damaged one cannot stop it, and a crash between an exit and its sweep loses nothing</td><td class="warn">Archived mail never read stays in the mailbox, counts towards step 4's bound, and is handed out again at each Resume or Recover</td></tr>
+    <tr><td><b>The session lists what is unshown,</b> not <code>MailboxShown</code></td><td>A checkpoint from before this step has no list, so its mail counts as shown, not as all unshown</td><td>None seen</td></tr>
+    <tr><td><b>Shown is set when a call returns,</b> not after its ledger line</td><td>The runtime cannot see the ledger, and nothing is durable before the next checkpoint. A failed call let no agent act</td><td class="warn">A crash after a call reads as <code>not_shown</code>, although a model may have read it. The notice says "no record", not "not read"</td></tr>
+  </table>
+
+  <h2>3. Eleven Things Book Writer Asked to Check</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>1. The chain-end hook</td><td class="good"><code>Bus.Sweep</code> runs after <code>runSession</code>, at the end of <code>Engine.Run</code>, and at every step of every process. That last one picks up the engine's <code>Close</code>, the scheduler's exits, and a process that died in between. Repeating it adds nothing. <span class="warn">If nothing on that state directory ever steps again, the mail stays pending</span></td></tr>
+    <tr><td>2. A send racing the end</td><td class="good">Send and sweep both hold the bus lock: refused or dead-lettered. <code>TestSendRacesAChainsEnd</code> uses OS processes. <span class="warn">With a delay added in the gap it catches 100 ms and 30 ms; at 0 and 3 ms it misses, so a narrow gap rests on the argument</span></td></tr>
+    <tr><td>3. An unreadable checkpoint</td><td class="good">The sweep reads none. The mail gets its ordinary reason, and nothing extra is recorded</td></tr>
+    <tr><td>4. Untrusted text</td><td class="good">Every reserved opener, after each line break and an OSC, gives one line the escape leaves alone. The reason is cut to 200 bytes and quoted; the agent ID goes through <code>Inline</code></td></tr>
+    <tr><td>5. Rollback</td><td class="good">Both fields are per session. Mail shown only in undone steps gets detail <code>rolled_back</code>. A rollback past a notice repeats it once, on purpose; a plain Recover does not</td></tr>
+    <tr><td>6. The crash window</td><td class="warn">Accepted direction: told too much, not too little. Worded as "no record that a model read this"</td></tr>
+    <tr><td>7. Publish</td><td class="good">Event only. The publisher never named the recipient, and it would bring back the storm</td></tr>
+    <tr><td>8. Operator mail</td><td>Event only. <code>aos-tui</code> does not show it; <code>aos inspect</code> does. In <code>aos-tui</code> a final exit keeps the mail for the new root</td></tr>
+    <tr><td>9. End to end</td><td class="good">Held, closed, told: tested. A parent sees <code>delegate_result</code>, then <code>undelivered:</code></td></tr>
+    <tr><td>10. Cost</td><td>Section 4</td></tr>
+    <tr><td>11. Replay</td><td class="good">Records identical. No-mail runs: same event types and prompts. <code>sender_outcomes</code> gates records with mail</td></tr>
+  </table>
+
+  <h2>4. Cost, on a Log of 20,000 Events (3.5 MB)</h2>
+  <table>
+    <tr><th>What</th><th>Per step</th></tr>
+    <tr><td>One kernel write on this log, for scale; a step makes several</td><td>61 ms</td></tr>
+    <tr><td>Added: no mail on the bus and no dead letter</td><td class="good">60 µs</td></tr>
+    <tr><td>Added: every dead letter already read</td><td class="good">140 µs</td></tr>
+    <tr><td>Added: mail pending for a live peer</td><td class="warn">29 ms, while it is there: one kernel read</td></tr>
+    <tr><td>Added: a dead letter not yet read</td><td class="warn">29 to 31 ms, once per new letter: one read of the log</td></tr>
+  </table>
+  <p>Two runs of <code>TestIPCB12OutcomeCost</code> on this machine. These show the shape, not a benchmark.</p>
+
+  <h2>5. Evidence</h2>
+  <pre>go test -count=1 ./internal/framing ./internal/kernel ./internal/ipc ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./internal/inspect ./internal/statedir ./internal/scheduler ./internal/lease ./cmd/aos ./cmd/aos-tui
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11|B12' -timeout 600s ./bench/ipc/</pre>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Full package list</td><td class="good">3 runs: 13 of 13 packages pass each time; no orphaned helper before any run</td></tr>
+    <tr><td>Probes</td><td class="good">B1, B2, B3, B4, B5, B8, B10, B11 and B12 pass; B4 over 25 trials: 0 lost, 0 duplicated, 0 corrupted, 0 out of order</td></tr>
+    <tr><td>Saved records</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
+    <tr><td>18 mutations, each on a copy, each with its named test</td><td class="good">All 18 fail the named test. Two needed better tests first</td></tr>
+    <tr><td>A mutation removing the engine's own sweep after <code>Close</code></td><td class="warn">Passed: the delegator's next step sweeps anyway. So I removed that sweep as redundant</td></tr>
+    <tr><td>The send resolving outside the bus lock, 8 trials each</td><td class="warn">Fails at the first trial with 100 ms in the gap, the second with 30 ms; <b>passes with 0 and 3 ms</b></td></tr>
+  </table>
+
+  <h2>6. What the Chapter Cannot Claim</h2>
+  <ul>
+    <li><span class="bad">"Every message ends in something the sender can see."</span> A chain nobody closes does not, and that is the default.</li>
+    <li><span class="bad">"A dead letter means no model read it."</span> <code>not_shown</code> means no checkpoint records it.</li>
+    <li><span class="warn">"A publisher or the operator is told."</span> They get the event.</li>
+    <li><span class="warn">"Shown means acted on."</span> It means a request held the body and the call returned.</li>
+    <li><span class="warn">"The sweep always runs."</span> It needs a process to take a step on that state directory.</li>
+  </ul>
+
+  <h2>7. Known Limits</h2>
+  <ul>
+    <li>A body split across <code>read_memory</code> pages stays unshown, even if every page was read.</li>
+    <li>A second notice for one chain is possible if a stray message is swept later.</li>
+    <li>In <code>aos-tui</code>, a new root is a new chain, so mail the old root sent bounces to nobody.</li>
+    <li>Another process's step, between <code>continueEnded</code>'s <code>Close</code> and <code>Transfer</code>, dead-letters that mail instead of moving it. Its sender is told.</li>
+    <li>Mail still does not replay identically (decision 11 is Proposed).</li>
+  </ul>
+
+  <h2>8. Should the Engine Close More?</h2>
+  <p>This step did not change it. One case looks worth closing: re-delegating to the same agent after a retryable exit with no restart policy, since nobody in that run will recover the old chain. It would end an operator's Recover of that exit, so it is the user's decision. An abandoned child and an exit left at a run's end should stay open.</p>
+</body>
+</html>

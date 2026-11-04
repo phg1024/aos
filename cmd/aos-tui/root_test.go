@@ -48,7 +48,7 @@ func newRootFixture(t *testing.T) rootFixture {
 }
 
 func (f rootFixture) runtime(backend runtime.Backend) *runtime.AgentRuntime {
-	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6}
+	return &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 6, KeepMailAtExit: true}
 }
 
 // say runs one TUI turn for line, as the loop does.
@@ -409,5 +409,47 @@ func TestContinueEndedClosesBeforeItMovesTheMail(t *testing.T) {
 	}
 	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 0 || len(pending[root.process.PID]) != 1 {
 		t.Fatalf("pending = %+v", pending)
+	}
+}
+
+// sendsThenExits delivers a line while the root takes its last step.
+type sendsThenExits struct {
+	bus  *ipc.Bus
+	line string
+}
+
+func (b sendsThenExits) Generate(_ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	if _, err := b.bus.SendAsOperator(request.Process.PID, b.line); err != nil {
+		return runtime.GenerateResult{}, err
+	}
+	return exitDone(), nil
+}
+
+// A root's final exit leaves its mail for the new root that continues the
+// conversation, so an unread line of the user's reaches a model, not a dead
+// letter.
+func TestAFinalExitLeavesMailForTheNewRoot(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	backend := sendsThenExits{bus: f.bus, line: "typed during the last step"}
+	if _, err := f.runtime(backend).RunWithOptions(context.Background(), first.PID, []runtime.Message{{Role: "user", Content: "hi"}}, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+	if _, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.bus.Pending()
+	if len(pending[root.process.PID]) != 1 || pending[root.process.PID][0].Body != "typed during the last step" {
+		t.Fatalf("pending = %+v", pending)
+	}
+	events, _ := f.kernel.Events()
+	for _, event := range events {
+		if event.Type == ipc.DeadLetterEvent {
+			t.Fatalf("ipc.dead_letter = %+v", event)
+		}
 	}
 }

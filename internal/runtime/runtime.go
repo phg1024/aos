@@ -67,6 +67,8 @@ type Message struct {
 	// Content. A read_memory result sets it to a reference to what it
 	// read, so compaction never copies one segment into another.
 	ArchiveAs string `json:"archive_as,omitempty"`
+	// Mail is the ID of the message this entry holds the body of.
+	Mail string `json:"mail,omitempty"`
 }
 
 type ToolCall struct {
@@ -167,6 +169,14 @@ type Session struct {
 	// a message delivered again (the bus delivers at least once) is
 	// recorded only once.
 	MailboxSeen []string `json:"mailbox_seen,omitempty"`
+	// MailboxUnshown is the mail in MailboxSeen no model call has returned
+	// with the body of. It stays unacknowledged until then. A checkpoint made
+	// before this existed has none, so its mail counts as shown.
+	MailboxUnshown []UnshownMail `json:"mailbox_unshown,omitempty"`
+	// NoticesSeen is the newest ipc.dead_letter event this session has taken
+	// account of. A rollback to an older one tells the session again, since
+	// its history has not heard.
+	NoticesSeen int `json:"notices_seen,omitempty"`
 	// Usage is what the process has consumed, so a resumed or recovered
 	// process continues against the same budget and step limit. StepBase
 	// is where the current turn's steps began (an interactive turn starts
@@ -176,6 +186,16 @@ type Session struct {
 	StepBase     int       `json:"step_base,omitempty"`
 	Extended     Extension `json:"extended,omitzero"`
 	BudgetWarned []string  `json:"budget_warned,omitempty"`
+}
+
+// UnshownMail is a message a session holds and no model has been shown. Segment
+// and Seq are set once compaction archived it: the live history then has only
+// a pointer, and a read_memory result holding the body is what shows it.
+type UnshownMail struct {
+	ID      string `json:"id"`
+	From    string `json:"from"`
+	Segment string `json:"segment,omitempty"`
+	Seq     int    `json:"seq,omitempty"`
 }
 
 // MemoryRef points at a compacted stretch of history: a memory_segment
@@ -252,6 +272,14 @@ type AgentRuntime struct {
 	// AOS did before intents existed. Only a replay of such a record sets
 	// it, so the replay records what the original did.
 	NoToolIntents bool
+	// NoSenderOutcomes turns off what sender outcomes added: no tracking of
+	// shown mail, every recorded message acknowledged, no dead letters and no
+	// undelivered notices. Only a replay of a record made before them sets it.
+	NoSenderOutcomes bool
+	// KeepMailAtExit leaves a final exit's mail where it is, for a program that
+	// will move it on, as aos-tui does when a new root continues the
+	// conversation. The next Sweep takes whatever it did not move.
+	KeepMailAtExit bool
 	// NoPeerFraming renders a peer's message as AOS did before framing: only
 	// a line that starts like a sender label is quoted. It is for replaying a
 	// record made before framing; the prompt backend has its own switch.
@@ -604,6 +632,9 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 		// a Recover to take over, with its pending mail.
 		if final, err := r.Kernel.Get(pid); err == nil && final.ChainEnded() {
 			_ = r.Bus.Unsubscribe(pid, ipc.CauseChainEnded)
+			if !r.NoSenderOutcomes && !r.KeepMailAtExit {
+				_ = r.Bus.Sweep()
+			}
 		}
 	}
 	return result, runErr
@@ -808,6 +839,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		_, stepElapsed := account.top().UsedAt(stepNow)
 		session.Messages = append(session.Messages, budgetNotes(account, &session, maxSteps, stepNow)...)
 		if r.Bus != nil {
+			session.Messages = append(session.Messages, r.undeliveredNotes(pid, &session)...)
 			// The first step also takes messages handed out before but never
 			// acknowledged: a crash or an interruption left them unrecorded.
 			inboxMessages, err := r.Bus.Receive(pid, step == 0)
@@ -911,6 +943,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if ctx.Err() != nil {
 				return stop()
 			}
+		}
+		if err == nil {
+			session.MailboxUnshown = markShown(session.MailboxUnshown)
 		}
 		if err != nil && retry.Attempts >= 0 {
 			// Retries ran out: the endpoint is down, which another step
@@ -1131,6 +1166,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				Useful:    useful,
 			})
 			resultMessage := runtimeNote("tool", framing.ToolResult(toolResult.Tool), toolResultMessage(toolResult))
+			if toolResult.Tool == "read_memory" {
+				session.MailboxUnshown = r.bodiesRead(session.MailboxUnshown, resultMessage.Content)
+			}
 			switch {
 			case toolResult.Tool == "read_memory" && toolResult.Output["artifact_id"] == "":
 				resultMessage.ArchiveAs = rangeReadReference(toolResult.Output["from"], toolResult.Output["to"])
@@ -1758,6 +1796,7 @@ func (r *AgentRuntime) compactSessionMemory(process kernel.Process, session Sess
 	session.Messages = recent
 	session.MemorySnapshot = session.WorkingMemory
 	session = endHandoff(session)
+	session = r.noteArchivedUnread(process.PID, session, older, record.ID)
 	return session, nil
 }
 
@@ -2146,8 +2185,12 @@ func (r *AgentRuntime) saveCheckpoint(pid string, session Session, parents []str
 		return artifact.Artifact{}, err
 	}
 	if r.Bus != nil && len(*unacked) > 0 {
-		if r.Bus.Ack(pid, *unacked) == nil {
-			*unacked = nil
+		// Mail no model has been shown stays on the bus: if the chain ends
+		// first, it is a dead letter, and the bus alone can say so.
+		held := slices.DeleteFunc(slices.Clone(*unacked), func(id string) bool { return !unshown(session, id) })
+		shown := slices.DeleteFunc(slices.Clone(*unacked), func(id string) bool { return unshown(session, id) })
+		if r.Bus.Ack(pid, shown) == nil {
+			*unacked = held
 		}
 	}
 	return record, nil
@@ -2701,13 +2744,28 @@ func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, message
 		}
 		session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
 		session.MailboxSeen = append(session.MailboxSeen, message.ID)
+		entry := Message{Role: "mailbox", Content: r.peerMessage(message)}
 		if message.From == ipc.OperatorSender {
-			session.Messages = append(session.Messages, Message{Role: "user", Content: message.Body})
-			continue
+			entry = Message{Role: "user", Content: message.Body}
 		}
-		session.Messages = append(session.Messages, Message{Role: "mailbox", Content: r.peerMessage(message)})
+		if !r.NoSenderOutcomes {
+			entry.Mail = message.ID
+			session.MailboxUnshown = append(session.MailboxUnshown, UnshownMail{ID: message.ID, From: message.From})
+		}
+		session.Messages = append(session.Messages, entry)
 	}
 	return session, received, nil
+}
+
+// senderLabel names a process as a note shows it: on one line whatever its
+// agent ID holds, since that comes from a spec.
+func (r *AgentRuntime) senderLabel(pid string) string {
+	if r.Kernel != nil {
+		if process, err := r.Kernel.Get(pid); err == nil && process.Metadata["agent_id"] != "" {
+			return framing.Inline(fmt.Sprintf("%s (%s)", process.Metadata["agent_id"], pid))
+		}
+	}
+	return framing.Inline(pid)
 }
 
 // PeerMessagePrefix starts every message from another agent in the history.

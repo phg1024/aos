@@ -19,6 +19,12 @@
 // acknowledgements, refusals, transfers and subscriptions are logged as
 // ipc.* kernel events.
 //
+// A message left in a chain that has ended becomes a dead letter (Sweep): an
+// ipc.dead_letter event, and nothing left in the mailbox. A send racing the end
+// of a chain is one or the other: Sweep and send both hold the bus's lock, and
+// a send that gets in after a Sweep reads the kernel after that exit, and is
+// refused. A chain nobody closes has not ended, and its mail just waits.
+//
 // Forwarding reads the kernel under the bus's lock, and Transfer takes that
 // lock after Supersede, so a send racing a recovery either sees the successor
 // or lands in time to be moved. The kernel's lock may be taken inside the
@@ -86,6 +92,11 @@ type Message struct {
 	// acknowledgements lack it, so their messages load as pending.
 	Deliveries  int        `json:"deliveries,omitempty"`
 	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	// Archived names the memory segment compaction moved the message to
+	// before any model call had its body (MarkArchived). RolledBack says a
+	// rollback put it back, so a model may have read it in the steps undone.
+	Archived   string `json:"archived,omitempty"`
+	RolledBack bool   `json:"rolled_back,omitempty"`
 	// Held is set on what Send and Publish return, for the sender: see
 	// HeldMeaning. It is about that moment, so it is not stored.
 	Held bool `json:"-"`
@@ -98,7 +109,26 @@ const HeldMeaning = "the process is not running and may never read this"
 
 type busState struct {
 	NextMessageID int `json:"next_message_id"`
+	// LastDeadLetter is the number of the newest ipc.dead_letter event, so a
+	// reader with nothing new to learn need not read the kernel's log.
+	LastDeadLetter int `json:"last_dead_letter,omitempty"`
 }
+
+// DeadLetterEvent is the kernel event of a message no model is known to have
+// read when its recipient's chain ended, recorded on the chain's last process.
+const DeadLetterEvent = "ipc.dead_letter"
+
+// Why a message became a dead letter. ReasonUnread: it was never handed to the
+// recipient. ReasonNotShown: it was handed over, and no checkpoint records a
+// model call that returned with its body. That is what is known, not that no
+// model read it: a crash after the call and before the checkpoint reads the
+// same. DetailArchived and DetailRolledBack add why.
+const (
+	ReasonUnread     = "unread"
+	ReasonNotShown   = "not_shown"
+	DetailArchived   = "archived"
+	DetailRolledBack = "rolled_back"
+)
 
 type Bus struct {
 	root   string
@@ -416,7 +446,7 @@ func (b *Bus) Redeliver(pid string, messages []Redelivery, cause string) (int, e
 				continue
 			}
 			message := item.Message
-			message.To, message.Deliveries, message.DeliveredAt = pid, 0, nil
+			message.To, message.Deliveries, message.DeliveredAt, message.Archived, message.RolledBack = pid, 0, nil, "", true
 			t.mailboxes[pid] = append(t.mailboxes[pid], message)
 			b.record(pid, "ipc.redelivered", map[string]string{"id": message.ID, "from": message.From, "cause": cause, "record": item.Record})
 			added++
@@ -428,6 +458,169 @@ func (b *Bus) Redeliver(pid string, messages []Redelivery, cause string) (int, e
 		return nil
 	})
 	return added, err
+}
+
+// MarkArchived notes on pid's unacknowledged message id that compaction moved
+// it to segment, for its dead letter's detail.
+func (b *Bus) MarkArchived(pid, id, segment string) error {
+	return b.update(func(t *tx) error {
+		for i, message := range t.mailboxes[pid] {
+			if message.ID == id {
+				t.mailboxes[pid][i].Archived = segment
+				t.changed = true
+			}
+		}
+		return nil
+	})
+}
+
+// Sweep turns the mail left in every chain that has ended into dead letters.
+// Nothing is left in those mailboxes. It reads only the bus and the kernel, so
+// no unreadable checkpoint can stop it, and it can run after any exit, from
+// any process, any number of times: an ID with a dead letter gets no second
+// one. The events of one chain go in one kernel transaction, before the
+// mailbox is written, so a crash between them repeats no event.
+func (b *Bus) Sweep() error {
+	if b.kernel == nil {
+		return nil
+	}
+	return b.update(func(t *tx) error {
+		var pids []string
+		for pid, messages := range t.mailboxes {
+			if len(messages) > 0 {
+				pids = append(pids, pid)
+			}
+		}
+		if len(pids) == 0 {
+			return nil
+		}
+		slices.Sort(pids)
+		ends, err := b.kernel.ChainEnds(pids)
+		if err != nil {
+			return err
+		}
+		var existing map[string]bool
+		for _, pid := range pids {
+			end, ok := ends[pid]
+			if !ok || !end.ChainEnded() {
+				continue
+			}
+			if existing == nil {
+				if existing, err = b.deadLetterIDs(t); err != nil {
+					return err
+				}
+			}
+			var data []map[string]string
+			for _, message := range t.mailboxes[pid] {
+				if !existing[message.ID] {
+					existing[message.ID] = true
+					data = append(data, deadLetter(message, end))
+				}
+			}
+			if len(data) > 0 {
+				events, err := b.kernel.RecordEvents(end.PID, DeadLetterEvent, data)
+				if err != nil {
+					return err
+				}
+				t.state.LastDeadLetter = max(t.state.LastDeadLetter, eventNumber(events[len(events)-1].ID))
+			}
+			t.setMailbox(pid, nil)
+		}
+		return nil
+	})
+}
+
+// DeadLetters returns the dead letters newer than after, by event number, and
+// the newest number. With none newer it does not read the kernel's log.
+func (b *Bus) DeadLetters(after int) ([]kernel.Event, int, error) {
+	if b.kernel == nil {
+		return nil, after, nil
+	}
+	latest := after
+	err := b.view(func(t *tx) error {
+		latest = t.state.LastDeadLetter
+		return nil
+	})
+	if err != nil || latest <= after {
+		return nil, after, err
+	}
+	events, err := b.kernel.Events()
+	if err != nil {
+		return nil, after, err
+	}
+	var out []kernel.Event
+	for _, event := range events {
+		if event.Type == DeadLetterEvent && eventNumber(event.ID) > after {
+			out = append(out, event)
+			latest = max(latest, eventNumber(event.ID))
+		}
+	}
+	return out, latest, nil
+}
+
+// deadLetterIDs is every message that has a dead letter. It also brings the
+// counter up to date, after a crash between an event and the bus's files.
+func (b *Bus) deadLetterIDs(t *tx) (map[string]bool, error) {
+	events, err := b.kernel.Events()
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	for _, event := range events {
+		if event.Type == DeadLetterEvent {
+			ids[event.Data["id"]] = true
+			if n := eventNumber(event.ID); n > t.state.LastDeadLetter {
+				t.state.LastDeadLetter = n
+				t.changed = true
+			}
+		}
+	}
+	return ids, nil
+}
+
+func deadLetter(message Message, end kernel.Process) map[string]string {
+	data := map[string]string{"id": message.ID, "from": message.From, "to": end.PID, "reason": ReasonUnread}
+	if message.Deliveries > 0 {
+		data["reason"] = ReasonNotShown
+	}
+	switch {
+	case message.Archived != "":
+		data["detail"] = DetailArchived
+		data["segment"] = message.Archived
+	case message.RolledBack:
+		data["detail"] = DetailRolledBack
+	}
+	if message.Topic != "" {
+		data["topic"] = message.Topic
+	}
+	if agent := end.Metadata["agent_id"]; agent != "" {
+		data["agent"] = agent
+	}
+	if end.ExitStatus != nil {
+		data["exit_code"] = strconv.Itoa(end.ExitStatus.Code)
+		data["exit_reason"] = CutReason(end.ExitStatus.Reason)
+	}
+	if end.Closed {
+		data["closed"] = "true"
+	}
+	return data
+}
+
+// CutReason keeps an exit reason, which an agent may have written, to a length
+// fit for a line about it. Whoever shows it still quotes it.
+func CutReason(reason string) string {
+	if len(reason) > 200 {
+		return strings.ToValidUTF8(reason[:200], "") + "..."
+	}
+	return reason
+}
+
+func eventNumber(id string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(id, "evt-"))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // Pending returns every unacknowledged message, by recipient.
@@ -479,10 +672,7 @@ func finalExit(pid string, end kernel.Process) string {
 	if end.ExitStatus == nil {
 		return where
 	}
-	reason := end.ExitStatus.Reason
-	if len(reason) > 200 {
-		reason = strings.ToValidUTF8(reason[:200], "") + "..."
-	}
+	reason := CutReason(end.ExitStatus.Reason)
 	closed := ""
 	if end.Closed {
 		closed = ", closed"

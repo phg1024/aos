@@ -508,6 +508,11 @@ func exists(path string) bool {
 //   - send root from to stop out: send numbered messages until stop exists,
 //     writing "id<TAB>to<TAB>body" lines for each;
 //   - publish root from topic stop out: the same, through a topic;
+//   - close root pid: close the chain of pid and sweep;
+//   - send-until-refused root from to out: send until the chain has ended,
+//     writing each ID, then "refused";
+//   - end root pid: exit pid with code 0 and sweep;
+//   - sweep root: sweep;
 //   - recover root pid done rounds: Recover the chain's end rounds times, each
 //     successor but the last crashing in its first step; the last takes mail
 //     until done exists and nothing new is waiting, then exits 0.
@@ -544,6 +549,42 @@ func TestChainRaceHelper(t *testing.T) {
 				t.Fatalf("publish %d = %+v, %v", i, messages, err)
 			}
 			fmt.Fprintf(out, "%s\t%s\t%s\n", messages[0].ID, messages[0].To, body)
+		}
+	case "close":
+		if _, err := s.kernel.Close(args[2], "closed by another process"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.bus.Sweep(); err != nil {
+			t.Fatal(err)
+		}
+	case "send-until-refused":
+		out, err := os.Create(args[4])
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer out.Close()
+		for i := 0; ; i++ {
+			time.Sleep(10 * time.Millisecond)
+			message, err := s.bus.Send(args[2], args[3], fmt.Sprintf("%s#%05d", args[2], i))
+			if errors.Is(err, ipc.ErrRecipientExited) {
+				fmt.Fprintln(out, "refused")
+				return
+			}
+			if err != nil {
+				t.Fatalf("send %d: %v", i, err)
+			}
+			fmt.Fprintln(out, message.ID)
+		}
+	case "end":
+		if _, err := s.kernel.Exit(args[2], kernel.ExitStatus{Code: 0, Reason: "done"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.bus.Sweep(); err != nil {
+			t.Fatal(err)
+		}
+	case "sweep":
+		if err := s.bus.Sweep(); err != nil {
+			t.Fatal(err)
 		}
 	case "recover":
 		rounds, _ := strconv.Atoi(args[4])
