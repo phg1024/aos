@@ -86,7 +86,15 @@ type Message struct {
 	// acknowledgements lack it, so their messages load as pending.
 	Deliveries  int        `json:"deliveries,omitempty"`
 	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	// Held is set on what Send and Publish return, for the sender: see
+	// HeldMeaning. It is about that moment, so it is not stored.
+	Held bool `json:"-"`
 }
+
+// HeldMeaning is what a sender is told when a message went to a process that
+// exited retryably. It is not a delivery: nothing says a successor will come,
+// and until that chain ends nobody will say otherwise.
+const HeldMeaning = "the process is not running and may never read this"
 
 type busState struct {
 	NextMessageID int `json:"next_message_id"`
@@ -152,15 +160,14 @@ func (b *Bus) SendAsOperator(to, body string) (Message, error) {
 
 func (b *Bus) send(from, to, body string) (Message, error) {
 	var sent Message
-	held := false
 	err := b.update(func(t *tx) error {
 		end, err := b.chainEnd(to)
 		if err != nil {
 			b.record(from, "ipc.rejected", map[string]string{"to": to, "reason": err.Error()})
 			return err
 		}
-		held = end.State == kernel.StateExited
 		sent = t.enqueue(Message{From: from, To: end.PID, Body: body})
+		sent.Held = end.State == kernel.StateExited
 		return nil
 	})
 	if err != nil {
@@ -169,11 +176,7 @@ func (b *Bus) send(from, to, body string) (Message, error) {
 	if sent.To != to {
 		b.record(from, "ipc.forwarded", map[string]string{"id": sent.ID, "from_pid": to, "to_pid": sent.To})
 	}
-	data := map[string]string{"id": sent.ID, "to": sent.To}
-	if held {
-		data["held"] = "true"
-	}
-	b.record(from, "ipc.sent", data)
+	b.record(from, "ipc.sent", sentEvent(sent))
 	return sent, nil
 }
 
@@ -272,7 +275,9 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 				continue
 			}
 			kept = append(kept, end.PID)
-			created = append(created, t.enqueue(Message{From: from, To: end.PID, Topic: topic, Body: body}))
+			message := t.enqueue(Message{From: from, To: end.PID, Topic: topic, Body: body})
+			message.Held = end.State == kernel.StateExited
+			created = append(created, message)
 		}
 		if !slices.Equal(kept, subscribers) {
 			t.setSubscribers(topic, kept)
@@ -290,7 +295,9 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 		b.recordSubscription("ipc.subscribed", move[1], topic, CauseTransfer)
 	}
 	for _, message := range created {
-		b.record(from, "ipc.sent", map[string]string{"id": message.ID, "to": message.To, "topic": topic})
+		data := sentEvent(message)
+		data["topic"] = topic
+		b.record(from, "ipc.sent", data)
 	}
 	return created, nil
 }
@@ -431,6 +438,14 @@ func (b *Bus) Pending() (map[string][]Message, error) {
 		return nil
 	})
 	return out, err
+}
+
+func sentEvent(message Message) map[string]string {
+	data := map[string]string{"id": message.ID, "to": message.To}
+	if message.Held {
+		data["held"] = "true"
+	}
+	return data
 }
 
 // chainEnd is the process mail to pid goes to: the last of pid's chain, live

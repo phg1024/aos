@@ -19,6 +19,7 @@ import (
 )
 
 type rootFixture struct {
+	dir    string
 	kernel *kernel.Kernel
 	store  *artifact.Store
 	bus    *ipc.Bus
@@ -43,7 +44,7 @@ func newRootFixture(t *testing.T) rootFixture {
 	spawn := func() (kernel.Process, error) {
 		return k.Spawn(kernel.ProcessSpec{Role: "agent:interactive", Metadata: map[string]string{"agent_id": "interactive"}})
 	}
-	return rootFixture{kernel: k, store: store, bus: bus, spawn: spawn}
+	return rootFixture{dir: dir, kernel: k, store: store, bus: bus, spawn: spawn}
 }
 
 func (f rootFixture) runtime(backend runtime.Backend) *runtime.AgentRuntime {
@@ -370,6 +371,43 @@ func TestContinueEndedClosesTheChainItReplaces(t *testing.T) {
 		t.Fatalf("the new root's topics = %v", topics)
 	}
 	if pending, _ := f.bus.Pending(); len(pending[root.process.PID]) != 1 || len(pending[first.PID]) != 0 {
+		t.Fatalf("pending = %+v", pending)
+	}
+}
+
+// The old root is closed before its mail moves, so a send between the two is
+// refused rather than stranded. A Transfer that fails shows the order, and the
+// next attempt still moves the mail.
+func TestContinueEndedClosesBeforeItMovesTheMail(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	f.bus.SendAsOperator(first.PID, "unread")
+	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
+	mailboxes := filepath.Join(f.dir, "bus", "mailboxes.json")
+	good, err := os.ReadFile(mailboxes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mailboxes, []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); err == nil {
+		t.Fatal("the transfer should fail")
+	}
+	if old, _ := f.kernel.Get(first.PID); !old.Closed {
+		t.Fatalf("the old root should be closed before the transfer: %+v", old)
+	}
+	if err := os.WriteFile(mailboxes, good, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.bus.SendAsOperator(first.PID, "after the close"); !errors.Is(err, ipc.ErrRecipientExited) {
+		t.Fatalf("a send after the close = %v", err)
+	}
+	if _, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 0 || len(pending[root.process.PID]) != 1 {
 		t.Fatalf("pending = %+v", pending)
 	}
 }

@@ -53,11 +53,13 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	if err != nil {
 		return "", err
 	}
-	if _, err := bus.Transfer(current.PID, next.PID); err != nil {
+	// The new root is a new chain, so nothing will recover this one. Close it
+	// first: mail sent before this is moved below, and mail sent after is
+	// refused, so none is left behind on the old PID.
+	if _, err := k.Close(current.PID, "continued by "+next.PID); err != nil && !errors.Is(err, kernel.ErrSuperseded) {
 		return "", err
 	}
-	// The new root is a new chain, so nothing will recover this one.
-	if _, err := k.Close(current.PID, "continued by "+next.PID); err != nil && !errors.Is(err, kernel.ErrSuperseded) {
+	if _, err := bus.Transfer(current.PID, next.PID); err != nil {
 		return "", err
 	}
 	reason := ""

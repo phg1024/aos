@@ -172,7 +172,7 @@ Delivery is at least once, and exactly once into a session:
 A PID names its process chain, the processes linked by `Recover`, and mail and subscriptions belong to the chain:
 
 - Mail to a superseded PID is forwarded to the chain's last process (`ipc.forwarded`), and the sender's result names it.
-- Mail or a publish to a process that exited retryably is held, and `Recover` moves it, with the old process's unacknowledged mail, subscriptions and leases, to the new one.
+- Mail or a publish to a process that exited retryably is held, and the sender's result says `held`: the process is not running and may never read it. `Recover` moves it, with the old process's unacknowledged mail, subscriptions and leases, to the new one.
 - A chain ends when its last process exits with code 0 or non-retryably, or when its retryable exit is closed (`Kernel.Close`, `process.closed`). The engine closes the exits its restart policy escalates or declines, and `Recover` refuses them. The end of a chain drops its subscriptions.
 - Mail to an unknown process or an ended chain is refused. The sender sees a tool error naming the final exit, and the refusal is an `ipc.rejected` event.
 - **Not built yet:** mail left unread in an ended chain stays in its mailbox, and its sender is not told.

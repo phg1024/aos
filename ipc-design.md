@@ -140,7 +140,9 @@ As of step 2. Each line names the probe or test that holds it.
 
 - **A sender is not told its mail went unread** (B2c, B1c, step 3). Mail left
   in an ended chain stays in the mailbox with no event of its own. The sender
-  sees a refusal only for a send made after the chain ended.
+  sees a refusal for a send made after the chain ended, and `held` on a send to a
+  process not running, and nothing later. Step 3 will not reach a chain nobody
+  closes.
 - **No cap on size or on a mailbox** (B6, B8a, step 4), **no request and
   response** (B7, step 5), **no addressing policy** (B10a), **no replay of
   mail** (B9).
@@ -326,6 +328,9 @@ is refused only when the chain has ended.**
   in that process's mailbox. Recover's `Transfer` moves it, as it moves
   mail sent before the exit (B2a). If the chain is then closed, it is a
   dead letter. This is what makes decision 4 work.
+- **This rule is about a `to` field.** `await_agent` is not addressing: on a
+  superseded PID it reports that process's own exit, and does not follow the
+  chain.
 - **Exact-run sends** stay internal (`Bus.Send` to a PID, used by the
   runtime for bounces and replies). No agent tool offers them; no use case
   needs one.
@@ -979,10 +984,13 @@ names its URL.
   `Recover`'s `Transfer` takes the bus lock too, so the two are
   serialized.
 - **Open chains hold mail indefinitely.** Decision 3 accepts mail for a
-  retryably exited process. If nothing ever closes it, the mail neither
-  arrives nor bounces (the known limit under decision 2). The engine must
-  close every exit it declines to restart. A probe should check that no
-  `supervisor.not_restarted` leaves its chain open.
+  retryably exited process. If nothing ever closes it, the mail neither arrives
+  nor bounces (the known limit under decision 2). The engine closes the exits
+  its restart policy declines, for the causes `budget_spent`, `no_checkpoint`
+  and `not_recoverable`, and on escalation. It does not close cause `error`, an
+  agent with no restart policy, an abandoned child, or a run that returned an
+  error or was cancelled. An operator may still recover those. So those chains
+  stay open, and step 3's outcomes will not reach them.
 - **Bounce storms.** A sender with many outstanding messages to a chain
   that ends gets one notice per message. Notices to one sender from one
   ended chain should be one notice listing the IDs. Bounces are never
@@ -1111,8 +1119,12 @@ Everything else stays **Proposed**:
 - **The three defects come first** (B5, B8c, B11). The chapter cannot
   describe a trust boundary, durable subscriptions or at-least-once
   delivery while a probe shows each one broken.
-- **Outcomes (step 3) next.** They make every message end in something
-  the sender can see, which the rest builds on.
+- **Outcomes (step 3) next.** When a chain ends, every message it never showed
+  to a model ends in something the sender can see. A chain nobody closes has not
+  ended, so it produces no outcome: its mail waits, and its sender hears nothing
+  more than the `held` on its send result. That is the default for an agent with
+  no restart policy (see
+  [Who closes](#who-closes-and-what-a-delegated-childs-end-does)).
 - **Bounds and handles (step 4) before request and response.** They
   answer the chapter's question directly: mail or handle, enforced by
   the cap.
@@ -1397,6 +1409,9 @@ backslashes. When it does:
   runtime's form, and folding case would escape ordinary prose such as
   `Message from Alice`. Look-alikes are not imitation a filter can settle.
   Every line of mail is marked, so none of this applies to mail.
+- **Only CSI and OSC sequences are treated as invisible.** A line opening with DCS,
+  APC, PM or SOS (`ESC P`, `ESC _`, `ESC ^`, `ESC X`) or a two-byte sequence (`ESC (
+  B`, `ESC c`) passes unescaped. The model sees those bytes literally anyway.
 - **A record with a topic the check now refuses** would diverge on replay. No
   known record has one, and a topic with a line break was never useful.
 - **Common text can match.** A changelog line `[#12] fix` or a log line
@@ -1484,15 +1499,19 @@ AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11
 
   The send result names the PID it reached: `send:to=pid-3 id=msg-1
   forwarded_from=pid-1`, and `to` and `forwarded_from` in `message_agent`'s
-  output.
+  output. A held message says so:
+  `send:to=pid-3 id=msg-1 held=true (the process is not running and may never
+  read this)`, `held` in `message_agent`'s output, and `held=N` on a publish.
 - **Subscriptions belong to the chain.** `runSession` no longer unsubscribes on
   every exit, only at the chain's end. `Transfer` moves them. `Publish` treats
   an open chain as deliverable, holds for it, and reaches a chain once even if
   two of its PIDs are subscribed. `ipc.subscribed` and `ipc.unsubscribed` carry
   `topic`, `pid` and `cause` (`subscribe`, `transfer`, `chain_ended`).
-- **Rollback re-delivers.** `restoreRolledBack` in `Recover`, after the
-  transfers and before the first step. A `subscribed to: news` notice goes in
-  through `runtimeNote`; the opener was reserved in step 1.
+- **Rollback re-delivers.** `restoreChain` in `Recover`, after the transfers and
+  before the first step. What it cannot read never stops the Recover. A
+  `subscribed to: news` notice goes in through `runtimeNote`, on every Recover,
+  for each subscription the session's history does not show; the opener was
+  reserved in step 1.
 - **Replay.** `run.started` says `chain_delivery: v1`. A record without it
   replays with `Engine.NoChainDelivery` and `Bus.NoSubscriptionEvents`, and the
   report says `legacy_chain_delivery`.
@@ -1581,6 +1600,8 @@ round: re-delivering nothing, or re-delivering where the mail already is.
 | Died after putting it back, before the first step | `Transfer` moves it, and `Redeliver` skips an ID already there: one message, one event | The same |
 | Delivered, died before the first checkpoint | The same, with `Deliveries` already 1 | The same |
 | A record that cannot be read | `ipc.redelivery_failed` names the ID and the unreadable records. The Recover goes on; otherwise no later Recover of the chain could run | `TestRollbackWithoutARecordIsLogged` |
+| A newer checkpoint that cannot be read | `ipc.checkpoint_unreadable` names it. What is owed comes from the readable newer checkpoints and from the chain's receive records. The Recover goes on | `TestRollbackPastAnUnreadableCheckpoint`, `TestUnreadableCheckpointDoesNotBlockRepeatedRecovers` |
+| A newer checkpoint and a record both unreadable | That message cannot come back, and its ID may not be known. `ipc.redelivery_failed` names the records. The process runs | `TestUnreadableCheckpointAndRecordIsLogged` |
 
 `Redeliver` is one bus transaction, so a crash cannot leave some of a batch.
 Its event is written first, as the kernel does with a state change. After a
@@ -1623,15 +1644,16 @@ length is bounded by the table, and it needs no arbitrary hop limit.
 | Eval's three `ca78ad9` trials, replayed by this build | 31/31, 8/8, 9/9, each `result: identical`, `the record predates chain-owned delivery` |
 | A record made by v0.1.4 source, replayed by this build | 7/7, `result: identical` |
 | 16 mutations, each on a copy: one hop only; `Transfer` appending; unsubscribing on every exit; `Transfer` leaving subscriptions; a publish holding nothing; a publish per PID; `Redeliver` adding twice; no re-delivery; re-delivery only on an asked rollback; no notice; `Supersede` and `Recover` ignoring `Closed`; no loop check; the engine never closing; replay ignoring the field; `process.closed` not rebuilt | Each makes its named test fail |
-| One existing test, `TestBackoffWaitsAndStopsWithTheRun` | **Fails intermittently when the packages run together, and also on `a252a14`, before this step** (1 of 2 runs there; 2 of 2 here). It passes when `internal/agentflow` runs alone. With a message added, it shows `workers=0 restarts=0`: it cancels after a fixed 200 ms, and under load no worker has started. A timing assumption in the test, not fixed here |
+| 9 more mutations for the review's fixes: a damaged checkpoint returning its error; receive records not consulted; only the newest checkpoint counting; a record's damage unlogged; the send note or the tool output omitting `held`; `held` stored in records; `continueEnded` transferring first; notes only when a newer checkpoint exists | Each makes its named test fail |
+| `TestBackoffWaitsAndStopsWithTheRun`, as it was | Failed when the packages ran together: 1 of 2 runs on a copy of `a252a14`, and 2 of 2 on a copy of `37ca34b`, each showing `workers=0 restarts=0`. It failed in the repo at `37ca34b` too. The book session saw 2 of 2 pass on `9987096`, and 12 of 12 pass alone under CPU load on each commit. So it is load-dependent and predates step 2's production code, but its rate at each commit is not established. It cancelled after a fixed 200 ms. Fixed in `899f573`: it now cancels once the worker has exited. Since then, the full package list has passed 3 of 3 runs |
 
 ### Differences from the contract text above
 
 1. **Re-delivery is decided from the chain's records, not from the `Rollback`
    option.** Decision 12 reads as a property of a rollback. A successor that dies
    before its first checkpoint hands on an exit that names the target, so the
-   next Recover looks like a plain one, and the mail would be lost. The check is
-   whether the target is the chain's newest checkpoint.
+   next Recover looks like a plain one, and the mail would be lost. What is owed
+   is what the chain's checkpoints newer than the target hold.
 2. **A mailbox is kept in ID order.** The design said `Transfer` appends and
    re-delivered mail goes ahead of pending mail. Forwarding makes appending
    wrong, as above. The bus gives out IDs under its lock, so ID order is send
@@ -1656,6 +1678,53 @@ length is bounded by the table, and it needs no arbitrary hop limit.
 9. **`aos-tui`.** `continueEnded` closes a root it replaces, after moving its
    mail and subscriptions, since the new root is a new chain.
 
+### Fixed after review of `37ca34b`
+
+- **A damaged newest checkpoint blocked every rollback of the chain, for good.**
+  This was a regression from `37ca34b`. `restoreRolledBack` read the newest
+  checkpoint and returned any error, so Recover exited each new successor
+  retryably, and each attempt left another dead process. At `9987096` the same
+  steps ran, though they lost the mail. A bad newest checkpoint is the main reason
+  to roll back.
+  - **Now:** an unreadable newer checkpoint is recorded as
+    `ipc.checkpoint_unreadable`, naming it, and the Recover goes on.
+  - **What is owed:** the union of `MailboxSeen` in every readable checkpoint newer
+    than the target, minus the target's. If any of them is unreadable, its list is
+    gone, so every `mailbox_message` receive record newer than the target, for an ID
+    the target lacks, counts too. Mail still on the bus is not added twice, since
+    `Redeliver` skips an ID already in the mailbox.
+  - **What can still be lost:** a message whose record is unreadable, when the only
+    readable list naming it was a damaged checkpoint. `ipc.redelivery_failed` names
+    the record. It cannot name the message, whose ID was in those two places.
+- **Other reads on a plain Recover.** I checked what `37ca34b` added:
+  - `Artifacts.List()` runs on every Recover. It reads the same index that
+    `ownedCheckpoint` read just before, so it adds no new way to fail. If it does
+    fail, the failure is now logged and the Recover goes on. No test reaches this:
+    damaging the index stops `ownedCheckpoint` first.
+  - **Payloads:** a plain Recover from the newest checkpoint reads none beyond the
+    target (`TestPlainRecoverReadsNothingElse`).
+  - `Bus.Subscriptions` now runs on every Recover. It loads the same files as the
+    `Transfer` before it, and a failure is logged rather than returned.
+  - **The one error left is `Bus.Redeliver`,** when there is mail to put back and
+    the bus cannot write. `Transfer` needs the same writes just before. The mail
+    stays on record, and the next Recover repeats it.
+- **A sender could not tell held from delivered.** See "What is enforced" above.
+  It matters most where nobody ever calls `Close`, since no chain end means no dead
+  letter even after step 3, and no restart policy is the default. `Message.Held` is
+  `json:"-"`, so it is about that moment and is in no record.
+  `ipc.sent` now has `held` for a publish too, which it lacked.
+- **`continueEnded` moved mail, then closed.** A send between the two was held on
+  the old PID and stranded with no record. It now closes first: a send before that
+  is moved, and one after it is refused. `TestContinueEndedClosesBeforeItMovesTheMail`
+  makes the `Transfer` fail to show the order, and the next attempt moves the mail.
+- **A plain Recover gave no `subscribed to:` notice** for a subscription made after
+  its checkpoint, because the notes returned early when the target was the newest
+  checkpoint. They now run on every Recover
+  (`TestPlainRecoverTellsOfASubscriptionPastItsCheckpoint`).
+- **`TestBackoffWaitsAndStopsWithTheRun`** cancels once the worker has exited.
+- **Document corrections:** "Why this order", the open-chains hazard, the CSI and
+  OSC limit under step 1, and the `await_agent` line under decision 3.
+
 ### Tests
 
 - `kernel`: `TestChainEnded`, `TestCloseAndSupersedeExcludeEachOther`,
@@ -1671,20 +1740,26 @@ length is bounded by the table, and it needs no arbitrary hop limit.
   `TestRollbackOfARollback`, `TestRecoverAfterACrashDuringRedelivery`,
   `TestRollbackWithoutARecordIsLogged`, `TestRollbackTellsOfSubscriptions`,
   `TestSubscriptionsLastAsLongAsTheChain`, `TestSendResultNamesThePIDItReached`,
-  `TestRecoverRefusesAnEndedChain`.
+  `TestRecoverRefusesAnEndedChain`, `TestRollbackPastAnUnreadableCheckpoint`,
+  `TestUnreadableCheckpointDoesNotBlockRepeatedRecovers`,
+  `TestUnreadableCheckpointAndRecordIsLogged`, `TestPlainRecoverReadsNothingElse`,
+  `TestPlainRecoverTellsOfASubscriptionPastItsCheckpoint`, `TestHeldIsToldToTheSender`,
+  `TestOwedComesFromEveryNewerCheckpoint`.
 - `agentflow`: `TestEscalationClosesTheChildsChain`,
   `TestSpentBudgetClosesTheChain`, `TestNotRecoverableClosesOnlyAChainWithNoSuccessor`,
   `TestAnExitNobodyDeclinedStaysOpen`, `TestRestartKeepsSubscriptionsAcrossBackoff`.
 - `replay`: `TestReplayOfARecordWithoutChainDelivery`,
   `TestChainDeliveryAddsNoEventToAPlainRun`.
-- `aos-tui`: `TestDeliverFollowsTheChain`, `TestContinueEndedClosesTheChainItReplaces`.
+- `aos-tui`: `TestDeliverFollowsTheChain`, `TestContinueEndedClosesTheChainItReplaces`,
+  `TestContinueEndedClosesBeforeItMovesTheMail`.
 - `bench/ipc`: B2b, B8c and B11 assert, with their `180d076` results in comments.
 
 ### Changed for existing runs
 
 - A send to a retryably exited process now succeeds and is held. It used to be
-  refused. A workflow that relied on the refusal to learn of a failure no longer
-  gets it, and until step 3 gets nothing instead.
+  refused. The result says `held`, which tells the agent what the refusal did
+  without refusing it. If the chain later closes, nothing more is said until step
+  3, and if nobody closes it, nothing more is said at all.
 - A send to a superseded PID now succeeds. Its `send:` note and `message_agent`
   output gain `forwarded_from`.
 - A retryable exit keeps its subscriptions, so a publish reaches it (held), and
@@ -1692,6 +1767,9 @@ length is bounded by the table, and it needs no arbitrary hop limit.
 - `Recover` refuses a closed process, so an exit the engine escalated or declined
   can no longer be recovered by an operator, which it could before. The same goes
   for a retryable exit with code 0.
+  - **The user confirmed this on 2026-11-03,** following decision 2.
+  - **It supersedes Chapter 7's sentence** "An operator can still recover it on
+    purpose", which remains true of v0.1.4.
 - In `aos-tui`, a line sent to a root that exited retryably goes in the bus,
   instead of being carried by the recovery. It therefore survives a turn that
   fails before a checkpoint.
@@ -1701,7 +1779,7 @@ length is bounded by the table, and it needs no arbitrary hop limit.
   guessed; a guess at an unknown PID reads as before.
 - `run.started` has `chain_delivery`. `aos inspect` shows `closed`. New event types:
   `process.closed`, `ipc.forwarded`, `ipc.subscribed`, `ipc.unsubscribed`,
-  `ipc.redelivery_failed`.
+  `ipc.redelivery_failed`, `ipc.checkpoint_unreadable`.
 
 ### Not covered
 
@@ -1715,6 +1793,9 @@ length is bounded by the table, and it needs no arbitrary hop limit.
   the code and did not measure it.
 - **No operator command closes a chain.** `Kernel.Close` is the API; decision 2's
   "an operator closed it" has no `aos` subcommand yet.
+- **`aos-tui` closing a root it replaces.** A publish between the `Close` and the
+  `Transfer` finds the chain ended and drops that subscription, so the new root
+  does not inherit it.
 - **Dropping subscriptions at chain end is not atomic with the exit.** An exit
   recorded outside `runSession` and the engine (the scheduler, a crash between
   `Close` and `Unsubscribe`) leaves the entry until the next publish to that topic

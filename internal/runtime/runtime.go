@@ -541,7 +541,7 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	}
 	// What the chain got after the checkpoint it now starts from is not in
 	// that session: mail goes back in the mailbox, ahead of the first step.
-	subscribed, err := r.restoreRolledBack(recovered.PID, lineage, checkpointID, session)
+	subscribed, err := r.restoreChain(recovered.PID, lineage, checkpointID, session)
 	if err != nil {
 		status := kernel.ExitStatus{Code: 1, Reason: "mail re-delivery: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
 		_, _ = r.Kernel.Exit(recovered.PID, status)
@@ -1267,6 +1267,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if message.To != result.Action.Send.To {
 				note += " forwarded_from=" + result.Action.Send.To
 			}
+			if message.Held {
+				note += " held=true (" + ipc.HeldMeaning + ")"
+			}
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSent, note))
 		case "publish":
 			if result.Action.Publish == nil || result.Action.Publish.Topic == "" {
@@ -1303,7 +1306,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailPublished, fmt.Sprintf("publish:topic=%s count=%d", result.Action.Publish.Topic, len(messages))))
+			note := fmt.Sprintf("publish:topic=%s count=%d", result.Action.Publish.Topic, len(messages))
+			if held := heldCount(messages); held > 0 {
+				note += fmt.Sprintf(" held=%d (%s)", held, ipc.HeldMeaning)
+			}
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailPublished, note))
 		case "subscribe":
 			if result.Action.Subscribe == nil || result.Action.Subscribe.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -2402,6 +2409,9 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if message.To != to {
 			output["forwarded_from"] = to
 		}
+		if message.Held {
+			output["held"] = "true: " + ipc.HeldMeaning
+		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "sent agent message",
@@ -2751,6 +2761,17 @@ func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 		return header
 	}
 	return header + "\n" + marked
+}
+
+// heldCount is how many of a publish's messages went to a process not running.
+func heldCount(messages []ipc.Message) int {
+	held := 0
+	for _, message := range messages {
+		if message.Held {
+			held++
+		}
+	}
+	return held
 }
 
 // nonEmpty is a one-element parent list, or nil for no parent.

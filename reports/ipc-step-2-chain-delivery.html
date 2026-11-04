@@ -24,20 +24,32 @@
     <p><b>Result:</b></p>
     <ul>
       <li><span class="good">B2b, B8c and B11 now assert, and pass.</span></li>
-      <li><span class="warn">One existing test is flaky under load, before and after this step:</span> section 4.</li>
       <li><span class="good">B1, B2a, B3 and B4 still hold:</span> FIFO across Recover, and over 25 trials of 4 senders × 50 messages, 0 lost, 0 duplicated, 0 corrupted, 0 out of order.</li>
       <li><span class="good">Senders in separate OS processes racing repeated Recovers lose nothing,</span> in every trial of <code>TestForwardingRacesRecover</code>. <span class="warn">That test cannot see a very narrow race on its own: section 4.</span></li>
       <li><span class="good">Eval's three <code>ca78ad9</code> trials (31/31, 8/8, 9/9) and a v0.1.4 record (7/7) replay identically.</span></li>
     </ul>
-    <p><b>Still open:</b> <span class="bad">a sender is not told when its mail goes unread (B2c, B1c).</span> Mail in an ended chain stays in the mailbox, with no event of its own, until step 3. Holding a message also makes this silence more common, because a send that used to be refused now succeeds.</p>
+    <p><b>Still open:</b> <span class="bad">a sender is not told when its mail goes unread (B2c, B1c).</span> Mail in an ended chain stays in the mailbox, with no event of its own, until step 3. A send to a process not running now succeeds, and its result says <code>held</code> and nothing later does. <span class="bad">A chain nobody closes produces no outcome, even after step 3,</span> and that is the default for an agent with no restart policy.</p>
     <p>Steps 3 to 5 are not built. There were no live runs: everything here used scripted agents.</p>
   </div>
+
+  <h2>Fixed After Review of <code>37ca34b</code></h2>
+  <table>
+    <tr><th>Hole</th><th>Before</th><th>Now</th></tr>
+    <tr><td>A damaged newest checkpoint (a regression from <code>37ca34b</code>)</td><td class="bad">Every rollback of the chain failed, for good, and each attempt left another dead process</td><td class="good"><code>ipc.checkpoint_unreadable</code> names it, and the Recover goes on. What is owed comes from the readable newer checkpoints and the chain's receive records. <span class="warn">Still lost: a message whose record is unreadable too, when only a damaged checkpoint named it. The log names the record, not the message</span></td></tr>
+    <tr><td>Held looked like delivered</td><td class="bad"><code>ipc.sent</code> said <code>held</code>; the sender's result did not</td><td class="good"><code>send:to=pid-3 id=msg-1 held=true (the process is not running and may never read this)</code>, <code>held</code> in <code>message_agent</code>'s output, <code>held=N</code> on a publish</td></tr>
+    <tr><td><code>continueEnded</code> order</td><td class="bad">Transfer, then Close: a send between them was stranded on the old PID</td><td class="good">Close, then Transfer: a send before is moved, one after is refused. <span class="warn">A publish in that gap drops the subscription</span></td></tr>
+    <tr><td>A subscription past a plain Recover's checkpoint</td><td class="bad">No notice, so topic mail could arrive with no history of asking</td><td class="good">The notes run on every Recover</td></tr>
+    <tr><td><code>TestBackoffWaitsAndStopsWithTheRun</code></td><td class="bad">Cancelled after a fixed 200 ms, and failed under load with <code>workers=0</code></td><td class="good">Cancels once the worker has exited (<code>899f573</code>)</td></tr>
+    <tr><td><code>ipc-design.md</code></td><td class="bad">"Every message" ends in an outcome; "no <code>not_restarted</code>" leaves a chain open</td><td class="good">Corrected. Also stated: only CSI and OSC are treated as invisible, and <code>await_agent</code> does not follow the chain</td></tr>
+  </table>
+  <p>Other reads added to a plain Recover: <code>Artifacts.List()</code> and <code>Bus.Subscriptions</code> read what <code>ownedCheckpoint</code> and <code>Transfer</code> read just before, and a failure of either is now logged and not returned. A plain Recover reads no payload beyond its checkpoint. The one error left is <code>Bus.Redeliver</code> failing to write, with the mail still on record for the next Recover.</p>
+  <p><b>Confirmed by the user on 2026-11-03:</b> an exit the engine escalated or declined cannot be recovered by an operator, following decision 2. This supersedes Chapter 7's sentence "An operator can still recover it on purpose", which remains true of v0.1.4.</p>
 
   <h2>1. What Changed</h2>
   <table>
     <tr><th>Case</th><th>Before (<code>180d076</code>)</th><th>Now</th></tr>
     <tr><td>Mail to a superseded PID</td><td class="bad">Refused, although the successor was live</td><td class="good">Forwarded to the chain's last process, with <code>ipc.forwarded</code>. The result says <code>send:to=pid-3 id=msg-1 forwarded_from=pid-1</code></td></tr>
-    <tr><td>Mail to a retryable exit, not yet recovered</td><td class="bad">Refused</td><td class="good">Held, and moved by <code>Transfer</code>. <code>ipc.sent</code> says <code>held</code></td></tr>
+    <tr><td>Mail to a retryable exit, not yet recovered</td><td class="bad">Refused</td><td class="good">Held, and moved by <code>Transfer</code>. The result and <code>ipc.sent</code> say <code>held</code></td></tr>
     <tr><td>Mail to an ended chain</td><td>Refused</td><td>Refused, naming where: <code>pid-1, whose chain ended at pid-3 (exit code 1 "crashed", closed)</code></td></tr>
     <tr><td>Subscription across a Recover (B8c)</td><td class="bad"><code>{}</code> after the exit; a publish after Recover reached 0</td><td class="good">Moved to the successor; a publish in the gap and one after it each arrive once</td></tr>
     <tr><td>Mail acked after a rollback's target (B11)</td><td class="bad">0 times in the successor's first request, with nothing on the record</td><td class="good">Once, under its original ID, ahead of pending mail; <code>ipc.redelivered</code> with cause <code>rollback</code></td></tr>
@@ -74,10 +86,10 @@ AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11
     <tr><th>Check</th><th>Result</th></tr>
     <tr><td>Probes B1, B2, B3, B4, B5, B8, B10, B11</td><td class="good">Pass; B4 over 25 trials: lost 0, duplicated 0, corrupted 0, order violations 0</td></tr>
     <tr><td><code>TestForwardingRacesRecover</code></td><td class="good">3 sender and 1 publisher OS processes against 4 Recovers, 7 trials on the final test: 0 lost, 0 duplicated, 0 out of order, nothing pending; every trial had held and forwarded mail</td></tr>
-    <tr><td>16 mutations, each on a copy, each with its named test</td><td class="good">All 16 fail the named test</td></tr>
+    <tr><td>25 mutations, each on a copy, each with its named test (16, plus 9 for the review's fixes)</td><td class="good">All 25 fail the named test</td></tr>
     <tr><td>Mutation: the send resolves outside the bus lock</td><td class="warn">8 trials each: caught at the first trial with a 100 ms delay in the gap, and at the seventh with 30 ms. <b>Missed with 0 and 3 ms.</b> The window is small, and each later Recover sweeps up what an earlier one missed. For a narrow gap, the evidence is the locking argument, not the test</td></tr>
     <tr><td>Saved records</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
-    <tr><td><code>TestBackoffWaitsAndStopsWithTheRun</code></td><td class="warn"><b>Fails intermittently when the packages run together, and also on <code>a252a14</code>, before this step</b> (1 of 2 runs there; 2 of 2 here). It passes when <code>internal/agentflow</code> runs alone. It shows <code>workers=0 restarts=0</code>: it cancels after a fixed 200 ms, and under load no worker has started. A timing assumption in the test, not fixed here</td></tr>
+    <tr><td><code>TestBackoffWaitsAndStopsWithTheRun</code>, as it was</td><td class="warn">Failed when the packages ran together: 1 of 2 runs on a copy of <code>a252a14</code>, 2 of 2 on a copy of <code>37ca34b</code>, each with <code>workers=0</code>. The book session saw 2 of 2 pass on <code>9987096</code>. It is load-dependent and predates step 2's production code, but its rate at each commit is not established. Fixed in <code>899f573</code>; the full package list has since passed 3 of 3 runs</td></tr>
   </table>
 
   <h2>5. Changed From the Design</h2>
@@ -103,12 +115,12 @@ AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11
 
   <h2>7. Changed for Existing Runs</h2>
   <ul>
-    <li>A send to a retryable exit now succeeds and is held. A workflow that relied on the refusal gets nothing instead, until step 3.</li>
+    <li>A send to a retryable exit now succeeds, is held, and says so in its result. Nothing more is said later until step 3, and nothing at all if nobody closes the chain.</li>
     <li>A send to a superseded PID succeeds, and its result gains <code>forwarded_from</code>.</li>
     <li>A retryable exit keeps its subscriptions, so a publisher's <code>count</code> includes it.</li>
-    <li>An exit the engine escalated or declined can no longer be recovered by an operator.</li>
+    <li>An exit the engine escalated or declined can no longer be recovered by an operator. The user confirmed this on 2026-11-03.</li>
     <li>In <code>aos-tui</code>, a line to a root that exited retryably goes in the bus, so it survives a failed turn.</li>
-    <li>New events: <code>process.closed</code>, <code>ipc.forwarded</code>, <code>ipc.subscribed</code>, <code>ipc.unsubscribed</code>, <code>ipc.redelivery_failed</code>. <code>aos inspect</code> shows <code>closed</code>.</li>
+    <li>New events: <code>process.closed</code>, <code>ipc.forwarded</code>, <code>ipc.subscribed</code>, <code>ipc.unsubscribed</code>, <code>ipc.redelivery_failed</code>, <code>ipc.checkpoint_unreadable</code>. <code>aos inspect</code> shows <code>closed</code>.</li>
   </ul>
 
   <h2>8. Known Limits</h2>
@@ -120,6 +132,7 @@ AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11
     <li>An exit recorded outside <code>runSession</code> and the engine leaves its subscription entry until the next publish to that topic drops it.</li>
     <li>A re-delivered message may be acted on twice, and mail sent in rolled-back steps is not recalled. Decision 12 accepts both.</li>
     <li>Replay still drops mail (decision 11 is Proposed).</li>
+    <li>Only CSI and OSC sequences are treated as invisible. DCS, APC, PM, SOS and two-byte sequences pass unescaped; the model sees those bytes literally.</li>
   </ul>
 </body>
 </html>

@@ -84,8 +84,8 @@ func TestSendToAnOpenChainIsHeldAndMoved(t *testing.T) {
 		t.Fatalf("send to an open chain = %+v, %v", held, err)
 	}
 	sent := events(t, k, "ipc.sent")
-	if sent[0].Data["held"] != "" || sent[1].Data["held"] != "true" {
-		t.Fatalf("ipc.sent = %+v", sent)
+	if sent[0].Data["held"] != "" || sent[1].Data["held"] != "true" || !held.Held {
+		t.Fatalf("ipc.sent = %+v, returned %+v", sent, held)
 	}
 	next, err := k.Supersede(worker, kernel.ProcessSpec{Role: "agent:worker"}, nil)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestSendToAnOpenChainIsHeldAndMoved(t *testing.T) {
 	}
 	// The window between the kernel's supersede and the bus's transfer: this
 	// one goes straight to the successor, and still comes last.
-	if forwarded, err := bus.Send(sender, worker, "in the handover"); err != nil || forwarded.To != next.PID {
+	if forwarded, err := bus.Send(sender, worker, "in the handover"); err != nil || forwarded.To != next.PID || forwarded.Held {
 		t.Fatalf("send in the handover = %+v, %v", forwarded, err)
 	}
 	if moved, err := bus.Transfer(worker, next.PID); err != nil || moved != 2 {
@@ -162,8 +162,11 @@ func TestPublishDuringBackoffIsHeld(t *testing.T) {
 	}
 	k.Exit(worker, crashed)
 	held, err := bus.Publish(publisher, "news", "during the backoff")
-	if err != nil || len(held) != 1 || held[0].To != worker {
+	if err != nil || len(held) != 1 || held[0].To != worker || !held[0].Held {
 		t.Fatalf("publish in the backoff = %+v, %v", held, err)
+	}
+	if sent := events(t, k, "ipc.sent"); sent[0].Data["held"] != "true" {
+		t.Fatalf("ipc.sent = %+v", sent)
 	}
 	next, err := k.Supersede(worker, kernel.ProcessSpec{Role: "agent:worker"}, nil)
 	if err != nil {

@@ -745,3 +745,272 @@ func forwardingRace(t *testing.T, trial int) {
 		t.Fatalf("trial %d: nothing reached the last process %s", trial, chain[rounds])
 	}
 }
+
+// damage makes an artifact unreadable: its payload rewritten, or gone.
+func damage(t *testing.T, root, id string, missing bool) {
+	t.Helper()
+	path := filepath.Join(root, "artifacts", "payloads", id+".json")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if !missing {
+		if err := os.WriteFile(path, []byte(`{"mailbox_seen":[]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func (s mailState) recordIDs(t *testing.T, artifactType string) []string {
+	t.Helper()
+	records, err := s.store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, record := range records {
+		if record.Type == artifactType {
+			ids = append(ids, record.ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// A damaged newest checkpoint is the main reason to roll back. It never stops
+// the Recover, it is on the log, and the chain's records still say what it knew.
+func TestRollbackPastAnUnreadableCheckpoint(t *testing.T) {
+	for name, missing := range map[string]bool{"damaged": false, "missing": true} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			s := openMailState(t, root)
+			worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+			c1 := s.park(t, worker)
+			s.bus.Send(lead.PID, worker.PID, "mail a")
+			first, err := s.agent(crashing()).Resume(context.Background(), worker.PID, c1, nil, runtime.RunOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c2 := first.ExitStatus.Checkpoint
+			s.bus.Send(lead.PID, worker.PID, "mail b")
+			second, err := s.agent(crashing()).Recover(context.Background(), first.PID, "", nil, runtime.RunOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c3 := second.ExitStatus.Checkpoint
+			damage(t, root, c3, missing)
+
+			var history string
+			result, err := s.agent(listening(&history)).Recover(context.Background(), second.PID, c1, nil, runtime.RunOptions{Rollback: true})
+			if err != nil || result.ExitStatus.Code != 0 {
+				t.Fatalf("recover = %+v, %v", result, err)
+			}
+			// mail a is in the readable c2; mail b only in the unreadable c3
+			// and in its record.
+			if got := bodiesIn(history); got != "mail a, mail b" {
+				t.Fatalf("after the rollback: %q\n%s", got, history)
+			}
+			logged := s.events(t, "ipc.checkpoint_unreadable")
+			if len(logged) != 1 || logged[0].Data["checkpoint"] != c3 || logged[0].Data["reason"] == "" {
+				t.Fatalf("ipc.checkpoint_unreadable = %+v (c2 %s, c3 %s)", logged, c2, c3)
+			}
+			if failed := s.events(t, "ipc.redelivery_failed"); len(failed) != 0 {
+				t.Fatalf("ipc.redelivery_failed = %+v", failed)
+			}
+		})
+	}
+}
+
+// Every newer checkpoint gone, and the second Recover is no different from the
+// first: no attempt leaves the chain worse off.
+func TestUnreadableCheckpointDoesNotBlockRepeatedRecovers(t *testing.T) {
+	root := t.TempDir()
+	s := openMailState(t, root)
+	worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+	c1 := s.park(t, worker)
+	s.bus.Send(lead.PID, worker.PID, "mail a")
+	first, err := s.agent(crashing()).Resume(context.Background(), worker.PID, c1, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	damage(t, root, first.ExitStatus.Checkpoint, false)
+	second, err := s.agent(crashing()).Recover(context.Background(), worker.PID, c1, nil, runtime.RunOptions{Rollback: true})
+	if err != nil || strings.Contains(second.ExitStatus.Reason, "re-delivery") {
+		t.Fatalf("first attempt = %+v, %v", second, err)
+	}
+	var history string
+	third, err := s.agent(listening(&history)).Recover(context.Background(), second.PID, c1, nil, runtime.RunOptions{Rollback: true})
+	if err != nil || third.ExitStatus.Code != 0 {
+		t.Fatalf("second attempt = %+v, %v", third, err)
+	}
+	if got := bodiesIn(history); got != "mail a" {
+		t.Fatalf("after the second attempt: %q\n%s", got, history)
+	}
+}
+
+// With the checkpoint and the record both gone, the message cannot come back.
+// The process still runs, and the log says what could not be named.
+func TestUnreadableCheckpointAndRecordIsLogged(t *testing.T) {
+	root := t.TempDir()
+	s := openMailState(t, root)
+	worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+	c1 := s.park(t, worker)
+	s.bus.Send(lead.PID, worker.PID, "mail a")
+	first, err := s.agent(crashing()).Resume(context.Background(), worker.PID, c1, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	damage(t, root, first.ExitStatus.Checkpoint, true)
+	record := s.recordIDs(t, "mailbox_message")[0]
+	damage(t, root, record, true)
+	var history string
+	result, err := s.agent(listening(&history)).Recover(context.Background(), worker.PID, c1, nil, runtime.RunOptions{Rollback: true})
+	if err != nil || result.ExitStatus.Code != 0 {
+		t.Fatalf("recover = %+v, %v", result, err)
+	}
+	if strings.Contains(history, "mail a") {
+		t.Fatalf("nothing could bring it back:\n%s", history)
+	}
+	failed := s.events(t, "ipc.redelivery_failed")
+	if len(failed) != 1 || failed[0].Data["unreadable"] != record {
+		t.Fatalf("ipc.redelivery_failed = %+v", failed)
+	}
+}
+
+// A plain Recover reads no payload but the checkpoint it starts from, so
+// damage elsewhere in the store adds no way for it to fail.
+func TestPlainRecoverReadsNothingElse(t *testing.T) {
+	root := t.TempDir()
+	s := openMailState(t, root)
+	worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+	c1 := s.park(t, worker)
+	s.bus.Send(lead.PID, worker.PID, "mail a")
+	first, err := s.agent(crashing()).Resume(context.Background(), worker.PID, c1, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	damage(t, root, c1, true)
+	damage(t, root, s.recordIDs(t, "mailbox_message")[0], true)
+	var history string
+	result, err := s.agent(listening(&history)).Recover(context.Background(), first.PID, "", nil, runtime.RunOptions{})
+	if err != nil || result.ExitStatus.Code != 0 {
+		t.Fatalf("recover = %+v, %v", result, err)
+	}
+	if got := bodiesIn(history); got != "mail a" {
+		t.Fatalf("history: %q", got)
+	}
+	if n := len(s.events(t, "ipc.checkpoint_unreadable")) + len(s.events(t, "ipc.redelivery_failed")); n != 0 {
+		t.Fatalf("%d events for a store a plain Recover never read", n)
+	}
+}
+
+// Subscribe, then exit naming the checkpoint before it: a plain Recover still
+// says so, or topic mail would arrive with no history of asking for it.
+func TestPlainRecoverTellsOfASubscriptionPastItsCheckpoint(t *testing.T) {
+	s := openMailState(t, t.TempDir())
+	worker := s.spawn(t, "worker", "message_agent")
+	c1 := s.park(t, worker)
+	if err := s.bus.Subscribe(worker.PID, "news"); err != nil {
+		t.Fatal(err)
+	}
+	s.kernel.Transition(worker.PID, kernel.StateRunning)
+	if _, err := s.kernel.Exit(worker.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true, Checkpoint: c1}); err != nil {
+		t.Fatal(err)
+	}
+	var history string
+	if _, err := s.agent(listening(&history)).Recover(context.Background(), worker.PID, "", nil, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(history, "subscribed to: news") != 1 {
+		t.Fatalf("history:\n%s", history)
+	}
+}
+
+// A send to a process that is not running says so, in each of the three
+// places an agent can read it, and a live recipient says nothing of the kind.
+func TestHeldIsToldToTheSender(t *testing.T) {
+	s := openMailState(t, t.TempDir())
+	worker := s.spawn(t, "worker")
+	if err := s.bus.Subscribe(worker.PID, "news"); err != nil {
+		t.Fatal(err)
+	}
+	s.kernel.Exit(worker.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
+	live := s.spawn(t, "live")
+	sender := s.spawn(t, "lead", "message_agent")
+	var last []runtime.Message
+	backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		last = request.History
+		switch call {
+		case 1:
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "send", Send: &runtime.SendCall{To: worker.PID, Body: "one"}}}, nil
+		case 2:
+			return toolAction("message_agent", map[string]string{"to": worker.PID, "body": "two"}), nil
+		case 3:
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "publish", Publish: &runtime.PublishCall{Topic: "news", Body: "three"}}}, nil
+		case 4:
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "send", Send: &runtime.SendCall{To: live.PID, Body: "four"}}}, nil
+		}
+		return exitResult("done"), nil
+	}}
+	if _, err := s.agent(backend).RunWithOptions(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, message := range last {
+		lines = append(lines, message.Content)
+	}
+	history := strings.Join(lines, "\n")
+	for _, want := range []string{
+		fmt.Sprintf("send:to=%s id=msg-000001 held=true (%s)", worker.PID, ipc.HeldMeaning),
+		"held:true: " + ipc.HeldMeaning,
+		fmt.Sprintf("publish:topic=news count=1 held=1 (%s)", ipc.HeldMeaning),
+	} {
+		if !strings.Contains(history, want) {
+			t.Fatalf("the history should hold %q:\n%s", want, history)
+		}
+	}
+	if want := fmt.Sprintf("send:to=%s id=msg-000004", live.PID); !strings.HasSuffix(history, want) {
+		t.Fatalf("a send to a live process should end at %q:\n%s", want, history)
+	}
+	// It is about that moment, so the send's record does not say it.
+	records, _ := s.store.List()
+	checked := 0
+	for _, record := range records {
+		if record.Type == "mailbox_message" && record.Metadata["direction"] == "send" {
+			var stored map[string]any
+			if err := s.store.ReadJSON(record.ID, &stored); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := stored["held"]; ok {
+				t.Fatalf("record %s = %v", record.ID, stored)
+			}
+			checked++
+		}
+	}
+	if checked != 2 {
+		t.Fatalf("%d send records", checked)
+	}
+}
+
+// What is owed is every newer checkpoint's list, not only the newest's. A
+// chain rolled back before re-delivery existed has a newest checkpoint that
+// lacks mail an older one held.
+func TestOwedComesFromEveryNewerCheckpoint(t *testing.T) {
+	s := openMailState(t, t.TempDir())
+	worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+	c1 := s.park(t, worker)
+	s.bus.Send(lead.PID, worker.PID, "mail a")
+	first, err := s.agent(crashing()).Resume(context.Background(), worker.PID, c1, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.CreateJSON("checkpoint", first.PID, runtime.Session{Messages: []runtime.Message{{Role: "user", Content: "work"}}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	var history string
+	if _, err := s.agent(listening(&history)).Recover(context.Background(), first.PID, c1, nil, runtime.RunOptions{Rollback: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := bodiesIn(history); got != "mail a" {
+		t.Fatalf("after the rollback: %q\n%s", got, history)
+	}
+}
