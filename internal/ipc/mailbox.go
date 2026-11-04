@@ -11,9 +11,18 @@
 // records the IDs it has seen can drop the repeats and see each message
 // exactly once.
 //
-// With a kernel bound, messages to unknown or exited processes are
-// refused, and sends, deliveries, acknowledgements, refusals and transfers
-// are logged as ipc.* kernel events.
+// With a kernel bound, a PID names its process chain (superseded_by), and
+// mail and subscriptions belong to the chain. A message goes to the chain's
+// last process: forwarded if the PID was superseded, held in the mailbox if
+// that process exited retryably and may yet be recovered, and refused if the
+// chain has ended or the process is unknown. Sends, deliveries,
+// acknowledgements, refusals, transfers and subscriptions are logged as
+// ipc.* kernel events.
+//
+// Forwarding reads the kernel under the bus's lock, and Transfer takes that
+// lock after Supersede, so a send racing a recovery either sees the successor
+// or lands in time to be moved. The kernel's lock may be taken inside the
+// bus's, and never the reverse, so the two cannot deadlock.
 package ipc
 
 import (
@@ -86,7 +95,25 @@ type busState struct {
 type Bus struct {
 	root   string
 	kernel *kernel.Kernel
-	mu     sync.Mutex
+	// NoSubscriptionEvents leaves out ipc.subscribed and ipc.unsubscribed, for
+	// replaying a record made before them.
+	NoSubscriptionEvents bool
+	mu                   sync.Mutex
+}
+
+// Why a subscription came or went, on its ipc.subscribed or ipc.unsubscribed
+// event.
+const (
+	CauseSubscribe  = "subscribe"
+	CauseTransfer   = "transfer"
+	CauseChainEnded = "chain_ended"
+)
+
+// Redelivery is a message going back in a mailbox, and the mailbox_message
+// artifact it came from.
+type Redelivery struct {
+	Message Message
+	Record  string
 }
 
 // tx is one locked read-modify-write of the bus files.
@@ -106,8 +133,9 @@ func New(root string, k *kernel.Kernel) (*Bus, error) {
 	return &Bus{root: root, kernel: k}, nil
 }
 
-// Send queues body for to. A recipient the kernel does not know, or that
-// has exited, is refused.
+// Send queues body for to, which may be any PID of a process chain. The
+// returned message names the process it reached. An unknown process, or a
+// chain that has ended, is refused.
 func (b *Bus) Send(from, to, body string) (Message, error) {
 	if from == OperatorSender {
 		return Message{}, fmt.Errorf("%w: %s", ErrReservedSender, from)
@@ -124,18 +152,28 @@ func (b *Bus) SendAsOperator(to, body string) (Message, error) {
 
 func (b *Bus) send(from, to, body string) (Message, error) {
 	var sent Message
+	held := false
 	err := b.update(func(t *tx) error {
-		if err := b.deliverable(to); err != nil {
+		end, err := b.chainEnd(to)
+		if err != nil {
 			b.record(from, "ipc.rejected", map[string]string{"to": to, "reason": err.Error()})
 			return err
 		}
-		sent = t.enqueue(Message{From: from, To: to, Body: body})
+		held = end.State == kernel.StateExited
+		sent = t.enqueue(Message{From: from, To: end.PID, Body: body})
 		return nil
 	})
 	if err != nil {
 		return Message{}, err
 	}
-	b.record(from, "ipc.sent", map[string]string{"id": sent.ID, "to": sent.To})
+	if sent.To != to {
+		b.record(from, "ipc.forwarded", map[string]string{"id": sent.ID, "from_pid": to, "to_pid": sent.To})
+	}
+	data := map[string]string{"id": sent.ID, "to": sent.To}
+	if held {
+		data["held"] = "true"
+	}
+	b.record(from, "ipc.sent", data)
 	return sent, nil
 }
 
@@ -145,29 +183,61 @@ func (b *Bus) Subscribe(pid, topic string) error {
 		b.record(pid, "ipc.rejected", map[string]string{"reason": "invalid_topic"})
 		return err
 	}
-	return b.update(func(t *tx) error {
+	added := false
+	err := b.update(func(t *tx) error {
 		if !slices.Contains(t.subscriptions[topic], pid) {
 			t.subscriptions[topic] = append(t.subscriptions[topic], pid)
 			t.changed = true
+			added = true
 		}
 		return nil
 	})
+	if added {
+		b.recordSubscription("ipc.subscribed", pid, topic, CauseSubscribe)
+	}
+	return err
 }
 
-// Unsubscribe removes pid from every topic, as when it exits.
-func (b *Bus) Unsubscribe(pid string) error {
-	return b.update(func(t *tx) error {
+// Unsubscribe removes pid from every topic. A chain's subscriptions outlive
+// its processes, so this is for the end of the chain (CauseChainEnded); a
+// Recover moves them with Transfer instead.
+func (b *Bus) Unsubscribe(pid, cause string) error {
+	var left []string
+	err := b.update(func(t *tx) error {
 		for topic, pids := range t.subscriptions {
 			if kept := slices.DeleteFunc(slices.Clone(pids), func(p string) bool { return p == pid }); len(kept) != len(pids) {
 				t.setSubscribers(topic, kept)
+				left = append(left, topic)
 			}
 		}
 		return nil
 	})
+	slices.Sort(left)
+	for _, topic := range left {
+		b.recordSubscription("ipc.unsubscribed", pid, topic, cause)
+	}
+	return err
 }
 
-// Publish queues body for every live subscriber of topic. Subscribers that
-// have exited, or that the kernel does not know, are dropped.
+// Subscriptions lists the topics pid subscribes to, in order.
+func (b *Bus) Subscriptions(pid string) ([]string, error) {
+	var topics []string
+	err := b.view(func(t *tx) error {
+		for topic, pids := range t.subscriptions {
+			if slices.Contains(pids, pid) {
+				topics = append(topics, topic)
+			}
+		}
+		return nil
+	})
+	slices.Sort(topics)
+	return topics, err
+}
+
+// Publish queues body for the last process of every subscriber's chain, once
+// per chain. One that exited retryably holds it for its successor. A
+// subscriber whose chain has ended, or that the kernel does not know, is
+// dropped; one whose chain is broken gets nothing and is kept.
 func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 	if from == OperatorSender {
 		return nil, fmt.Errorf("%w: %s", ErrReservedSender, from)
@@ -177,24 +247,52 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 		return nil, err
 	}
 	var created []Message
+	var dropped []string
+	var moved [][2]string
 	err := b.update(func(t *tx) error {
-		var live []string
-		for _, pid := range t.subscriptions[topic] {
-			if b.deliverable(pid) != nil {
+		subscribers := t.subscriptions[topic]
+		kept := make([]string, 0, len(subscribers))
+		for _, pid := range subscribers {
+			end, err := b.chainEnd(pid)
+			switch {
+			case errors.Is(err, ErrUnknownRecipient), errors.Is(err, ErrRecipientExited):
+				dropped = append(dropped, pid)
+				continue
+			case errors.Is(err, kernel.ErrBrokenChain):
+				b.record(from, "ipc.rejected", map[string]string{"to": pid, "topic": topic, "reason": err.Error()})
+				kept = append(kept, pid)
+				continue
+			case err != nil:
+				return err
+			}
+			if end.PID != pid {
+				moved = append(moved, [2]string{pid, end.PID})
+			}
+			if slices.Contains(kept, end.PID) {
 				continue
 			}
-			live = append(live, pid)
-			created = append(created, t.enqueue(Message{From: from, To: pid, Topic: topic, Body: body}))
+			kept = append(kept, end.PID)
+			created = append(created, t.enqueue(Message{From: from, To: end.PID, Topic: topic, Body: body}))
 		}
-		if len(live) != len(t.subscriptions[topic]) {
-			t.setSubscribers(topic, live)
+		if !slices.Equal(kept, subscribers) {
+			t.setSubscribers(topic, kept)
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	for _, pid := range dropped {
+		b.recordSubscription("ipc.unsubscribed", pid, topic, CauseChainEnded)
+	}
+	for _, move := range moved {
+		b.recordSubscription("ipc.unsubscribed", move[0], topic, CauseTransfer)
+		b.recordSubscription("ipc.subscribed", move[1], topic, CauseTransfer)
+	}
 	for _, message := range created {
 		b.record(from, "ipc.sent", map[string]string{"id": message.ID, "to": message.To, "topic": topic})
 	}
-	return created, err
+	return created, nil
 }
 
 // Receive hands out pid's messages and marks them delivered. They stay in
@@ -255,9 +353,11 @@ func (b *Bus) Ack(pid string, ids []string) error {
 }
 
 // Transfer moves every unacknowledged message and subscription of fromPID
-// to toPID, as Recover does for the process it replaces.
+// to toPID, as Recover does for the process it replaces. A message forwarded
+// to toPID before this keeps its place by send order.
 func (b *Bus) Transfer(fromPID, toPID string) (int, error) {
 	moved := 0
+	var topics []string
 	err := b.update(func(t *tx) error {
 		for _, message := range t.mailboxes[fromPID] {
 			message.To = toPID
@@ -265,13 +365,18 @@ func (b *Bus) Transfer(fromPID, toPID string) (int, error) {
 			moved++
 		}
 		if moved > 0 {
+			inSendOrder(t.mailboxes[toPID])
 			t.setMailbox(fromPID, nil)
 		}
 		for topic, pids := range t.subscriptions {
 			if i := slices.Index(pids, fromPID); i >= 0 {
 				next := slices.Clone(pids)
 				next[i] = toPID
-				t.setSubscribers(topic, slices.Compact(next))
+				if slices.Contains(pids, toPID) {
+					next = slices.Delete(next, i, i+1)
+				}
+				t.setSubscribers(topic, next)
+				topics = append(topics, topic)
 			}
 		}
 		return nil
@@ -279,7 +384,43 @@ func (b *Bus) Transfer(fromPID, toPID string) (int, error) {
 	if moved > 0 {
 		b.record(toPID, "ipc.transferred", map[string]string{"from_pid": fromPID, "count": strconv.Itoa(moved)})
 	}
+	slices.Sort(topics)
+	for _, topic := range topics {
+		b.recordSubscription("ipc.unsubscribed", fromPID, topic, CauseTransfer)
+		b.recordSubscription("ipc.subscribed", toPID, topic, CauseTransfer)
+	}
 	return moved, err
+}
+
+// Redeliver puts messages a rollback took back from pid's chain in pid's
+// mailbox: same IDs, pending again, in send order, which puts them ahead of
+// the mail that came after them. A message already there stays as it is, so
+// a Recover repeated after a crash adds nothing twice. Each is logged before
+// it is written, like a kernel state change: after a crash, the log may name
+// a redelivery the next Recover repeats, and never misses one.
+func (b *Bus) Redeliver(pid string, messages []Redelivery, cause string) (int, error) {
+	if len(messages) == 0 {
+		return 0, nil
+	}
+	added := 0
+	err := b.update(func(t *tx) error {
+		for _, item := range messages {
+			if slices.ContainsFunc(t.mailboxes[pid], func(m Message) bool { return m.ID == item.Message.ID }) {
+				continue
+			}
+			message := item.Message
+			message.To, message.Deliveries, message.DeliveredAt = pid, 0, nil
+			t.mailboxes[pid] = append(t.mailboxes[pid], message)
+			b.record(pid, "ipc.redelivered", map[string]string{"id": message.ID, "from": message.From, "cause": cause, "record": item.Record})
+			added++
+		}
+		if added > 0 {
+			inSendOrder(t.mailboxes[pid])
+			t.changed = true
+		}
+		return nil
+	})
+	return added, err
 }
 
 // Pending returns every unacknowledged message, by recipient.
@@ -292,22 +433,66 @@ func (b *Bus) Pending() (map[string][]Message, error) {
 	return out, err
 }
 
-// deliverable refuses a recipient that cannot read its mail.
-func (b *Bus) deliverable(pid string) error {
+// chainEnd is the process mail to pid goes to: the last of pid's chain, live
+// or holding it for a successor. Without a kernel, pid itself. It refuses an
+// unknown process (ErrUnknownRecipient), a chain that has ended
+// (ErrRecipientExited), and a broken chain (kernel.ErrBrokenChain).
+func (b *Bus) chainEnd(pid string) (kernel.Process, error) {
 	if b.kernel == nil {
-		return nil
+		return kernel.Process{PID: pid}, nil
 	}
-	process, err := b.kernel.Get(pid)
+	end, err := b.kernel.ChainEnd(pid)
 	if errors.Is(err, kernel.ErrProcessNotFound) {
-		return fmt.Errorf("%w: %s", ErrUnknownRecipient, pid)
+		return kernel.Process{}, fmt.Errorf("%w: %s", ErrUnknownRecipient, pid)
 	}
 	if err != nil {
-		return err
+		return kernel.Process{}, err
 	}
-	if process.State == kernel.StateExited {
-		return fmt.Errorf("%w: %s", ErrRecipientExited, pid)
+	if end.ChainEnded() {
+		return kernel.Process{}, fmt.Errorf("%w: %s", ErrRecipientExited, finalExit(pid, end))
 	}
-	return nil
+	return end, nil
+}
+
+// finalExit names where a chain ended, for the sender it refuses. The reason
+// may be an agent's, so it is quoted and cut short.
+func finalExit(pid string, end kernel.Process) string {
+	where := end.PID
+	if pid != end.PID {
+		where = fmt.Sprintf("%s, whose chain ended at %s", pid, end.PID)
+	}
+	if end.ExitStatus == nil {
+		return where
+	}
+	reason := end.ExitStatus.Reason
+	if len(reason) > 200 {
+		reason = strings.ToValidUTF8(reason[:200], "") + "..."
+	}
+	closed := ""
+	if end.Closed {
+		closed = ", closed"
+	}
+	return fmt.Sprintf("%s (exit code %d %q%s)", where, end.ExitStatus.Code, reason, closed)
+}
+
+// inSendOrder sorts a mailbox by ID. The bus gives out IDs under its lock, so
+// that is the order the messages were sent in.
+func inSendOrder(messages []Message) {
+	slices.SortStableFunc(messages, func(a, b Message) int { return messageNumber(a.ID) - messageNumber(b.ID) })
+}
+
+func messageNumber(id string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(id, "msg-"))
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+func (b *Bus) recordSubscription(eventType, pid, topic, cause string) {
+	if !b.NoSubscriptionEvents {
+		b.record(pid, eventType, map[string]string{"topic": topic, "pid": pid, "cause": cause})
+	}
 }
 
 func (b *Bus) record(pid, eventType string, data map[string]string) {
@@ -417,7 +602,7 @@ func (b *Bus) load() (*tx, error) {
 	// Never reuse an ID, even if the counter fell behind the mailboxes.
 	for _, messages := range t.mailboxes {
 		for _, message := range messages {
-			if n, err := strconv.Atoi(strings.TrimPrefix(message.ID, "msg-")); err == nil && n >= t.state.NextMessageID {
+			if n := messageNumber(message.ID); n >= t.state.NextMessageID {
 				t.state.NextMessageID = n + 1
 			}
 		}

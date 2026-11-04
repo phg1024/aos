@@ -33,6 +33,15 @@ const (
 	PeerFramingV2    = "v2"
 )
 
+// ChainDeliveryField is the run.started field that says mail and
+// subscriptions belong to the process chain, with the value ChainDeliveryV1:
+// the run's record holds process.closed, ipc.subscribed and ipc.unsubscribed.
+// Records without it do not.
+const (
+	ChainDeliveryField = "chain_delivery"
+	ChainDeliveryV1    = "v1"
+)
+
 // LeaseClockField is the run.started field that says lease expiries come
 // from the kernel's clock, with the value LeaseClockKernel, so a replay
 // reproduces them. Records without it took expiries from the wall clock.
@@ -90,6 +99,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoPeerFraming {
 		data[PeerFramingField] = PeerFramingV2
+	}
+	if !e.NoChainDelivery {
+		data[ChainDeliveryField] = ChainDeliveryV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

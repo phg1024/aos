@@ -81,9 +81,12 @@ type Report struct {
 	LegacyLeases bool `json:"legacy_leases,omitempty"`
 	// LegacyPeerFraming means the record predates framing, so the replay
 	// rendered peer messages and prompts the way it did then.
-	LegacyPeerFraming bool              `json:"legacy_peer_framing,omitempty"`
-	RecordedBuild     map[string]string `json:"recorded_build,omitempty"`
-	Divergence        *Divergence       `json:"divergence,omitempty"`
+	LegacyPeerFraming bool `json:"legacy_peer_framing,omitempty"`
+	// LegacyChainDelivery means the record predates chain-owned delivery, so
+	// the replay records no process.closed, ipc.subscribed or ipc.unsubscribed.
+	LegacyChainDelivery bool              `json:"legacy_chain_delivery,omitempty"`
+	RecordedBuild       map[string]string `json:"recorded_build,omitempty"`
+	Divergence          *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -344,6 +347,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// the older rendering, so the replay must produce it too.
 	engine.NoPeerFraming = started.Data[agentflow.PeerFramingField] == ""
 	report.LegacyPeerFraming = engine.NoPeerFraming
+	// A run.started without chain_delivery predates process.closed and the
+	// subscription events, and the record's event sequence has none.
+	engine.NoChainDelivery = started.Data[agentflow.ChainDeliveryField] == ""
+	bus.NoSubscriptionEvents = engine.NoChainDelivery
+	report.LegacyChainDelivery = engine.NoChainDelivery
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

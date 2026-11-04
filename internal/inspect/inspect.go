@@ -59,6 +59,7 @@ type Process struct {
 	State            string             `json:"state"`
 	Exit             *kernel.ExitStatus `json:"exit,omitempty"`
 	SupersededBy     string             `json:"superseded_by,omitempty"`
+	Closed           bool               `json:"closed,omitempty"`
 	LatestCheckpoint string             `json:"latest_checkpoint,omitempty"`
 	// UnconfinedRun marks a process whose run commands skip the sandbox.
 	UnconfinedRun bool `json:"unconfined_run,omitempty"`
@@ -315,7 +316,7 @@ func processTree(processes []kernel.Process, checkpoints map[string]string) []Pr
 		out = append(out, Process{
 			PID: process.PID, ParentPID: process.ParentPID, Depth: depth,
 			AgentID: process.Metadata["agent_id"], Role: process.Role, State: string(process.State),
-			Exit: process.ExitStatus, SupersededBy: process.SupersededBy, LatestCheckpoint: checkpoints[process.PID],
+			Exit: process.ExitStatus, SupersededBy: process.SupersededBy, Closed: process.Closed, LatestCheckpoint: checkpoints[process.PID],
 			UnconfinedRun: process.CapabilitySet.UnconfinedRun,
 			Budget:        process.CapabilitySet.Budget,
 		})
@@ -363,6 +364,9 @@ func (r Report) WriteText(w io.Writer) {
 		}
 		if process.SupersededBy != "" {
 			line += "  superseded by " + process.SupersededBy
+		}
+		if process.Closed {
+			line += "  closed"
 		}
 		if process.LatestCheckpoint != "" {
 			line += "  checkpoint " + process.LatestCheckpoint

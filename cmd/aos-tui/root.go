@@ -36,7 +36,7 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	if current.State != kernel.StateExited {
 		return "", nil
 	}
-	if root.checkpointID != "" && current.ExitStatus != nil && current.ExitStatus.Retryable {
+	if root.checkpointID != "" && !current.ChainEnded() {
 		// Resume recovers it from its checkpoint.
 		return "", nil
 	}
@@ -56,6 +56,10 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	if _, err := bus.Transfer(current.PID, next.PID); err != nil {
 		return "", err
 	}
+	// The new root is a new chain, so nothing will recover this one.
+	if _, err := k.Close(current.PID, "continued by "+next.PID); err != nil && !errors.Is(err, kernel.ErrSuperseded) {
+		return "", err
+	}
 	reason := ""
 	if current.ExitStatus != nil {
 		reason = current.ExitStatus.Reason
@@ -64,8 +68,9 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	return fmt.Sprintf("the agent %s exited (%s); a new agent %s continues its conversation", current.PID, reason, next.PID), nil
 }
 
-// deliver puts line in the root's mailbox. A root that exited cannot take
-// mail; its recovery carries the line instead, as appended.
+// deliver puts line in the root's mailbox, where a root that exited
+// retryably holds it for its recovery. A chain that has ended cannot take
+// mail, so the next turn carries the line instead, as appended.
 func deliver(bus *ipc.Bus, root *tuiRoot, line string) (appended []runtime.Message, err error) {
 	if _, err := bus.SendAsOperator(root.process.PID, line); errors.Is(err, ipc.ErrRecipientExited) {
 		return []runtime.Message{{Role: "user", Content: line}}, nil

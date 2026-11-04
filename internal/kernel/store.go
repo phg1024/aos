@@ -243,6 +243,11 @@ func applyEvent(record Process, known bool, event Event) (Process, bool, error) 
 			return record, false, nil
 		}
 		record.SupersededBy = event.Data["successor"]
+	case "process.closed":
+		if !known {
+			return record, false, nil
+		}
+		record.Closed = true
 	default:
 		return record, false, nil
 	}

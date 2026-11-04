@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -99,6 +100,12 @@ type options struct {
 	noLeaseClock bool
 	// noFraming records as AOS did before peer framing.
 	noFraming bool
+	// noChain records as AOS did before chain-owned delivery.
+	noChain bool
+	// restart is the agent's restart policy, as JSON, and maxSteps its steps
+	// if not the default.
+	restart  string
+	maxSteps int
 	// mail also grants message_agent.
 	mail bool
 	// recall is the spec's recall field, as JSON.
@@ -167,6 +174,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	store, _ := artifact.New(filepath.Join(stateDir, "artifacts"))
 	leases, _ := lease.New(filepath.Join(stateDir, "leases"), k)
 	bus, _ := ipc.New(filepath.Join(stateDir, "bus"), k)
+	bus.NoSubscriptionEvents = opts.noChain
 	toolRuntime := tools.NewRuntime()
 	toolRuntime.Protected = []string{stateDir}
 	toolRuntime.ScratchRoot = filepath.Join(root, "scratch")
@@ -184,21 +192,30 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	if opts.recall != "" {
 		recall = `"recall":` + opts.recall + `,`
 	}
-	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.","max_steps":12,
+	maxSteps := 12
+	if opts.maxSteps > 0 {
+		maxSteps = opts.maxSteps
+	}
+	restart := ""
+	if opts.restart != "" {
+		restart = `"restart":` + opts.restart + `,`
+	}
+	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.",`+restart+`"max_steps":`+strconv.Itoa(maxSteps)+`,
 		"mounts":[{"name":"workspace","host_path":"`+workspace+`"}],
 		"capabilities":{"tools":[`+mailTool+`"write_file","read_file","run","acquire_lease","release_lease"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}]}`), &spec); err != nil {
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:        agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming},
-		NoPeerFraming:  opts.noFraming,
-		Compaction:     opts.compaction,
-		BackendRetry:   runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
-		Budget:         opts.budget,
-		RunRecord:      map[string]string{"build_version": "test"},
-		NoToolIntents:  opts.noIntents,
-		NoLeaseFencing: opts.noFencing,
-		NoLeaseClock:   opts.noLeaseClock,
+		Factory:         agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming},
+		NoPeerFraming:   opts.noFraming,
+		NoChainDelivery: opts.noChain,
+		Compaction:      opts.compaction,
+		BackendRetry:    runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
+		Budget:          opts.budget,
+		RunRecord:       map[string]string{"build_version": "test"},
+		NoToolIntents:   opts.noIntents,
+		NoLeaseFencing:  opts.noFencing,
+		NoLeaseClock:    opts.noLeaseClock,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -795,6 +812,94 @@ func TestReplayOfMailMatchesEveryRequest(t *testing.T) {
 	}
 }
 
+// subscribeScript subscribes, which puts a chain's state on the record.
+func subscribeScript(workspace string) []step {
+	return []step{
+		{action: map[string]any{"type": "subscribe", "subscribe": map[string]any{"topic": "news"}}},
+		tool("run", map[string]any{"command": "ls"}),
+		exit("checked"),
+	}
+}
+
+// A run that spends its steps on a retryable exit: the restart policy declines
+// it, with no successor, so the run stays replayable and has a process.closed.
+func declinedScript(workspace string) []step {
+	return []step{
+		tool("run", map[string]any{"command": "ls"}),
+		{action: map[string]any{"type": "exit", "exit_status": map[string]any{"code": 1, "reason": "fails", "retryable": true}}},
+	}
+}
+
+// Chain-owned delivery adds events, and a replay's kernel events have to match
+// the record's one for one. Without run.started's chain_delivery, a replay
+// records none of them; with it, all of them.
+func TestReplayOfARecordWithoutChainDelivery(t *testing.T) {
+	budget := capability.Budget{Seconds: 600}
+	declined := options{budget: budget, mail: true, restart: `{"max":3,"backoff":"0s"}`, maxSteps: 2}
+	for name, c := range map[string]struct {
+		script func(string) []step
+		opts   options
+		want   string
+	}{
+		"subscribe": {subscribeScript, options{budget: budget, mail: true}, "ipc.subscribed"},
+		"declined":  {declinedScript, declined, "process.closed"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			current := recordAt(t, newRoot(t), context.Background(), c.script, c.opts)
+			if started := runStartedData(t, current); started[agentflow.ChainDeliveryField] != agentflow.ChainDeliveryV1 {
+				t.Fatalf("run.started = %v", started)
+			}
+			if events := eventTypes(t, current); !strings.Contains(events, c.want) {
+				t.Fatalf("the record should hold %s: %s", c.want, events)
+			}
+			if report := replayed(t, current, false); !report.Identical() || report.LegacyChainDelivery {
+				t.Fatalf("current report = %+v, divergence %+v", report, report.Divergence)
+			}
+
+			opts := c.opts
+			opts.noChain = true
+			legacy := recordAt(t, newRoot(t), context.Background(), c.script, opts)
+			if started := runStartedData(t, legacy); started[agentflow.ChainDeliveryField] != "" {
+				t.Fatalf("the legacy run.started = %v", started)
+			}
+			if events := eventTypes(t, legacy); strings.Contains(events, c.want) || strings.Contains(events, "ipc.unsubscribed") {
+				t.Fatalf("the legacy record should not hold them: %s", events)
+			}
+			if report := replayed(t, legacy, false); !report.Identical() || !report.LegacyChainDelivery {
+				t.Fatalf("legacy report = %+v, divergence %+v", report, report.Divergence)
+			}
+
+			// The field decides: without it, a record that has the events
+			// no longer matches what a replay produces.
+			path := filepath.Join(current, "kernel", "events.json")
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stripped := chainDeliveryField.ReplaceAll(raw, nil)
+			if len(stripped) == len(raw) {
+				t.Fatal("no chain_delivery field in the events")
+			}
+			if err := os.WriteFile(path, stripped, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if report, err := replay.Run(context.Background(), replay.Options{StateDir: current}); err == nil && report.Identical() {
+				t.Fatalf("a record with the events replayed without them should diverge: %+v", report)
+			}
+		})
+	}
+}
+
+// A run with no mail, no subscription and no restart declined adds no event.
+func TestChainDeliveryAddsNoEventToAPlainRun(t *testing.T) {
+	budget := capability.Budget{Seconds: 600}
+	current := eventTypes(t, recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: budget}))
+	legacy := eventTypes(t, recordAt(t, newRoot(t), context.Background(), framingScript, options{budget: budget, noChain: true}))
+	if current != legacy {
+		t.Fatalf("the events differ:\n%s\n%s", current, legacy)
+	}
+}
+
 // A record that says framed is framed: a spec naming no_prompt_framing does
 // not turn the escape off behind peer_framing.
 func TestRecordOfPeerFramingTellsTheTruth(t *testing.T) {
@@ -812,6 +917,8 @@ func TestRecordOfPeerFramingTellsTheTruth(t *testing.T) {
 		t.Fatalf("report = %+v, divergence %+v", report, report.Divergence)
 	}
 }
+
+var chainDeliveryField = regexp.MustCompile(`\s*"chain_delivery":\s*"v1",?`)
 
 var peerFramingField = regexp.MustCompile(`\s*"peer_framing":\s*"v2",?`)
 

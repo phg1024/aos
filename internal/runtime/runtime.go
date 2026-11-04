@@ -506,7 +506,7 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 		Mounts:        append([]capability.Mount(nil), process.Mounts...),
 		CapabilitySet: process.CapabilitySet,
 	}, superseded)
-	if errors.Is(err, kernel.ErrSuperseded) {
+	if errors.Is(err, kernel.ErrSuperseded) || errors.Is(err, kernel.ErrChainClosed) {
 		return RunResult{}, fmt.Errorf("%w: %w", ErrNotRecoverable, err)
 	}
 	if err != nil {
@@ -539,6 +539,14 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 			}
 		}
 	}
+	// What the chain got after the checkpoint it now starts from is not in
+	// that session: mail goes back in the mailbox, ahead of the first step.
+	subscribed, err := r.restoreRolledBack(recovered.PID, lineage, checkpointID, session)
+	if err != nil {
+		status := kernel.ExitStatus{Code: 1, Reason: "mail re-delivery: " + err.Error(), Retryable: true, Checkpoint: checkpointID}
+		_, _ = r.Kernel.Exit(recovered.PID, status)
+		return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
+	}
 	// Calls the old processes started and never finished are their last
 	// acts; the new one hears of them before anything else.
 	if err := r.noteInterrupted(pid, recovered.PID, checkpointID, &session); err != nil {
@@ -546,6 +554,7 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 		_, _ = r.Kernel.Exit(recovered.PID, status)
 		return RunResult{PID: recovered.PID, ExitStatus: status, CheckpointID: checkpointID}, err
 	}
+	session.Messages = append(session.Messages, subscribed...)
 	if options.OnRecovered != nil {
 		options.OnRecovered(recovered)
 	}
@@ -553,13 +562,19 @@ func (r *AgentRuntime) Recover(ctx context.Context, pid, checkpointID string, ap
 	return r.runSession(ctx, recovered.PID, session, options, checkpointID)
 }
 
-// recoverable refuses a process that is live or whose exit is final.
+// recoverable refuses a process that is live or whose chain has ended.
 func recoverable(process kernel.Process) error {
 	if process.State != kernel.StateExited || process.ExitStatus == nil {
 		return fmt.Errorf("%w: %s is %s; only an exited process can be recovered", ErrNotRecoverable, process.PID, process.State)
 	}
 	if !process.ExitStatus.Retryable {
 		return fmt.Errorf("%w: %s exited with a non-retryable status: %s", ErrNotRecoverable, process.PID, process.ExitStatus.Reason)
+	}
+	if process.Closed {
+		return fmt.Errorf("%w: %w: %s", ErrNotRecoverable, kernel.ErrChainClosed, process.PID)
+	}
+	if process.ChainEnded() {
+		return fmt.Errorf("%w: %s exited with code 0, which is final: %s", ErrNotRecoverable, process.PID, process.ExitStatus.Reason)
 	}
 	if process.SupersededBy != "" {
 		return fmt.Errorf("%w: %w: %s was superseded by %s", ErrNotRecoverable, kernel.ErrSuperseded, process.PID, process.SupersededBy)
@@ -585,10 +600,10 @@ func (r *AgentRuntime) runSession(ctx context.Context, pid string, session Sessi
 	result, runErr := r.runSteps(ctx, process, session, options, resumedFrom, &track)
 	result, runErr = r.closeRun(pid, track, result, runErr)
 	if r.Bus != nil {
-		// An exited process reads nothing more; its pending mail stays for a
-		// Recover to take over.
-		if final, err := r.Kernel.Get(pid); err == nil && final.State == kernel.StateExited {
-			_ = r.Bus.Unsubscribe(pid)
+		// Subscriptions belong to the chain: a retryable exit keeps them for
+		// a Recover to take over, with its pending mail.
+		if final, err := r.Kernel.Get(pid); err == nil && final.ChainEnded() {
+			_ = r.Bus.Unsubscribe(pid, ipc.CauseChainEnded)
 		}
 	}
 	return result, runErr
@@ -1229,7 +1244,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			message, err := r.Bus.Send(pid, result.Action.Send.To, result.Action.Send.Body)
-			if errors.Is(err, ipc.ErrUnknownRecipient) || errors.Is(err, ipc.ErrRecipientExited) {
+			if errors.Is(err, ipc.ErrUnknownRecipient) || errors.Is(err, ipc.ErrRecipientExited) || errors.Is(err, kernel.ErrBrokenChain) {
 				// The agent named a process that cannot read it: its mistake to
 				// correct, not a failure of the bus.
 				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "send", err, options); !continued {
@@ -1248,7 +1263,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
-			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSent, fmt.Sprintf("send:to=%s id=%s", message.To, message.ID)))
+			note := fmt.Sprintf("send:to=%s id=%s", message.To, message.ID)
+			if message.To != result.Action.Send.To {
+				note += " forwarded_from=" + result.Action.Send.To
+			}
+			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSent, note))
 		case "publish":
 			if result.Action.Publish == nil || result.Action.Publish.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
@@ -2375,14 +2394,18 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if err != nil {
 			return tools.Result{}, err
 		}
+		output := map[string]string{
+			"id":   message.ID,
+			"to":   message.To,
+			"body": message.Body,
+		}
+		if message.To != to {
+			output["forwarded_from"] = to
+		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "sent agent message",
-			Output: map[string]string{
-				"id":   message.ID,
-				"to":   message.To,
-				"body": message.Body,
-			},
+			Output:  output,
 		}, nil
 	case "await_agent":
 		pid := strings.TrimSpace(call.Args["pid"])

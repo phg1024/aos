@@ -66,6 +66,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacyPeerFraming {
 		fmt.Fprintln(w, "  the record predates peer framing; rendered without it")
 	}
+	if report.LegacyChainDelivery {
+		fmt.Fprintln(w, "  the record predates chain-owned delivery; replayed without its events")
+	}
 	if report.Identical() {
 		fmt.Fprintf(w, "  kernel: %d events and the process table identical\n", report.Events)
 		fmt.Fprintf(w, "  artifacts: %d identical (checkpoint usage seconds not compared)\n", report.Artifacts)

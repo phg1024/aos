@@ -142,7 +142,7 @@ func TestTransferAndUnsubscribe(t *testing.T) {
 	if len(published) != 2 {
 		t.Fatalf("the recovered process should inherit the subscription: %+v", published)
 	}
-	bus.Unsubscribe(recovered)
+	bus.Unsubscribe(recovered, ipc.CauseChainEnded)
 	if published, _ := bus.Publish(a, "news", "y"); len(published) != 1 || published[0].To != other {
 		t.Fatalf("after unsubscribe: %+v", published)
 	}

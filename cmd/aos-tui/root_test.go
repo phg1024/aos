@@ -325,3 +325,51 @@ func captureFooter(t *testing.T, fn func(*render.FooterBar)) string {
 	out, _ := io.ReadAll(read)
 	return string(out)
 }
+
+// A root that exited retryably holds a line for its recovery, in the bus, so
+// a turn that fails before a checkpoint does not lose it. A root whose chain
+// has ended cannot hold one, and the next turn carries it.
+func TestDeliverFollowsTheChain(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
+	appended, err := deliver(f.bus, &root, "still there?")
+	if err != nil || appended != nil {
+		t.Fatalf("deliver to an open chain = %v, %v", appended, err)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+	f.kernel.Close(first.PID, "declined")
+	appended, err = deliver(f.bus, &root, "and now?")
+	if err != nil || len(appended) != 1 || appended[0].Content != "and now?" {
+		t.Fatalf("deliver to a closed chain = %v, %v", appended, err)
+	}
+}
+
+// A root replaced by a new one is a chain that nothing will recover, so it is
+// closed, after its mail and subscriptions have moved.
+func TestContinueEndedClosesTheChainItReplaces(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	root := tuiRoot{process: first}
+	f.bus.Subscribe(first.PID, "news")
+	f.bus.SendAsOperator(first.PID, "unread")
+	// Retryable, but with no checkpoint to recover from.
+	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
+	note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn)
+	if err != nil || note == "" || root.process.PID == first.PID {
+		t.Fatalf("continueEnded = %q, %v, root %s", note, err, root.process.PID)
+	}
+	old, _ := f.kernel.Get(first.PID)
+	if !old.Closed {
+		t.Fatalf("the replaced root = %+v", old)
+	}
+	if topics, _ := f.bus.Subscriptions(root.process.PID); len(topics) != 1 {
+		t.Fatalf("the new root's topics = %v", topics)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[root.process.PID]) != 1 || len(pending[first.PID]) != 0 {
+		t.Fatalf("pending = %+v", pending)
+	}
+}

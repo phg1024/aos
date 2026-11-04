@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/supervisor"
@@ -169,6 +170,7 @@ func (e *Engine) escalate(agent AgentSpec, run AgentRun, policy supervisor.Polic
 		"last_reason": run.ExitStatus.Reason,
 	})
 	e.emitKernelTrace(agent.ID, run.PID, "escalated", reason, event.ID)
+	e.closeChain(run.PID, reason)
 	run.ExitStatus = kernel.ExitStatus{Code: run.ExitStatus.Code, Reason: reason, Retryable: false, Checkpoint: run.ExitStatus.Checkpoint}
 	return run
 }
@@ -181,6 +183,28 @@ func (e *Engine) notRestarted(agent AgentSpec, run AgentRun, cause, detail strin
 		"detail":   detail,
 	})
 	e.emitKernelTrace(agent.ID, run.PID, "not_restarted", cause+": "+detail, event.ID)
+	// An error reading the budget says nothing about the exit, which an
+	// operator may still recover.
+	if cause != "error" {
+		e.closeChain(run.PID, cause+": "+detail)
+	}
+}
+
+// closeChain ends the chain of a retryable exit the policy will not restart:
+// the engine, as its supervisor, says no successor is coming, for this
+// process's chain alone, whoever delegated to it. Its subscriptions go, and
+// its unread mail stays in the mailbox. A process another engine recovered
+// first is refused, since its chain goes on.
+func (e *Engine) closeChain(pid, reason string) {
+	if e.NoChainDelivery {
+		return
+	}
+	if _, err := e.Kernel.Close(pid, reason); err != nil {
+		return
+	}
+	if e.Bus != nil {
+		_ = e.Bus.Unsubscribe(pid, ipc.CauseChainEnded)
+	}
 }
 
 // backoff waits d, or until ctx is done. Engine.Sleep, when set, does the

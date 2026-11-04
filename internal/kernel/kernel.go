@@ -89,6 +89,9 @@ func (k *Kernel) Supersede(pid string, spec ProcessSpec, data map[string]string)
 		if previous.SupersededBy != "" {
 			return fmt.Errorf("%w: %s was superseded by %s", ErrSuperseded, pid, previous.SupersededBy)
 		}
+		if previous.Closed {
+			return fmt.Errorf("%w: %s", ErrChainClosed, pid)
+		}
 		now := k.now().UTC()
 		if successor, err = t.spawn(spec, now); err != nil {
 			return err
@@ -109,6 +112,71 @@ func (k *Kernel) Supersede(pid string, spec ProcessSpec, data map[string]string)
 		return Process{}, err
 	}
 	return successor, nil
+}
+
+// Close ends the chain of pid, an exited process nothing has superseded: no
+// successor will come, and Supersede refuses it from now on. Close and
+// Supersede race in one transaction, so one of them wins. A chain already
+// ended stays as it is, with no new event; a superseded process is refused,
+// since its chain goes on.
+func (k *Kernel) Close(pid, reason string) (Process, error) {
+	var process Process
+	err := k.store.update(func(t *tx) error {
+		var err error
+		process, err = t.process(pid)
+		if err != nil {
+			return err
+		}
+		if process.State != StateExited {
+			return fmt.Errorf("%w: %s is %s; only an exited process can be closed", ErrInvalidTransition, pid, process.State)
+		}
+		if process.SupersededBy != "" {
+			return fmt.Errorf("%w: %s was superseded by %s", ErrSuperseded, pid, process.SupersededBy)
+		}
+		if process.ChainEnded() {
+			return nil
+		}
+		now := k.now().UTC()
+		event := t.appendEvent(pid, "process.closed", map[string]string{"reason": reason}, now)
+		process.Closed = true
+		process.UpdatedAt = now
+		process.LastEventID = event.ID
+		t.putProcess(process)
+		return nil
+	})
+	if err != nil {
+		return Process{}, err
+	}
+	return process, nil
+}
+
+// ChainEnd follows superseded_by from pid to the last process of its chain,
+// in one reading of the table. A walk that meets an unknown process or a
+// process twice ends in ErrBrokenChain, so a damaged table cannot hang it.
+func (k *Kernel) ChainEnd(pid string) (Process, error) {
+	var end Process
+	err := k.store.view(func(t *tx) error {
+		visited := map[string]bool{}
+		for current := pid; ; {
+			process, err := t.process(current)
+			if err != nil && current == pid {
+				return err
+			}
+			if err != nil {
+				return fmt.Errorf("%w: following %s, the successor %s is unknown", ErrBrokenChain, pid, current)
+			}
+			if visited[current] {
+				return fmt.Errorf("%w: following %s, %s comes round again", ErrBrokenChain, pid, current)
+			}
+			visited[current] = true
+			if process.SupersededBy == "" {
+				end = process
+				return nil
+			}
+			current = process.SupersededBy
+		}
+	})
+	return end, err
 }
 
 func (k *Kernel) Transition(pid string, next ProcessState) (Process, error) {

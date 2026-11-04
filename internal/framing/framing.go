@@ -24,8 +24,8 @@ type Opener struct{ text string }
 
 func (o Opener) String() string { return o.text }
 
-// The openers the runtime writes. Undelivered, ArchivedUnread and
-// SubscribedTo are reserved ahead of the notices that will use them.
+// The openers the runtime writes. Undelivered and ArchivedUnread are reserved
+// ahead of the notices that will use them.
 var (
 	PeerHeader        = Opener{"message from "}
 	BudgetSteps       = Opener{"budget steps="}

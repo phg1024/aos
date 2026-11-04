@@ -136,6 +136,11 @@ type Engine struct {
 	// (runtime.AgentRuntime.NoPeerFraming), for replaying a record made
 	// before it. With framing on, run.started says so (peer_framing).
 	NoPeerFraming bool
+	// NoChainDelivery leaves out what chain-owned delivery adds to a run's
+	// record, process.closed, for replaying a record made before it. The
+	// caller sets Bus.NoSubscriptionEvents with it. When it is off,
+	// run.started says so (chain_delivery).
+	NoChainDelivery bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -668,9 +673,6 @@ func (e *Engine) abandon(process kernel.Process, reason string) kernel.ExitStatu
 	status := kernel.ExitStatus{Code: 1, Reason: reason, Retryable: true, Checkpoint: checkpoints[process.PID]}
 	if _, err := e.Kernel.Exit(process.PID, status); err == nil {
 		e.emitKernelTrace(process.Metadata["agent_id"], process.PID, "abandoned", reason, e.lastKernelEvent(process.PID))
-		if e.Bus != nil {
-			_ = e.Bus.Unsubscribe(process.PID)
-		}
 	}
 	return status
 }

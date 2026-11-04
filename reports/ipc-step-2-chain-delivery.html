@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Step 2: Chain Delivery</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; font-weight: 600; }
+    .bad { color: #b91c1c; font-weight: 600; }
+    .warn { color: #b45309; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Step 2: Chain Delivery</h1>
+    <p>This is step 2 of the slice in <code>ipc-design.md</code>, for defects B8c and B11 and gap B2b. Mail and subscriptions now belong to a process chain, not to one process, so a restart no longer costs an agent its subscriptions, and a rollback no longer loses mail.</p>
+    <p><b>Result:</b></p>
+    <ul>
+      <li><span class="good">B2b, B8c and B11 now assert, and pass.</span></li>
+      <li><span class="warn">One existing test is flaky under load, before and after this step:</span> section 4.</li>
+      <li><span class="good">B1, B2a, B3 and B4 still hold:</span> FIFO across Recover, and over 25 trials of 4 senders × 50 messages, 0 lost, 0 duplicated, 0 corrupted, 0 out of order.</li>
+      <li><span class="good">Senders in separate OS processes racing repeated Recovers lose nothing,</span> in every trial of <code>TestForwardingRacesRecover</code>. <span class="warn">That test cannot see a very narrow race on its own: section 4.</span></li>
+      <li><span class="good">Eval's three <code>ca78ad9</code> trials (31/31, 8/8, 9/9) and a v0.1.4 record (7/7) replay identically.</span></li>
+    </ul>
+    <p><b>Still open:</b> <span class="bad">a sender is not told when its mail goes unread (B2c, B1c).</span> Mail in an ended chain stays in the mailbox, with no event of its own, until step 3. Holding a message also makes this silence more common, because a send that used to be refused now succeeds.</p>
+    <p>Steps 3 to 5 are not built. There were no live runs: everything here used scripted agents.</p>
+  </div>
+
+  <h2>1. What Changed</h2>
+  <table>
+    <tr><th>Case</th><th>Before (<code>180d076</code>)</th><th>Now</th></tr>
+    <tr><td>Mail to a superseded PID</td><td class="bad">Refused, although the successor was live</td><td class="good">Forwarded to the chain's last process, with <code>ipc.forwarded</code>. The result says <code>send:to=pid-3 id=msg-1 forwarded_from=pid-1</code></td></tr>
+    <tr><td>Mail to a retryable exit, not yet recovered</td><td class="bad">Refused</td><td class="good">Held, and moved by <code>Transfer</code>. <code>ipc.sent</code> says <code>held</code></td></tr>
+    <tr><td>Mail to an ended chain</td><td>Refused</td><td>Refused, naming where: <code>pid-1, whose chain ended at pid-3 (exit code 1 "crashed", closed)</code></td></tr>
+    <tr><td>Subscription across a Recover (B8c)</td><td class="bad"><code>{}</code> after the exit; a publish after Recover reached 0</td><td class="good">Moved to the successor; a publish in the gap and one after it each arrive once</td></tr>
+    <tr><td>Mail acked after a rollback's target (B11)</td><td class="bad">0 times in the successor's first request, with nothing on the record</td><td class="good">Once, under its original ID, ahead of pending mail; <code>ipc.redelivered</code> with cause <code>rollback</code></td></tr>
+    <tr><td>A subscription made after a rollback's target</td><td class="bad">Dropped by B8c. Once B8c was fixed, the history would not have shown it</td><td class="good">Kept, with a notice: <code>subscribed to: news</code></td></tr>
+    <tr><td>A retryable exit the policy will not restart</td><td>Could still be recovered by anyone</td><td><code>Kernel.Close</code> ends the chain. <code>Recover</code> refuses it</td></tr>
+  </table>
+
+  <h2>2. What Is Enforced, and by What</h2>
+  <table>
+    <tr><th>Rule</th><th>Where</th></tr>
+    <tr><td>One definition of a chain's end</td><td><code>Process.ChainEnded()</code>: exited, not superseded, and closed, non-retryable or code 0</td></tr>
+    <tr><td><code>Close</code> and <code>Supersede</code> exclude each other</td><td>Each is one kernel transaction, so one of them wins</td></tr>
+    <tr><td>A send cannot be lost to a Recover</td><td>Resolve and enqueue happen under the bus lock, and <code>Transfer</code> takes that lock after <code>Supersede</code></td></tr>
+    <tr><td>No deadlock</td><td>The bus's lock, then the kernel's, never the reverse. Nothing under the kernel's lock reaches the bus</td></tr>
+    <tr><td>Send order across a handover</td><td>A mailbox is kept in ID order, and IDs are given out under the bus lock</td></tr>
+    <tr><td>A damaged state directory cannot hang a send</td><td><code>ChainEnd</code> walks with a visited set in one snapshot, and returns <code>ErrBrokenChain</code></td></tr>
+  </table>
+
+  <h2>3. Six Things Book Writer Asked to Check</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Mail still in a closed chain</td><td class="warn">Not deleted, not acked, and not handled. <code>aos inspect</code> lists it as pending. The B2c gap stays open until step 3, and the chapter cannot claim otherwise. <code>TestMailInAClosedChainStaysPending</code></td></tr>
+    <tr><td>Lock order</td><td class="good">Bus, then kernel. A racing send is either forwarded, or held and transferred. See section 4 for how far the test can see</td></tr>
+    <tr><td>Double re-delivery</td><td class="good">A rollback across two successors, a rollback of a rollback, and three crash windows each deliver once. One window needed a design change: section 5</td></tr>
+    <tr><td>A loop or a broken link</td><td class="good">A loop, a self-link and a dangling link each return <code>ErrBrokenChain</code>. A send is refused. A publish serves the others and keeps the broken subscriber. <span class="warn">A link to a real, unrelated process is not detected</span></td></tr>
+    <tr><td>Old records</td><td class="good">They replay identically. A run with no mail, no subscription and no declined restart gets no new event. <span class="warn">A run with a subscribe or a declined restart does get new events, with or without mail,</span> so <code>run.started</code> gained <code>chain_delivery</code>, and older records replay without those events</td></tr>
+    <tr><td>A child's end and its parent</td><td class="good">The engine closes the child's chain, as its supervisor, and only the child's. Section 6 has the table</td></tr>
+  </table>
+
+  <h2>4. Evidence</h2>
+  <pre>go test -count=1 ./internal/framing ./internal/kernel ./internal/ipc ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./internal/inspect ./internal/statedir ./internal/scheduler ./internal/lease ./cmd/aos ./cmd/aos-tui
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B8|B11' -timeout 600s ./bench/ipc/</pre>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Probes B1, B2, B3, B4, B5, B8, B10, B11</td><td class="good">Pass; B4 over 25 trials: lost 0, duplicated 0, corrupted 0, order violations 0</td></tr>
+    <tr><td><code>TestForwardingRacesRecover</code></td><td class="good">3 sender and 1 publisher OS processes against 4 Recovers, 7 trials on the final test: 0 lost, 0 duplicated, 0 out of order, nothing pending; every trial had held and forwarded mail</td></tr>
+    <tr><td>16 mutations, each on a copy, each with its named test</td><td class="good">All 16 fail the named test</td></tr>
+    <tr><td>Mutation: the send resolves outside the bus lock</td><td class="warn">8 trials each: caught at the first trial with a 100 ms delay in the gap, and at the seventh with 30 ms. <b>Missed with 0 and 3 ms.</b> The window is small, and each later Recover sweeps up what an earlier one missed. For a narrow gap, the evidence is the locking argument, not the test</td></tr>
+    <tr><td>Saved records</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
+    <tr><td><code>TestBackoffWaitsAndStopsWithTheRun</code></td><td class="warn"><b>Fails intermittently when the packages run together, and also on <code>a252a14</code>, before this step</b> (1 of 2 runs there; 2 of 2 here). It passes when <code>internal/agentflow</code> runs alone. It shows <code>workers=0 restarts=0</code>: it cancels after a fixed 200 ms, and under load no worker has started. A timing assumption in the test, not fixed here</td></tr>
+  </table>
+
+  <h2>5. Changed From the Design</h2>
+  <ul>
+    <li><b>Re-delivery is decided from the chain's records, not the <code>Rollback</code> option.</b> A successor that dies before its first checkpoint leaves an exit that names the target, so the next Recover looks plain, and the mail would be lost.</li>
+    <li><b>A mailbox stays in ID order.</b> The design had <code>Transfer</code> append, which forwarding makes wrong.</li>
+    <li><b>Artifacts are read before the bus lock,</b> not under it, so there is no new lock order.</li>
+    <li><b><code>chain_delivery</code> on <code>run.started</code>.</b> The design did not foresee that a replay compares events one for one.</li>
+    <li><b><code>Recover</code> refuses a retryable exit with code 0,</b> to agree with decision 2.</li>
+    <li><b><code>not_restarted</code> with cause <code>error</code> does not close.</b> Decision 2 lists three causes, and the hazard says none may leave a chain open. They disagree; I followed the decision.</li>
+  </ul>
+
+  <h2>6. Who Closes a Delegated Child's Chain</h2>
+  <table>
+    <tr><th>How the child ended</th><th>Who closes</th><th>Subscriptions</th><th>Unread mail</th></tr>
+    <tr><td>Exit 0, or non-retryable</td><td>The exit itself ends the chain</td><td>Dropped</td><td>Stays</td></tr>
+    <tr><td>Escalated</td><td>The engine</td><td>Dropped</td><td>Stays</td></tr>
+    <tr><td><code>budget_spent</code>, <code>no_checkpoint</code></td><td>The engine</td><td>Dropped</td><td>Stays</td></tr>
+    <tr><td><code>not_recoverable</code>, another engine recovered it</td><td>Nobody: the chain goes on</td><td>Moved</td><td>Moved</td></tr>
+    <tr><td class="warn">No restart policy; abandoned; returned an error; cancelled; cause <code>error</code></td><td class="warn">Nobody: an operator may still Recover it</td><td class="warn">Kept</td><td class="warn">Held, for good if nobody does</td></tr>
+  </table>
+  <p>A child's end never closes its parent, and a parent's end never closes its child. The last row is decision 2's known limit: a re-delegation starts a new chain, and the old one stays open, with no bound on its mailbox until step 4.</p>
+
+  <h2>7. Changed for Existing Runs</h2>
+  <ul>
+    <li>A send to a retryable exit now succeeds and is held. A workflow that relied on the refusal gets nothing instead, until step 3.</li>
+    <li>A send to a superseded PID succeeds, and its result gains <code>forwarded_from</code>.</li>
+    <li>A retryable exit keeps its subscriptions, so a publisher's <code>count</code> includes it.</li>
+    <li>An exit the engine escalated or declined can no longer be recovered by an operator.</li>
+    <li>In <code>aos-tui</code>, a line to a root that exited retryably goes in the bus, so it survives a failed turn.</li>
+    <li>New events: <code>process.closed</code>, <code>ipc.forwarded</code>, <code>ipc.subscribed</code>, <code>ipc.unsubscribed</code>, <code>ipc.redelivery_failed</code>. <code>aos inspect</code> shows <code>closed</code>.</li>
+  </ul>
+
+  <h2>8. Known Limits</h2>
+  <ul>
+    <li><span class="bad">B2c and B1c: no dead letters and no bounce.</span> Step 3.</li>
+    <li><span class="warn">The <code>no_checkpoint</code> close is not tested through the engine.</span> Every such exit a scripted agent can produce also returns an error, and <code>supervise</code> returns early on one. By reading the code, the branch may be unreachable today.</li>
+    <li><code>Resume</code> of a live, parked process from an older checkpoint still loses mail acked after it. I read this in the code and did not measure it.</li>
+    <li>No <code>aos</code> command closes a chain; <code>Kernel.Close</code> is the API.</li>
+    <li>An exit recorded outside <code>runSession</code> and the engine leaves its subscription entry until the next publish to that topic drops it.</li>
+    <li>A re-delivered message may be acted on twice, and mail sent in rolled-back steps is not recalled. Decision 12 accepts both.</li>
+    <li>Replay still drops mail (decision 11 is Proposed).</li>
+  </ul>
+</body>
+</html>

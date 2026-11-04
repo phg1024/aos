@@ -39,6 +39,14 @@ var ErrReservedEventType = errors.New("event type is reserved for the kernel")
 // be recovered again; recover the successor instead.
 var ErrSuperseded = errors.New("process already has a successor")
 
+// ErrChainClosed: a closed process has no successor to come, so it cannot
+// be recovered.
+var ErrChainClosed = errors.New("process chain is closed")
+
+// ErrBrokenChain: a superseded_by link leads nowhere or back on itself, which
+// only a tampered or damaged state directory can show.
+var ErrBrokenChain = errors.New("process chain is broken")
+
 // ReservedEventPrefix marks the kernel's own lifecycle events.
 const ReservedEventPrefix = "process."
 
@@ -85,9 +93,24 @@ type Process struct {
 	// set by Supersede in the same transaction that spawned it, so an
 	// exited process has at most one successor.
 	SupersededBy string `json:"superseded_by,omitempty"`
+	// Closed says no successor will come for this retryable exit: the
+	// restart policy declined it or an operator closed it. Set by Close.
+	Closed bool `json:"closed,omitempty"`
 	// LastEventID is the event that produced this record; the event log is
 	// authoritative and the table is repaired from events after it.
 	LastEventID string `json:"last_event_id,omitempty"`
+}
+
+// ChainEnded reports whether the process chain ending in p is over: p has
+// exited and nothing can take over from it. It exited with code 0 or for
+// good, or its retryable exit was closed. A retryable exit nobody has closed
+// or recovered leaves the chain open, and a superseded process is not the end
+// of its chain.
+func (p Process) ChainEnded() bool {
+	if p.State != StateExited || p.SupersededBy != "" {
+		return false
+	}
+	return p.ExitStatus == nil || p.Closed || !p.ExitStatus.Retryable || p.ExitStatus.Code == 0
 }
 
 type Event struct {

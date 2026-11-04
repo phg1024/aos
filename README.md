@@ -169,7 +169,16 @@ Delivery is at least once, and exactly once into a session:
 - A run that starts from a checkpoint, after a crash, a cancel or a resume, gets every unacknowledged message again. The session records the IDs it holds (`mailbox_seen`) and drops the repeats.
 - Mailboxes written before acknowledgements load as pending.
 
-Mail to an unknown or exited process is refused. The sender sees a tool error, and the refusal is an `ipc.rejected` event. An exited process loses its subscriptions. `Recover` moves the old process's unacknowledged mail and subscriptions to the new one, along with its leases. Sends, deliveries, redeliveries, acknowledgements and transfers are `ipc.*` kernel events, and `aos inspect` lists mail not yet acknowledged.
+A PID names its process chain, the processes linked by `Recover`, and mail and subscriptions belong to the chain:
+
+- Mail to a superseded PID is forwarded to the chain's last process (`ipc.forwarded`), and the sender's result names it.
+- Mail or a publish to a process that exited retryably is held, and `Recover` moves it, with the old process's unacknowledged mail, subscriptions and leases, to the new one.
+- A chain ends when its last process exits with code 0 or non-retryably, or when its retryable exit is closed (`Kernel.Close`, `process.closed`). The engine closes the exits its restart policy escalates or declines, and `Recover` refuses them. The end of a chain drops its subscriptions.
+- Mail to an unknown process or an ended chain is refused. The sender sees a tool error naming the final exit, and the refusal is an `ipc.rejected` event.
+- **Not built yet:** mail left unread in an ended chain stays in its mailbox, and its sender is not told.
+- A `Recover` from an earlier checkpoint puts back the mail acknowledged after it, under the same IDs (`ipc.redelivered`, cause `rollback`). A subscription that history no longer shows is told in a `subscribed to:` notice.
+
+Sends, deliveries, redeliveries, acknowledgements, transfers and subscriptions are `ipc.*` kernel events, and `aos inspect` lists mail not yet acknowledged.
 
 A message from another agent reaches the model as a header, `message from <agent> (<pid>) [<id>], <n> lines:`, and then its body with every line marked `| `, so no line of it can pass for a turn, a tool result or a note. Its raw body stays in the `mailbox_message` artifact. The system prompt ranks it below the task and the user, so a peer cannot redefine another agent's work. Only the user's own lines speak as the user: `Bus.Send` refuses the sender `user`, and only `aos-tui` calls `Bus.SendAsOperator`.
 

@@ -195,7 +195,7 @@ func resumePoint(k *kernel.Kernel, stateDir, agentID string) (process kernel.Pro
 			current.State = kernel.StateReady
 		}
 		note = "the previous TUI stopped mid-turn; continuing from its last checkpoint"
-	case current.State == kernel.StateExited && (checkpointID == "" || current.ExitStatus == nil || !current.ExitStatus.Retryable):
+	case current.State == kernel.StateExited && (checkpointID == "" || current.ChainEnded()):
 		reason := ""
 		if current.ExitStatus != nil {
 			reason = current.ExitStatus.Reason

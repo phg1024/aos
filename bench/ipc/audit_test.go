@@ -6,9 +6,9 @@
 // subscribe actions, and replay against the code as it is, with scripted
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
-// comment names the contract it was measured against. B5 asserts instead,
-// since its defect is fixed; its comment keeps the result from before. They
-// are kept out of go test ./... by the ipcaudit tag:
+// comment names the contract it was measured against. B2b, B5, B8c and B11
+// assert instead, since those are fixed; their comments keep the result from
+// before. They are kept out of go test ./... by the ipcaudit tag:
 //
 //	go test -tags ipcaudit -count=1 -v ./bench/ipc/
 //
@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -433,21 +434,65 @@ func TestIPCB2ExitedAndSuperseded(t *testing.T) {
 	before, _ := f.bus.Send(lead.PID, worker.PID, "sent before the exit")
 	f.exit(t, worker.PID, kernel.ExitStatus{Code: 1, Reason: "killed", Retryable: true, Checkpoint: checkpoint})
 
-	_, afterExit := f.bus.Send(lead.PID, worker.PID, "sent after the exit")
-	finding(t, "send to an exited (not yet superseded) process: err=%v (ErrRecipientExited=%t); ipc.rejected events on the sender: %d",
-		afterExit, errors.Is(afterExit, ipc.ErrRecipientExited), len(f.events(t, "ipc.rejected")))
+	// B2b asserts, since step 2 of the slice (ipc-design.md, decision 3): a
+	// PID names its chain. Before, at 180d076: a send to the exited PID and to
+	// the superseded PID were both refused with ErrRecipientExited, although
+	// the successor was live.
+	held, err := f.bus.Send(lead.PID, worker.PID, "sent after the exit")
+	if err != nil || held.To != worker.PID {
+		t.Fatalf("B2b: a send to an open chain = %+v, %v", held, err)
+	}
+	finding(t, "send to an exited (not yet superseded) process: held as %s, err=%v; ipc.rejected events on the sender: %d", held.ID, err, len(f.events(t, "ipc.rejected")))
 
-	next := script()
+	var forwarded ipc.Message
+	var forwardErr error
+	next := &backend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		switch call {
+		case 1:
+			forwarded, forwardErr = f.bus.Send(lead.PID, worker.PID, "sent to the old pid after Recover")
+			return say("noted"), nil
+		case 2:
+			return say("noted"), nil
+		}
+		return exitWith(0, false, "done"), nil
+	}}
 	recovered, err := f.agent(next).Recover(context.Background(), worker.PID, "", nil, runtime.RunOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	finding(t, "mail sent before the exit (%s) reaches the successor %s: %d time(s)", before.ID, recovered.PID, strings.Count(text(next.first()), "sent before the exit"))
+	if forwardErr != nil || forwarded.To != recovered.PID {
+		t.Fatalf("B2b: a send to the superseded pid = %+v, %v", forwarded, forwardErr)
+	}
+	events := f.events(t, "ipc.forwarded")
+	if len(events) != 1 || events[0].Data["from_pid"] != worker.PID || events[0].Data["to_pid"] != recovered.PID || events[0].Data["id"] != forwarded.ID {
+		t.Fatalf("B2b: ipc.forwarded = %+v", events)
+	}
+	first := text(next.first())
+	second := text(next.seen[1])
+	for body, history := range map[string]string{"sent before the exit": first, "sent after the exit": first, "sent to the old pid after Recover": second} {
+		if strings.Count(history, body) != 1 {
+			t.Fatalf("B2b: %q in the successor's request %d time(s):\n%s", body, strings.Count(history, body), history)
+		}
+	}
+	finding(t, "mail sent before the exit (%s) and after it (%s) reach the successor %s once each; a send to the superseded pid reaches it as %s, with ipc.forwarded", before.ID, held.ID, recovered.PID, forwarded.ID)
 
-	_, afterSupersede := f.bus.Send(lead.PID, worker.PID, "sent to the old pid after Recover")
-	old, _ := f.kernel.Get(worker.PID)
-	finding(t, "send to the superseded pid after Recover: err=%v; not forwarded to superseded_by=%s; pending for the successor: %d",
-		afterSupersede, old.SupersededBy, len(f.pending(t)[recovered.PID]))
+	// The chain has ended now, and any PID of it refuses, naming where.
+	_, refused := f.bus.Send(lead.PID, worker.PID, "sent after the chain ended")
+	if !errors.Is(refused, ipc.ErrRecipientExited) || !strings.Contains(refused.Error(), recovered.PID) || !strings.Contains(refused.Error(), `"done"`) {
+		t.Fatalf("B2b: a send to an ended chain = %v", refused)
+	}
+	c := newFixture(t)
+	declined := c.spawn(t, "declined")
+	declinedSender := c.spawn(t, "sender")
+	c.exit(t, declined.PID, kernel.ExitStatus{Code: 1, Reason: "killed", Retryable: true})
+	if _, err := c.kernel.Close(declined.PID, "restart intensity exceeded"); err != nil {
+		t.Fatal(err)
+	}
+	_, refused = c.bus.Send(declinedSender.PID, declined.PID, "sent after the close")
+	if !errors.Is(refused, ipc.ErrRecipientExited) || !strings.Contains(refused.Error(), declined.PID) || !strings.Contains(refused.Error(), "closed") {
+		t.Fatalf("B2b: a send to a closed chain = %v", refused)
+	}
+	finding(t, "a send to an ended chain is refused, naming its final exit: %v", refused)
 
 	// Mail left unread by a process that exits for good.
 	g := newFixture(t)
@@ -997,7 +1042,12 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 	finding(t, "publish with no subscribers creates %d messages; a late subscriber sees nothing earlier; with 3 subscribers (one is the publisher) one publish creates %d messages: %s",
 		len(early), len(both), strings.Join(ids, " "))
 
-	// Durable across Recover?
+	// B8c asserts, since step 2 of the slice (ipc-design.md, decision 4): a
+	// subscription belongs to the chain. Before, at 180d076:
+	// subscriptions.json was {} after the exit, since runSession unsubscribed
+	// an exited process before Transfer could move it, and a publish after
+	// Recover reached 0 subscribers, while the successor's history said it
+	// had subscribed.
 	h := newFixture(t)
 	subscriber := h.spawn(t, "subscriber", "message_agent")
 	poster := h.spawn(t, "poster")
@@ -1006,12 +1056,24 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subscriptions, _ := os.ReadFile(filepath.Join(h.root, "bus", "subscriptions.json"))
+	subscriptions := func() string {
+		raw, _ := os.ReadFile(filepath.Join(h.root, "bus", "subscriptions.json"))
+		return strings.Join(strings.Fields(string(raw)), "")
+	}
+	if got := subscriptions(); !strings.Contains(got, subscriber.PID) {
+		t.Fatalf("B8c: after the exit, subscriptions.json = %s", got)
+	}
 	whileExited, _ := h.bus.Publish(poster.PID, "news", "while the subscriber is exited")
+	if len(whileExited) != 1 {
+		t.Fatalf("B8c: a publish in the gap reached %d", len(whileExited))
+	}
+	var after []ipc.Message
+	var afterSubscriptions string
 	listening := &backend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		if call == 1 {
-			after, _ := h.bus.Publish(poster.PID, "news", "after the Recover")
-			finding(t, "a publish after Recover reaches %d subscriber(s); the successor's history says %q", len(after), lastWith(request.History, "subscribe:"))
+			afterSubscriptions = subscriptions()
+			after, _ = h.bus.Publish(poster.PID, "news", "after the Recover")
+			return say("noted"), nil
 		}
 		return exitWith(0, false, "done"), nil
 	}}
@@ -1019,8 +1081,23 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	finding(t, "subscriber %s exited retryably (%q): subscriptions.json then %s; a publish while it was exited reached %d; recovered as %s",
-		subscriber.PID, result.ExitStatus.Reason, strings.Join(strings.Fields(string(subscriptions)), ""), len(whileExited), recovered.PID)
+	if !strings.Contains(afterSubscriptions, recovered.PID) || strings.Contains(afterSubscriptions, subscriber.PID) {
+		t.Fatalf("B8c: after Recover, subscriptions.json = %s", afterSubscriptions)
+	}
+	if len(after) != 1 || after[0].To != recovered.PID {
+		t.Fatalf("B8c: a publish after Recover = %+v", after)
+	}
+	if n := strings.Count(text(listening.first()), "while the subscriber is exited"); n != 1 {
+		t.Fatalf("B8c: the publish in the gap in the successor's first request %d time(s)", n)
+	}
+	if n := strings.Count(text(listening.seen[1]), "after the Recover"); n != 1 {
+		t.Fatalf("B8c: the publish after Recover in its next request %d time(s)", n)
+	}
+	if got := subscriptions(); strings.Contains(got, recovered.PID) {
+		t.Fatalf("B8c: the chain ended with exit 0, and subscriptions.json = %s", got)
+	}
+	finding(t, "subscriber %s exited retryably (%q): its subscription stays; a publish in the gap reached %d, after Recover %d, each once in %s's history; the chain's exit 0 dropped it",
+		subscriber.PID, result.ExitStatus.Reason, len(whileExited), len(after), recovered.PID)
 }
 
 // B9 Replay. Contract (replay-design.md): a replay reproduces the run's
@@ -1147,6 +1224,12 @@ func TestIPCB10Other(t *testing.T) {
 // Recover with RunOptions.Rollback starts from an earlier checkpoint; mail
 // acked into a later one is off the bus, and the earlier session never
 // held it.
+//
+// B11 asserts, since step 2 of the slice (ipc-design.md, decision 12). Before,
+// at 180d076: the message acked into C2 was off the bus and not in C1's
+// session, so the successor's first request had it 0 times. No event named it
+// after the rollback, and its mailbox_message record stayed unread. The
+// subscription was gone too, by B8c.
 func TestIPCB11Rollback(t *testing.T) {
 	f := newFixture(t)
 	worker := f.spawn(t, "worker", "message_agent")
@@ -1165,37 +1248,54 @@ func TestIPCB11Rollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	finding(t, "worker parked at %s, then received %s and subscribed; exited retryably at %s; %s acked (ipc.acked events: %d); pending on the bus for the worker: %d (%s)",
-		first, acked.ID, result.ExitStatus.Checkpoint, acked.ID, len(f.events(t, "ipc.acked")), len(f.pending(t)[worker.PID]), pending.ID)
+	if box := f.pending(t)[worker.PID]; len(box) != 1 || box[0].ID != pending.ID || len(f.events(t, "ipc.acked")) == 0 {
+		t.Fatalf("before the rollback, the bus should hold only the pending message: %+v", box)
+	}
 
-	before := len(f.events(t, ""))
 	next := script()
 	recovered, err := f.agent(next).Recover(context.Background(), worker.PID, first, nil, runtime.RunOptions{Rollback: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	history := text(next.first())
-	finding(t, "Recover with Rollback to %s (the exit names %s): successor %s; its first request holds the acked message %d time(s), the pending one %d time(s); it says it subscribed: %t",
-		first, result.ExitStatus.Checkpoint, recovered.PID, strings.Count(history, "acked after the first checkpoint"), strings.Count(history, "pending at the exit"), strings.Contains(history, "subscribe:"))
-	var mentions []string
-	events, _ := f.kernel.Events()
-	for _, event := range events[before:] {
-		if strings.HasPrefix(event.Type, "ipc.") && strings.Contains(fmt.Sprint(event.Data), acked.ID) {
-			mentions = append(mentions, event.Type)
+	if n := strings.Count(history, "acked after the first checkpoint"); n != 1 {
+		t.Fatalf("the acked message in the first request %d time(s):\n%s", n, history)
+	}
+	if n := strings.Count(history, "pending at the exit"); n != 1 {
+		t.Fatalf("the pending message in the first request %d time(s):\n%s", n, history)
+	}
+	if !strings.Contains(history, "["+acked.ID+"]") {
+		t.Fatalf("the acked message should keep its ID %s:\n%s", acked.ID, history)
+	}
+	if strings.Index(history, "acked after the first checkpoint") > strings.Index(history, "pending at the exit") {
+		t.Fatalf("the re-delivered message should come first:\n%s", history)
+	}
+	var redelivered []kernel.Event
+	for _, event := range f.events(t, "ipc.redelivered") {
+		if event.Data["cause"] == "rollback" {
+			redelivered = append(redelivered, event)
 		}
 	}
-	var record string
-	records, _ := f.store.List()
-	for _, item := range records {
-		if item.Type == "mailbox_message" && item.ProducerPID == worker.PID {
-			record = item.ID
+	if len(redelivered) != 1 || redelivered[0].Data["id"] != acked.ID || redelivered[0].ProcessID != recovered.PID || redelivered[0].Data["record"] == "" {
+		t.Fatalf("ipc.redelivered = %+v", redelivered)
+	}
+	var note runtime.Message
+	for _, message := range next.first() {
+		if strings.HasPrefix(message.Content, "subscribed to:") {
+			note = message
 		}
 	}
-	finding(t, "after the rollback: ipc events naming %s: %v; it is still on record as mailbox_message %s (producer %s), which nothing re-delivers; the loss is not recorded",
-		acked.ID, mentions, record, worker.PID)
-	subscriptions, _ := os.ReadFile(filepath.Join(f.root, "bus", "subscriptions.json"))
-	finding(t, "a subscription made after the rollback target: subscriptions.json is %s (B8c drops it at the exit anyway; once B8c is fixed, the successor would hold a subscription its history does not show)",
-		strings.Join(strings.Fields(string(subscriptions)), ""))
+	if note.Content != "subscribed to: news" || note.Role != "notice" {
+		t.Fatalf("the notice of the kept subscription = %+v\n%s", note, history)
+	}
+	if !slices.Contains(framing.ReservedPrefixes(), "subscribed to:") {
+		t.Fatal("the notice's opener should be reserved")
+	}
+	if left := f.pending(t); len(left) != 0 {
+		t.Fatalf("left pending: %+v", left)
+	}
+	finding(t, "Recover with Rollback to %s (the exit names %s): successor %s has %s once, with its ID, then %s once; ipc.redelivered cause=rollback record=%s; notice %q",
+		first, result.ExitStatus.Checkpoint, recovered.PID, acked.ID, pending.ID, redelivered[0].Data["record"], note.Content)
 }
 
 type agentScripts map[string]*backend

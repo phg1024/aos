@@ -76,7 +76,7 @@ go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING      
       <td>The worker is parked, mail is sent, the worker exits retryably, and it is Recovered.</td>
       <td>The successor gets the mail once (via <code>Transfer</code>).</td>
       <td>Unacked mail moves to the successor</td><td class="holds">holds</td></tr>
-    <tr><td>B2b Mail sent after the exit or Supersede</td>
+    <tr><td>B2b Mail sent after the exit or Supersede (fixed by step 2; this row is the <code>180d076</code> result)</td>
       <td>Send to the exited PID, before and after Recover.</td>
       <td>Refused with <code>ErrRecipientExited</code> both times, with one <code>ipc.rejected</code> event. It is not forwarded along <code>superseded_by</code>, even though the successor is live.</td>
       <td>Refused (holds as written). A sender has no way to reach "whoever continues this process".</td><td class="gap">gap</td></tr>
@@ -135,7 +135,7 @@ go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING      
       <td>Publish before any subscriber exists, then publish with 3 subscribers.</td>
       <td>The first publish creates 0 messages, and a late subscriber sees nothing earlier. The second creates one message per subscriber with its own ID, and the publisher receives its own message.</td>
       <td>One message per live subscriber (<code>Publish</code>)</td><td class="holds">holds</td></tr>
-    <tr><td>B8c Subscription across Recover</td>
+    <tr><td>B8c Subscription across Recover (fixed by step 2; this row is the <code>180d076</code> result)</td>
       <td>An agent subscribes, then exits retryably, and is Recovered.</td>
       <td><code>subscriptions.json</code> is <code>{}</code> after the exit, and a publish after the Recover reaches 0 subscribers. The successor's history still says <code>subscribe:topic=news</code>. The cause: <code>runSession</code> unsubscribes an exited process (<code>runtime.go:586</code>) before <code>Recover</code>'s <code>Transfer</code> could move the subscription.</td>
       <td><code>Transfer</code> moves every unacked message and subscription to the successor.</td><td class="defect">defect</td></tr>
@@ -168,7 +168,7 @@ go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING      
       <td>Code citation</td>
       <td><code>Bus.Send</code> takes <code>from</code> from its caller. The runtime always passes the process's PID, so an agent cannot choose it. aos-tui passes <code>user</code> (<code>cmd/aos-tui/root.go:70</code>), and that message becomes a plain user turn.</td>
       <td>An agent cannot forge its sender field</td><td class="holds">holds</td></tr>
-    <tr><td>B11 Rollback (added 2026-11-03)</td>
+    <tr><td>B11 Rollback (added 2026-11-03; fixed by step 2; this row is the <code>180d076</code> result)</td>
       <td>Park at C1. Receive a message and subscribe. Exit retryably at C2. Recover with <code>Rollback</code> to C1.</td>
       <td>The message was acked into C2, so it is off the bus, and C1 never held it. The successor's first request has it 0 times. No <code>ipc.*</code> event names it after the rollback. Its <code>mailbox_message</code> artifact is still on record. Mail still pending at the exit arrives, through <code>Transfer</code>. The subscription is gone too, but that is B8c.</td>
       <td>At least once (internal/ipc package doc)</td><td class="defect">defect</td></tr>
