@@ -1292,7 +1292,8 @@ go test -tags ipcaudit -count=1 -v -run B5 ./bench/ipc/
   `runtime notice:` passed. A reader sees those lines as the real opener.
   - It now reads a line as a reader does. Control characters (Cc), format
     characters (Cf), variation selectors, other default-ignorable characters
-    such as a Hangul filler, and terminal sequences (`ESC[31m`) are dropped
+    such as a Hangul filler, and terminal sequences (CSI `ESC[31m`, and OSC `ESC]0;t` up to its BEL or
+    string terminator, added after a re-check found it passing) are dropped
     anywhere in the opening. Any Unicode space in front is dropped, and one
     inside reads as a plain space.
   - Only the decision uses that reading. `Escape` still adds one backslash at

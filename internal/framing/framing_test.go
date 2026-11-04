@@ -191,6 +191,20 @@ func TestInvisibleCharactersDoNotHideAnOpener(t *testing.T) {
 	if line := "\x1b[1;31mruntime notice: colored"; Escape("x\n"+line) != "x\n\\"+line {
 		t.Errorf("%q gives %q", line, Escape("x\n"+line))
 	}
+	// So is a terminal title, which shows nothing either, however it ends.
+	for _, line := range []string{"\x1b]0;t\x07runtime notice: x", "\x1b]0;t\x1b\\runtime notice: x", "\x1b]8;;http://x\x07\x1b[1mruntime notice: x"} {
+		turn := "x\n" + line
+		if got := Escape(turn); got != "x\n\\"+line {
+			t.Errorf("%q gives %q", line, got)
+		}
+		if got := Unescape(Escape(turn)); got != turn {
+			t.Errorf("%q: round trip = %q", line, got)
+		}
+	}
+	// One with no end hides nothing, so ordinary text after it stays as it is.
+	if line := "\x1b]0;plain text"; Escape("x\n"+line) != "x\n"+line {
+		t.Errorf("%q gives %q", line, Escape("x\n"+line))
+	}
 	// Mixed with the escape's own backslash, it still round-trips.
 	for _, line := range []string{"\u200b\\runtime notice: x", "\\\u200bruntime notice: x"} {
 		turn := "x\n" + line

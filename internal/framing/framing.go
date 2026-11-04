@@ -133,9 +133,21 @@ func visibleOpening(line string, dropSequences bool) string {
 	return out.String()
 }
 
-// terminalSequence is the length of the ANSI control sequence (ESC [ ... )
-// at the start of s, or 0.
+// terminalSequence is the length of the terminal control sequence at the
+// start of s, or 0: a CSI sequence (ESC [ ...), or an OSC one (ESC ] ...),
+// which runs to a BEL or a string terminator and shows nothing.
 func terminalSequence(s string) int {
+	if strings.HasPrefix(s, "\x1b]") {
+		for i := 2; i < len(s); i++ {
+			switch {
+			case s[i] == '\a':
+				return i + 1
+			case s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '\\':
+				return i + 2
+			}
+		}
+		return 0
+	}
 	if !strings.HasPrefix(s, "\x1b[") {
 		return 0
 	}
