@@ -200,6 +200,108 @@ func TestUnreadableCheckpointDoesNotStopTheSweep(t *testing.T) {
 	}
 }
 
+// A swept message stays on disk whole, however it was sent. For the operator's,
+// nothing else holds it. Repeating a sweep after a crash writes the same file.
+func TestSweepKeepsEveryBody(t *testing.T) {
+	root := t.TempDir()
+	s := openMailState(t, root)
+	worker := s.spawn(t, "worker")
+	if err := s.bus.Subscribe(worker.PID, "news"); err != nil {
+		t.Fatal(err)
+	}
+	sender := s.spawn(t, "lead", "message_agent")
+	backend := &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		switch call {
+		case 1:
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "send", Send: &runtime.SendCall{To: worker.PID, Body: "BODY-SEND"}}}, nil
+		case 2:
+			return toolAction("message_agent", map[string]string{"to": worker.PID, "body": "BODY-MESSAGE-AGENT"}), nil
+		case 3:
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "publish", Publish: &runtime.PublishCall{Topic: "news", Body: "BODY-PUBLISH"}}}, nil
+		}
+		return sayAction("parked"), nil
+	}}
+	if _, err := s.agent(backend).RunWithOptions(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{StopOnAssistantMessage: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.bus.SendAsOperator(worker.PID, "BODY-OPERATOR\nsecond line"); err != nil {
+		t.Fatal(err)
+	}
+	box := s.pendingFor(t, worker.PID)
+	if len(box) != 4 {
+		t.Fatalf("mailbox = %+v", box)
+	}
+	mailboxes := filepath.Join(root, "bus", "mailboxes.json")
+	before, err := os.ReadFile(mailboxes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.kernel.Exit(worker.PID, kernel.ExitStatus{Code: 0, Reason: "done"})
+	check := func() {
+		t.Helper()
+		if err := s.bus.Sweep(); err != nil {
+			t.Fatal(err)
+		}
+		if len(s.pendingFor(t, worker.PID)) != 0 || len(s.events(t, ipc.DeadLetterEvent)) != 4 {
+			t.Fatalf("pending %+v, letters %+v", s.pendingFor(t, worker.PID), s.events(t, ipc.DeadLetterEvent))
+		}
+		for _, message := range box {
+			kept, err := s.bus.DeadLetterBody(message.ID)
+			if err != nil || kept.Body != message.Body || kept.From != message.From || kept.ID != message.ID {
+				t.Fatalf("%s: kept %+v, %v", message.ID, kept, err)
+			}
+		}
+		files, err := os.ReadDir(filepath.Join(root, "bus", "dead_letters"))
+		if err != nil || len(files) != 4 {
+			t.Fatalf("dead_letters holds %v, %v", files, err)
+		}
+	}
+	check()
+	if err := os.WriteFile(mailboxes, before, 0o644); err != nil { // as if the crash came before this write
+		t.Fatal(err)
+	}
+	check()
+	if _, err := s.bus.DeadLetterBody("msg-999999"); !errors.Is(err, ipc.ErrNoDeadLetter) {
+		t.Fatalf("an unknown ID = %v", err)
+	}
+	if _, err := s.bus.DeadLetterBody("../mailboxes"); !errors.Is(err, ipc.ErrNoDeadLetter) {
+		t.Fatalf("an ID outside the directory = %v", err)
+	}
+	// Not in the kernel's log: it is rewritten on every append.
+	if raw, _ := os.ReadFile(filepath.Join(root, "kernel", "events.json")); strings.Contains(string(raw), "BODY-OPERATOR") {
+		t.Fatal("a body reached the kernel's log")
+	}
+}
+
+// A body that cannot be kept stops the sweep before anything is lost: the mail
+// is still there, with no event, and the next sweep finishes.
+func TestSweepThatCannotKeepABodyLeavesTheMail(t *testing.T) {
+	root := t.TempDir()
+	s := openMailState(t, root)
+	worker := s.spawn(t, "worker")
+	s.bus.SendAsOperator(worker.PID, "BODY-OPERATOR")
+	s.kernel.Exit(worker.PID, kernel.ExitStatus{Code: 0, Reason: "done"})
+	blocked := filepath.Join(root, "bus", "dead_letters")
+	if err := os.WriteFile(blocked, []byte("in the way"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bus.Sweep(); err == nil {
+		t.Fatal("the sweep should fail")
+	}
+	if len(s.pendingFor(t, worker.PID)) != 1 || len(s.events(t, ipc.DeadLetterEvent)) != 0 {
+		t.Fatalf("pending %+v, letters %+v", s.pendingFor(t, worker.PID), s.events(t, ipc.DeadLetterEvent))
+	}
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.bus.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if kept, err := s.bus.DeadLetterBody("msg-000001"); err != nil || kept.Body != "BODY-OPERATOR" {
+		t.Fatalf("kept %+v, %v", kept, err)
+	}
+}
+
 // One notice per ended chain, however much mail: 20 IDs, then a count. The
 // next step does not repeat it, and a bounce is not mail.
 func TestOneNoticePerEndedChain(t *testing.T) {
@@ -491,6 +593,33 @@ func TestCrashAfterACallIsNotShown(t *testing.T) {
 	notes := notesIn(history, "undelivered:")
 	if len(notes) != 1 || !strings.Contains(notes[0], "no record that a model read this") || strings.Contains(notes[0], "was not read") {
 		t.Fatalf("notes = %q", notes)
+	}
+}
+
+// A crash is not the only way. Mail read in a call that returned, then a denied
+// tool or a malformed action with no ContinueOnToolError, exits through a path
+// that saves no checkpoint. It reads the same, and says no more than that.
+func TestExitWithNoCheckpointAfterTheCallIsNotShown(t *testing.T) {
+	for name, action := range map[string]runtime.GenerateResult{
+		"denied tool":      toolAction("write_file", map[string]string{"path": "x", "content": "y"}),
+		"malformed action": {Action: runtime.GenerateAction{Type: "send"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := openMailState(t, t.TempDir())
+			worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+			sent, _ := s.bus.Send(lead.PID, worker.PID, "read in a call that returned")
+			backend := &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				return action, nil
+			}}
+			result, _ := s.agent(backend).Run(context.Background(), worker.PID, []runtime.Message{{Role: "user", Content: "go"}})
+			if result.ExitStatus.Code == 0 || result.ExitStatus.Retryable {
+				t.Fatalf("the exit = %+v", result.ExitStatus)
+			}
+			letters := s.events(t, ipc.DeadLetterEvent)
+			if len(letters) != 1 || letters[0].Data["id"] != sent.ID || letters[0].Data["reason"] != ipc.ReasonNotShown {
+				t.Fatalf("ipc.dead_letter = %+v", letters)
+			}
+		})
 	}
 }
 

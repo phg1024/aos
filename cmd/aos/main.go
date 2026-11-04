@@ -105,10 +105,25 @@ func inspectRun(args []string) {
 	fs := flag.NewFlagSet("inspect", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	tail := fs.Int("tail", 20, "number of trailing trace events to show (-1 for all)")
+	deadLetter := fs.String("dead-letter", "", "print this dead letter's message, by its ID, as JSON")
 	positional := parseInterspersed(fs, args)
 	if len(positional) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: aos inspect [--json] [--tail N] <state-dir>  (flags may also follow the path)")
+		fmt.Fprintln(os.Stderr, "usage: aos inspect [--json] [--tail N] [--dead-letter ID] <state-dir>  (flags may also follow the path)")
 		os.Exit(2)
+	}
+	if *deadLetter != "" {
+		message, err := inspect.DeadLetterBody(positional[0], *deadLetter)
+		if err == nil {
+			// JSON, so a body's control characters cannot reach the terminal.
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			err = encoder.Encode(message)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	report, err := inspect.Load(positional[0], *tail)
 	if err != nil {

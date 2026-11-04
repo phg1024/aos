@@ -538,6 +538,9 @@ func TestIPCB2ExitedAndSuperseded(t *testing.T) {
 	if len(report.DeadLetters) != 1 || len(report.Mail) != 0 {
 		t.Fatalf("B2c: inspect lists mail=%+v, dead letters=%+v", report.Mail, report.DeadLetters)
 	}
+	if kept, err := inspect.DeadLetterBody(g.root, stranded.ID); err != nil || kept.Body != "never read" {
+		t.Fatalf("B2c: inspect shows %+v, %v", kept, err)
+	}
 	telling := script()
 	if _, err := g.agent(telling).Run(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
 		t.Fatal(err)

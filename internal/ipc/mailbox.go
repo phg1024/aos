@@ -35,6 +35,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -121,8 +122,8 @@ const DeadLetterEvent = "ipc.dead_letter"
 // Why a message became a dead letter. ReasonUnread: it was never handed to the
 // recipient. ReasonNotShown: it was handed over, and no checkpoint records a
 // model call that returned with its body. That is what is known, not that no
-// model read it: a crash after the call and before the checkpoint reads the
-// same. DetailArchived and DetailRolledBack add why.
+// model read it: any exit with no checkpoint after the call reads the same.
+// DetailArchived and DetailRolledBack add why.
 const (
 	ReasonUnread     = "unread"
 	ReasonNotShown   = "not_shown"
@@ -475,11 +476,13 @@ func (b *Bus) MarkArchived(pid, id, segment string) error {
 }
 
 // Sweep turns the mail left in every chain that has ended into dead letters.
-// Nothing is left in those mailboxes. It reads only the bus and the kernel, so
-// no unreadable checkpoint can stop it, and it can run after any exit, from
-// any process, any number of times: an ID with a dead letter gets no second
-// one. The events of one chain go in one kernel transaction, before the
-// mailbox is written, so a crash between them repeats no event.
+// Nothing is left in those mailboxes, but each message stays on disk whole, for
+// DeadLetterBody: for the operator's, that is the only copy. It reads only the
+// bus and the kernel, so no unreadable checkpoint can stop it, and it can run
+// after any exit, from any process, any number of times: an ID with a dead
+// letter gets no second one. Bodies go first and events next, each before the
+// mailbox is written, so a crash anywhere between them loses nothing and repeats
+// no event. A body that cannot be written leaves the mail where it is.
 func (b *Bus) Sweep() error {
 	if b.kernel == nil {
 		return nil
@@ -512,6 +515,9 @@ func (b *Bus) Sweep() error {
 			}
 			var data []map[string]string
 			for _, message := range t.mailboxes[pid] {
+				if err := b.keepBody(message); err != nil {
+					return err
+				}
 				if !existing[message.ID] {
 					existing[message.ID] = true
 					data = append(data, deadLetter(message, end))
@@ -528,6 +534,43 @@ func (b *Bus) Sweep() error {
 		}
 		return nil
 	})
+}
+
+// ErrNoDeadLetter: no dead letter has this ID.
+var ErrNoDeadLetter = errors.New("no dead letter with this ID")
+
+// DeadLetterBody returns a dead letter's message as it was when swept.
+func (b *Bus) DeadLetterBody(id string) (Message, error) {
+	raw, err := os.ReadFile(b.bodyPath(id))
+	if errors.Is(err, os.ErrNotExist) {
+		return Message{}, fmt.Errorf("%w: %s", ErrNoDeadLetter, id)
+	}
+	if err != nil {
+		return Message{}, err
+	}
+	var message Message
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return Message{}, fmt.Errorf("%s: %w", filepath.Base(b.bodyPath(id)), err)
+	}
+	return message, nil
+}
+
+// keepBody writes message to its own file, replaced atomically, so a sweep
+// repeated after a crash writes the same file again and no more. Not the
+// kernel's log, which is rewritten on every append, and not one shared file,
+// which would be rewritten on every sweep. Nothing prunes them: like the log
+// and the artifacts, they last as long as the state directory.
+func (b *Bus) keepBody(message Message) error {
+	if err := os.MkdirAll(filepath.Dir(b.bodyPath(message.ID)), 0o755); err != nil {
+		return err
+	}
+	return writeJSON(b.bodyPath(message.ID), message)
+}
+
+// bodyPath keeps any ID inside the directory, whatever it holds: one comes from
+// a command line.
+func (b *Bus) bodyPath(id string) string {
+	return filepath.Join(b.root, "dead_letters", url.PathEscape(id)+".json")
 }
 
 // DeadLetters returns the dead letters newer than after, by event number, and

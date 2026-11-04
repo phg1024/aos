@@ -87,6 +87,15 @@ type CutOffCall struct {
 
 // Mailbox counts one recipient's unacknowledged messages: Pending never
 // handed out, Delivered handed out but not yet recorded by a checkpoint.
+// DeadLetterBody returns a dead letter's message, as Bus.Sweep kept it.
+func DeadLetterBody(stateDir, id string) (ipc.Message, error) {
+	bus, err := ipc.New(filepath.Join(stateDir, "bus"), nil)
+	if err != nil {
+		return ipc.Message{}, err
+	}
+	return bus.DeadLetterBody(id)
+}
+
 // DeadLetter is one ipc.dead_letter event.
 type DeadLetter struct {
 	ID     string `json:"id"`
@@ -429,7 +438,7 @@ func (r Report) WriteText(w io.Writer) {
 		}
 	}
 	if len(r.DeadLetters) > 0 {
-		fmt.Fprintln(w, "\ndead letters (no model is known to have read these):")
+		fmt.Fprintln(w, "\ndead letters (no model is known to have read these; aos inspect --dead-letter ID shows one):")
 		for _, letter := range r.DeadLetters {
 			reason := letter.Reason
 			if letter.Detail != "" {

@@ -453,3 +453,77 @@ func TestAFinalExitLeavesMailForTheNewRoot(t *testing.T) {
 		}
 	}
 }
+
+// The path that matters: a line typed as the root exits, then the user quits. A
+// new TUI on that state directory moves it to the new root before any step, so
+// the first request holds it and nothing is swept.
+func TestAStartingTUIMovesAnEndedRootsMail(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	backend := sendsThenExits{bus: f.bus, line: "typed as it exited"}
+	result, err := f.runtime(backend).RunWithOptions(context.Background(), first.PID, []runtime.Message{{Role: "user", Content: "hi"}}, runtime.RunOptions{})
+	if err != nil || result.ExitStatus.Code != 0 {
+		t.Fatalf("run = %+v, %v", result, err)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+
+	root, note, resumed, err := startRoot(f.kernel, f.bus, f.dir, "interactive", f.spawn)
+	if err != nil || !resumed || root.process.PID == first.PID || note == "" {
+		t.Fatalf("startRoot = %+v, %q, %t, %v", root.process, note, resumed, err)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 0 || len(pending[root.process.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+	var history []runtime.Message
+	reading := readingBackend{history: &history}
+	if _, err := runTurn(context.Background(), f.runtime(reading), &root, nil, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, message := range history {
+		found = found || (message.Role == "user" && message.Content == "typed as it exited")
+	}
+	if !found {
+		t.Fatalf("the first request: %+v", history)
+	}
+	events, _ := f.kernel.Events()
+	for _, event := range events {
+		if event.Type == ipc.DeadLetterEvent {
+			t.Fatalf("ipc.dead_letter = %+v", event)
+		}
+	}
+}
+
+// A root still able to go on keeps its mail: startRoot replaces nothing.
+func TestAStartingTUILeavesARecoverableRootsMail(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn()
+	record, err := f.store.CreateJSON("checkpoint", first.PID, runtime.Session{Messages: []runtime.Message{{Role: "user", Content: "hi"}}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.bus.SendAsOperator(first.PID, "held")
+	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true, Checkpoint: record.ID})
+	root, _, resumed, err := startRoot(f.kernel, f.bus, f.dir, "interactive", f.spawn)
+	if err != nil || !resumed || root.process.PID != first.PID {
+		t.Fatalf("startRoot = %+v, %t, %v", root.process, resumed, err)
+	}
+	if old, _ := f.kernel.Get(first.PID); old.Closed {
+		t.Fatalf("it should not be closed: %+v", old)
+	}
+	if pending, _ := f.bus.Pending(); len(pending[first.PID]) != 1 {
+		t.Fatalf("pending = %+v", pending)
+	}
+}
+
+// readingBackend keeps its first request and exits.
+type readingBackend struct{ history *[]runtime.Message }
+
+func (b readingBackend) Generate(_ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	if len(*b.history) == 0 {
+		*b.history = request.History
+	}
+	return exitDone(), nil
+}

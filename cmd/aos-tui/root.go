@@ -53,13 +53,7 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	if err != nil {
 		return "", err
 	}
-	// The new root is a new chain, so nothing will recover this one. Close it
-	// first: mail sent before this is moved below, and mail sent after is
-	// refused, so none is left behind on the old PID.
-	if _, err := k.Close(current.PID, "continued by "+next.PID); err != nil && !errors.Is(err, kernel.ErrSuperseded) {
-		return "", err
-	}
-	if _, err := bus.Transfer(current.PID, next.PID); err != nil {
+	if err := takeOver(k, bus, current.PID, next.PID); err != nil {
 		return "", err
 	}
 	reason := ""
@@ -68,6 +62,37 @@ func continueEnded(k *kernel.Kernel, store *artifact.Store, bus *ipc.Bus, root *
 	}
 	root.process, root.checkpointID, root.seed = next, "", seed
 	return fmt.Sprintf("the agent %s exited (%s); a new agent %s continues its conversation", current.PID, reason, next.PID), nil
+}
+
+// takeOver hands an ended root's mail and subscriptions to the new root that
+// continues its conversation. The new root is a new chain, so nothing will
+// recover the old one. Close it first: mail sent before this is moved below, and
+// mail sent after is refused, so none is left behind on the old PID.
+func takeOver(k *kernel.Kernel, bus *ipc.Bus, old, next string) error {
+	if _, err := k.Close(old, "continued by "+next); err != nil && !errors.Is(err, kernel.ErrSuperseded) {
+		return err
+	}
+	_, err := bus.Transfer(old, next)
+	return err
+}
+
+// startRoot finds the interactive process a TUI starting on stateDir talks to.
+// A root that cannot continue is replaced, and what it left unread goes to the
+// new one before any step, so a line typed just before it exited is read rather
+// than swept.
+func startRoot(k *kernel.Kernel, bus *ipc.Bus, stateDir, agentID string, spawn func() (kernel.Process, error)) (root tuiRoot, note string, resumed bool, err error) {
+	previous, hadRoot := interactiveRoot(stateDir, agentID)
+	root.process, root.checkpointID, root.session, root.seed, note, resumed = resumePoint(k, stateDir, agentID)
+	if root.process.PID != "" {
+		return root, note, resumed, nil
+	}
+	if root.process, err = spawn(); err != nil {
+		return root, note, resumed, err
+	}
+	if hadRoot && resumed {
+		err = takeOver(k, bus, previous.PID, root.process.PID)
+	}
+	return root, note, resumed, err
 }
 
 // deliver puts line in the root's mailbox, where a root that exited

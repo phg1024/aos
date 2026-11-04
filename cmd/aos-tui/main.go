@@ -126,14 +126,9 @@ func runTUI() []string {
 			Delegable:     agent.Delegable,
 		})
 	}
-	var root tuiRoot
-	var resumeNote string
-	var resumed bool
-	root.process, root.checkpointID, root.session, root.seed, resumeNote, resumed = resumePoint(k, stateDir, agent.ID)
-	if root.process.PID == "" {
-		if root.process, err = spawnRoot(); err != nil {
-			fail(err)
-		}
+	root, resumeNote, resumed, err := startRoot(k, bus, stateDir, agent.ID, spawnRoot)
+	if err != nil {
+		fail(err)
 	}
 
 	// The environment's backend is one profile among those /model offers;

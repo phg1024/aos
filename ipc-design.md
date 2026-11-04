@@ -135,9 +135,10 @@ As of step 3. Each line names the probe or test that holds it.
   refuses it, and the engine closes the exits its restart policy declines.
 - **When a chain ends, its unread mail becomes an outcome.** Each message left
   is one `ipc.dead_letter`, once, and nothing stays in the mailbox (B2c, B1c,
-  `TestSweepIsRepeatable`). A sender whose chain is live is told in one line per
-  ended chain, across OS processes (`TestNoticesCrossProcesses`), and a send
-  racing the end is refused or dead-lettered (`TestSendRacesAChainsEnd`).
+  `TestSweepIsRepeatable`). The whole message stays on disk, and `aos inspect
+  --dead-letter ID` shows it (`TestSweepKeepsEveryBody`). A sender whose chain is live
+  is told in one line per ended chain (`TestNoticesCrossProcesses`), and a send racing
+  the end is refused or dead-lettered (`TestSendRacesAChainsEnd`).
 - **Mail stays unacknowledged until a model call has returned with its body**, or
   a `read_memory` result holding it (`TestArchivedMailIsNotShownUntilRead`).
 - **Sender identity is the runtime's, not the agent's** (B10d).
@@ -155,10 +156,13 @@ As of step 3. Each line names the probe or test that holds it.
   result, and hears nothing more. "Every message ends in something the sender can
   see" is not true.
 - **`not_shown` does not mean no model read it.** It means no checkpoint records
-  a call that returned with the body. A crash in between reads the same.
-- **A sweep needs something to run it.** If the last process on a state directory
-  dies between an exit and its sweep, the mail stays pending until the next step of
-  any process there.
+  a call that returned with the body. Any exit with no checkpoint after that call
+  reads the same: a crash, a denied tool, a malformed action.
+- **A sweep needs something to run it.** If a run dies between an exit and its sweep,
+  the mail stays pending until the next run on that state directory takes a step.
+- **Concurrent runs on one state directory.** `aos run` and `aos-tui` hold
+  `statedir.Lock`, so the cross-process tests show what the bus and kernel guarantee,
+  and not something those two commands do.
 - **A publisher and the operator get the event, not a notice.**
 - **No cap on size or on a mailbox** (B6, B8a, step 4), **no request and
   response** (B7, step 5), **no addressing policy** (B10a), **no replay of
@@ -193,33 +197,41 @@ strong:
 
 ### 1. Consumed vs delivered (B1c)
 
-**Decision: a message is consumed once a model call's request has
-included it. An ack still follows the checkpoint, as today. A message
-that its recipient's chain ends without showing to a model becomes a dead
-letter (decision 2).**
+**Decision: a message is consumed once a model call has returned with its body
+in the request. An ack waits for that. A message that its recipient's chain ends
+without consuming becomes a dead letter (decision 2).**
+
+*Changed during step 3. This decision used to keep the ack at the checkpoint and
+add a `MailboxShown` list. Moving the ack is what lets a chain's end be handled from
+the bus alone, with no checkpoint to read.*
 
 - Two separate facts:
-  - **acked:** the message is durable in the receiver's checkpoint, so
-    the bus may drop it;
-  - **consumed:** a model has seen it.
+  - **acked:** the bus may drop the message, because a checkpoint holds it and a
+    model has been shown it;
+  - **consumed:** a model call returned with its body in the request.
 
-  Today the first implies the second, and B1c shows it does not.
-- The session gains `MailboxShown`: the IDs of messages a sent model
-  request contained. It is set after the call's ledger start line is
-  written, so a crash during the call counts as shown. The call may have
-  read it, and the successor continues that history and shows it again
-  anyway.
-- When the recipient's chain ends (defined under decision 2), every ID in
-  `MailboxSeen` but not in `MailboxShown` is dead-lettered with reason
-  `not_shown`.
+  At `180d076` an ack implied neither, and B1c showed it.
+- **The session gains `MailboxUnshown`:** the messages it holds that no call has
+  returned with. It is cleared when a call returns, and recorded at the next
+  checkpoint.
+  - A call that fails or is cancelled shows nothing, since no agent acted on it, and
+    the next call sends the same history.
+  - A checkpoint from before this has no list, so its mail counts as shown.
+- **What the record cannot say.** Any exit with no checkpoint after the call leaves
+  the mail unshown, although a model may have read it. See
+  [What "not_shown" claims](#what-not_shown-claims).
+- **When the recipient's chain ends** (defined under decision 2), everything still in
+  its mailbox is dead-lettered: `unread` if it was never handed over, `not_shown` if it
+  was.
 - **Why not "redeliver until shown":** an exit after a spent budget is
   final in practice. A successor would start with the budget already
   spent (the restart policy refuses `budget_spent`), so it would never
   make the call either. Waiting for a later call would just be a slower
   form of B2c's silence.
-- **Why not move the ack after the model call:** the history is what the
-  successor continues. Acking after the checkpoint keeps the exactly-once
-  argument of B1a/B1b unchanged. The new field only adds a fact to it.
+- **Why the ack can wait:** the exactly-once argument of B1a and B1b does not depend on
+  when the ack comes, since `MailboxSeen` drops a repeat. **The cost:** mail archived and
+  never read stays in the mailbox for the rest of the chain, counts towards the bound in
+  decision 8, and is handed out again at each Resume or Recover.
 - **Compaction: only the body counts.** B6 showed that the default
   compaction can move a mail body into a `memory_segment` before any
   model call, when more history follows it. The request then holds only
@@ -236,6 +248,8 @@ letter (decision 2).**
     goes out in a request.
   - At chain end it is a dead letter with reason `not_shown` and detail
     `archived`.
+  - Its body must arrive whole in one `read_memory` result. A search that quotes it,
+    or a body split across pages, does not count.
   - **Why not count the reference:** "consumed" means the agent could act
     on the content. A pointer only says the content exists. Counting it
     would repeat B1c's mistake one layer down: today an ack stands for
@@ -266,22 +280,27 @@ runtime notice, not a peer message, if its own chain is still live.**
   chain is open, and its mail waits for a successor.
 - **What a dead letter holds:** the message ID, the sender, the reason
   (`unread`, meaning never delivered, or `not_shown`), and the
-  recipient's final exit (code, reason).
+  recipient's final exit (code, reason), in a kernel event. The whole message stays on
+  disk in `bus/dead_letters/`, since for the operator's mail nothing else holds it, and
+  `aos inspect --dead-letter ID` shows it.
 - **The bounce:** a notice to the sender's chain, rendered as a runtime
   line, not as `message from …`:
-  `undelivered: msg-000012 to worker (pid-000004) was not read; it exited
-  code 0 "done"`.
+  `undelivered: msg-000012 to worker (pid-000004): no record that a model
+  read this; its chain ended with exit code 0 "done"`. It says what the record shows
+  and no more (decision 1).
+  - A publisher and the operator get the event, not a notice.
   - Bounces are never bounced.
   - A sender whose chain has ended gets only the event.
 - **Runtime notices are not mail.** Bounces, `ipc.request_failed`
   outcomes (decision 6), `archived unread` (decision 1) and
   `tool_interrupted` are written by the runtime, as `notice` turns in
   the session the runtime is about to run.
-  - **How they travel:** a bounce for a sender in another OS process is
-    read from the kernel log, not the bus. The sender's runtime reads, at
-    each step, the `ipc.dead_letter` and `ipc.request_failed` events
-    naming its chain since its last checkpoint (`NoticesSeen`, by event
-    sequence).
+  - **How they travel:** a bounce is read from the kernel log, not the bus. The
+    sender's runtime reads, at each step, the `ipc.dead_letter` and
+    `ipc.request_failed` events naming its chain newer than `NoticesSeen`, by event
+    sequence. `aos run` and `aos-tui` each hold `statedir.Lock`, so two of them never
+    run on one state directory at once; the sender who hears is in the same run, or a
+    later one, or in another program using these packages directly.
   - **So they are outside the bounds:** they do not count against the
     16 KiB body cap or the mailbox bound (decisions 7 and 8), and they
     cannot be refused for a full mailbox.
@@ -851,7 +870,7 @@ replays. Multi-agent replay stays out of scope.**
   - Replay's bus is a player: at step N it hands out the messages the
     record first holds at step N, in recorded order, and acks them as
     recorded.
-  - With decision 1 in place, `MailboxShown` must match as well.
+  - With decision 1 in place, `MailboxUnshown` must match as well.
 - **Mail the replayed agent sends** is compared against the recorded
   `ipc.sent` events and not delivered, as tool effects are compared.
 - **Multi-agent runs stay refused** (`replay.go:245`). Their mail ordering
@@ -981,7 +1000,7 @@ names its URL.
 | B8c Subscriptions lost on Recover (defect) | 4: chain-owned subscriptions, events | `runtime.runSession`, `ipc.Bus` |
 | B2b No forwarding after Recover | 3: chain addressing, `ipc.forwarded` | `ipc.Bus.deliverable`, `kernel` |
 | B2c Stranded mail is silent | 2: chain end, dead letters, bounces; `Kernel.Close` | `kernel`, `ipc`, `agentflow.supervise` |
-| B1c Acked but never shown | 1: `MailboxShown`; `not_shown` dead letters | `runtime` session |
+| B1c Acked but never shown | 1: `MailboxUnshown`; `not_shown` dead letters | `runtime` session |
 | B7 No request and response | 6: correlation, deadline, `await_reply`, deadlock refusal | `ipc.Message`, `runtime` tools |
 | B6 No size cap; no handle read; `list_artifacts` ungated | 7: 16 KiB cap, handles, `read_artifact`, gated listing | `ipc`, `runtime` tools |
 | B8a No backpressure | 8: 256 messages / 1 MiB, `ErrMailboxFull` | `ipc.Bus` |
@@ -1094,7 +1113,7 @@ probes from logging to asserting.
        during a restart's backoff (decision 4).
      - B11's re-delivery walks the same chain as `Transfer`.
 3. **Sender outcomes and consumption (B2c, B1c).**
-   - `MailboxShown` in the session, counting bodies only. The `archived
+   - `MailboxUnshown` in the session, counting bodies only. The `archived
      unread` notice for compacted mail.
    - At chain end: an `ipc.dead_letter` for each unconsumed message, and
      one bounce notice per sender chain, read from the kernel log
@@ -1170,7 +1189,7 @@ and keeps the `180d076` result in a comment as the "before".
     - `[#8] run:map[…]`;
     - the budget warning;
     - `SYSTEM: …`;
-    - `undelivered: msg-… to … was not read`;
+    - `undelivered: msg-… to …`;
     - `archived unread: …`.
 
     A `user` message still renders as a plain user turn.
@@ -1233,14 +1252,14 @@ and keeps the `180d076` result in a comment as the "before".
   - **B6's compaction case asserts:**
     - when compaction archives a 1 MB message before any call, the
       request carries the `archived unread` notice;
-    - the ID is not in `MailboxShown`;
+    - the ID is still in `MailboxUnshown`;
     - after a `read_memory` that returns the body, it is shown;
     - without that read, the chain's end dead-letters it as
       `not_shown` (`archived`).
   - `TestBouncesAreNotBounced`, `TestOneNoticePerEndedChain` (at most
     20 IDs, then `and N more`), `TestRetryableExitKeepsMailUntilClosed`,
-    and `TestNoticesCrossProcesses` (the sender in another OS process
-    gets the bounce from the kernel log).
+    and `TestNoticesCrossProcesses` (the chain ends in another OS process, and
+    the sender gets the bounce from the kernel log).
 - **Step 4:**
   - **B6 asserts:**
     - the 1 MB and 10 MB sends are refused with `ErrMessageTooLarge`,
@@ -1881,18 +1900,27 @@ it, for every chain at once.**
 |---|---|
 | `runSession` | After a run whose chain ended, unless `KeepMailAtExit` |
 | `Engine.Run` | After the root's exit |
-| **Every step of every process** | Before it reads its notices. This picks up a `Kernel.Close` from the engine (its delegator's next step), an exit recorded elsewhere (the scheduler, `workflow`, `scenario`), and a process that died between its exit and its sweep |
+| **Every step of every process in the run** | Before it reads its notices. This picks up a `Kernel.Close` from the engine (its delegator's next step), an exit recorded elsewhere (the scheduler, `workflow`, `scenario`), and, in a later run, a process that died between its exit and its sweep |
 
-- **`aos-tui` does not sweep at a final exit** (`KeepMailAtExit`), and `continueEnded`
-  moves the mail to the new root. The conversation goes on, so an unread line of the
-  user's reaches a model. If the user quits instead, the next step of any process on
-  that state directory sweeps it.
+- **`aos-tui` does not sweep at a final exit** (`KeepMailAtExit`), and the mail goes to
+  the new root that continues the conversation, so an unread line of the user's reaches a
+  model:
+  - in the same session, `continueEnded` moves it;
+  - **if the user quits first,** a new `aos-tui` on that state directory moves it in
+    `startRoot`, before any step (`TestAStartingTUIMovesAnEndedRootsMail`). At
+    `9a05e8c` it did not: `resumePoint` spawned the new root and left the mail
+    behind, and its first step swept it.
+  - If nobody restarts it, the line stays in the mailbox, and `aos inspect` lists it.
+- **One run at a time.** `aos run` and `aos-tui` each hold `statedir.Lock` for a state
+  directory, so another `aos` process cannot take a step there while one holds it. The
+  bus's guarantees across OS processes hold for any program using these packages, and
+  the tests exercise them that way, but those two commands take turns.
 - **Repeating it doubles nothing.** An ID with a dead letter gets no second one. The
   events of one chain go in one kernel transaction, before the mailbox is written, so
   a crash between them repeats no event, and a reader sees all of a chain's letters or
   none. `TestSweepIsRepeatable` restores the mailbox and the counter as a crash would.
-- **The stated limit:** if nothing on that state directory ever takes another step,
-  the mail stays in the mailbox, and `aos inspect` lists it as pending.
+- **The stated limit:** if no run on that state directory ever takes another step, the
+  mail stays in the mailbox, and `aos inspect` lists it as pending.
 
 ### A send racing a chain's end
 
@@ -1946,11 +1974,17 @@ its sender label through the same `Inline`.
 ### What "not_shown" claims
 
 **The accepted direction of error is that a sender may be told too much, not too
-little.** A crash after a call and before its checkpoint leaves no record that the
-mail was shown. With a successor, it is shown again. With none, it is `not_shown`,
-although a model may have read it. So neither the event nor the notice says it was not
-read. The notice says `no record that a model read this`, which replaces the design's
-`was not read` (`TestCrashAfterACallIsNotShown`).
+little.** Mail counts as shown at the checkpoint after a call that returned. **Any exit
+with no checkpoint after that call leaves no record, and reads as `not_shown`,** although
+a model did read it:
+
+- a crash after the call (`TestCrashAfterACallIsNotShown`);
+- a denied tool with no `ContinueOnToolError`, or a malformed action, which exit through a
+  path that saves no checkpoint (`TestExitWithNoCheckpointAfterTheCallIsNotShown`).
+
+With a successor, it is shown again. With none, it is a dead letter. So neither the event
+nor the notice says it was not read. The notice says `no record that a model read this`,
+which replaces the design's `was not read`.
 
 ### Publish and the operator
 
@@ -2002,12 +2036,12 @@ it is there. Kernel operations on a long log are the cost that was already there
 
 ### Differences from the contract text above
 
-1. **The session lists what is unshown, instead of `MailboxShown`.** A checkpoint from
-   before this step has `MailboxSeen` and nothing else, so `MailboxSeen` minus
-   `MailboxShown` would call all its mail unshown. An empty unshown list treats it as
+1. **The session lists what is unshown, instead of a shown list.** A checkpoint from
+   before this step has `MailboxSeen` and nothing else, so `MailboxSeen` minus a shown
+   list would call all its mail unshown. An empty unshown list treats it as
    shown (`TestACheckpointWithoutTheListCountsAsShown`).
-2. **An ack waits for a model call.** Decision 1 kept the ack at the checkpoint, and said
-   why not to move it: acking after the checkpoint keeps the exactly-once argument of
+2. **An ack waits for a model call.** Decision 1 first kept the ack at the checkpoint, and
+   said why not to move it: acking after the checkpoint keeps the exactly-once argument of
    B1a and B1b. That argument still holds, since a repeat is dropped by `MailboxSeen`.
    Moving it means the sweep needs no checkpoint, which settles the unreadable-checkpoint
    case, and the crash between an exit and its sweep. **The cost:** mail archived and
@@ -2016,8 +2050,8 @@ it is there. Kernel operations on a long log are the cost that was already there
 3. **Shown is set when a call returns, not after its ledger start line.** The runtime
    cannot see the ledger, and nothing is durable before the next checkpoint anyway. A
    call that failed or was cancelled shows nothing, since no agent acted on it, and the
-   next call sends the same history. This differs from the design's "a crash during the
-   call counts as shown": that could never be recorded (`TestOnlyACallThatReturnedShowsMail`).
+   next call sends the same history. The first design's "a crash during the call counts
+   as shown" could never be recorded (`TestOnlyACallThatReturnedShowsMail`).
 4. **The notice's wording:** see above.
 5. **One dead letter per message, one transaction per chain,** through a new
    `Kernel.RecordEvents`. The design did not say.
@@ -2026,6 +2060,44 @@ it is there. Kernel operations on a long log are the cost that was already there
 8. **The design's B6 compaction assertion is a separate test.**
    `TestArchivedMailIsNotShownUntilRead` uses short bodies and a small compaction
    policy instead of a 1 MB body, and B6 still logs.
+
+### Fixed after review of `9a05e8c`
+
+- **A sweep destroyed the only copy of an operator's message.** Peer bodies survive in
+  the sender's `mailbox_message` record, but `SendAsOperator` has no such record, and the
+  event holds only an ID. A line typed as the root exited was deleted when the next step
+  swept it. Before step 3 it stayed pending and visible.
+  - **Now:** every swept message stays on disk whole, in its own file,
+    `bus/dead_letters/<id>.json`, written under the bus lock before its event and before
+    the mailbox is emptied. Not in the kernel's log, which is rewritten on every append.
+  - **`aos inspect --dead-letter ID <state-dir>`** prints it, as JSON, so a body's control
+    characters cannot reach the terminal. The report's dead-letter list names the flag.
+  - **A repeat doubles nothing:** a sweep after a crash writes the same file again
+    (`TestSweepKeepsEveryBody`, all four senders). A body that cannot be written stops
+    the sweep with the mail still in the mailbox and no event
+    (`TestSweepThatCannotKeepABodyLeavesTheMail`).
+  - **What bounds it:** today, nothing. One file per dead letter, whole body, for the life
+    of the state directory, like the kernel's log and the artifacts. Bodies are uncapped
+    until step 4 (B6 sent 10 MB). After step 4, each is at most 16 KiB, and the number of
+    files still grows with the dead letters.
+- **A new `aos-tui` swept the very line that defect lost.** `resumePoint` spawned a new
+  root and left an ended root's mail behind, so the first step swept it. `startRoot` now
+  moves it before any step, with the same `Close`, then `Transfer`, as `continueEnded`
+  (`TestAStartingTUIMovesAnEndedRootsMail`). A root that can still be recovered keeps its
+  mail (`TestAStartingTUILeavesARecoverableRootsMail`).
+- **The doc claimed a race that the commands cannot have.** `aos-tui` holds
+  `statedir.Lock`, so no other `aos` process steps there. I removed the "lazy sweep can
+  race `aos-tui`'s handover" limit, and corrected "any process".
+- **`not_shown` was described as a crash window.** Any exit with no checkpoint after the
+  call reads the same. No code change.
+- **Decisions 1 and 2 said the opposite of what is built.** Their text is now what is
+  true, with a line saying decision 1 changed. Decision 12 named neither `MailboxShown` nor
+  `was not read`, so it did not change. The Recommendation, Gaps and Tests sections use
+  the new name.
+- **Step 5's plan needs a look.** "B7 asserts, with a real concurrent peer" has two
+  OS processes sharing one state directory, each running its own `aos` runtime. `aos run`
+  cannot do that under `statedir.Lock`. The test harness can, as `TestForwardingRacesRecover`
+  does, but the chapter should not imply the commands do. Not changed here.
 
 ### Should the engine close more?
 
@@ -2050,12 +2122,15 @@ is the reason they are retryable at all.
   `TestOnlyACallThatReturnedShowsMail`, `TestCrashAfterACallIsNotShown`,
   `TestRollbackAndDeadLetters`, `TestRollbackRepeatsANoticeOnce`,
   `TestTopicMailGetsTheEventOnly`, `TestOperatorMailGetsTheEventOnly`,
-  `TestACheckpointWithoutTheListCountsAsShown`, `TestSendRacesAChainsEnd`.
+  `TestACheckpointWithoutTheListCountsAsShown`, `TestSendRacesAChainsEnd`,
+  `TestSweepKeepsEveryBody`, `TestSweepThatCannotKeepABodyLeavesTheMail`,
+  `TestExitWithNoCheckpointAfterTheCallIsNotShown`.
 - `agentflow`: `TestParentHearsOfUnreadMailAfterTheDelegateResult`,
   `TestAChainNobodyClosesProducesNoOutcome`.
 - `replay`: `TestSenderOutcomesAddNothingToAPlainRun`,
   `TestReplayOfARecordWithoutSenderOutcomes`.
-- `aos-tui`: `TestAFinalExitLeavesMailForTheNewRoot`.
+- `aos-tui`: `TestAFinalExitLeavesMailForTheNewRoot`,
+  `TestAStartingTUIMovesAnEndedRootsMail`, `TestAStartingTUILeavesARecoverableRootsMail`.
 - `bench/ipc`: B1c and B2c assert, with their `180d076` results in comments;
   `TestIPCB12OutcomeCost` measures.
 
@@ -2070,6 +2145,7 @@ is the reason they are retryable at all.
 | Eval's three `ca78ad9` trials, replayed by this build | 31/31, 8/8, 9/9, each `result: identical`, `the record predates sender outcomes` |
 | A record made by v0.1.4 source, replayed by this build | 7/7, `result: identical` |
 | 18 mutations, each on a copy: a sweep repeating its events; every recorded message acked; a failed call counting as shown; the reason not quoted; the agent ID not kept on the line; topic mail bouncing; one notice per message; no cap on IDs; no sweep at exit; no sweep at a step; a sweep taking an open chain; `read_memory` showing nothing; no archived notice; a rollback leaving no mark; a sender hearing only of its own PID; an old checkpoint reading as unshown; replay ignoring the field; `aos-tui` sweeping at a final exit | Each makes its named test fail. "A failed call counting as shown" passed at first, because the test's path saved no checkpoint, so I changed the test |
+| 5 more for the fixes after review of `9a05e8c`: no body kept; a failed body write ignored; an ID able to leave the directory; a starting `aos-tui` leaving the mail; `Transfer` before `Close` | Each makes its named test fail |
 | A mutation removing the engine's own sweep after `Close` | Passed, since the delegator's next step sweeps anyway. So I removed that sweep as redundant |
 | The send resolving outside the bus lock, 8 trials each | Fails at the first trial with 100 ms in the gap, and the second with 30 ms. **Passes with 0 and 3 ms** |
 
@@ -2084,6 +2160,9 @@ is the reason they are retryable at all.
 - **`Message` and `Session` gain fields** in checkpoints and `mailbox_message` records,
   only for mail.
 - **`run.started` has `sender_outcomes`.** New events: `ipc.dead_letter`.
+- **A new `aos-tui` moves an ended root's mail to its new root,** and closes the old
+  chain, as `continueEnded` does.
+- **`bus/dead_letters/`** holds every swept message.
 
 ### Not covered
 
@@ -2092,12 +2171,10 @@ is the reason they are retryable at all.
   because no single request held it. The error is towards telling the sender. Step 4's
   16 KiB cap makes this rare.
 - **A second notice for one chain is possible** if a stray message is swept later: mail
-  from a `Transfer` that failed, or a sweep in another process after a crash. A notice is
-  per read, not remembered per chain.
+  from a `Transfer` that failed, or a sweep in a later run after a crash. A notice is per
+  read, not remembered per chain.
 - **A sender's notices follow its lineage.** `aos-tui`'s new root is a new chain, so mail
   the old root sent bounces to nobody.
-- **The lazy sweep can race `aos-tui`'s handover:** another process's step, between
-  `continueEnded`'s `Close` and `Transfer`, dead-letters that mail instead of moving it.
-  Its sender is told, and nothing is stranded.
+- **Nothing prunes `bus/dead_letters/`.** See "Fixed after review of `9a05e8c`".
 - **Reading mail is not checked against acting on it.** Shown means a request had the
   body and the call returned, not that the agent did anything with it.
