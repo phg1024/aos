@@ -5,6 +5,21 @@ book session for Chapter 8 (IPC Without Shared Context), and covers the
 audit and the design. Nothing in it is built yet. The commit that adds
 this note changes no production code.
 
+**Revised, 2026-11-03,** after the book session's review of `951c787`:
+
+- **A twelfth decision, rollback and mail.** A rollback loses acked mail,
+  and probe B11 confirms it (defect).
+- **"Shown" is defined under compaction** (decision 1).
+- **Exact line-break and control-character rules** (decision 5).
+- **Tool output is an unframed channel.** It is now weighed, and a
+  reserved-prefix escape is added to step 1 (decision 5).
+- **The operator's grounds rest on the protected state directory**
+  (decision 5).
+- **Runtime notices are not mail.** Replies have reserved room
+  (decisions 2, 6 and 8).
+- **The slice is reordered** to 1, 2, 3, 5, 4.
+- **Erlang's mailbox limit** is restated (decision 8).
+
 ## Why
 
 Chapter 8 asks: **when should supervised processes use mailboxes, events,
@@ -32,7 +47,8 @@ This note does three things:
 
 Every result below comes from running code at `180d076`, not from reading
 it. The probes are Go tests in `bench/ipc/audit_test.go` behind the
-`ipcaudit` build tag, so `go test ./...` does not run them. They use
+`ipcaudit` build tag. B11 was added in the revision; production code is
+unchanged since `180d076`, so it measures the same code, so `go test ./...` does not run them. They use
 scripted agents and helper OS processes (test-binary re-exec), and need
 no model and no phg-gpu:
 
@@ -44,7 +60,7 @@ AOS_IPC_TRIALS=20 go test -tags ipcaudit -count=1 -v -run B4 ./bench/ipc/
 Each probe logs `FINDING:` lines and fails only when it cannot run. A
 comment on each probe names the contract it was measured against. The
 full table, with the observed numbers, is in `reports/ipc-audit.html`. The
-book session re-ran all ten probes independently (50 `FINDING` lines) and
+book session re-ran the first ten probes independently (50 `FINDING` lines) and
 checked the code citations for B5, B8c, B9 and B2b.
 
 **A note on numbering.** Replay's divergence report numbers a call by the
@@ -77,13 +93,15 @@ seq in parentheses where it matters.
 | B10a | An agent sends to a process it has no relation to | Accepted: the only checks are the `message_agent` capability and a live recipient | gap |
 | B10b | A delegated worker mails its parent, then exits | The parent sees the delegate result first, then the earlier mail | note |
 | B10c | Code: `Bus.update` (`ipc/mailbox.go:302`) | Writes `state.json`, `mailboxes.json`, `subscriptions.json` one after another. Each is atomic; the three together are not. IDs are never reused | gap |
+| B11 | Park at C1; receive a message and subscribe; exit retryably at C2; Recover with `Rollback` to C1 | The message was acked into C2, so it is off the bus. C1's session never held it, so the successor's first request has it 0 times. No event names it after the rollback, and nothing records the loss. Its `mailbox_message` artifact is still on record. Mail still pending at the exit arrives, through `Transfer`. The subscription is gone too, but that is B8c; once B8c is fixed, the successor would hold a subscription its history does not show | **defect** |
 | B10d | Code: who sets `From` | The runtime always passes the process's PID; an agent cannot choose it. `aos-tui` passes `user` (`cmd/aos-tui/root.go:70`) | holds |
 
 ### What the book can call Implemented today
 
 - **At-least-once delivery, made exactly-once by the receiver.** The bus
   redelivers until an ack; acks follow checkpoints; the session drops
-  repeats by message ID (B1a, B1b).
+  repeats by message ID (B1a, B1b). This holds for every recovery except
+  a rollback (B11).
 - **Per-sender FIFO, and send order overall**, across Recover (B3).
 - **Consistency across OS processes.** Every operation is a
   read-modify-write under one file lock (B4: 0 of 5,000 lost or
@@ -152,6 +170,29 @@ letter (decision 2).**
 - **Why not move the ack after the model call:** the history is what the
   successor continues. Acking after the checkpoint keeps the exactly-once
   argument of B1a/B1b unchanged. The new field only adds a fact to it.
+- **Compaction: only the body counts.** B6 showed that the default
+  compaction can move a mail body into a `memory_segment` before any
+  model call, when more history follows it. The request then holds only
+  the segment's `MemoryRef`, which today lists tool counts and file paths
+  (`indexedRef`, `runtime/retrieval.go:126`) and says nothing about mail.
+  - A message counts as shown only when a request contained its body,
+    whether in the live history or in a `read_memory` result that
+    returned it.
+  - When compaction archives a message not yet shown, the runtime adds a
+    one-line notice to the live history:
+    `archived unread: msg-000012 from worker (pid-000004), seq 14 in
+    art-000031; read_memory to read it`.
+    The message stays unshown until a `read_memory` result containing it
+    goes out in a request.
+  - At chain end it is a dead letter with reason `not_shown` and detail
+    `archived`.
+  - **Why not count the reference:** "consumed" means the agent could act
+    on the content. A pointer only says the content exists. Counting it
+    would repeat B1c's mistake one layer down: today an ack stands for
+    "seen", and a reference would stand for it next.
+  - **Why compaction may still archive it:** the request has to fit the
+    window. Step 4's cap makes this rare: at most 1 MiB of unread mail
+    can arrive in one step, and that only from a full mailbox.
 
 ### 2. Sender outcomes (B2c, B1c, B7)
 
@@ -180,6 +221,23 @@ runtime notice, not a peer message, if its own chain is still live.**
   code 0 "done"`.
   - Bounces are never bounced.
   - A sender whose chain has ended gets only the event.
+- **Runtime notices are not mail.** Bounces, `ipc.request_failed`
+  outcomes (decision 6), `archived unread` (decision 1) and
+  `tool_interrupted` are written by the runtime, as `notice` turns in
+  the session the runtime is about to run.
+  - **How they travel:** a bounce for a sender in another OS process is
+    read from the kernel log, not the bus. The sender's runtime reads, at
+    each step, the `ipc.dead_letter` and `ipc.request_failed` events
+    naming its chain since its last checkpoint (`NoticesSeen`, by event
+    sequence).
+  - **So they are outside the bounds:** they do not count against the
+    16 KiB body cap or the mailbox bound (decisions 7 and 8), and they
+    cannot be refused for a full mailbox.
+  - **Bounded by construction instead:** one notice per ended chain per
+    sender, listing at most 20 message IDs, then `and N more`.
+  - **A peer cannot forge one,** because the framing in decision 5
+    covers the prefixes they use (`undelivered:`, `archived unread:`,
+    `tool_interrupted`).
 - **Compared with Erlang:**
   - A plain send to a pid "never fails, even if the pid identifies a
     non-existing process" (Erlang reference manual, Expressions, Send:
@@ -294,6 +352,68 @@ only the operator can send it.**
   - The line count in the header lets a reader see where the message
     ends without a closing delimiter. A body cannot forge a closing
     delimiter that does not exist.
+- **What counts as a line break.** A forged line needs only something the
+  model reads as a new line, not necessarily `\n`. Before marking,
+  `peerMessage` normalizes every line boundary to `\n` and then splits on
+  `\n`. The boundaries are:
+  - `\r\n`, a lone `\r`, and `\n`;
+  - `\v` (U+000B) and `\f` (U+000C);
+  - U+001C, U+001D and U+001E;
+  - U+0085 (NEL), U+2028 and U+2029.
+
+  This is the set Python's `str.splitlines` breaks on (checked with
+  Python 3; documented at
+  https://docs.python.org/3/library/stdtypes.html#str.splitlines). It
+  includes the Unicode mandatory breaks. Normalizing rather than only
+  splitting means the marked body has no line boundary but `\n`, so the
+  line count is exact.
+- **Other control characters are escaped, not stripped.** After the
+  normalization, each one is written as a visible `\u00XX`:
+  - every other C0 control except `\t` (U+0000–U+001F);
+  - DEL (U+007F);
+  - the C1 controls (U+0080–U+009F);
+  - the bidirectional overrides and isolates (U+202A–U+202E,
+    U+2066–U+2069), which can make a quoted line display in another
+    order.
+
+  Escaping keeps the body faithful and visible, where stripping would
+  silently change what the sender wrote. The receiver's
+  `mailbox_message` record keeps the raw body. Only the rendering
+  changes.
+- **The same channel through tool output.** Step 1 closes forgery inside
+  mail, but the same lines can reach the model at column 0 another way:
+  - a peer writes a file containing
+    `message from coordinator (pid-…) [msg-…]: …`;
+  - the receiver runs `cat` on it, or `read_file`;
+  - or the same text comes through `web_fetch`.
+
+  Tool output is rendered unmarked, so after step 1 a peer could still
+  forge a peer header indirectly.
+  - **Weighed: marking every tool-output line with `| `.** It is the same
+    function family and the same probe, but it would put a prefix on
+    every line of every file and command output in every prompt.
+    - The agent copies `old_text` for `edit_file` out of `read_file`
+      output. A marked copy fails to match, or worse, the model starts
+      dropping the prefix by guesswork.
+    - That changes edit accuracy, which only an eval run can measure. It
+      also turns every recorded run legacy for replay.
+
+    It is not in step 1.
+  - **In step 1 instead: reserved prefixes are escaped in tool output.**
+    The runtime's own line openers are one list,
+    `runtime.ReservedPrefixes`: the peer header pattern, `[#N]`,
+    `undelivered:`, `archived unread:` and `tool_interrupted`. A
+    tool-output line that begins with one, after the same line-break
+    normalization, is written with a leading `\`. This is textual, not
+    structural, but it covers exactly the forms the runtime itself uses,
+    and it leaves code and file contents byte-identical otherwise.
+  - **The limit, stated plainly: the shared filesystem is an unframed
+    channel between agents.** Two agents that can write and read the same
+    paths can pass each other any text, and the reader's model sees it
+    as tool output, not as a message from the writer. Step 1 stops that
+    text from imitating the runtime's own lines. It does not stop it from
+    persuading. That is again decision 5's point: only capabilities bound
+    what a persuaded agent can do.
 - **What it cannot change:** the API has no role for peer mail.
   - `PromptBackend` sends every non-assistant turn as role `user`
     (`backend.go:84`). The OpenAI-compatible `tool` role needs a
@@ -328,6 +448,45 @@ only the operator can send it.**
   - The only caller that does is `aos-tui`, which holds the state
     directory. Anything that holds the state directory can already
     rewrite every record, so it is the operator.
+  - **This rests on agents not being able to write the state
+    directory.** Otherwise an agent could write `bus/mailboxes.json`
+    itself and forge `user`. They cannot:
+    - `aos run` puts the state directory and its lock in
+      `tools.Runtime.Protected` (`cmd/aos/main.go:400`), and `aos-tui`
+      does the same for its state and sessions directories
+      (`cmd/aos-tui/main.go:193`).
+    - Every file tool refuses a protected path for reading and for
+      writing (`DeniedProtected`, `tools/runtime.go:166` and `:177`),
+      even where a mount and scope would grant it.
+    - A confined `run` gets the protected paths as `Hidden` in its
+      sandbox policy (`tools/confine.go:54`).
+    - Paths are compared by what they name, not how they are spelled
+      (`capability.within`, `capability/policy.go:235`, called through
+      `Within`): case variants on a case-insensitive volume,
+      normalization variants, and firmlinks or bind mounts of a
+      different depth all resolve to the same file.
+    - **Tests:**
+      - `TestCaseVariantsGetTheSameAnswer` (`tools/casefold_test.go`):
+        `.aos-state`, `.AOS-STATE` and `.Aos-State`;
+      - `TestEvaluatorComparesWhatPathsName` and
+        `TestAttenuationComparesWhatPathsName`
+        (`capability/casefold_test.go`);
+      - `TestConfinedRunCannotLeaveItsScopes`
+        (`tools/sandbox_darwin_test.go`): a confined `echo >` into the
+        state directory.
+
+      They all probe `kernel/events.json`. None names the bus directory,
+      so step 1 adds one: `write_file`, `edit_file` and a confined `run`
+      on `bus/mailboxes.json`, in each case variant, are refused with
+      `DeniedProtected`, and the file is unchanged.
+  - **Where the grounds do not hold:** an agent with `unconfined_run`
+    runs commands outside the OS sandbox (`tools/confine.go:21`), so it
+    can write the state directory and send as `user`. `unconfined_run`
+    is for agents isolated some other way, such as a disposable
+    container. Inside that container the agent has the operator's reach
+    over the state directory. The chapter should say so: operator mail is
+    trustworthy only as far as the state directory is out of the agents'
+    reach.
 
   The slice makes this structural rather than incidental: `Bus.Send`
   refuses the reserved sender `user`. A separate `Bus.SendAsOperator` is
@@ -390,6 +549,21 @@ is refused.**
   - `await_reply` is for peers that run on their own: another `aos run`
     or a TUI session on the same state directory, or a sibling the engine
     runs concurrently once it can.
+- **A reply always has room.** The reply comes from the replier, and a
+  full asker's mailbox must not lose it, nor leave the asker to time out
+  on an answer that was sent.
+  - So room is reserved when the request is sent: a reply to an open
+    request is admitted beyond the mailbox bound (decision 8).
+  - What bounds replies instead is the number of open requests. A chain
+    may have at most 16 open requests at once. A 17th is refused with
+    `ErrTooManyRequests`, so the reserve is at most 16 messages of 16
+    KiB.
+  - This is credit-based flow control: the asker pays for the reply's
+    room when it asks.
+  - **A reply that comes too late** (the request timed out or was
+    answered) is refused to the replier with `ErrRequestClosed`, recorded
+    as `ipc.rejected` with reason `request_closed`. The asker already has
+    its outcome, `timeout`, and never gets a second one.
 - **`await_agent`** stays a non-blocking state read. Its description says
   so.
 
@@ -412,6 +586,7 @@ capabilities. `list_artifacts` is gated to the same set.**
       should be well under one tool result.
     - With decision 8's mailbox bound, the cap bounds the bus file
       (decision 10).
+  - Runtime notices are not mail and are not capped by it (decision 2).
     - The sender's own action turn holds the body, so its checkpoint grows
       by the same amount (B6: 21 MB for 10 MB).
 - **Handles:**
@@ -466,9 +641,24 @@ them.**
     a handle.
 - **Publish:** delivers to the subscribers with room. Its result lists
   the ones it skipped, and each skip is an `ipc.rejected`.
+- **Exempt from the bound:**
+  - runtime notices, which are not mail (decision 2);
+  - replies to open requests, whose room was reserved when the request
+    was sent (decision 6).
 - **Prior art:**
-  - Erlang's manuals state no limit on a process's message queue
+  - Erlang's manuals give no bound on a process's message queue
     (https://www.erlang.org/doc/system/ref_man_processes.html).
+    - The only related knob is `max_heap_size`
+      (https://www.erlang.org/doc/apps/erts/erlang.html#process_flag_max_heap_size).
+      "The size check is only done when a garbage collection is
+      triggered."
+    - It counts messages that are part of the heap, which means the
+      queue only with `message_queue_data` set to `on_heap`.
+    - With `kill` (default `true`) the process gets an untrappable
+      `kill` exit.
+    - That is a memory kill switch for the receiver, not backpressure on
+      the sender: the sender is never told, and the queue is lost with
+      the process. AOS's refusal is the opposite.
   - In Akka the bound is opt-in. The default mailbox,
     `SingleConsumerOnlyUnboundedMailbox`, is unbounded
     (https://doc.akka.io/libraries/akka-core/current/typed/mailboxes.html).
@@ -563,6 +753,62 @@ replays. Multi-agent replay stays out of scope.**
   replayable, since their input arrives as mail from `user`. The other is
   that they are multi-turn (`replay-design.md`, "As built", Limits).
 
+### 12. Rollback and mail (B11, a defect)
+
+**Decision: a rollback re-delivers the mail its target checkpoint never
+held. The messages come from their durable `mailbox_message` artifacts,
+keep their original IDs, and each is recorded as `ipc.redelivered` with
+cause `rollback`. Subscriptions are kept, and the successor is told
+which it holds.**
+
+- **The defect.**
+  - `Recover` with `RunOptions.Rollback` starts from an earlier
+    checkpoint C1 (`runtime.go:486`).
+  - Mail delivered after C1 and acked into a later checkpoint C2 is off
+    the bus, because `Bus.Ack` removes it. C1's session never held it, so
+    the successor never sees it.
+  - Nothing records the loss. B11: 0 times in the successor's first
+    request, no `ipc.*` event naming it after the rollback, and its
+    `mailbox_message` artifact still on record.
+- **What is re-delivered:** every message whose ID is in the `MailboxSeen`
+  of the chain's latest checkpoint and not in the target's. The latest
+  checkpoint is the one the exit names, or a later successor's, if the
+  chain went further.
+  - Each is put back in the successor's mailbox, from its
+    `mailbox_message` record, under the bus lock, before the successor's
+    first step. It goes in recorded order, ahead of mail already pending.
+  - The kept ID means a message is still seen once. C1's `MailboxSeen`
+    lacks it, so the successor takes it. Anything that already holds it
+    drops the repeat.
+- **Why re-deliver rather than dead-letter:**
+  - Mail is input from outside the process. A rollback asks to repeat
+    the process's own steps, not to un-receive what others sent it.
+  - The sender was told nothing, and believes the message delivered.
+  - Re-delivery keeps at-least-once, which is the bus's one promise.
+  - Dead-lettering with reason `rolled_back` and a bounce would be honest
+    but would push the loss onto the sender, which has no reason to send
+    again.
+- **The cost:** a re-delivered message may be acted on twice: once by the
+  rolled-back steps, and again by the successor. That is the same
+  repeat a rollback already accepts for tool effects. The
+  `process.superseded` event records `rollback_from`, and each
+  `ipc.redelivered` names the original delivery.
+- **Mail the process sent in the rolled-back steps** has left and is not
+  recalled. The repeated steps may send it again under new IDs, so
+  receivers see two messages. The chapter should state this as rollback's
+  outgoing at-least-once, like a repeated tool call.
+- **Subscriptions made after C1.** Under decision 4 a subscription is
+  chain state, not history, so a rollback keeps the chain's current
+  subscriptions. Its history no longer shows the subscribe, so the
+  successor's first step gets a notice: `subscribed to: news`.
+  - **Why keep and tell, rather than revert:** reverting would need the
+    subscription set in every checkpoint. It would also drop publishes
+    the rolled-back steps had asked for. A notice makes the history true
+    at the cost of one line.
+- **In the slice:** step 2, which owns chain delivery. Re-delivery uses
+  the same chain walk as `Transfer`, and step 2 is where subscriptions
+  become chain state.
+
 ### Not a guarantee: mail versus delegate results (B10b)
 
 Mail and delegate results are separate channels, with no order between
@@ -580,7 +826,8 @@ names its URL.
   - asynchronous send that never fails;
   - monitors and `'DOWN'`, with `noproc`;
   - `gen_server:call` with a reference and a 5 s default timeout;
-  - no stated mailbox bound.
+  - no stated mailbox bound; `max_heap_size` kills a process that
+    grows too large, which is not backpressure.
 
   AOS takes the call shape and the per-call timeout. It fails a send to
   an ended chain synchronously, rather than silently. It bounds mailboxes
@@ -631,6 +878,8 @@ names its URL.
 | B10a Any-to-any | 9: `MessageTargets`, attenuated; reply right | `capability`, `agentflow` spec, `runtime` |
 | B10c Three files, not one write | 10: one `bus.json` | `ipc.Bus.update` |
 | B9 Replay drops mail from outside the run | 11: a replay bus that plays the record | `replay` |
+| B11 Rollback loses acked mail (defect) | 12: re-deliver from `mailbox_message`, `ipc.redelivered` (`rollback`); subscription notice | `runtime.Recover`, `ipc.Bus` |
+| Tool output carries forged runtime lines | 5: reserved prefixes escaped; the shared filesystem stated as unframed | `runtime` tool-result rendering |
 
 ## Hazards
 
@@ -651,8 +900,9 @@ names its URL.
   ended chain should be one notice listing the IDs. Bounces are never
   bounced.
 - **Framing changes every prompt with mail.**
-  - The rendered peer turn changes, so a recorded run with mail no longer
-    produces the same request. `run.started` records `peer_framing: v2`,
+  - The rendered peer turn changes, and so does tool output with a line
+    that starts with a reserved prefix. A recorded run with either no
+    longer produces the same request. `run.started` records `peer_framing: v2`,
     and a record without it is replayed with the old rendering
     (`legacy_peer_framing`), as `NoToolIntents` and `NoLeaseFencing` did.
   - Prompt caching is unaffected beyond the new turns, because the change
@@ -674,75 +924,118 @@ names its URL.
     written before checkpoints held it, is refused as not replayable
     rather than guessed.
 
+- **The shared filesystem is an unframed channel.** Two agents that
+  share writable paths can pass each other any text, which reaches the
+  reader as tool output. Step 1 escapes the runtime's reserved prefixes
+  there. It does not mark the rest, and it cannot stop the text from
+  persuading. Capabilities are the only bound on what follows (decision
+  5).
+- **Normalization must match the model's tokenizer, not only Go's.** The
+  line-break set is Python's `splitlines` set, which includes the Unicode
+  mandatory breaks. A model trained on some other convention could still
+  read a character outside the set as a break. The escape of every other
+  control character narrows this to printable characters, which cannot
+  open a line.
+- **Reserved reply room is a second bound to keep honest.** 16 open
+  requests of at most 16 KiB each can put up to 256 KiB over a full
+  mailbox. That is inside the bus-size argument of decision 10, as long
+  as `ErrTooManyRequests` is checked under the bus lock with the send.
+- **Rollback re-delivery reads artifacts under the bus lock.** The
+  `mailbox_message` records are immutable once written, so reading them
+  inside the bus transaction adds no lock order beyond the existing one
+  (the kernel's lock inside the bus's).
+
 ## Recommendation: the Smallest Slice
 
 In order. Each step is one commit with its tests, and each flips named
 probes from logging to asserting.
 
 1. **Structural framing (B5, a defect).**
-   - Header line plus `| `-marked body in `peerMessage`; header carries
-     the line count.
-   - `Bus.Send` refuses the sender `user`; `Bus.SendAsOperator` for
+   - In `peerMessage`: a header line with the line count, then every
+     body line marked `| `, after line-break normalization and the
+     control-character escape.
+   - Tool output: reserved prefixes (`runtime.ReservedPrefixes`) are
+     escaped at line start.
+   - `Bus.Send` refuses the sender `user`; `Bus.SendAsOperator` is for
      `aos-tui`.
-   - `peer_framing` on `run.started`, legacy rendering for older records.
-   - *First because:* it is a defect, it is local to two functions, and
-     it touches only how mail reads. Nothing else in the slice depends on
-     it, and nothing in it depends on the rest.
-2. **Chain-owned delivery (B8c, a defect, and B2b).**
+   - A test that the bus directory is protected from `write_file`,
+     `edit_file` and a confined `run`, in each case variant.
+   - `peer_framing` on `run.started`, with the legacy rendering for older
+     records.
+   - *First because:* it is a defect, it is local to the rendering and
+     to `Bus.Send`, and nothing else depends on it.
+2. **Chain-owned delivery (B8c and B11, defects, and B2b).**
    - `Kernel.Close` and `Process.Closed`. agentflow closes the exits it
      escalates or declines.
    - `deliverable` accepts an open chain and follows `superseded_by`
      (`ipc.forwarded`).
    - Subscriptions are dropped at chain end instead of at exit;
-     `ipc.subscribed` / `ipc.unsubscribed` events.
-   - *Why B2b rides with B8c:* without holding mail for an open chain,
-     fixing B8c's unsubscribe still loses every publish made during a
-     restart's backoff (decision 4). The defect fix and chain addressing
-     are the same rule.
+     `ipc.subscribed` and `ipc.unsubscribed` events.
+   - Rollback re-delivers from `mailbox_message` (`ipc.redelivered`,
+     cause `rollback`), and the subscription notice.
+   - *Why these go together:* all three are one rule, that mail and
+     subscriptions belong to the chain.
+     - Fixing B8c's unsubscribe alone still loses every publish made
+       during a restart's backoff (decision 4).
+     - B11's re-delivery walks the same chain as `Transfer`.
 3. **Sender outcomes and consumption (B2c, B1c).**
-   - `MailboxShown` in the session.
-   - At chain end: `ipc.dead_letter` per unconsumed message, one bounce
-     notice per sender chain.
-   - *After step 2* because "chain end" is step 2's `Close`.
-4. **Request and response (B7).**
-   - `correlation_id`, `reply_to`, `deadline` on `ipc.Message`.
-   - `message_agent` gains `expect_reply` and `reply_to`; a new
-     `await_reply` with the four outcomes.
-   - `ipc.request_failed` at the replier's chain end, which reuses step
-     3's hook.
-   - The deadlock refusal.
-5. **Bounds and handles (B6, B8a).**
-   - The 16 KiB cap and the 256-message / 1 MiB mailbox bound at the bus.
+   - `MailboxShown` in the session, counting bodies only. The `archived
+     unread` notice for compacted mail.
+   - At chain end: an `ipc.dead_letter` for each unconsumed message, and
+     one bounce notice per sender chain, read from the kernel log
+     (`NoticesSeen`).
+   - *After step 2,* because "chain end" is step 2's `Close`.
+4. **Bounds and handles (B6, B8a).**
+   - The 16 KiB cap and the 256-message / 1 MiB mailbox bound, at the
+     bus. Runtime notices are exempt.
    - `Message.Artifacts`, `read_artifact`, and the gated
      `list_artifacts`.
    - *Why the cap waits for the handle:* a cap without a way to send the
      data that no longer fits is a regression. The mailbox bound is the
      same check in the same place, so it rides along.
+5. **Request and response (B7).** It is last, and can be cut.
+   - `correlation_id`, `reply_to` and `deadline` on `ipc.Message`.
+     `message_agent` gains `expect_reply` and `reply_to`.
+   - A new `await_reply` with its four outcomes.
+   - Reserved reply room, the 16-open-request limit, and
+     `ErrRequestClosed`.
+   - `ipc.request_failed` at the replier's chain end, which reuses step
+     3's hook.
+   - The deadlock refusal.
 
 Everything else stays **Proposed**:
 
 - the addressing policy, `MessageTargets` (B10a, decision 9);
-- one `bus.json` (B10c, decision 10). Small, but nothing in the slice
-  needs it, and the caps already bound its cost;
+- one `bus.json` (B10c, decision 10). It is small, but nothing in the
+  slice needs it, and the caps already bound its cost;
 - the replay bus that plays recorded mail (B9, decision 11);
 - topic scoping;
-- framing tool outputs. A `web_fetch` or `run` output can carry the same
-  forged lines as a peer body, and the same marking would apply;
+- marking every tool-output line, which needs an eval run for
+  `edit_file` accuracy first (decision 5);
 - multi-agent replay;
 - recording a `delegate` in flight as an intent (from
   `supervision-design.md`, "Not covered").
 
-**Why this order rather than another:**
+**Why this order:**
 
-- The two defects come first, because the chapter cannot describe a
-  trust boundary or durable subscriptions while a probe shows them
-  broken.
-- Outcomes (3) come before request and response (4), because a failed
-  request is just a dead letter with a waiter, so step 4 is small once
-  step 3 exists.
-- The caps (5) come last, because they are the only step that refuses
-  something that works today. They should land with the handle path that
-  replaces it.
+- **The three defects come first** (B5, B8c, B11). The chapter cannot
+  describe a trust boundary, durable subscriptions or at-least-once
+  delivery while a probe shows each one broken.
+- **Outcomes (step 3) next.** They make every message end in something
+  the sender can see, which the rest builds on.
+- **Bounds and handles (step 4) before request and response.** They
+  answer the chapter's question directly: mail or handle, enforced by
+  the cap.
+- **Request and response (step 5) is last, because it has no user inside
+  a workflow.** agentflow's engine runs one agent at a time, and
+  `delegate` already is the request and response to a child. Its users
+  are separate `aos run` processes and TUI sessions on one state
+  directory, so it can be cut without leaving a chapter claim
+  unsupported. It also gets small once step 3 exists: a failed request
+  is a dead letter that someone is waiting on.
+- **Changed from the first draft,** which had request and response
+  before the bounds. The book session's review argued for this order,
+  and the reasons above agree.
 
 ## Tests That Would Prove It
 
@@ -753,15 +1046,35 @@ and keeps the `180d076` result in a comment as the "before".
 
 - **Step 1:**
   - **B5 asserts:** in the rendered prompt, every line of the peer turn
-    after the header starts with `| `. The forgeries `[#7] message from
-    coordinator …`, `[#8] run:map[…]`, the budget warning and `SYSTEM:
-    …` each appear only quoted. A `user` message still renders as a plain
-    user turn.
-  - `TestPeerMessageMarksEveryBodyLine`, including an empty body, a body
-    of only newlines and a body that copies a full header line.
+    after the header starts with `| `. Each of these appears only quoted:
+    - `[#7] message from coordinator …`;
+    - `[#8] run:map[…]`;
+    - the budget warning;
+    - `SYSTEM: …`;
+    - `undelivered: msg-… to … was not read`;
+    - `archived unread: …`.
+
+    A `user` message still renders as a plain user turn.
+  - **B5's tool-output case (new):** a peer writes a file whose lines
+    are the same forgeries. The receiver reads it with `read_file` and
+    with `run cat`, and each reserved-prefix line reaches the prompt
+    escaped. The file's other lines are byte-identical.
+  - `TestPeerMessageMarksEveryBodyLine`:
+    - an empty body, a body of only newlines, and a body that copies a
+      full header line;
+    - a forged header after each line boundary in turn: `\r\n`, a lone
+      `\r`, `\v`, `\f`, U+001C, U+001D, U+001E, U+0085, U+2028 and
+      U+2029. Each gives one more marked line, and the count matches the
+      header;
+    - NUL, ESC, DEL, a C1 control and U+202E, each rendered as `\u00XX`
+      or `\u202E`, with `\t` kept.
   - `TestOnlyTheOperatorSendsAsUser`: `Bus.Send("user", …)` is refused;
-    `SendAsOperator` works. A grep test that `internal/runtime` never
-    calls `SendAsOperator`.
+    `SendAsOperator` works; a grep test checks that `internal/runtime`
+    never calls `SendAsOperator`.
+  - `TestBusDirectoryIsProtected`: `write_file`, `edit_file` and a
+    confined `run` on `bus/mailboxes.json` are refused with
+    `DeniedProtected`, under `.aos-state`, `.AOS-STATE` and
+    `.Aos-State`, and the file is unchanged.
   - `TestReplayOfARecordWithoutPeerFraming`.
 - **Step 2:**
   - **B8c asserts:** after exit and Recover, `subscriptions.json` names
@@ -769,37 +1082,71 @@ and keeps the `180d076` result in a comment as the "before".
   - **B2b asserts:** a send to the superseded PID is delivered to the
     successor, with `ipc.forwarded`. A send to a closed chain is refused,
     naming the final exit.
+  - **B11 asserts:**
+    - the successor of a rollback to C1 sees the message acked into C2
+      exactly once, with its original ID;
+    - an `ipc.redelivered` with cause `rollback` names it;
+    - the pending message still arrives once, after it;
+    - the first step's notice lists the subscription made after C1.
   - `TestPublishDuringBackoffIsHeld`: a publish between a retryable exit
     and its Recover reaches the successor.
-  - `TestForwardingRacesRecover`: N OS processes send while one recovers.
-    Every message reaches exactly one live process (B4's harness).
+  - `TestForwardingRacesRecover`: N OS processes send while one
+    recovers. Every message reaches exactly one live process (B4's
+    harness).
   - `TestClosedChainDropsSubscriptions`.
+  - `TestRollbackAcrossTwoSuccessors`: the latest checkpoint is on a
+    later successor; mail seen there is re-delivered too, and none twice.
 - **Step 3:**
   - **B1c asserts:** the message is an `ipc.dead_letter` with reason
     `not_shown`, and the sender's next request carries the
     `undelivered:` notice.
-  - **B2c asserts:** the same with reason `unread`, and nothing is left
+  - **B2c asserts:** the same, with reason `unread`, and nothing is left
     pending.
-  - `TestBouncesAreNotBounced`, `TestOneNoticePerEndedChain`, and
-    `TestRetryableExitKeepsMailUntilClosed`.
+  - **B6's compaction case asserts:**
+    - when compaction archives a 1 MB message before any call, the
+      request carries the `archived unread` notice;
+    - the ID is not in `MailboxShown`;
+    - after a `read_memory` that returns the body, it is shown;
+    - without that read, the chain's end dead-letters it as
+      `not_shown` (`archived`).
+  - `TestBouncesAreNotBounced`, `TestOneNoticePerEndedChain` (at most
+    20 IDs, then `and N more`), `TestRetryableExitKeepsMailUntilClosed`,
+    and `TestNoticesCrossProcesses` (the sender in another OS process
+    gets the bounce from the kernel log).
 - **Step 4:**
-  - **B7 asserts:** a reply before the deadline returns `reply`. No reply
-    gives `timeout` at the deadline, on the kernel clock. The child
-    exiting without answering gives `no_reply` with its exit, and an
-    unread request gives `recipient_ended`.
+  - **B6 asserts:**
+    - the 1 MB and 10 MB sends are refused with `ErrMessageTooLarge`,
+      naming the remedy;
+    - the same data sent as a handle is readable by the receiver
+      through `read_artifact`, in 64 KiB pages;
+    - an unrelated process's `read_artifact` and `list_artifacts` do
+      not see it.
+  - **B8a asserts:** the 257th unread message is refused with
+    `ErrMailboxFull`, and a publish reports the skipped subscriber. A
+    runtime notice to the full mailbox's owner still arrives.
+  - `TestHandleNeedsTheSenderToReadIt`: a sender cannot pass a handle
+    it cannot read.
+  - `TestRuntimeRecordsAreNotReadable`: a checkpoint ID is refused.
+- **Step 5:**
+  - **B7 asserts, with a real concurrent peer:** two OS processes share
+    one state directory, each running its own `aos` runtime (test-binary
+    re-exec, as B4 and B1a do). The asker sends with `expect_reply` and
+    blocks in `await_reply`. The outcomes:
+    - the replier's answer before the deadline returns `reply`;
+    - a replier that never answers gives `timeout` at the deadline;
+    - a replier that exits after reading gives `no_reply`, with its
+      exit;
+    - one that exits unread gives `recipient_ended`.
+
+    Scripted in-process waits alone would not show the blocking and the
+    cross-process wake-up.
+  - `TestReplyHasRoomInAFullMailbox`: the asker's mailbox is full; the
+    reply still arrives.
+  - `TestSeventeenthRequestIsRefused` (`ErrTooManyRequests`) and
+    `TestLateReplyIsRefused` (`ErrRequestClosed`, and the asker's
+    outcome stays `timeout`).
   - `TestAwaitOnParkedChildIsRefused`: the deadlock case.
   - `TestAwaitIsChargedToTheTimeBudget`.
-- **Step 5:**
-  - **B6 asserts:** the 1 MB and 10 MB sends are refused with
-    `ErrMessageTooLarge`, naming the remedy. The same data sent as a
-    handle is readable by the receiver through `read_artifact`, in 64 KiB
-    pages. An unrelated process's `read_artifact` and `list_artifacts`
-    do not see it.
-  - **B8a asserts:** the 257th unread message is refused with
-    `ErrMailboxFull`, and a publish reports the skipped subscriber.
-  - `TestHandleNeedsTheSenderToReadIt`: a sender cannot pass a handle it
-    cannot read.
-  - `TestRuntimeRecordsAreNotReadable`: a checkpoint ID is refused.
 - **Later steps:**
   - B10a asserts the refusal outside `MessageTargets`, and the reply
     right;
@@ -807,4 +1154,4 @@ and keeps the `180d076` result in a comment as the "before".
   - B9 asserts that the operator-mail run replays identically.
 - **Kept as they are:** B1a, B1b, B2a, B3, B4, B8b and B10d already
   hold. They become regression checks, and B4 must still show 0 lost
-  and 0 duplicated after steps 2 and 5 change the bus.
+  and 0 duplicated after steps 2 and 4 change the bus.

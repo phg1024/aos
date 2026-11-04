@@ -2,7 +2,7 @@
 
 // Package ipc_test holds the measure-only audit of AOS IPC behind
 // Chapter 8 (IPC Without Shared Context), at v0.1.4 (180d076). Each probe
-// B1..B10 runs one question about the mailbox bus, the send, publish and
+// B1..B11 runs one question about the mailbox bus, the send, publish and
 // subscribe actions, and replay against the code as it is, with scripted
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
@@ -968,6 +968,61 @@ func TestIPCB10Other(t *testing.T) {
 	}
 	finding(t, "bus.Send takes the sender as an argument; the runtime passes the process's PID, and aos-tui passes \"user\" (cmd/aos-tui/root.go), which the receiver turns into a plain user turn (runtime.appendInboxArtifacts)")
 	finding(t, "Bus.update writes state.json, mailboxes.json and subscriptions.json one after another; each is atomic, the three are not (a crash between them leaves new mailboxes with old subscriptions)")
+}
+
+// B11 Rollback. Contract (ipc package doc): delivery is at least once.
+// Recover with RunOptions.Rollback starts from an earlier checkpoint; mail
+// acked into a later one is off the bus, and the earlier session never
+// held it.
+func TestIPCB11Rollback(t *testing.T) {
+	f := newFixture(t)
+	worker := f.spawn(t, "worker", "message_agent")
+	lead := f.spawn(t, "lead")
+	first := f.park(t, worker)
+	acked, _ := f.bus.Send(lead.PID, worker.PID, "acked after the first checkpoint")
+	var pending ipc.Message
+	working := &backend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		if call == 1 {
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "subscribe", Subscribe: &runtime.SubscribeCall{Topic: "news"}}}, nil
+		}
+		pending, _ = f.bus.Send(lead.PID, worker.PID, "pending at the exit")
+		return exitWith(1, true, "transient failure"), nil
+	}}
+	result, err := f.agent(working).Resume(context.Background(), worker.PID, first, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finding(t, "worker parked at %s, then received %s and subscribed; exited retryably at %s; %s acked (ipc.acked events: %d); pending on the bus for the worker: %d (%s)",
+		first, acked.ID, result.ExitStatus.Checkpoint, acked.ID, len(f.events(t, "ipc.acked")), len(f.pending(t)[worker.PID]), pending.ID)
+
+	before := len(f.events(t, ""))
+	next := script()
+	recovered, err := f.agent(next).Recover(context.Background(), worker.PID, first, nil, runtime.RunOptions{Rollback: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := text(next.first())
+	finding(t, "Recover with Rollback to %s (the exit names %s): successor %s; its first request holds the acked message %d time(s), the pending one %d time(s); it says it subscribed: %t",
+		first, result.ExitStatus.Checkpoint, recovered.PID, strings.Count(history, "acked after the first checkpoint"), strings.Count(history, "pending at the exit"), strings.Contains(history, "subscribe:"))
+	var mentions []string
+	events, _ := f.kernel.Events()
+	for _, event := range events[before:] {
+		if strings.HasPrefix(event.Type, "ipc.") && strings.Contains(fmt.Sprint(event.Data), acked.ID) {
+			mentions = append(mentions, event.Type)
+		}
+	}
+	var record string
+	records, _ := f.store.List()
+	for _, item := range records {
+		if item.Type == "mailbox_message" && item.ProducerPID == worker.PID {
+			record = item.ID
+		}
+	}
+	finding(t, "after the rollback: ipc events naming %s: %v; it is still on record as mailbox_message %s (producer %s), which nothing re-delivers; the loss is not recorded",
+		acked.ID, mentions, record, worker.PID)
+	subscriptions, _ := os.ReadFile(filepath.Join(f.root, "bus", "subscriptions.json"))
+	finding(t, "a subscription made after the rollback target: subscriptions.json is %s (B8c drops it at the exit anyway; once B8c is fixed, the successor would hold a subscription its history does not show)",
+		strings.Join(strings.Fields(string(subscriptions)), ""))
 }
 
 type agentScripts map[string]*backend

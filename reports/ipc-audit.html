@@ -22,7 +22,7 @@
     <h1>IPC Audit at v0.1.4 (180d076)</h1>
     <p>This audit measures AOS mail as it stands, for Chapter 8 (IPC Without Shared Context). It covers the mailbox bus (<code>internal/ipc</code>), the send, publish and subscribe actions and tools, and replay.</p>
     <ul>
-      <li>Probes B1 to B10 are in <code>bench/ipc/audit_test.go</code>, behind the <code>ipcaudit</code> build tag.</li>
+      <li>Probes B1 to B11 are in <code>bench/ipc/audit_test.go</code>, behind the <code>ipcaudit</code> build tag.</li>
       <li>They use scripted agents only: no live model and no phg-gpu.</li>
       <li>No production code was changed.</li>
       <li>The design that answers these findings is <a href="ipc-design.html">ipc-design.html</a> (<code>ipc-design.md</code>).</li>
@@ -37,10 +37,11 @@
           <li>no loss, duplication or corruption across OS processes: 0 of 5,000 messages over 25 trials.</li>
         </ul>
       </li>
-      <li><span class="defect">Two defects:</span>
+      <li><span class="defect">Three defects:</span>
         <ul>
           <li>a topic subscription does not survive Recover;</li>
           <li>a numbered sender label in a message body is not quoted, so it can pass for a separate message.</li>
+          <li>added 2026-11-03 (B11): a rollback loses mail that was acked after its target checkpoint, with no record of the loss.</li>
         </ul>
       </li>
       <li><span class="gap">Gaps:</span> no size bound, no backpressure, no correlation ID or timeout, silent drops of stranded mail, any-to-any messaging, and no replay of mail that came from outside the run.</li>
@@ -166,6 +167,10 @@ go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING      
       <td>Code citation</td>
       <td><code>Bus.Send</code> takes <code>from</code> from its caller. The runtime always passes the process's PID, so an agent cannot choose it. aos-tui passes <code>user</code> (<code>cmd/aos-tui/root.go:70</code>), and that message becomes a plain user turn.</td>
       <td>An agent cannot forge its sender field</td><td class="holds">holds</td></tr>
+    <tr><td>B11 Rollback (added 2026-11-03)</td>
+      <td>Park at C1. Receive a message and subscribe. Exit retryably at C2. Recover with <code>Rollback</code> to C1.</td>
+      <td>The message was acked into C2, so it is off the bus, and C1 never held it. The successor's first request has it 0 times. No <code>ipc.*</code> event names it after the rollback. Its <code>mailbox_message</code> artifact is still on record. Mail still pending at the exit arrives, through <code>Transfer</code>. The subscription is gone too, but that is B8c.</td>
+      <td>At least once (internal/ipc package doc)</td><td class="defect">defect</td></tr>
   </table>
 
   <h2>Notes for the Chapter</h2>
