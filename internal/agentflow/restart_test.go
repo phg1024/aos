@@ -409,7 +409,17 @@ func TestBackoffWaitsAndStopsWithTheRun(t *testing.T) {
 	coordinator = &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "done")}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	time.AfterFunc(200*time.Millisecond, cancel)
+	// Stop once the worker has exited, which puts the run in its backoff. A
+	// fixed delay could stop it before a loaded machine had started the worker.
+	go func() {
+		for ctx.Err() == nil {
+			if workers := g.workers(t); len(workers) == 1 && workers[0].State == kernel.StateExited {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 	engine := agentflow.Engine{Kernel: g.kernel, Artifacts: g.store, Leases: g.leases, Tools: tools.NewRuntime(), Factory: scripts{"worker": worker, "coordinator": coordinator}}
 	start = time.Now()
 	engine.Run(ctx, g.spec(&supervisor.RestartPolicy{Backoff: "30s"}, 8), agentflow.RunRequest{Goal: "go"})
