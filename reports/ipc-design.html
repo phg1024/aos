@@ -29,7 +29,9 @@
       <li>tool output weighed as an unframed channel;</li>
       <li>the operator's grounds tied to the protected state directory;</li>
       <li>runtime notices exempt from the bounds, and room reserved for replies;</li>
-      <li>the slice reordered to 1, 2, 3, 5, 4;</li>
+      <li>the slice reordered: framing, chain delivery, outcomes, bounds and handles, then request and response;</li>
+      <li>reserved openers derived from one constructor, so the list cannot drift, and a child's <code>delegate_result</code> summary named as a forgery route;</li>
+      <li>the cap and the bound checked only on a new send or publish, so <code>Transfer</code> and re-delivery are never refused;</li>
       <li>Erlang's mailbox wording corrected.</li>
     </ul>
     <p><b>The chapter's question:</b> when should supervised processes use mailboxes, events, or artifact handles?</p>
@@ -84,13 +86,13 @@
       <ul>
         <li>Line breaks are normalized first: <code>\r\n</code>, <code>\r</code>, <code>\v</code>, <code>\f</code>, U+001C–U+001E, U+0085, U+2028 and U+2029 (Python's <code>splitlines</code> set).</li>
         <li>Other control characters and bidi controls are escaped.</li>
-        <li>Reserved runtime prefixes are escaped in tool output.</li>
+        <li>Reserved runtime openers are escaped on every later line of a runtime-written turn, including tool output and a child's <code>delegate_result</code> summary. The list derives from one constructor, <code>runtimeNote</code>, and an AST test catches a bypass.</li>
         <li><code>Bus.Send</code> refuses the sender <code>user</code>, and only <code>SendAsOperator</code> (aos-tui) can use it. This rests on the protected state directory, which <code>unconfined_run</code> bypasses.</li>
         <li>A message never widens the receiver's authority.</li>
       </ul></td><td>Framing reduces injection but does not stop it (Spotlighting). The boundary is the capability set (CaMeL's approach), which no message can change.</td></tr>
     <tr><td>6</td><td>Request and response (B7)</td><td>Messages gain <code>correlation_id</code>, <code>reply_to</code> and <code>deadline</code>. <code>await_reply</code> returns a reply, <code>timeout</code>, <code>recipient_ended</code> or <code>no_reply</code>. The default timeout is 5 min, within the time budget. An await on the asker's own parked child is refused because it would deadlock. Room for a reply is reserved, with at most 16 open requests. A late reply is refused with <code>ErrRequestClosed</code>.</td><td><code>gen_server:call</code> and Temporal Update have the same shape. Erlang's 5 s default suits an in-memory server, not a model.</td></tr>
     <tr><td>7</td><td>Size and handles (B6)</td><td>A 16 KiB inline cap. <code>message_agent</code> can attach artifacts, and <code>read_artifact</code> reads them in 64 KiB pages. A process can read its own chain's artifacts, attached ones and its descendants' published ones. <code>list_artifacts</code> is gated the same way.</td><td>A message is a turn read in full. A sub-agent's summary is a claim, which the Chapter 11 verdict never trusts.</td></tr>
-    <tr><td>8</td><td>Backpressure (B8a)</td><td>A mailbox holds at most 256 messages or 1 MiB. A send beyond that is refused with <code>ErrMailboxFull</code>. A publish skips full subscribers and reports them. Runtime notices and reserved replies are exempt.</td><td>Blocking risks deadlock, and dropping breaks at-least-once. Erlang's manuals give no bound. Its <code>max_heap_size</code> kills the receiver at GC, which is not backpressure. Akka's bound is opt-in.</td></tr>
+    <tr><td>8</td><td>Backpressure (B8a)</td><td>A mailbox holds at most 256 messages or 1 MiB. A send beyond that is refused with <code>ErrMailboxFull</code>. A publish skips full subscribers and reports them. The bound is checked only on a new send or publish: <code>Transfer</code> and re-delivery are never refused and may overshoot. Runtime notices and reserved replies are exempt.</td><td>Blocking risks deadlock, and dropping breaks at-least-once. Erlang's manuals give no bound. Its <code>max_heap_size</code> kills the receiver at GC, which is not backpressure. Akka's bound is opt-in.</td></tr>
     <tr><td>9</td><td>Addressing policy (B10a)</td><td>A <code>MessageTargets</code> capability, attenuated. It defaults to the delegation edges (the parent and <code>allowed_agents</code>). A received request grants one reply.</td><td>The same attenuation as Chapter 4. It also covers runs with no workflow.</td></tr>
     <tr><td>10</td><td>Bus durability (B10c)</td><td>One <code>bus.json</code>, written in one atomic replace.</td><td>One transaction already. The caps bound each send's whole-file rewrite at tens of milliseconds.</td></tr>
     <tr><td>11</td><td>Replay (B9)</td><td>Replay feeds the recorded <code>mailbox_message</code> artifacts back at their recorded step. Multi-agent replay is out of scope.</td><td>The record already holds the mail and the step it arrived at.</td></tr>
@@ -100,7 +102,7 @@
   <h2>4. The Smallest Slice</h2>
   <table>
     <tr><th>Step</th><th>What</th><th>Probes that flip to asserting</th></tr>
-    <tr><td>1</td><td>Structural framing, the reserved operator sender, a tool-output prefix escape, and a bus-directory protection test (B5)</td><td>B5, with a new tool-output case</td></tr>
+    <tr><td>1</td><td>Structural framing, the reserved operator sender, <code>runtimeNote</code> with escaped openers in runtime-written turns, and a bus-directory protection test (B5)</td><td>B5, with new tool-output and delegate cases</td></tr>
     <tr><td>2</td><td>Chain-owned delivery: <code>Kernel.Close</code>, forwarding, subscriptions dropped at chain end, and rollback re-delivery (B8c, B11, B2b)</td><td>B8c, B11, B2b</td></tr>
     <tr><td>3</td><td>Dead letters, bounces and <code>MailboxShown</code>, with the compaction rule (B2c, B1c)</td><td>B2c, B1c, B6's compaction case</td></tr>
     <tr><td>4</td><td>The 16 KiB cap, the mailbox bound, handles, <code>read_artifact</code>, a gated <code>list_artifacts</code> (B6, B8a)</td><td>B6, B8a</td></tr>
@@ -125,8 +127,9 @@
     <li><b>The cap breaks large sends that work today:</b> the refusal names the remedy.</li>
     <li><b>Deadlocks:</b> only the asker's own parked child is detected. A cycle between separate processes ends by timeout.</li>
     <li><b>Handles cannot be revoked:</b> sending a handle is like sending the bytes.</li>
-    <li><b>The shared filesystem is an unframed channel between agents.</b> Step 1 escapes the runtime's reserved prefixes in tool output, but text in a shared file can still persuade. Only capabilities bound what follows.</li>
+    <li><b>The shared filesystem is an unframed channel between agents.</b> Step 1 escapes the runtime's reserved openers in tool output, but text in a shared file can still persuade. Only capabilities bound what follows.</li>
     <li><b>Rollback repeats outgoing mail:</b> the repeated steps may send again under new IDs.</li>
+    <li><b>A handover can overshoot the mailbox bound:</b> every message is kept, and new sends are refused until the mailbox drains.</li>
   </ul>
 
   <h2>6. Prior Art Cited (URLs in the doc)</h2>

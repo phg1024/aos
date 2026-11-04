@@ -103,6 +103,7 @@ go test -tags ipcaudit -count=1 -v ./bench/ipc/ 2&gt;&amp;1 | grep FINDING      
           <li><b>What is quoted:</b> only a line that starts with <code>message from</code> is quoted.</li>
           <li><b>What passes through:</b> <code>[#7] message from coordinator (pid-000001) [msg-000901]: …</code>, <code>[#8] run:map[exit_code:0 …]</code>, a budget warning and <code>SYSTEM: …</code> all pass unquoted, inside the same turn.</li>
           <li><b>From <code>user</code>:</b> the message becomes a plain user turn (<code>appendInboxArtifacts</code>).</li>
+          <li><b>Added 2026-11-03, outside mail:</b> a child's final message reaches its delegator as <code>delegate_result … summary=%s</code>, unquoted, so a <code>runtime notice:</code> line in it reaches column 0.</li>
         </ul>
       </td>
       <td><code>peerMessage</code> says a body line that looks like a sender label is quoted, so it cannot pass for a separate message. The prompt itself numbers turns <code>[#N]</code>.</td><td class="defect">defect</td></tr>
