@@ -1,17 +1,22 @@
 package ipc_test
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 )
 
 type boundsFixture struct {
+	dir    string
 	kernel *kernel.Kernel
 	bus    *ipc.Bus
 	from   string
@@ -29,7 +34,7 @@ func newBoundsFixture(t *testing.T) boundsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := boundsFixture{kernel: k, bus: bus}
+	f := boundsFixture{dir: dir, kernel: k, bus: bus}
 	f.from, f.to = f.spawn(t), f.spawn(t)
 	return f
 }
@@ -43,10 +48,31 @@ func (f boundsFixture) spawn(t *testing.T) string {
 	return process.PID
 }
 
-// fill sends n messages of size bytes to pid.
+// fill leaves n messages of size bytes in pid's mailbox: the last few by sending, so
+// the bound lets them in, and the rest by writing the bus's file, since a send costs
+// about 20 ms.
 func (f boundsFixture) fill(t *testing.T, pid string, n, size int) {
 	t.Helper()
-	for i := 0; i < n; i++ {
+	seeded := max(n-4, 0)
+	pending, err := f.bus.Pending()
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := 1
+	for _, box := range pending {
+		next += len(box)
+	}
+	for i := 0; i < seeded; i++ {
+		pending[pid] = append(pending[pid], ipc.Message{ID: fmt.Sprintf("msg-%06d", next+i), From: f.from, To: pid, Body: strings.Repeat("x", size), Timestamp: time.Now().UTC()})
+	}
+	raw, err := json.Marshal(pending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.dir, "bus", "mailboxes.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := seeded; i < n; i++ {
 		if _, err := f.bus.Send(f.from, pid, strings.Repeat("x", size)); err != nil {
 			t.Fatalf("send %d of %d: %v", i+1, n, err)
 		}

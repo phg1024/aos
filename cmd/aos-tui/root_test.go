@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"aos/internal/artifact"
@@ -639,10 +641,20 @@ func TestALineReachesAFullMailbox(t *testing.T) {
 	f := newRootFixture(t)
 	first, _ := f.spawn("")
 	peer, _ := f.spawn("")
+	// As a flood of sends would have left it, without their 5 seconds.
+	var flood []ipc.Message
 	for i := 0; i < ipc.MaxMailboxMessages; i++ {
-		if _, err := f.bus.Send(peer.PID, first.PID, "flood"); err != nil {
-			t.Fatal(err)
-		}
+		flood = append(flood, ipc.Message{ID: fmt.Sprintf("msg-%06d", i+1), From: peer.PID, To: first.PID, Body: "flood", Timestamp: time.Now().UTC()})
+	}
+	raw, err := json.Marshal(map[string][]ipc.Message{first.PID: flood})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.dir, "bus", "mailboxes.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.bus.Send(peer.PID, first.PID, "one more"); !errors.Is(err, ipc.ErrMailboxFull) {
+		t.Fatalf("a peer's send = %v", err)
 	}
 	root := tuiRoot{process: first}
 	if _, err := deliver(f.bus, f.store, &root, "stop what you are doing"); err != nil {

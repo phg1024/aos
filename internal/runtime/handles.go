@@ -47,25 +47,32 @@ func (r *AgentRuntime) mailBatch(session Session) ipc.Batch {
 	return batch
 }
 
-// takeMail is the step's mail. What a batch leaves behind is already in the mailbox
-// when the model decides, and would become dead letters if it exits, so the model is
-// told. The note is not mail, and it stays with the last turn when compaction cuts,
-// as a tool result does. A repeat of a line still in the history adds nothing, which
-// keeps a failing call's request the same.
-func (r *AgentRuntime) takeMail(pid string, session *Session, redeliver bool) ([]ipc.Message, []Message, error) {
+// takeMail is the step's mail, and what the batch left behind.
+func (r *AgentRuntime) takeMail(pid string, session Session, redeliver bool) ([]ipc.Message, ipc.Waiting, error) {
 	if r.NoBusBounds {
 		messages, err := r.Bus.Receive(pid, redeliver)
-		return messages, nil, err
+		return messages, ipc.Waiting{}, err
 	}
-	messages, waiting, err := r.Bus.ReceiveBatch(pid, redeliver, session.MailboxSeen, r.mailBatch(*session))
-	if err != nil || waiting.Messages == 0 {
-		return messages, nil, err
+	return r.Bus.ReceiveBatch(pid, redeliver, session.MailboxSeen, r.mailBatch(session))
+}
+
+// waitingNotes tells the model what a batch left behind, once the step's mail is in
+// session. That mail is already in the mailbox when the model decides, and would
+// become dead letters if it exits. The note is not mail, and it stays with the last
+// turn when compaction cuts, as a tool result does. The same line with no mail after
+// it adds nothing, which keeps a failing call's request the same. With mail after it
+// the line is about other mail, however alike the numbers.
+func waitingNotes(session Session, waiting ipc.Waiting) []Message {
+	if waiting.Messages == 0 {
+		return nil
 	}
 	note := runtimeNote("tool", framing.RuntimeNotice, mailWaitingNote(waiting))
-	if slices.ContainsFunc(session.Messages, func(message Message) bool { return message.Content == note.Content }) {
-		return messages, nil, nil
+	for i := len(session.Messages) - 1; i >= 0 && session.Messages[i].Mail == ""; i-- {
+		if session.Messages[i].Content == note.Content {
+			return nil
+		}
 	}
-	return messages, []Message{note}, nil
+	return []Message{note}
 }
 
 func mailWaitingNote(waiting ipc.Waiting) string {

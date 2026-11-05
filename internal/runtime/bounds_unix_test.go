@@ -83,6 +83,29 @@ func (s mailState) publishArtifact(t *testing.T, pid, body string) string {
 	return record.ID
 }
 
+// fillMailbox puts n messages of size bytes in pid's mailbox by writing the bus's file,
+// as a sender's send would have left them. A send costs about 20 ms, and a test about
+// what a full mailbox does has no need to wait for 256 of them.
+func (s mailState) fillMailbox(t *testing.T, from, pid string, n, size int) []string {
+	t.Helper()
+	pending, err := s.bus.Pending()
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := 1
+	for _, box := range pending {
+		next += len(box)
+	}
+	var ids []string
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("msg-%06d", next+i)
+		ids = append(ids, id)
+		pending[pid] = append(pending[pid], ipc.Message{ID: id, From: from, To: pid, Body: strings.Repeat("x", size), Timestamp: time.Now().UTC()})
+	}
+	writeMailboxes(t, s.root, pending)
+	return ids
+}
+
 func (s mailState) mustExit(t *testing.T, pid string) {
 	t.Helper()
 	if _, err := s.kernel.Exit(pid, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true}); err != nil {
@@ -119,11 +142,7 @@ func TestRefusalsLeaveTheSenderRunning(t *testing.T) {
 				t.Fatal(err)
 			}
 			if c.full {
-				for i := 0; i < ipc.MaxMailboxMessages; i++ {
-					if _, err := s.bus.Send(filler.PID, receiver.PID, "x"); err != nil {
-						t.Fatal(err)
-					}
-				}
+				s.fillMailbox(t, filler.PID, receiver.PID, ipc.MaxMailboxMessages, 1)
 			}
 			var live kernel.ProcessState
 			backend := &playback{}
@@ -636,14 +655,14 @@ func TestReadArtifactPages(t *testing.T) {
 	}
 }
 
-// Ten MiB paged to the end, as the model reads it: what comes back through the
-// history is the artifact, byte for byte, and no page is cut by the tool result's
-// own cap.
-func TestReadArtifactPagesTenMegabytesToTheEnd(t *testing.T) {
+// An artifact paged to the end, as the model reads it: what comes back through the
+// history is the artifact, byte for byte, and no page is cut by the tool result's own
+// cap. B6 reads 10 MiB the same way.
+func TestReadArtifactPagesToTheEnd(t *testing.T) {
 	s := openMailState(t, t.TempDir())
 	owner := s.spawn(t, "owner")
 	var text strings.Builder
-	for i := 0; text.Len() < 10<<20; i++ {
+	for i := 0; text.Len() < 1<<20; i++ {
 		fmt.Fprintf(&text, "%08d 世界🙂\n", i)
 	}
 	want := text.String()
@@ -673,15 +692,15 @@ func TestReadArtifactPagesTenMegabytesToTheEnd(t *testing.T) {
 		return toolAction("read_artifact", map[string]string{"id": id, "offset": offset}), nil
 	}
 	agent := s.agent(backend)
-	agent.MaxSteps = 400
+	agent.MaxSteps = 40
 	if _, err := agent.RunWithOptions(context.Background(), owner.PID, []runtime.Message{{Role: "user", Content: "read"}}, runtime.RunOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if got.String() != want {
 		t.Fatalf("read %d bytes of %d over %d pages", got.Len(), len(want), pages)
 	}
-	if pages < 160 {
-		t.Fatalf("%d pages: at most 64 KiB each should be at least 160", pages)
+	if pages < 16 {
+		t.Fatalf("%d pages: at most 64 KiB each should be at least 16", pages)
 	}
 	// Pages compaction moved out are referred to, not copied.
 	records, _ := s.store.List()
@@ -745,11 +764,7 @@ func TestAFullMailboxDrainsOnAReturnedCall(t *testing.T) {
 	s := openMailState(t, t.TempDir())
 	receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
 	parked := s.park(t, receiver)
-	for i := 0; i < ipc.MaxMailboxMessages; i++ {
-		if _, err := s.bus.Send(sender.PID, receiver.PID, "x"); err != nil {
-			t.Fatal(err)
-		}
-	}
+	s.fillMailbox(t, sender.PID, receiver.PID, ipc.MaxMailboxMessages, 1)
 	refused := func(when string) {
 		t.Helper()
 		if _, err := s.bus.Send(sender.PID, receiver.PID, "y"); !errors.Is(err, ipc.ErrMailboxFull) {
@@ -760,12 +775,18 @@ func TestAFullMailboxDrainsOnAReturnedCall(t *testing.T) {
 	failing := &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		return runtime.GenerateResult{}, errors.New("connection reset")
 	}}
-	result, _ := s.agent(failing).Resume(context.Background(), receiver.PID, parked, nil, runtime.RunOptions{})
+	// One attempt, so the run saves a checkpoint and acknowledges all it may: nothing.
+	failed := s.agent(failing)
+	failed.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+	result, err := failed.Resume(context.Background(), receiver.PID, parked, nil, runtime.RunOptions{})
+	if err != nil || result.CheckpointID == "" {
+		t.Fatalf("the failed run = %+v, %v", result, err)
+	}
 	refused("after a call that failed")
 	backend := &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		return sayAction("read"), nil
 	}}
-	if _, err := s.agent(backend).Recover(context.Background(), result.PID, parked, nil, runtime.RunOptions{StopOnAssistantMessage: true}); err != nil {
+	if _, err := s.agent(backend).Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{StopOnAssistantMessage: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.bus.Send(sender.PID, receiver.PID, "y"); err != nil {
@@ -775,13 +796,18 @@ func TestAFullMailboxDrainsOnAReturnedCall(t *testing.T) {
 
 // Senders in separate OS processes race for one mailbox's last places. New sends
 // never take it past the bound, nothing accepted is lost, and each refusal is on
-// the log.
+// the log. The mailbox starts a few places short of full, and more senders than places
+// start at once, so they meet at the bound, where the race is.
 func TestTheBoundHoldsAcrossProcesses(t *testing.T) {
-	const senders, each = 4, 100
+	const senders, each, seeded = 12, 8, ipc.MaxMailboxMessages - 6
 	for _, draining := range []bool{false, true} {
 		t.Run(fmt.Sprintf("draining=%t", draining), func(t *testing.T) {
 			s := openMailState(t, t.TempDir())
 			receiver := s.spawn(t, "receiver")
+			first := map[string]bool{}
+			for _, id := range s.fillMailbox(t, "pid-000000", receiver.PID, seeded, 1) {
+				first[id] = true
+			}
 			var cmds []*exec.Cmd
 			var tallies []string
 			for i := 0; i < senders; i++ {
@@ -818,12 +844,12 @@ func TestTheBoundHoldsAcrossProcesses(t *testing.T) {
 						over++
 					}
 					if draining && len(pending[receiver.PID]) > 0 {
-						first := pending[receiver.PID][0].ID
-						if err := s.bus.Ack(receiver.PID, []string{first}); err != nil {
+						oldest := pending[receiver.PID][0].ID
+						if err := s.bus.Ack(receiver.PID, []string{oldest}); err != nil {
 							t.Error(err)
 							return
 						}
-						drained[first] = true
+						drained[oldest] = true
 					}
 				}
 			}()
@@ -866,14 +892,14 @@ func TestTheBoundHoldsAcrossProcesses(t *testing.T) {
 			}
 			pending := s.pendingFor(t, receiver.PID)
 			for _, message := range pending {
-				if !accepted[message.ID] {
+				if !accepted[message.ID] && !first[message.ID] {
 					t.Fatalf("%s is pending and no sender was told it got in", message.ID)
 				}
 			}
-			if len(pending)+len(drained) != len(accepted) {
-				t.Fatalf("%d accepted: %d pending, %d drained", len(accepted), len(pending), len(drained))
+			if len(pending)+len(drained) != len(accepted)+seeded {
+				t.Fatalf("%d accepted and %d there at the start: %d pending, %d drained", len(accepted), seeded, len(pending), len(drained))
 			}
-			if !draining && (len(accepted) != ipc.MaxMailboxMessages || refused != senders*each-ipc.MaxMailboxMessages) {
+			if !draining && (len(accepted) != ipc.MaxMailboxMessages-seeded || refused != senders*each-len(accepted)) {
 				t.Fatalf("no drain: %d accepted, %d refused", len(accepted), refused)
 			}
 			t.Logf("accepted %d, refused %d, drained %d", len(accepted), refused, len(drained))
@@ -900,7 +926,8 @@ func windowed(window int, largest *int, then func(call int) runtime.GenerateResu
 // A full mailbox cannot land in one request: it comes in batches that fit the
 // smallest window Validate admits, and it drains, with no message archived before
 // a model read it. Without the batches the first request is 1 MiB, every call
-// fails, and nothing ever leaves.
+// fails, and nothing ever leaves. Each case is here for a rule of the batch, and B14
+// runs them at full size.
 func TestAFullMailboxFitsTheWindow(t *testing.T) {
 	// The smallest window Validate admits at the default ratio of 0.8.
 	const windowTokens = 58100
@@ -921,32 +948,17 @@ func TestAFullMailboxFitsTheWindow(t *testing.T) {
 		size     int
 	}{
 		{"64 at the cap", smallest, fits, 64, ipc.MaxBodyBytes},
-		{"256 small", smallest, fits, 256, 4096},
-		{"300 after a handover", smallest, fits, 300, 4096},
-		{"unknown window, 64 at the cap", unknown, 1 << 30, 64, ipc.MaxBodyBytes},
-		{"unknown window, 256 small", unknown, 1 << 30, 256, 100},
-		{"unknown window, 256 of 350 bytes", unknown, 1 << 30, 256, 350},
+		{"over the bound after a handover", smallest, fits, ipc.MaxMailboxMessages + 4, 512},
+		{"unknown window, at the cap", unknown, 1 << 30, 12, ipc.MaxBodyBytes},
+		{"unknown window, short", unknown, 1 << 30, 40, 100},
+		{"unknown window, 350 bytes", unknown, 1 << 30, 40, 350},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			policy, window := c.policy, c.window
 			s := openMailState(t, t.TempDir())
 			receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
 			parked := s.park(t, receiver)
-			if c.messages > ipc.MaxMailboxMessages {
-				var back []ipc.Redelivery
-				for i := 0; i < c.messages; i++ {
-					back = append(back, ipc.Redelivery{Message: ipc.Message{ID: fmt.Sprintf("msg-%06d", i+1), From: sender.PID, Body: strings.Repeat("x", c.size)}, Record: "art-x"})
-				}
-				if _, err := s.bus.Redeliver(receiver.PID, back, "rollback"); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				for i := 0; i < c.messages; i++ {
-					if _, err := s.bus.Send(sender.PID, receiver.PID, strings.Repeat("x", c.size)); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
+			s.fillMailbox(t, sender.PID, receiver.PID, c.messages, c.size)
 			largest, calls := 0, 0
 			backend := windowed(window, &largest, func(call int) runtime.GenerateResult {
 				calls = call
@@ -1026,7 +1038,7 @@ func TestAnOldStateDirKeepsEveryMessage(t *testing.T) {
 	receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
 	parked := s.park(t, receiver)
 	old := map[string][]ipc.Message{}
-	const count = 300
+	const count = ipc.MaxMailboxMessages + 4
 	for i := 0; i < count; i++ {
 		body := fmt.Sprintf("old %03d", i)
 		if i == 0 {
@@ -1134,14 +1146,7 @@ func TestARefusedCallCanBeRepeatedOnceThingsChange(t *testing.T) {
 	t.Run("a full mailbox drains", func(t *testing.T) {
 		s := openMailState(t, t.TempDir())
 		receiver, sender, filler := s.spawn(t, "receiver"), s.spawn(t, "sender", "message_agent"), s.spawn(t, "filler")
-		var ids []string
-		for i := 0; i < ipc.MaxMailboxMessages; i++ {
-			message, err := s.bus.Send(filler.PID, receiver.PID, "x")
-			if err != nil {
-				t.Fatal(err)
-			}
-			ids = append(ids, message.ID)
-		}
+		ids := s.fillMailbox(t, filler.PID, receiver.PID, ipc.MaxMailboxMessages, 1)
 		backend := play()
 		backend.fn = func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 			backend.histories = append(backend.histories, request.History)
@@ -1300,7 +1305,7 @@ func noteBodies(shown map[string]bool, history []runtime.Message) {
 // consecutive steps of one run: the old skip left it for the next Resume. Every way
 // a run can start on such a mailbox.
 func TestDeliveredMailDrainsThroughOneRun(t *testing.T) {
-	const count = 40
+	const count = 25
 	drain := func(t *testing.T, s mailState, start func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error)) {
 		t.Helper()
 		shown := map[string]bool{}
@@ -1387,7 +1392,7 @@ func TestDeliveredMailDrainsThroughOneRun(t *testing.T) {
 // comes until the batch has reached a model. That holds whether the run goes on after
 // the failure or exits and is recovered from the checkpoint it saved.
 func TestAFailedCallDoesNotGrowTheRequest(t *testing.T) {
-	const count = 40
+	const count = 20
 	setup := func(t *testing.T) (mailState, kernel.Process) {
 		s := openMailState(t, t.TempDir())
 		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
@@ -1527,7 +1532,15 @@ func TestACallFailingBelowTheTriggerStays(t *testing.T) {
 	result, _ := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
 	first := largest
 	for i := 0; i < 3; i++ {
-		result, _ = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{})
+		// What an operator sees each time: a retryable exit naming the endpoint's
+		// error, with a checkpoint, which can be Recovered and fails again.
+		if !result.ExitStatus.Retryable || result.ExitStatus.Checkpoint == "" || !strings.Contains(result.ExitStatus.Reason, "model endpoint failed 1 times in a row") || !strings.Contains(result.ExitStatus.Reason, "exceeds the context window") {
+			t.Fatalf("attempt %d: exit = %+v", i, result.ExitStatus)
+		}
+		var err error
+		if result, err = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{}); err != nil {
+			t.Fatalf("attempt %d: Recover = %v", i, err)
+		}
 	}
 	if largest != first {
 		t.Fatalf("the request grew from %d to %d", first, largest)
@@ -1594,4 +1607,117 @@ func TestArchivedMailDoesNotHoldTheBatch(t *testing.T) {
 	if !strings.Contains(historyContent(later), "the next one") {
 		t.Fatalf("the next message did not come:\n%.500s", historyContent(later))
 	}
+}
+
+// A line the same as an old one is still about new mail. Equal-sized mail, as templated
+// or chunked messages are, gives the same numbers again: the old note was about mail
+// that has since arrived, and only a new one tells the model of what is left.
+func TestAnOldNoteDoesNotStandInForANewOne(t *testing.T) {
+	policy := runtime.CompactionPolicy{MaxMessages: 40, KeepMessages: 30}
+	body := func(mark string) string { return mark + strings.Repeat("x", 12*1024-len(mark)) }
+	const note = "1 more message is waiting in your mailbox, 12288 bytes"
+	t.Run("more mail of the same size", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		for _, mark := range []string{"AAA", "BBB", "CCC"} {
+			s.bus.Send(sender.PID, receiver.PID, body(mark))
+		}
+		var third []runtime.Message
+		backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			switch call {
+			case 1:
+				return sayAction("reading"), nil
+			case 2:
+				for _, mark := range []string{"DDD", "EEE", "FFF"} {
+					s.bus.Send(sender.PID, receiver.PID, body(mark))
+				}
+				return sayAction("reading"), nil
+			}
+			third = request.History
+			return exitResult("done"), nil
+		}}
+		agent := s.agent(backend)
+		agent.Compaction = policy
+		if _, err := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
+			t.Fatal(err)
+		}
+		if last := third[len(third)-1].Content; !strings.Contains(last, note) {
+			t.Fatalf("the third request ends with %.100s", last)
+		}
+		if got := notesIn(third, "runtime notice: "); len(got) != 2 {
+			t.Fatalf("notes = %q", got)
+		}
+	})
+	t.Run("mail each step, the same left waiting", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		s.bus.Send(sender.PID, receiver.PID, body("AAA"))
+		s.bus.Send(sender.PID, receiver.PID, body("BBB"))
+		s.bus.Send(sender.PID, receiver.PID, body("CCC"))
+		var second []runtime.Message
+		backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			if call == 1 {
+				// AAA and BBB are in, CCC waits. Next CCC and DDD come, and EEE waits.
+				s.bus.Send(sender.PID, receiver.PID, body("DDD"))
+				s.bus.Send(sender.PID, receiver.PID, body("EEE"))
+				return sayAction("reading"), nil
+			}
+			second = request.History
+			return exitResult("done"), nil
+		}}
+		agent := s.agent(backend)
+		agent.Compaction = policy
+		if _, err := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
+			t.Fatal(err)
+		}
+		if last := second[len(second)-1].Content; !strings.Contains(last, note) {
+			t.Fatalf("the second request ends with %.100s", last)
+		}
+	})
+	t.Run("an old note, mail, then a failed call with more waiting", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		for _, mark := range []string{"AAA", "BBB", "CCC"} {
+			s.bus.Send(sender.PID, receiver.PID, body(mark))
+		}
+		var fourth []runtime.Message
+		backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			switch call {
+			case 1:
+				return sayAction("reading"), nil
+			case 2:
+				// CCC is in, and nothing waits. DDD and EEE fit the next batch.
+				s.bus.Send(sender.PID, receiver.PID, body("DDD"))
+				s.bus.Send(sender.PID, receiver.PID, body("EEE"))
+				return sayAction("reading"), nil
+			case 3:
+				// That call fails, and FFF arrives: held back, with the old note's numbers.
+				s.bus.Send(sender.PID, receiver.PID, body("FFF"))
+				return runtime.GenerateResult{}, errors.New("connection reset")
+			}
+			fourth = request.History
+			return exitResult("done"), nil
+		}}
+		agent := s.agent(backend)
+		agent.Compaction = policy
+		if _, err := agent.RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+			t.Fatal(err)
+		}
+		// One note for CCC's wait, one for FFF's.
+		if got := notesIn(fourth, "runtime notice: "); len(got) != 2 {
+			t.Fatalf("notes = %q", got)
+		}
+		lastMail, lastNote := -1, -1
+		for i, message := range fourth {
+			if message.Mail != "" {
+				lastMail = i
+			}
+			if strings.HasPrefix(message.Content, "runtime notice: ") {
+				lastNote = i
+			}
+		}
+		if lastNote < lastMail {
+			t.Fatalf("the newest note, at %d, is older than the newest mail, at %d", lastNote, lastMail)
+		}
+	})
 }

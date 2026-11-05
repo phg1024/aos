@@ -7,7 +7,7 @@
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
 // comment names the contract it was measured against. B1c, B2b, B2c, B5, B6, B8a,
-// B8c and B11 assert instead, since those are fixed; their comments keep the result
+// B8c, B11 and B14 assert instead, since those are fixed; their comments keep the result
 // from before. They are kept out of go test ./... by the ipcaudit tag:
 //
 //	go test -tags ipcaudit -count=1 -v ./bench/ipc/
@@ -1099,6 +1099,86 @@ func TestIPCB13BoundCost(t *testing.T) {
 		total += time.Since(start)
 	}
 	finding(t, "one read of a 10 MiB artifact's payload, hash check and decode: %s, over %d trials", (total / time.Duration(trials)).Round(time.Microsecond), trials)
+}
+
+// B14 A full mailbox and one request, at full size. Contract (ipc-design.md, decision
+// 8): one step takes a batch, so a full mailbox drains on the smallest window Validate
+// admits, with no message archived before a read. Asserts; the table in the design doc
+// comes from here. TestAFullMailboxFitsTheWindow has each rule at a smaller size.
+func TestIPCB14FullMailboxDrains(t *testing.T) {
+	const windowTokens = 58100
+	smallest := runtime.ContextCompactionPolicy(windowTokens, 0.8)
+	if err := smallest.Validate(tools.MaxToolResultBytes); err != nil {
+		t.Fatal(err)
+	}
+	fits := windowTokens * runtime.EstimatedCharsPerToken
+	unknown := runtime.DefaultCompactionPolicy()
+	for _, c := range []struct {
+		name     string
+		policy   runtime.CompactionPolicy
+		window   int
+		messages int
+		size     int
+	}{
+		{"64 at the cap", smallest, fits, 64, ipc.MaxBodyBytes},
+		{"256 of 4 KiB", smallest, fits, 256, 4096},
+		{"300 of 4 KiB, after a handover", smallest, fits, 300, 4096},
+		{"64 at the cap, unknown window", unknown, 1 << 30, 64, ipc.MaxBodyBytes},
+		{"256 of 100 bytes, unknown window", unknown, 1 << 30, 256, 100},
+		{"256 of 350 bytes, unknown window", unknown, 1 << 30, 256, 350},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFixture(t)
+			receiver, sender := f.spawn(t, "receiver"), f.spawn(t, "sender")
+			parked := f.park(t, receiver)
+			var box []ipc.Message
+			for i := 0; i < c.messages; i++ {
+				box = append(box, ipc.Message{ID: fmt.Sprintf("msg-%06d", i+1), From: sender.PID, To: receiver.PID, Body: strings.Repeat("x", c.size), Timestamp: time.Now().UTC()})
+			}
+			raw, err := json.Marshal(map[string][]ipc.Message{receiver.PID: box})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(f.root, "bus", "mailboxes.json"), raw, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			largest := 0
+			reading := &backend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				size := 0
+				for _, message := range request.History {
+					size += len(message.Content)
+				}
+				largest = max(largest, size)
+				if size > c.window {
+					return runtime.GenerateResult{}, fmt.Errorf("request of %d bytes exceeds the context window of %d", size, c.window)
+				}
+				return say("reading"), nil
+			}}
+			agent := f.agent(reading)
+			agent.Compaction = c.policy
+			agent.MaxSteps = 200
+			for i := 0; i < 400 && len(f.pending(t)[receiver.PID]) > 0; i++ {
+				result, err := agent.Resume(context.Background(), receiver.PID, parked, nil, runtime.RunOptions{StopOnAssistantMessage: true})
+				if err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
+					t.Fatalf("after %d calls, %d bytes at most: %v", reading.calls(), largest, err)
+				}
+				parked = result.CheckpointID
+				session, err := agent.RestoreCheckpoint(parked)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, mail := range session.MailboxUnshown {
+					if mail.Segment != "" {
+						t.Fatalf("%s was archived before a model read it", mail.ID)
+					}
+				}
+			}
+			if left := len(f.pending(t)[receiver.PID]); left != 0 {
+				t.Fatalf("%d left after %d calls", left, reading.calls())
+			}
+			finding(t, "%s: drained in %d calls; largest history %d bytes, window %d; none archived before a read", c.name, reading.calls(), largest, c.window)
+		})
+	}
 }
 
 // B7 Request/response. Contract: none for mail. The engine's wait is the

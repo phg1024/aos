@@ -847,7 +847,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			session.Messages = append(session.Messages, r.undeliveredNotes(pid, &session)...)
 			// The first step also takes messages handed out before but never
 			// acknowledged: a crash or an interruption left them unrecorded.
-			inboxMessages, waiting, err := r.takeMail(pid, &session, step == 0)
+			inboxMessages, waiting, err := r.takeMail(pid, session, step == 0)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -857,7 +857,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			unacked = append(unacked, received...)
-			session.Messages = append(session.Messages, waiting...)
+			session.Messages = append(session.Messages, waitingNotes(session, waiting)...)
 		}
 		archived := len(session.MemoryRefs)
 		if options.HandoffOnly && step == 0 && session.HandoffSeq == 0 {

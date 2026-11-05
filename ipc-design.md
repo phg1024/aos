@@ -2294,9 +2294,14 @@ gated `list_artifacts`. Step 5 is not built.
 
 ```
 go test -count=1 ./internal/framing ./internal/kernel ./internal/ipc ./internal/artifact ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./internal/inspect ./internal/statedir ./internal/scheduler ./internal/lease ./cmd/aos ./cmd/aos-tui
-AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B6|B8|B11|B12|B13' -timeout 1200s ./bench/ipc/
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B6|B8|B10|B11|B12|B13|B14' -timeout 1800s ./bench/ipc/
 reports/ipc-step-4-e2e/run.sh <aos binary> <new state dir>
 ```
+
+`internal/runtime` alone on this machine: 80 s at `24533d4`, 269 s with step 4's tests as first
+written, 143 s now. That is under `go test`'s default 10 minutes with room, though it took
+about 200 s with the other packages running beside it, and a heavily loaded machine reached 588 s
+before the cut. If yours is busier than that, use `-timeout 1500s`.
 
 ### What is enforced
 
@@ -2363,7 +2368,7 @@ Decisions 1, 7, 8 and 10 are changed in place, and each says so.
 
 ### The batch, measured
 
-`TestAFullMailboxFitsTheWindow`, with a backend that fails any request over the window, on
+`TestIPCB14FullMailboxDrains`, with a backend that fails any request over the window, on
 the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,300 chars at
 `EstimatedCharsPerToken`). History only: the system prompt comes on top.
 
@@ -2391,7 +2396,18 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   a window 2,000 chars above the trigger). **Under the trigger it does not:** nothing shrinks
   the request, each call fails the same way, and the mail is kept
   (`TestACallFailingBelowTheTriggerStays`). A tool's output in that gap does the same, so the
-  trigger has to fit the real window, system prompt included.
+  trigger has to fit the real window, system prompt included. The book session accepted this
+  over the way out growth used to give by chance, which added mail to a request already too
+  big, and archived that mail unread.
+  - **What an operator sees at that point:** each call's failure is a `backend.retry` event.
+    When the attempts run out (12 by default, about 10 minutes of backoff), the process exits
+    with code 1, retryable, with a checkpoint, and the reason `model endpoint failed 12 times
+    in a row:` and the endpoint's error. The mail stays in the mailbox. It can be Recovered,
+    and it fails the same way. An agent with a restart policy restarts until the policy
+    escalates, and then the chain closes and its senders are told. Without one, the chain stays
+    open until a re-delegation closes it. The way out is a lower `AOS_LLM_CONTEXT_WINDOW` or
+    `AOS_COMPACT_RATIO`, so that the trigger falls below the real window: the next attempts
+    then compact, as above.
 - **Over its bound after a handover:** the same batches, so it drains.
 - **The limit that remains: one body larger than the window.** A body over the cap can exist
   only from before the cap. It comes alone, every call fails, and the process exits
@@ -2443,7 +2459,7 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   `TestRuntimeRecordsAreNotReadable`, `TestAForgedHandleGrantsNothing`,
   `TestChainIdentityInTheReadRules`, `TestAGrantSurvivesARollbackPastTheReceipt`,
   `TestAGrantStartsAtTheReceipt`, `TestAHandleCanBePassedOn`, `TestListArtifactsIsGated`,
-  `TestReadArtifactPages`, `TestReadArtifactPagesTenMegabytesToTheEnd`,
+  `TestReadArtifactPages`, `TestReadArtifactPagesToTheEnd`,
   `TestAReadOfADamagedArtifactIsAToolError`, `TestAFullMailboxDrainsOnAReturnedCall`,
   `TestTheBoundHoldsAcrossProcesses`, `TestAFullMailboxFitsTheWindow`,
   `TestABodyBeyondTheWindowStaysStuckAndKept`, `TestAnOldStateDirKeepsEveryMessage`,
@@ -2452,7 +2468,7 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   `TestAStepThatHoldsMailBackSaysSo`, `TestDeliveredMailDrainsThroughOneRun`,
   `TestAFailedCallDoesNotGrowTheRequest`, `TestACallFailingOnSizeGetsOut`,
   `TestACallFailingBelowTheTriggerStays`, `TestArchivedMailDoesNotHoldTheBatch`,
-  `TestNoBusBoundsTakesAllAtOnce`.
+  `TestNoBusBoundsTakesAllAtOnce`, `TestAnOldNoteDoesNotStandInForANewOne`.
 - `agentflow`: `TestAVerifierGetsEvidenceThroughAWait`,
   `TestSystemPromptDescribesHandlesOnlyWhenOn`.
 - `replay`: `TestReplayOfARecordWithoutBusBounds`, `TestReplayOfHandles`.
@@ -2460,7 +2476,17 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   `TestAnOverLongLineThatCannotBeKeptIsNotDelivered`, `TestALineReachesAFullMailbox`,
   `TestANewRootHoldsWhatTheOldOneHeld`.
 - `bench/ipc`: B6 and B8a assert, with their `180d076` results in comments; B5 runs imitation
-  through `read_artifact`; `TestIPCB13BoundCost` measures.
+  through `read_artifact`; B14 runs the batch table at full size and asserts it;
+  `TestIPCB13BoundCost` measures.
+- **Sizes and seeding.** Package tests that need a full mailbox write the bus's file instead of
+  sending 256 times, which is what took the time, and leave the last sends real where the bound
+  is what they test. `TestAFullMailboxFitsTheWindow` keeps a case per rule of the batch at a
+  smaller size, and B14 has them at full size. `TestReadArtifactPagesToTheEnd` reads 1 MiB, and
+  B6 reads 10 MiB. No assertion was changed to get there.
+- **A flake in a test this step did not touch:** `TestGuardFencesWrites` (`internal/lease`,
+  `guard_test.go:55`) failed once in 3 runs of the package list, on a loaded machine: it grants a
+  50 ms lease and expects it still held on the next line. It failed 8 of 16 processes run at
+  once. Not fixed here.
 - Two older tests set `NoBusBounds`, with what they expect unchanged:
   `TestArchivedMailIsNotShownUntilRead` and `TestAdoptionRequiresIdenticalMessages` need
   several messages in one step, which batches now split. Re-checked after the review's fixes:
@@ -2472,13 +2498,18 @@ The book session's review found two defects in the batches, both reproduced:
 
 | Defect | Measured | Now |
 |---|---|---|
-| Batches hid waiting mail from the model, which could exit over it. A regression from the batches: before them it was all in one request | Default policy, the model exits at its first call. 13 short messages: 12 in the request, 1 dead letter, no hint. 3 of 12 KiB: 1 in the request, 2 dead letters, no hint | The notice, in the step that held mail back and after the mail, so compaction cannot separate them. One place in the count is kept for it. The exit stands, and a `wait` is told too |
+| Batches hid waiting mail from the model, which could exit over it. A regression from the batches: before them it was all in one request | Default policy, the model exits at its first call. 13 short messages: 12 in the request, 1 dead letter, no hint. 3 of 12 KiB: 1 in the request, 2 dead letters, no hint | The notice, in the step that held mail back and after the mail, so compaction cannot separate them. One place in the count is kept for it. The exit stands, and a `wait` is told too. *Fixed again after review of `2b8d6be`:* a repeat was dropped if the same line was anywhere in the history, so with equal-sized mail an old note about other mail stood in for a true one. Now only a line with no mail after it counts as a repeat (`TestAnOldNoteDoesNotStandInForANewOne`) |
 | Mail handed out and not acknowledged, past one batch, was stranded for the rest of the run: `ReceiveBatch` skipped `Deliveries > 0` after the first step | 40 delivered, a Recover with `Rollback`, 40 calls: 12 of 40 reached a request. An old directory, 30 delivered, a Resume, 30 calls: 12 of 30 | A later step takes anything not in the session's `MailboxSeen`. `TestDeliveredMailDrainsThroughOneRun` drains through consecutive steps of one run: Resume, plain Recover, Rollback, an old directory. `Receive`, which a replay uses, is as it was |
 
 Checking the failing-call loop as asked found a third: each failed step took on another batch,
 so a failed call grew the next request. Now nothing new comes until the batch has reached a
 model. A count limit of 11, not 12, and half the target, not all of it, came with the notice,
 since the notice and framing have to fit in what compaction keeps.
+
+One more after review of `2b8d6be`: `internal/runtime` had grown near `go test`'s default timeout,
+so the new tests were cut, as above. Re-running the mutations on the cut tests found one weakened: `TestTheBoundHoldsAcrossProcesses`, seeded 40 places short with 4 senders, let the bound
+checked outside the lock pass. It now has 12 senders for 6 places and catches that in 12 runs of
+12.
 
 The book session also ran the close on re-delegation through a real `aos run`, which this
 section had said was not done: see [Should the engine close more?](#should-the-engine-close-more).
