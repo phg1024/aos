@@ -1,0 +1,54 @@
+kernel 7.0.0-38-generic, io_uring_disabled=0
+=== namespace, as aos itself would make it
+  mount tmpfs over /run/user       permission denied
+clone(NEWUSER|NEWNS) with maps     OPEN
+=== bwrap
+-rwxr-xr-x
+bwrap-userns-restrict
+=== shipped: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                socket: operation not permitted
+seqpacket: user systemd/private    socket: operation not permitted
+seqpacket: system bus              socket: operation not permitted
+seqpacket: own stream socket       socket: operation not permitted
+seqpacket: own seqpacket socket    socket: operation not permitted
+seqpacket: abstract seqpacket      socket: operation not permitted
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            socket: operation not permitted
+tcp connect to 127.0.0.1:9         socket: operation not permitted
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== shipped: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0

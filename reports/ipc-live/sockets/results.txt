@@ -1,0 +1,449 @@
+# Sockets a confined command can reach, measured on the machine with the card. Host paths and the card's UUID removed.
+kernel 7.0.0-38-generic, io_uring_disabled=0
+=== namespace, as aos itself would make it
+  mount tmpfs over /run/user       permission denied
+clone(NEWUSER|NEWNS) with maps     OPEN
+=== bwrap
+-rwxr-xr-x
+bwrap-userns-restrict
+=== shipped: reach (plain, nonet)
+unix: user bus                     OPEN
+unix: user systemd/private         OPEN
+unix: system bus                   OPEN
+unix: own socket, outside grants   OPEN
+unix: abstract                     OPEN
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           protocol wrong type for socket
+socket(AF_NETLINK)                 OPEN
+socket(AF_VSOCK)                   OPEN
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     OPEN
+x32 socket(AF_UNIX)                function not implemented
+32-bit socket(AF_UNIX), int 0x80   OPEN
+systemctl --user: degraded
+exit 0
+=== shipped: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     ok
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== strict: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                socket: operation not permitted
+seqpacket: user systemd/private    socket: operation not permitted
+seqpacket: system bus              socket: operation not permitted
+seqpacket: own stream socket       socket: operation not permitted
+seqpacket: own seqpacket socket    socket: operation not permitted
+seqpacket: abstract seqpacket      socket: operation not permitted
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== strict: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           FAIL 1: AssertionError: cuInit 304
+nvcc compile, no run               ok
+exit 0
+=== seq: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== seq: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== seq-noinet: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            socket: operation not permitted
+tcp connect to 127.0.0.1:9         socket: operation not permitted
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== seq-noinet: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== bwrap-hide: reach (plain, nonet)
+unix: user bus                     connect: no such file or directory
+unix: user systemd/private         connect: no such file or directory
+unix: system bus                   connect: no such file or directory
+unix: own socket, outside grants   OPEN
+unix: abstract                     OPEN
+seqpacket: user bus                connect: no such file or directory
+seqpacket: user systemd/private    connect: no such file or directory
+seqpacket: system bus              connect: no such file or directory
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           OPEN
+socketpair dgram                   OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           no such file or directory
+socket(AF_NETLINK)                 OPEN
+socket(AF_VSOCK)                   OPEN
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     OPEN
+x32 socket(AF_UNIX)                function not implemented
+32-bit socket(AF_UNIX), int 0x80   OPEN
+systemctl --user: offline
+exit 0
+=== bwrap-hide: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     ok
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== bwrap-allow: reach (plain, nonet)
+unix: user bus                     connect: no such file or directory
+unix: user systemd/private         connect: no such file or directory
+unix: system bus                   connect: no such file or directory
+unix: own socket, outside grants   connect: no such file or directory
+unix: abstract                     OPEN
+seqpacket: user bus                connect: no such file or directory
+seqpacket: user systemd/private    connect: no such file or directory
+seqpacket: system bus              connect: no such file or directory
+seqpacket: own stream socket       connect: no such file or directory
+seqpacket: own seqpacket socket    connect: no such file or directory
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           OPEN
+socketpair dgram                   OPEN
+  repoint it with connect          no such file or directory
+  repoint it with sendto           no such file or directory
+socket(AF_NETLINK)                 OPEN
+socket(AF_VSOCK)                   OPEN
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     OPEN
+x32 socket(AF_UNIX)                function not implemented
+32-bit socket(AF_UNIX), int 0x80   OPEN
+systemctl --user: offline
+exit 0
+=== bwrap-allow: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     ok
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== seq, network granted: reach (plain, net)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      OPEN
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         connection refused
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== seq, network granted: lookups (plain, net)
+12
+::1             localhost
+exit 0
+=== shipped, network granted: lookups (plain, net)
+12
+::1             localhost
+exit 0
+=== what CUDA asks for, unconfined
+cuInit 0
+      1 bind(16, {sa_family=AF_UNIX, sun_path=@"cuda-uvmfd-4026531836-1038036\0"}, 33) = 0
+      1 connect(9, {sa_family=AF_UNIX, sun_path="/tmp/nvidia-mps/control"}, 26) = -1 ENOENT (No such file or directory)
+      1 listen(16, 128)                 = 0
+      1 socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC, 0) = 16
+      1 socket(AF_UNIX, SOCK_SEQPACKET|SOCK_CLOEXEC, 0) = 9
+=== what nvidia-smi asks for, unconfined
+=== on the card now
+compute app:  /usr/lib/x86_64-linux-gnu/xestrata/engine/strata-image  216 MiB
+compute app:  ~/jarvis-speech/venv-fast/bin/python  9162 MiB
+=== failed user units
+● snap.firmware-updater.firmware-notifier.service
+=== seqpacket listeners on this machine
+abstract @cuda-uvmfd-4026531836-119977@
+abstract @cuda-uvmfd-4026531836-53887@
+600 root /run/udev/control
+=== listeners by type
+     17 u_dgr
+      3 u_seq
+     85 u_str
+
+=== seq-scope: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      connect: operation not permitted
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            OPEN
+tcp connect to 127.0.0.1:9         permission denied
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== seq-scope: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0
+=== seq-noinet-scope: reach (plain, nonet)
+unix: user bus                     socket: operation not permitted
+unix: user systemd/private         socket: operation not permitted
+unix: system bus                   socket: operation not permitted
+unix: own socket, outside grants   socket: operation not permitted
+unix: abstract                     socket: operation not permitted
+seqpacket: user bus                connect: protocol wrong type for socket
+seqpacket: user systemd/private    connect: protocol wrong type for socket
+seqpacket: system bus              connect: protocol wrong type for socket
+seqpacket: own stream socket       connect: protocol wrong type for socket
+seqpacket: own seqpacket socket    OPEN
+seqpacket: abstract seqpacket      connect: operation not permitted
+socketpair stream                  OPEN
+  repoint it with connect          transport endpoint is already connected
+  repoint it with sendto           transport endpoint is already connected
+socketpair seqpacket               OPEN
+  repoint it with connect          protocol wrong type for socket
+  repoint it with sendto           OPEN
+socketpair dgram                   socketpair: operation not permitted
+socket(AF_NETLINK)                 operation not permitted
+socket(AF_VSOCK)                   operation not permitted
+socket(AF_PACKET)                  operation not permitted
+udp send to 127.0.0.1:9            socket: operation not permitted
+tcp connect to 127.0.0.1:9         socket: operation not permitted
+io_uring_setup                     operation not permitted
+x32 socket(AF_UNIX)                operation not permitted
+32-bit socket(AF_UNIX), int 0x80   operation not permitted
+systemctl --user: Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+exit 0
+=== seq-noinet-scope: workload (gpu, nonet)
+python multiprocessing Pool        FAIL 1: PermissionError: [Errno 13] Permission denied
+python multiprocessing Queue       FAIL 1: PermissionError: [Errno 13] Permission denied
+python Pipe(duplex)                ok
+python forkserver                  FAIL 1: PermissionError: [Errno 13] Permission denied
+python Manager                     FAIL 1: PermissionError: [Errno 1] Operation not permitted
+python asyncio subprocess          ok
+python getaddrinfo localhost       ok
+node child_process                 ok
+getent passwd                      ok
+whoami                             ok
+git init and commit                ok
+gcc -pipe and make                 ok
+cmake configure                    ok
+nvidia-smi -L                      ok
+cuInit, cuDeviceGetCount           ok
+nvcc compile, no run               ok
+exit 0

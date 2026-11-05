@@ -1,0 +1,6 @@
+kernel: 7.0.0-38-generic
+command: systemd-run --user --wait /usr/bin/id
+--- stdout
+--- stderr
+Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<user>@.host --user to connect to bus of other user)
+--- exit 1

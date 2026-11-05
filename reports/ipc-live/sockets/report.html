@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hiding Service Sockets from Confined Commands</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Hiding Service Sockets from Confined Commands</h1>
+    <p>A test of ways to stop a confined Linux command reaching the user's service manager. <b>Nothing in aos changed.</b> The rules under test are the shipped helper at <code>2d7c390</code>, with each candidate wrapped around it. No unit, Ray job or kernel was started.</p>
+    <p><b>Superseded on what was built:</b> the recommendation here was built in <code>ab0950b</code>, with the escape proof, in <code>reports/sandbox-socket-key-signal-fix.html</code>. The statement below that <code>systemd-run</code> was not tried describes this test only.</p>
+    <ul>
+      <li><span class="good">A seccomp filter works here, with no privilege and no new dependency:</span> <code>systemctl --user</code> goes from answering to <code>Operation not permitted</code>, and <code>cuInit</code>, <code>nvidia-smi</code> and <code>nvcc</code> still work.</li>
+      <li><span class="bad">Denying all Unix sockets breaks CUDA:</span> <code>cuInit</code> returns 304, because CUDA itself makes two <code>AF_UNIX</code> seqpacket sockets. The filter must allow that one type, at least under <code>allow_gpu</code>.</li>
+      <li><span class="warn">Not measured:</span> a real kernel. Only <code>cuInit</code> and <code>cuDeviceGetCount</code> ran, because allocating needs the offload window. <code>systemd-run</code> was not tried.</li>
+    </ul>
+  </div>
+
+  <h2>1. The candidates</h2>
+  <table>
+    <tr><th>Candidate</th><th>Service manager and buses</th><th>Socket in a directory outside any grant</th><th>Abstract seqpacket</th><th>UDP send</th><th>io_uring, netlink, vsock, 32-bit calls</th><th><code>cuInit</code></th><th>Needs</th></tr>
+    <tr><td>Shipped (Landlock only)</td><td class="bad">reachable</td><td class="bad">reachable</td><td class="bad">reachable</td><td class="bad">open</td><td class="bad">open</td><td class="good">0</td><td>-</td></tr>
+    <tr><td>Filter: no <code>AF_UNIX</code> socket at all</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td><td class="bad">open</td><td class="good">refused</td><td class="bad">304</td><td>seccomp</td></tr>
+    <tr><td>Filter: seqpacket only</td><td class="good">refused</td><td class="warn">seqpacket listeners only</td><td class="bad">reachable</td><td class="bad">open</td><td class="good">refused</td><td class="good">0</td><td>seccomp</td></tr>
+    <tr><td>Filter: seqpacket only, no IP, abstract scope</td><td class="good">refused</td><td class="warn">seqpacket listeners only</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td><td class="good">0</td><td>seccomp, Landlock ABI 6</td></tr>
+    <tr><td><code>bwrap</code>, <code>/run</code> and <code>/tmp</code> hidden</td><td class="good">not there</td><td class="bad">reachable</td><td class="bad">reachable</td><td class="bad">open</td><td class="bad">open</td><td class="good">0</td><td><code>bwrap</code> and its AppArmor profile</td></tr>
+    <tr><td><code>bwrap</code>, only granted paths visible</td><td class="good">not there</td><td class="good">not there</td><td class="bad">reachable</td><td class="bad">open</td><td class="bad">open</td><td class="good">0</td><td><code>bwrap</code> and its AppArmor profile</td></tr>
+    <tr><td>aos making its own mount namespace</td><td colspan="6">Not possible here: the clone succeeds and the mount is refused (<code>permission denied</code>), since <code>kernel.apparmor_restrict_unprivileged_userns=1</code>. Allowing it needs a system AppArmor profile, so sudo.</td><td>a root-installed profile</td></tr>
+  </table>
+  <p>Every row keeps the shipped Landlock rules underneath. "Refused" means the call returned an error and the probe saw it. A hidden-path approach is a list of what to hide, and sockets can be anywhere the user can write: Ray keeps its own in <code>/tmp</code>, for example.</p>
+
+  <h2>2. Why seqpacket is a narrow allowance</h2>
+  <p>A <code>SOCK_SEQPACKET</code> socket connecting to a stream listener gets <code>protocol wrong type for socket</code>. That was measured against the user bus, <code>systemd/private</code>, the system bus and a test socket. The machine has 85 stream listeners, 17 datagram and 3 seqpacket:</p>
+  <table>
+    <tr><th>Seqpacket listener</th><th>Who could connect under the shipped rules</th><th>Under seqpacket-only with abstract scope</th></tr>
+    <tr><td><code>/run/udev/control</code>, root, mode 600</td><td>No one but root, by file mode</td><td>Same</td></tr>
+    <tr><td>Two abstract <code>@cuda-uvmfd-…</code>, in other users of the card</td><td class="bad">A same-kind test listener was reachable, so these should be</td><td class="good">A same-kind test listener was refused</td></tr>
+  </table>
+  <p>I did not connect to those two: they belong to the speech service and Strata, and the test used its own listener of the same kind. What is left open is any seqpacket listener at a path the user can write to, including <code>/tmp/nvidia-mps/control</code> if MPS is ever started. None was running.</p>
+  <p>What CUDA asks for, traced unconfined: a seqpacket <code>connect</code> to <code>/tmp/nvidia-mps/control</code> (absent), and a seqpacket <code>bind</code> and <code>listen</code> on its own abstract <code>@cuda-uvmfd-…</code>. <code>nvidia-smi</code> makes no socket calls. CUDA's own listener still works under the abstract scope, since the scope only stops reaching out of the domain.</p>
+
+  <h2>3. What the filter costs</h2>
+  <table>
+    <tr><th>Check</th><th>Shipped</th><th>Filter</th></tr>
+    <tr><td><code>nvidia-smi -L</code>, <code>nvcc</code> compile, git, gcc with <code>-pipe</code>, make, cmake configure, node <code>child_process</code>, getent, whoami, python Pipe and asyncio subprocess</td><td class="good">ok</td><td class="good">ok</td></tr>
+    <tr><td><code>getaddrinfo("localhost")</code>; with network granted, <code>getaddrinfo("example.com")</code> and <code>getent hosts</code></td><td class="good">ok</td><td class="good">ok</td></tr>
+    <tr><td>python <code>multiprocessing.Manager</code>, which listens on a stream Unix socket</td><td class="good">ok</td><td class="bad">Operation not permitted</td></tr>
+    <tr><td>python <code>multiprocessing</code> Pool, Queue, forkserver</td><td class="bad">Permission denied</td><td class="bad">Permission denied, unchanged</td></tr>
+  </table>
+  <p>The last row fails with or without the filter, so it is a limit of today's sandbox and not caused by it. The cause was not investigated. The checklist is small. A real workload that needs a Unix socket would need a grant, which does not exist yet.</p>
+  <p>The filter also denies, as an error and not a kill: any foreign architecture, so 32-bit binaries; x32 numbers; <code>io_uring_setup</code>, <code>_enter</code> and <code>_register</code> (io_uring is enabled on this kernel); and datagram socketpairs. Stream and seqpacket socketpairs stay, because they are already connected: re-pointing one with <code>connect</code> was refused every time, and <code>sendto</code> with an address on a seqpacket pair succeeded, which should go to its peer. That last point is from the kernel's behaviour as I understand it, not separately measured.</p>
+
+  <h2>4. A better answer exists, on a newer kernel</h2>
+  <p>This machine runs 7.0 with Landlock ABI 8. A Landlock right for exactly this, <code>LANDLOCK_ACCESS_FS_RESOLVE_UNIX</code>, is ABI 9, and appears to first ship in 7.1 (<a href="https://kernsec.org/pipermail/linux-security-module-archive/2026-March/056560.html">documentation patch</a>; the release number is inferred from a <a href="https://git.radix-linux.su/kernel/linux.git/atom/include/uapi/linux/landlock.h?h=v7.1">v7.1 mirror</a>, not from release notes). It would allow-list socket paths the way files are. The filter is what works on this kernel, and aos could prefer the right when it is present.</p>
+
+  <h2>5. Recommendation, not built</h2>
+  <ul>
+    <li>Apply the filter in the confinement helper, after Landlock and before exec, on every confined command, and refuse the run if it cannot be installed.</li>
+    <li>Allow <code>socket(AF_UNIX, SOCK_SEQPACKET)</code> only when the policy has <code>Devices</code>. Otherwise no <code>AF_UNIX</code> socket at all.</li>
+    <li>Allow IPv4 and IPv6 only when the policy has network. That also closes the UDP gap in the current sandbox notes.</li>
+    <li>Add the abstract scope to the existing ruleset.</li>
+  </ul>
+  <p>All four were measured only from outside the helper. Unit tests, mutation evidence and a kernel run in a window would still be needed. The filter here is x86-64 only, and an arm64 build would need its own numbers.</p>
+
+  <h2>6. Limits of this test</h2>
+  <ul>
+    <li>Tried once, on one machine, on kernel 7.0.0-38. No repeated trials.</li>
+    <li>That the bus was reachable is shown by <code>systemctl --user</code> answering. That it can be used to escape is still inference: <code>systemd-run --user</code> has not been run.</li>
+    <li>The filter wraps the helper instead of being inside it, so filter and Landlock are in the opposite order from the recommendation. Neither should depend on the order, and that has not been tested.</li>
+    <li>Inherited socket descriptors, signals, and API keys in the environment were not tested. macOS was not tested.</li>
+    <li>The temporary folder on the machine has been removed. The one failed user unit there, a snap firmware notifier, is not from this test. No <code>run-*</code> unit exists.</li>
+  </ul>
+
+  <h2>7. Files</h2>
+  <p><code>reports/ipc-live/sockets/</code>: <code>probe/</code> (its own Go module, so the repository's tests do not build it), <code>run.sh</code>, <code>workload.sh</code>, and <code>results.txt</code>, the raw output with the card's UUID and home paths removed.</p>
+</body>
+</html>

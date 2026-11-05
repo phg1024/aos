@@ -1,0 +1,14 @@
+m00 | no filter installed | exit 1 | TestSocketsAreGrantedByPolicy TestTheServiceManagerIsOutOfReach TestARunWithoutItsFilterIsRefused 
+m01 | io_uring_setup allowed | exit 1 | TestSocketFilterDecides TestSocketsAreGrantedByPolicy 
+m02 | architecture check removed | exit 1 | TestSocketFilterRefusesAForeignArchitecture 
+m03 | x32 check removed | exit 1 | TestSocketFilterDecides 
+m04 | any Unix socket under a device grant | exit 1 | TestSocketFilterDecides TestSocketsAreGrantedByPolicy TestTheServiceManagerIsOutOfReach 
+m05 | seqpacket for every command | exit 1 | TestSocketFilterDecides TestSocketsAreGrantedByPolicy 
+m06 | IP sockets without network | exit 1 | TestSocketFilterDecides TestSocketsAreGrantedByPolicy 
+m07 | datagram socketpair allowed | exit 1 | TestSocketFilterDecides TestSocketsAreGrantedByPolicy 
+m08 | inherited descriptors kept | exit 1 | TestAnInheritedSocketDoesNotSurvive 
+m09 | keys kept in the environment | exit 1 | TestEnvironmentRemovesModelKeys TestKeysDoNotReachACommand 
+m10 | no signal scope | exit 1 | TestSignalsStayInside 
+m11 | no abstract socket scope | exit 1 | TestSocketsAreGrantedByPolicy 
+m12 | a filter failure ignored | exit 1 | TestARunWithoutItsFilterIsRefused 
+m13 | device grant allowed below ABI 6 | exit 1 | TestOlderKernelsAndTheScopes 

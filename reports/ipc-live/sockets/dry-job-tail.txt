@@ -1,0 +1,40 @@
+verdict art-000070: pass: verifier pid-000005 passed: verifier finished: a scripted verdict
+
+== not_shown dead letters: a returned model call after the delivery on record?
+no not_shown dead letter in this run
+
+== Bodies or tool output that look like a runtime opener
+none in this run
+
+== Contract situations
+exercised 1      a body refused as too large
+NOT EXERCISED    a full mailbox refused a send
+exercised 2      a handle attached to mail
+exercised 1      a handle read to its end
+exercised 1      a read denied
+exercised 1      the verifier reading evidence to its end
+exercised 1      the verifier pausing with a wait
+exercised 1      a question by mail to the coordinator
+NOT EXERCISED    mail forwarded along a chain
+NOT EXERCISED    mail held for a process not running
+NOT EXERCISED    a publish
+NOT EXERCISED    a dead letter, unread
+NOT EXERCISED    a dead letter, not_shown
+NOT EXERCISED    a not_shown letter with a returned call on record
+NOT EXERCISED    a dead letter, archived
+NOT EXERCISED    a dead letter, rolled back
+NOT EXERCISED    an undelivered: notice in a request
+NOT EXERCISED    an archived unread: line in a request
+NOT EXERCISED    a waiting note in a request
+NOT EXERCISED    a model exiting with a waiting note in its request
+NOT EXERCISED    a chain closed by a re-delegation
+NOT EXERCISED    a backend retry
+NOT EXERCISED    compaction
+NOT EXERCISED    a handoff
+NOT EXERCISED    a body or tool output imitating a runtime line
+NOT EXERCISED says nothing about the contract, either way.
+job: on the card: 53887, /usr/lib/x86_64-linux-gnu/xestrata/engine/strata-image, 216 MiB
+job: on the card: 119977, ~/jarvis-speech/venv-fast/bin/python, 9162 MiB
+2026-11-05 13:58:00,262	SUCC cli.py:66 -- [32m------------------------------------------------[39m
+2026-11-05 13:58:00,262	SUCC cli.py:67 -- [32mJob 'aos-sandbox-dry-20261105T215747Z' succeeded[39m
+2026-11-05 13:58:00,262	SUCC cli.py:68 -- [32m------------------------------------------------[39m

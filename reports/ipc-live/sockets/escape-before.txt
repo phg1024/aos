@@ -1,0 +1,16 @@
+kernel: 7.0.0-38-generic
+command: systemd-run --user --wait /usr/bin/id
+--- stdout
+--- stderr
+Running as unit: run-p1039140-i1045683.service; invocation ID: 1afb7988e5dc43749aee9fd231849e10
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 30ms
+             CPU time consumed: 21ms
+                   Memory peak: 2M (swap: 0B)
+--- exit 0
+--- units named run-p1039140*:
+--- count: 11
+--- journal
+Started run-p1039140-i1045683.service - [systemd-run] /usr/bin/id.
+uid=1000(phg) gid=1000(phg) groups=1000(phg),4(adm),24(cdrom),27(sudo),30(dip),44(video),46(plugdev),100(users),111(lpadmin),114(lxd),990(render)

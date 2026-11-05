@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sandbox Socket, Key and Signal Fixes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Sandbox Socket, Key and Signal Fixes</h1>
+    <p>Before this work a confined command on Linux could leave the sandbox: the user's service manager ran a command for it. That route is now closed, in <code>ab0950b</code>, on top of <code>2d7c390</code>. Nothing is pushed. No live model or real kernel ran.</p>
+    <ul>
+      <li><span class="good">Measured on the target machine:</span> the same command through the same helper form escaped before and is refused after. All 14 mutations of the controls fail a test. <code>cuInit</code>, <code>nvidia-smi</code> and <code>nvcc</code> still work under the filter, and one Ray dry job succeeded.</li>
+      <li><span class="warn">Not yet measured:</span> a CUDA allocation or kernel under the filter. The first one is in the preflight, in the offload window.</li>
+      <li><span class="bad">Still open on macOS, not fixed here:</span> <code>launchctl print</code> answers a confined command, which suggests a similar route. See section 6.</li>
+    </ul>
+  </div>
+
+  <h2>1. The escape proof</h2>
+  <p>Kernel 7.0.0-38-generic. One run each, of the one command approved, through <code>aos __aos_sandbox_exec /bin/sh -c</code> with no network and no devices.</p>
+  <h3>Before, at <code>2d7c390</code></h3>
+<pre>Running as unit: run-p1039140-i1045683.service; invocation ID: 1afb7988e5dc43749aee9fd231849e10
+          Finished with result: success
+Main processes terminated with: code=exited, status=0/SUCCESS
+               Service runtime: 30ms
+             CPU time consumed: 21ms
+                   Memory peak: 2M (swap: 0B)
+exit 0</pre>
+  <p>Its journal, read afterwards from outside: <code>uid=1000(phg) gid=1000(phg) groups=1000(phg),4(adm),24(cdrom),27(sudo),30(dip),44(video),46(plugdev),100(users),111(lpadmin),114(lxd),990(render)</code>. No unit of that name remained. The command was started by the service manager and so was not under the helper's Landlock domain: that follows from how a user service starts, and was not separately probed.</p>
+  <h3>After, at <code>ab0950b</code></h3>
+<pre>Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=&lt;user&gt;@.host --user to connect to bus of other user)
+exit 1</pre>
+  <p>No new unit. Raw outputs: <code>reports/ipc-live/sockets/escape-before.txt</code>, <code>escape-after.txt</code>.</p>
+
+  <h2>2. Fix 1: the socket filter</h2>
+  <p>Installed in the helper after Landlock and before exec, in hand-assembled BPF with no dependency. Refusals return <code>EPERM</code>, so a tool's error can be read. A filter that cannot be installed refuses the run with exit 126, and an architecture with no filter or a kernel with no seccomp is <code>ErrUnavailable</code>, so <code>run</code> is refused.</p>
+  <table>
+    <tr><th>Call</th><th>No grant</th><th><code>allow_network</code></th><th><code>allow_gpu</code></th></tr>
+    <tr><td><code>socket(AF_INET, AF_INET6)</code></td><td class="good">refused</td><td>allowed; Landlock answers for TCP</td><td class="good">refused</td></tr>
+    <tr><td><code>socket(AF_UNIX)</code> stream or datagram</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td></tr>
+    <tr><td><code>socket(AF_UNIX, SOCK_SEQPACKET)</code></td><td class="good">refused</td><td class="good">refused</td><td class="warn">allowed: CUDA needs it</td></tr>
+    <tr><td>netlink, vsock, packet, any other family</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td></tr>
+    <tr><td><code>socketpair</code>, Unix stream or seqpacket</td><td>allowed</td><td>allowed</td><td>allowed</td></tr>
+    <tr><td><code>socketpair</code>, datagram or another family</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td></tr>
+    <tr><td><code>io_uring_setup</code>, <code>_enter</code>, <code>_register</code></td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td></tr>
+    <tr><td>another architecture's calls, x32 numbers</td><td class="good">refused</td><td class="good">refused</td><td class="good">refused</td></tr>
+  </table>
+  <ul>
+    <li><b>Why <code>socketpair</code> stays:</b> Python and build tools use it for local IPC. A connected pair reaches nothing outside the process tree, and <code>connect</code> on one was refused every time. A datagram pair could be pointed elsewhere by its nature, so it is refused.</li>
+    <li><b>Why seqpacket under <code>allow_gpu</code>:</b> a user decision, after measuring that <code>cuInit</code> returns 304 without it. CUDA makes one seqpacket socket to look for MPS and one to listen on its own abstract name. Such a socket gets <code>protocol wrong type for socket</code> from a stream listener, which is what the buses are.</li>
+    <li><b>Inherited sockets:</b> <code>exec.Cmd</code> closes only what is close-on-exec, so a socket <code>aos</code> was started with would have carried through. The helper now marks every descriptor above stderr close-on-exec just before exec. The <code>run</code> tool passes buffers, so stdout and stderr are pipes, and stdin is empty.</li>
+    <li><b>What a real workload loses:</b> Python's <code>multiprocessing.Manager</code>. Its Pool and Queue failed before this work too, with a different error, which was not investigated. git, gcc, make, cmake, node, getent, and name lookups with network all still work.</li>
+    <li><b>Ordering:</b> Landlock first, then the filter, then exec. The filter does not touch <code>close_range</code> or <code>execve</code>, and the helper is what the tests above run, in this order.</li>
+  </ul>
+
+  <h2>3. Fix 2: API keys</h2>
+  <p><code>Policy.Environment</code>, the one place a confined command's environment is built on both platforms, removes <code>AOS_LLM_API_KEY</code>, <code>AOS_VLLM_API_KEY</code> and <code>AOS_KEY_*</code>. The repository has no <code>allow_env</code>-style grant, so nothing can name them back in. <code>/proc/$PPID/environ</code> stays refused, tested with the keys set in the parent. What the search found beyond these:</p>
+  <ul>
+    <li><b>Provider code</b> reads only those two variables by name. Any profile's <code>api_key_env</code> can be another name. Only <code>aos-tui</code> loads profiles, and it removes those from its own environment. <code>aos run</code> does not read profiles.</li>
+    <li><b><code>unconfined_run</code> is unchanged.</b> It inherits everything, keys included. That covers <code>workflows/terminal-bench.json</code>, and <code>bench/harbor/aos_agent.py</code> sets a key, so a model's commands in those containers still see it. Not changed here because the request was for confined commands. It needs its own decision.</li>
+    <li><b>Other credentials in <code>aos</code>'s environment pass through.</b> The environment is copied, not allow-listed. <code>AOS_LLM_BASE_URL</code> passes too, which matters only if a URL carries a credential.</li>
+    <li><b>Which version:</b> <code>ab0950b</code>, after <code>v0.1.5</code> and untagged. The eval session's runs keep the old behaviour until they rebuild.</li>
+  </ul>
+
+  <h2>4. Fix 3: signals and abstract sockets</h2>
+  <p>The Landlock ruleset sets <code>LANDLOCK_SCOPE_SIGNAL</code> and <code>LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET</code> from ABI 6. A confined <code>kill -TERM</code> of an outside process of the same user is refused and the process lives. A command still signals its own child: status 143. CUDA's own abstract listener still works, in the same domain.</p>
+  <p><b>Below ABI 6</b> follows both existing policies, on the line they already draw. What a policy explicitly asks for and cannot be kept is refused, as network is below ABI 4: <code>allow_gpu</code> is refused, because its seqpacket allowance depends on the abstract scope. A hardening the policy did not ask for is best effort, as truncate and ioctl rights are: the command runs. Unlike those, it is told: <code>aos sandbox: warning: Landlock ABI N cannot scope signals (needs 6), so this command can signal this user's other processes</code> goes to stderr, so it reaches the tool result and the run record. Refusing outright would have stopped every confined run on kernels before 6.12. Only the decision logic was tested for this, since no older kernel was available.</p>
+
+  <h2>5. Evidence</h2>
+  <table>
+    <tr><th>What</th><th>Where</th><th>Result</th></tr>
+    <tr><td><code>internal/sandbox</code>, real helper, 3 times over</td><td>Target machine</td><td class="good">PASS</td></tr>
+    <tr><td><code>TestGPUNeedsItsGrant</code></td><td>Target machine</td><td class="good">with: <code>cuInit 0</code>, <code>nvidia-smi</code> exit 0. Without: 304, 255</td></tr>
+    <tr><td><code>internal/tools</code>, <code>cmd/aos</code></td><td>Target machine</td><td class="good">PASS</td></tr>
+    <tr><td><code>internal/sandbox</code>, <code>internal/tools</code>, <code>internal/capability</code>, <code>cmd/aos</code></td><td>Mac</td><td class="good">ok</td></tr>
+    <tr><td>Probe of every route, through the shipped helper</td><td>Target machine</td><td class="good">All refused but connected pairs. 32-bit <code>int 0x80</code> included. <code>reports/ipc-live/sockets/results-after-fix.txt</code></td></tr>
+    <tr><td>Ray dry job <code>aos-sandbox-dry-20261105T215747Z</code></td><td>Target machine, 2 CPUs, no key</td><td class="good">Succeeded in about 10 s. <code>nvcc</code> ran inside the sandbox, the scripted verifier passed. Compute memory on the card unchanged: 216 and 9162 MiB, neither ours. No <code>Operation not permitted</code> anywhere in its state</td></tr>
+  </table>
+  <p>Only package tests ran, not <code>go test ./...</code>, so the probe result files were not rewritten. The full evidence set has not been re-run.</p>
+  <h3>Mutations, each built and run on the target machine</h3>
+  <table>
+    <tr><th>Removed</th><th>Failed</th></tr>
+    <tr><td>Filter not installed</td><td><code>TestSocketsAreGrantedByPolicy</code>, <code>TestTheServiceManagerIsOutOfReach</code>, <code>TestARunWithoutItsFilterIsRefused</code></td></tr>
+    <tr><td><code>io_uring_setup</code> allowed</td><td><code>TestSocketFilterDecides</code>, <code>TestSocketsAreGrantedByPolicy</code></td></tr>
+    <tr><td>Architecture check</td><td><code>TestSocketFilterRefusesAForeignArchitecture</code></td></tr>
+    <tr><td>x32 check</td><td><code>TestSocketFilterDecides</code></td></tr>
+    <tr><td>Any Unix socket under a device grant</td><td><code>TestSocketFilterDecides</code>, <code>TestSocketsAreGrantedByPolicy</code>, <code>TestTheServiceManagerIsOutOfReach</code></td></tr>
+    <tr><td>Seqpacket for every command</td><td><code>TestSocketFilterDecides</code>, <code>TestSocketsAreGrantedByPolicy</code></td></tr>
+    <tr><td>IP sockets without network</td><td><code>TestSocketFilterDecides</code>, <code>TestSocketsAreGrantedByPolicy</code></td></tr>
+    <tr><td>Datagram socketpair allowed</td><td><code>TestSocketFilterDecides</code>, <code>TestSocketsAreGrantedByPolicy</code></td></tr>
+    <tr><td>Inherited descriptors kept</td><td><code>TestAnInheritedSocketDoesNotSurvive</code></td></tr>
+    <tr><td>Keys kept</td><td><code>TestEnvironmentRemovesModelKeys</code>, <code>TestKeysDoNotReachACommand</code></td></tr>
+    <tr><td>Signal scope</td><td><code>TestSignalsStayInside</code></td></tr>
+    <tr><td>Abstract scope</td><td><code>TestSocketsAreGrantedByPolicy</code></td></tr>
+    <tr><td>A filter failure ignored</td><td><code>TestARunWithoutItsFilterIsRefused</code></td></tr>
+    <tr><td>Device grant allowed below ABI 6</td><td><code>TestOlderKernelsAndTheScopes</code></td></tr>
+  </table>
+  <p>The architecture and x32 checks are caught only by interpreting the program in Go, since the real helper test has no 32-bit call. The probe above did make one, by <code>int 0x80</code>, and it was refused.</p>
+
+  <h2>6. macOS, measured</h2>
+  <p>Through the real <code>sandbox-exec</code> path, with nothing changed. Nothing here is fixed, except that keys go, since both platforms share <code>Policy.Environment</code>.</p>
+  <table>
+    <tr><th>Gap</th><th>macOS</th></tr>
+    <tr><td>Unix socket by path, no network</td><td class="good">Refused: <code>operation not permitted</code></td></tr>
+    <tr><td>Unix socket by path, <code>allow_network</code></td><td class="bad">Open: <code>(allow network*)</code> includes it</td></tr>
+    <tr><td>UDP and TCP, no network</td><td class="good">Refused</td></tr>
+    <tr><td>Signal to an outside process of the same user</td><td class="good">Refused, own child allowed: <code>(allow signal (target same-sandbox))</code></td></tr>
+    <tr><td>API keys</td><td class="good">Gone</td></tr>
+    <tr><td>Inherited socket</td><td class="bad">Survives</td></tr>
+    <tr><td><code>launchd</code></td><td class="bad"><code>launchctl print gui/&lt;uid&gt;</code> answered with 4313 lines. <code>launchctl list</code> gave nothing. <code>launchctl submit</code>, the likely equivalent of <code>systemd-run</code>, was not tried, since no proof was approved here</td></tr>
+    <tr><td>Abstract sockets, io_uring, netlink</td><td>Do not exist there</td></tr>
+  </table>
+
+  <h2>7. Remaining gaps</h2>
+  <ul>
+    <li><b>A CUDA allocation or kernel under the filter is unmeasured.</b> It may ask for more. If so it comes back as a decision, without widening the filter first.</li>
+    <li><b><code>allow_gpu</code> can reach a seqpacket listener at any path the user can write to,</b> such as <code>/tmp/nvidia-mps/control</code> if MPS is started. A test states this directly. None runs on the machine now. It may also write <code>oom_score_adj</code> and <code>coredump_filter</code> of this user's processes, since <code>/proc</code> stays writable, and the signal scope does not cover that.</li>
+    <li><b>Shared <code>nvidiactl</code> and <code>nvidia-uvm</code></b> on a host with a second NVIDIA card remain unmeasured.</li>
+    <li><b><code>allow_network</code> sends UDP as well as TCP,</b> anywhere. Unchanged, and by grant.</li>
+    <li><b>The filter on arm64 has never run.</b> Its numbers are checked only by the interpreter. One kernel, x86-64, was measured.</li>
+    <li><b>Below ABI 6,</b> nothing ran on a real older kernel. Landlock ABI 9's Unix socket right (<a href="https://kernsec.org/pipermail/linux-security-module-archive/2026-March/056560.html">documentation patch</a>) would allow-list socket paths and is not used, since this machine cannot test it.</li>
+    <li><b>Same-user <code>ptrace</code> and <code>pidfd_getfd</code></b> are left to Landlock and were not separately probed. <code>/proc/$PPID/environ</code> being refused is the nearest test.</li>
+    <li><b>macOS and <code>unconfined_run</code>:</b> sections 3 and 6.</li>
+  </ul>
+
+  <h2>8. What changes for the workflow and the live run</h2>
+  <p>Nothing in <code>workflows/rasterizer-bunny-cuda-ipc.json</code>, <code>job.sh</code> or <code>submit.sh</code>, and the commands are the same. <code>aos</code> on the machine is now <code>ab0950b</code>. A key passed to <code>job.sh</code> still reaches <code>aos</code> and no longer reaches its commands. Its planned file is outside every mount in the workflow. Docs corrected: <code>README.md</code>, the header of <code>sandbox_linux.go</code>, and a note in <code>reports/ipc-live/cuda-report.html</code>. <code>ipc-design.md</code> makes no claim about Landlock and was left alone.</p>
+</body>
+</html>

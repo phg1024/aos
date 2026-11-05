@@ -22,7 +22,7 @@
     <ul>
       <li><span class="good">Through aos's own helper on the target machine:</span> with the grant, <code>cuInit</code> returns 0 and <code>nvidia-smi -L</code> lists the card; without it, 304 and exit 255.</li>
       <li><span class="good">A dry run through the real <code>aos run</code> there:</span> <code>nvcc</code> inside the sandbox from a read-only toolchain, a too-large refusal, a handle, a verifier's wait, a read to the end, a verdict. It allocated no GPU memory.</li>
-      <li><span class="bad">Before a live run:</span> a confined command can reach the user's service manager, and an API key in the environment reaches every model-written command. See section 4.</li>
+      <li><span class="bad">Before a live run:</span> a confined command can reach the user's service manager, and an API key in the environment reaches every model-written command. See section 4. <b>Fixed since, in <code>ab0950b</code>:</b> see <code>reports/sandbox-socket-key-signal-fix.html</code>.</li>
     </ul>
   </div>
 
