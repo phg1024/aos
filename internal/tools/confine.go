@@ -24,6 +24,9 @@ func (r *Runtime) runCommand(ctx context.Context, req Request, command string) (
 		return cmd, "unconfined (unconfined_run)", nil
 	}
 	policy, err := r.runPolicy(req)
+	if errors.Is(err, sandbox.ErrUnavailable) {
+		return nil, "", fmt.Errorf("%w: %v", ErrRunUnconfined, err)
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -43,24 +46,33 @@ func (r *Runtime) runCommand(ctx context.Context, req Request, command string) (
 
 // runPolicy is what a confined run of req's process may touch: its read
 // and write scopes within its mounts, its own scratch directory, network
-// only with allow_network, and never the protected paths.
+// only with allow_network, the GPU only with allow_gpu, and never the
+// protected paths.
 func (r *Runtime) runPolicy(req Request) (sandbox.Policy, error) {
 	read, write, readOnly := capability.RunScopes(req.CapabilitySet, req.Mounts)
 	temp, err := r.scratchDir(req.PID)
 	if err != nil {
 		return sandbox.Policy{}, err
 	}
+	var devices []string
+	if len(req.CapabilitySet.AllowGPU) > 0 {
+		if devices, err = sandbox.ResolveGPUs(req.CapabilitySet.AllowGPU); err != nil {
+			return sandbox.Policy{}, err
+		}
+	}
 	var hidden []string
 	for _, path := range r.Protected {
 		hidden = append(hidden, capability.ResolvePath(path))
 	}
 	return sandbox.Policy{
-		Read:     read,
-		Write:    write,
-		ReadOnly: readOnly,
-		Hidden:   hidden,
-		Network:  req.CapabilitySet.AllowNetwork,
-		Temp:     temp,
+		Read:        read,
+		Write:       write,
+		ReadOnly:    readOnly,
+		Hidden:      hidden,
+		Network:     req.CapabilitySet.AllowNetwork,
+		Devices:     devices,
+		VisibleGPUs: req.CapabilitySet.AllowGPU,
+		Temp:        temp,
 	}, nil
 }
 

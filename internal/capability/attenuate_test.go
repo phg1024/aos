@@ -1,6 +1,7 @@
 package capability_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -126,5 +127,49 @@ func TestBudgetsAttenuate(t *testing.T) {
 	}
 	if excess := capability.Excess(grantable, capability.Set{}); len(excess) != 0 {
 		t.Fatalf("asking for no budget is inheriting, not excess: %v", excess)
+	}
+}
+
+// allow_gpu is granted like the network, card by card: a child holds a card only if its
+// parent can grant it, and a parent that holds one does not force it on a child.
+func TestAllowGPUAttenuates(t *testing.T) {
+	both := capability.Set{Tools: []string{"run"}, AllowGPU: []string{"GPU-a", "GPU-b"}}
+	one := capability.Set{Tools: []string{"run"}, AllowGPU: []string{"GPU-a"}}
+	other := capability.Set{Tools: []string{"run"}, AllowGPU: []string{"GPU-c"}}
+	plain := capability.Set{Tools: []string{"run"}}
+	if got := capability.DeriveChildSet(both, one).AllowGPU; !reflect.DeepEqual(got, []string{"GPU-a"}) {
+		t.Fatalf("a child asking for one of its parent's cards gets %v", got)
+	}
+	if got := capability.DeriveChildSet(one, both).AllowGPU; !reflect.DeepEqual(got, []string{"GPU-a"}) {
+		t.Fatalf("a child asking for more than its parent holds gets %v", got)
+	}
+	if got := capability.DeriveChildSet(plain, one).AllowGPU; len(got) != 0 {
+		t.Fatalf("a parent without allow_gpu passed on %v", got)
+	}
+	if got := capability.DeriveChildSet(one, other).AllowGPU; len(got) != 0 {
+		t.Fatalf("a parent passed on a card it does not hold: %v", got)
+	}
+	if got := capability.DeriveChildSet(one, plain).AllowGPU; len(got) != 0 {
+		t.Fatalf("a child that did not ask got %v", got)
+	}
+	if excess := capability.Excess(plain, one); strings.Join(excess, "; ") != "allow_gpu GPU-a" {
+		t.Fatalf("excess = %v", excess)
+	}
+	if excess := capability.Excess(one, other); strings.Join(excess, "; ") != "allow_gpu GPU-c" {
+		t.Fatalf("excess = %v", excess)
+	}
+	if excess := capability.Excess(both, one); len(excess) != 0 {
+		t.Fatalf("excess = %v", excess)
+	}
+	if got := capability.Union(plain, one).AllowGPU; !reflect.DeepEqual(got, []string{"GPU-a"}) {
+		t.Fatalf("what a parent can grant includes what it may delegate: %v", got)
+	}
+	// A set without it reads and writes as it always did, so old records stay the same.
+	raw, err := json.Marshal(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "allow_gpu") {
+		t.Fatalf("marshalled: %s", raw)
 	}
 }

@@ -27,6 +27,13 @@ type Set struct {
 	// isolated some other way, such as inside a disposable container.
 	// Without it, run is confined or refused.
 	UnconfinedRun bool `json:"unconfined_run,omitempty"`
+	// AllowGPU names the NVIDIA GPUs, by UUID, whose device files a confined run
+	// may open. No entry means no GPU, and no value means every card. A UUID not
+	// on this machine refuses the run, so on macOS, where there is none, any entry
+	// does: Metal stays open to every confined run there, with or without this.
+	// The grant stops at the device. The OS sandbox has no say in what a process
+	// does on the GPU, or between two users of a card, and no budget meters it.
+	AllowGPU []string `json:"allow_gpu,omitempty"`
 	// MaxRunSeconds bounds the timeout of a run command; 0 means
 	// DefaultMaxRunSeconds.
 	MaxRunSeconds int `json:"max_run_seconds,omitempty"`
@@ -138,6 +145,7 @@ func DeriveChildSet(parent, requested Set) Set {
 		AllowNetwork:  parent.AllowNetwork && requested.AllowNetwork,
 		NetworkAllow:  intersectStrings(parent.NetworkAllow, requested.NetworkAllow),
 		UnconfinedRun: parent.UnconfinedRun && requested.UnconfinedRun,
+		AllowGPU:      intersectStrings(parent.AllowGPU, requested.AllowGPU),
 	}
 	if parent.MaxRunSeconds > 0 || requested.MaxRunSeconds > 0 {
 		derived.MaxRunSeconds = min(effectiveRunSeconds(parent.MaxRunSeconds), effectiveRunSeconds(requested.MaxRunSeconds))

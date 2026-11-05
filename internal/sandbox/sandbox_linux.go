@@ -213,8 +213,18 @@ func restrict(p Policy) error {
 			return err
 		}
 	}
-	for _, path := range devices {
+	for _, path := range append(append([]string{}, devices...), p.Devices...) {
 		if err := add(path, readRights|accessWriteFile|accessTruncate|accessIoctlDev); err != nil {
+			return err
+		}
+	}
+	if len(p.Devices) > 0 {
+		// CUDA names its threads through /proc/self/task/<tid>/comm and will not start
+		// if it cannot. Landlock grants by path, and a new thread's path is not known
+		// here, so this is all of /proc. What the user's file permissions allow there
+		// comes with it: oom_score_adj and coredump_filter of this user's processes
+		// were writable when measured. A process's mem and environ stayed refused.
+		if err := add("/proc", readRights|accessWriteFile|accessTruncate); err != nil {
 			return err
 		}
 	}

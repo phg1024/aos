@@ -10,6 +10,7 @@ package sandbox
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,9 +32,69 @@ type Policy struct {
 	Hidden []string
 	// Network allows outbound and inbound connections and name lookups.
 	Network bool
+	// Devices are device files the command may open read-write and drive by
+	// ioctl, on Linux. Any of them also makes /proc writable, which is what CUDA
+	// needs and all Landlock can express: see restrict. macOS ignores them: Metal
+	// is reachable from any confined command there. See ResolveGPUs.
+	Devices []string
+	// VisibleGPUs is what the command gets as CUDA_VISIBLE_DEVICES, so CUDA does
+	// not stumble on a card it may not open. It is a convenience and no boundary:
+	// the command can change it. Devices is the boundary.
+	VisibleGPUs []string
 	// Temp is a writable scratch directory for this process only; the
 	// command gets it as TMPDIR, and toolchain caches are pointed there.
 	Temp string
+}
+
+// gpuInfoRoot is where the NVIDIA driver describes each card.
+var gpuInfoRoot = "/proc/driver/nvidia/gpus"
+
+// ResolveGPUs returns the device files for the NVIDIA cards named by UUID: each
+// card's own /dev/nvidiaN, from the driver's description of it, plus the two every
+// card shares and CUDA cannot start without. /dev/nvidiactl is the driver's control
+// node. /dev/nvidia-uvm is its unified memory. uvm-tools, modeset and caps are for
+// profilers, displays and MIG, and are left out. A UUID not on this machine is
+// ErrUnavailable, so a run is refused rather than started on the wrong card or none.
+//
+// Another card's own node stays closed. The shared nodes do not stop at a card:
+// Landlock grants a device file, not an ioctl on it, so a process may still see that
+// other cards exist through the control node, and what more it can do there has not
+// been measured.
+func ResolveGPUs(uuids []string) ([]string, error) {
+	return resolveGPUs(gpuInfoRoot, uuids)
+}
+
+func resolveGPUs(root string, uuids []string) ([]string, error) {
+	minors := map[string]string{}
+	cards, _ := filepath.Glob(filepath.Join(root, "*", "information"))
+	for _, card := range cards {
+		raw, err := os.ReadFile(card)
+		if err != nil {
+			continue
+		}
+		var uuid, minor string
+		for _, line := range strings.Split(string(raw), "\n") {
+			key, value, _ := strings.Cut(line, ":")
+			switch strings.TrimSpace(key) {
+			case "GPU UUID":
+				uuid = strings.TrimSpace(value)
+			case "Device Minor":
+				minor = strings.TrimSpace(value)
+			}
+		}
+		if uuid != "" && minor != "" {
+			minors[uuid] = minor
+		}
+	}
+	devices := []string{"/dev/nvidiactl", "/dev/nvidia-uvm"}
+	for _, uuid := range uuids {
+		minor, ok := minors[uuid]
+		if !ok {
+			return nil, fmt.Errorf("%w: allow_gpu names %q, which is not an NVIDIA card on this machine", ErrUnavailable, uuid)
+		}
+		devices = append(devices, "/dev/nvidia"+minor)
+	}
+	return devices, nil
 }
 
 // Environment is the command's environment: the caller's, with temporary
@@ -49,6 +110,9 @@ func (p Policy) Environment(base []string) []string {
 		// xcrun caches tool lookups in the per-user temp dir otherwise, and
 		// prints a misleading "error" when it cannot.
 		"xcrun_db": filepath.Join(p.Temp, "xcrun_db"),
+	}
+	if len(p.VisibleGPUs) > 0 {
+		overrides["CUDA_VISIBLE_DEVICES"] = strings.Join(p.VisibleGPUs, ",")
 	}
 	var env []string
 	for _, entry := range base {

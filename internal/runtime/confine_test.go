@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"aos/internal/artifact"
@@ -51,5 +52,34 @@ func TestNetworkAndUnconfinedRunDenialsAreLogged(t *testing.T) {
 	}
 	if denied["network"] != "web_fetch" || denied["unconfined_run"] != "run" {
 		t.Fatalf("denials = %v", denied)
+	}
+}
+
+// A successor holds what its process held: Recover keeps the GPU grant, as it keeps the network.
+func TestRecoverKeepsAllowGPU(t *testing.T) {
+	root := t.TempDir()
+	k, _ := kernel.New(filepath.Join(root, "kernel"))
+	store, _ := artifact.New(filepath.Join(root, "artifacts"))
+	process, err := k.Spawn(kernel.ProcessSpec{Role: "worker", CapabilitySet: capability.Set{Tools: []string{"run"}, AllowGPU: []string{"GPU-a"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := store.CreateJSON("checkpoint", process.PID, runtime.Session{Messages: []runtime.Message{{Role: "user", Content: "go"}}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Exit(process.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true, Checkpoint: checkpoint.ID}); err != nil {
+		t.Fatal(err)
+	}
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		return exitResult("done"), nil
+	}}}
+	result, err := agent.Recover(context.Background(), process.PID, checkpoint.ID, nil, runtime.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	successor, err := k.Get(result.PID)
+	if err != nil || successor.PID == process.PID || !slices.Equal(successor.CapabilitySet.AllowGPU, []string{"GPU-a"}) {
+		t.Fatalf("the successor = %+v, %v", successor, err)
 	}
 }

@@ -16,6 +16,7 @@ func Union(a, b Set) Set {
 		AllowNetwork:  a.AllowNetwork || b.AllowNetwork,
 		NetworkAllow:  unionStrings(a.NetworkAllow, b.NetworkAllow),
 		UnconfinedRun: a.UnconfinedRun || b.UnconfinedRun,
+		AllowGPU:      unionStrings(a.AllowGPU, b.AllowGPU),
 	}
 	if a.MaxRunSeconds > 0 || b.MaxRunSeconds > 0 {
 		union.MaxRunSeconds = max(effectiveRunSeconds(a.MaxRunSeconds), effectiveRunSeconds(b.MaxRunSeconds))
@@ -70,6 +71,11 @@ func Excess(grantable, requested Set) []string {
 	}
 	if requested.UnconfinedRun && !grantable.UnconfinedRun {
 		excess = append(excess, "unconfined_run")
+	}
+	for _, gpu := range requested.AllowGPU {
+		if !slices.Contains(grantable.AllowGPU, gpu) {
+			excess = append(excess, "allow_gpu "+gpu)
+		}
 	}
 	if effectiveRunSeconds(requested.MaxRunSeconds) > effectiveRunSeconds(grantable.MaxRunSeconds) {
 		excess = append(excess, fmt.Sprintf("max_run_seconds %d", requested.MaxRunSeconds))

@@ -1,8 +1,11 @@
 package tools
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -136,5 +139,29 @@ func TestWebFetchReturnsPagedTextOnly(t *testing.T) {
 	rest := fetch(map[string]string{"offset": strconv.Itoa(MaxToolOutputBytes)})
 	if rest.Output["truncated"] != "" || !strings.Contains(rest.Output["text"], "Tile binning") {
 		t.Fatalf("expected the remaining text without truncation, got truncated=%q", rest.Output["truncated"])
+	}
+}
+
+// A run with no allow_gpu has no device beyond the usual ones. One that names a card not
+// on this machine is refused, and its command never starts: on macOS that is every card.
+func TestAllowGPUIsOffByDefaultAndFailsClosed(t *testing.T) {
+	r := NewRuntime()
+	r.ScratchRoot = t.TempDir()
+	policy, err := r.runPolicy(Request{PID: "pid-1", CapabilitySet: capability.Set{Tools: []string{"run"}}})
+	if err != nil || policy.Devices != nil || policy.VisibleGPUs != nil {
+		t.Fatalf("no grant: %+v, %v", policy, err)
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	dir := t.TempDir()
+	result, err := r.Execute(Request{
+		Tool: "run", Args: map[string]string{"command": "touch " + marker}, PID: "pid-2",
+		Mounts:        []capability.Mount{{Name: "ws", HostPath: dir}},
+		CapabilitySet: capability.Set{Tools: []string{"run"}, ReadPaths: []string{dir}, WritePaths: []string{dir}, AllowGPU: []string{"GPU-not-here"}},
+	})
+	if !errors.Is(err, ErrRunUnconfined) || !strings.Contains(err.Error(), "GPU-not-here") {
+		t.Fatalf("a card not here: %+v, %v", result, err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the command ran")
 	}
 }

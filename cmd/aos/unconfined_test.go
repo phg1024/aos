@@ -81,3 +81,27 @@ func TestUnconfinedRunIsAttenuatedAndVisible(t *testing.T) {
 		t.Fatal("the HTML report should mark the unconfined worker")
 	}
 }
+
+// allow_gpu is checked at the spec, as unconfined_run is: a worker cannot ask for a card its
+// lead cannot grant, and delegable is how the lead may grant one without using it.
+func TestAllowGPUIsAttenuatedAtTheSpec(t *testing.T) {
+	spec := func(delegable string) agentflow.WorkflowSpec {
+		var parsed agentflow.WorkflowSpec
+		raw := `{"name":"w","entry_agent":"lead","agents":[
+			{"id":"lead","system_prompt":"Lead.","allowed_agents":["worker"],"capabilities":{"tools":["spawn_agent"]},"delegable":` + delegable + `},
+			{"id":"worker","system_prompt":"Work.","capabilities":{"tools":["run"],"allow_gpu":["GPU-a"]}}]}`
+		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+			t.Fatal(err)
+		}
+		return parsed
+	}
+	if err := spec(`{"tools":["run"]}`).Validate(); !errors.Is(err, agentflow.ErrWorkflowSpecInvalid) || !strings.Contains(err.Error(), "allow_gpu GPU-a") {
+		t.Fatalf("a worker asking for a card its lead cannot grant: %v", err)
+	}
+	if err := spec(`{"tools":["run"],"allow_gpu":["GPU-b"]}`).Validate(); !errors.Is(err, agentflow.ErrWorkflowSpecInvalid) {
+		t.Fatalf("a lead that may grant another card: %v", err)
+	}
+	if err := spec(`{"tools":["run"],"allow_gpu":["GPU-a"]}`).Validate(); err != nil {
+		t.Fatalf("a lead that may grant it: %v", err)
+	}
+}
