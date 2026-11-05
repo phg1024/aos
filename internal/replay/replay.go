@@ -87,9 +87,12 @@ type Report struct {
 	LegacyChainDelivery bool `json:"legacy_chain_delivery,omitempty"`
 	// LegacySenderOutcomes means the record predates dead letters, so the
 	// replay tracks no shown mail and acknowledges every recorded message.
-	LegacySenderOutcomes bool              `json:"legacy_sender_outcomes,omitempty"`
-	RecordedBuild        map[string]string `json:"recorded_build,omitempty"`
-	Divergence           *Divergence       `json:"divergence,omitempty"`
+	LegacySenderOutcomes bool `json:"legacy_sender_outcomes,omitempty"`
+	// LegacyBusBounds means the record predates the cap, the bound and handles,
+	// so the replay takes any size into any mailbox.
+	LegacyBusBounds bool              `json:"legacy_bus_bounds,omitempty"`
+	RecordedBuild   map[string]string `json:"recorded_build,omitempty"`
+	Divergence      *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -331,6 +334,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 			Completer:     backend,
 			Skills:        skills.NewRegistry(runSpec.Spec.SkillRoots),
 			NoPeerFraming: started.Data[agentflow.PeerFramingField] == "",
+			NoBusBounds:   started.Data[agentflow.BusBoundsField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -357,6 +361,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyChainDelivery = engine.NoChainDelivery
 	engine.NoSenderOutcomes = started.Data[agentflow.SenderOutcomesField] == ""
 	report.LegacySenderOutcomes = engine.NoSenderOutcomes
+	engine.NoBusBounds = started.Data[agentflow.BusBoundsField] == ""
+	bus.NoBounds = engine.NoBusBounds
+	report.LegacyBusBounds = engine.NoBusBounds
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

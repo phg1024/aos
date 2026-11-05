@@ -589,7 +589,9 @@ func TestAdoptionRequiresIdenticalMessages(t *testing.T) {
 		}
 		return runtime.GenerateResult{}, errors.New("connection reset")
 	}}
-	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Bus: bus, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 10, Compaction: policy, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}}
+	// NoBusBounds: this needs both inbox messages in one step, which the bounds
+	// would split, to make the batch a replay then differs from.
+	agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Bus: bus, Tools: tools.NewRuntime(), Backend: first, MaxSteps: 10, Compaction: policy, BackendRetry: runtime.BackendRetryPolicy{Attempts: -1}, NoBusBounds: true}
 	failed, err := agent.Run(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}})
 	if err == nil {
 		t.Fatal("expected the crash")

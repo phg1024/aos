@@ -276,6 +276,11 @@ type AgentRuntime struct {
 	// shown mail, every recorded message acknowledged, no dead letters and no
 	// undelivered notices. Only a replay of a record made before them sets it.
 	NoSenderOutcomes bool
+	// NoBusBounds turns off what bounds and handles added: every mail taken in
+	// one step, no read_artifact, no artifacts on message_agent, and an ungated
+	// list_artifacts. It is for replaying a record made before them; the caller
+	// sets ipc.Bus.NoBounds with it.
+	NoBusBounds bool
 	// KeepMailAtExit leaves a final exit's mail where it is, for a program that
 	// will move it on, as aos-tui does when a new root continues the
 	// conversation. The next Sweep takes whatever it did not move.
@@ -842,7 +847,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			session.Messages = append(session.Messages, r.undeliveredNotes(pid, &session)...)
 			// The first step also takes messages handed out before but never
 			// acknowledged: a crash or an interruption left them unrecorded.
-			inboxMessages, err := r.Bus.Receive(pid, step == 0)
+			inboxMessages, err := r.Bus.ReceiveBatch(pid, step == 0, session.MailboxSeen, r.mailBatch())
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -1129,12 +1134,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 						return RunResult{}, recordErr
 					}
 					session.ToolArtifactIDs = append(session.ToolArtifactIDs, artifactRecord.ID)
-					session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
-						Name:      result.Action.ToolCall.Name,
-						Signature: signature,
-						Useful:    false,
-						Error:     err.Error(),
-					})
+					if !mayChange(err) {
+						session.ToolAttempts = append(session.ToolAttempts, ToolAttempt{
+							Name:      result.Action.ToolCall.Name,
+							Signature: signature,
+							Useful:    false,
+							Error:     err.Error(),
+						})
+					}
 					session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolError, fmt.Sprintf("tool_error name=%s error=%s try_different_strategy=true", result.Action.ToolCall.Name, err.Error())))
 					break
 				}
@@ -1170,6 +1177,12 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				session.MailboxUnshown = r.bodiesRead(session.MailboxUnshown, resultMessage.Content)
 			}
 			switch {
+			case toolResult.Tool == "read_artifact":
+				end := toolResult.Output["next_offset"]
+				if end == "" {
+					end = toolResult.Output["total_bytes"]
+				}
+				resultMessage.ArchiveAs = artifactReference(toolResult.Output["artifact_id"], toolResult.Output["offset"], end, toolResult.Output["total_bytes"])
 			case toolResult.Tool == "read_memory" && toolResult.Output["artifact_id"] == "":
 				resultMessage.ArchiveAs = rangeReadReference(toolResult.Output["from"], toolResult.Output["to"])
 			case toolResult.Tool == "read_memory":
@@ -1282,10 +1295,10 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
 			message, err := r.Bus.Send(pid, result.Action.Send.To, result.Action.Send.Body)
-			if errors.Is(err, ipc.ErrUnknownRecipient) || errors.Is(err, ipc.ErrRecipientExited) || errors.Is(err, kernel.ErrBrokenChain) {
-				// The agent named a process that cannot read it: its mistake to
-				// correct, not a failure of the bus.
-				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "send", err, options); !continued {
+			if errors.Is(err, ipc.ErrUnknownRecipient) || errors.Is(err, ipc.ErrRecipientExited) || errors.Is(err, kernel.ErrBrokenChain) || errors.Is(err, ipc.ErrMessageTooLarge) || errors.Is(err, ipc.ErrMailboxFull) {
+				// The agent named a process that cannot read it, or sent what it
+				// cannot take now: its to correct, not a failure of the bus.
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "send", r.withRemedy(process, err, false), options); !continued {
 					return failed, failErr
 				}
 				break
@@ -1327,9 +1340,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if r.Bus == nil {
 				return r.failRuntime(pid, lastCheckpoint(), errors.New("mailbox bus not configured"))
 			}
-			messages, err := r.Bus.Publish(pid, result.Action.Publish.Topic, result.Action.Publish.Body)
-			if errors.Is(err, ipc.ErrInvalidTopic) {
-				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "publish", err, options); !continued {
+			messages, skipped, err := r.Bus.Publish(pid, result.Action.Publish.Topic, result.Action.Publish.Body)
+			if errors.Is(err, ipc.ErrInvalidTopic) || errors.Is(err, ipc.ErrMessageTooLarge) {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "publish", r.withRemedy(process, err, true), options); !continued {
 					return failed, failErr
 				}
 				break
@@ -1337,9 +1350,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if err != nil {
 				return r.failRuntime(pid, lastCheckpoint(), err)
 			}
-			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_publish", pid, messages, latest(), map[string]string{
-				"topic": result.Action.Publish.Topic,
-			})
+			publishRecord := map[string]string{"topic": result.Action.Publish.Topic}
+			if len(skipped) > 0 {
+				publishRecord["skipped"] = strings.Join(skipped, ",")
+			}
+			artifactRecord, err := r.Artifacts.CreateJSON("mailbox_publish", pid, messages, latest(), publishRecord)
 			if err != nil {
 				return RunResult{}, err
 			}
@@ -1347,6 +1362,9 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			note := fmt.Sprintf("publish:topic=%s count=%d", result.Action.Publish.Topic, len(messages))
 			if held := heldCount(messages); held > 0 {
 				note += fmt.Sprintf(" held=%d (%s)", held, ipc.HeldMeaning)
+			}
+			if len(skipped) > 0 {
+				note += fmt.Sprintf(" skipped=%s (mailbox full: they did not get this)", strings.Join(skipped, ","))
 			}
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailPublished, note))
 		case "subscribe":
@@ -2350,8 +2368,10 @@ func (r *AgentRuntime) authorize(process kernel.Process, capabilityName, action 
 	// read_memory and search_memory only return the process's own compacted
 	// history, which was already in its context, and update_memory only
 	// writes the process's own working memory, and index_memory its own
-	// archive's index, so every agent may use them.
-	if capabilityName == "read_memory" || capabilityName == "search_memory" || capabilityName == "update_memory" || capabilityName == "index_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
+	// archive's index, so every agent may use them. read_artifact checks its
+	// own rules on each ID, and a handle would be no use to a receiver that
+	// also needed the tool granted.
+	if (capabilityName == "read_artifact" && !r.NoBusBounds) || capabilityName == "read_memory" || capabilityName == "search_memory" || capabilityName == "update_memory" || capabilityName == "index_memory" || (capability.Evaluator{}).ToolAllowed(capabilityName, process.CapabilitySet) {
 		return nil
 	}
 	r.logDenial(process.PID, action, capabilityName, "", "capability not granted")
@@ -2391,7 +2411,7 @@ func (r *AgentRuntime) refuseAction(pid, checkpointID string, session *Session, 
 
 func isRuntimeTool(name string) bool {
 	switch name {
-	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory", "update_memory", "index_memory":
+	case "spawn_agent", "message_agent", "await_agent", "checkpoint", "list_artifacts", "publish_artifact", "acquire_lease", "release_lease", "read_memory", "search_memory", "update_memory", "index_memory", "read_artifact":
 		return true
 	default:
 		return false
@@ -2440,14 +2460,24 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if to == "" {
 			return tools.Result{}, errors.New("message_agent requires to")
 		}
-		message, err := r.Bus.Send(process.PID, to, call.Args["body"])
+		var handles []string
+		if !r.NoBusBounds {
+			handles = splitHandles(call.Args["artifacts"])
+			if err := r.checkHandles(process, call.Name, handles); err != nil {
+				return tools.Result{}, err
+			}
+		}
+		message, err := r.Bus.SendWithArtifacts(process.PID, to, call.Args["body"], handles)
 		if err != nil {
-			return tools.Result{}, err
+			return tools.Result{}, r.withRemedy(process, err, false)
 		}
 		output := map[string]string{
 			"id":   message.ID,
 			"to":   message.To,
 			"body": message.Body,
+		}
+		if len(handles) > 0 {
+			output["artifacts"] = strings.Join(handles, ",")
 		}
 		if message.To != to {
 			output["forwarded_from"] = to
@@ -2502,6 +2532,12 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if err != nil {
 			return tools.Result{}, err
 		}
+		var rights readRights
+		if !r.NoBusBounds {
+			if rights, err = r.readRightsOf(process.PID, items); err != nil {
+				return tools.Result{}, err
+			}
+		}
 		var filtered []artifact.Artifact
 		typeFilter := strings.TrimSpace(call.Args["type"])
 		pidFilter := strings.TrimSpace(call.Args["producer_pid"])
@@ -2509,6 +2545,9 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 			pidFilter = process.PID
 		}
 		for _, item := range items {
+			if !r.NoBusBounds && rights.why(item) != "" {
+				continue
+			}
 			if typeFilter != "" && item.Type != typeFilter {
 				continue
 			}
@@ -2522,7 +2561,13 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		})
 		lines := make([]string, 0, len(filtered))
 		for _, item := range filtered {
-			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s", item.ID, item.Type, item.ProducerPID, item.CreatedAt.Format(time.RFC3339)))
+			kind := item.Type
+			if !r.NoBusBounds {
+				// A published type is an agent's words, and this reader may be
+				// another agent.
+				kind = framing.Inline(kind)
+			}
+			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s", item.ID, kind, item.ProducerPID, item.CreatedAt.Format(time.RFC3339)))
 		}
 		return tools.Result{
 			Tool:    call.Name,
@@ -2532,6 +2577,8 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 				"artifacts": strings.Join(lines, "\n"),
 			},
 		}, nil
+	case "read_artifact":
+		return r.readArtifact(process.PID, call.Args)
 	case "search_memory":
 		return r.searchMemory(process.PID, session, call.Args)
 	case "update_memory":
@@ -2734,11 +2781,15 @@ func (r *AgentRuntime) appendInboxArtifacts(pid string, session Session, message
 		if slices.Contains(session.MailboxSeen, message.ID) {
 			continue
 		}
-		artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, nil, map[string]string{
+		metadata := map[string]string{
 			"direction": "receive",
 			"from":      message.From,
 			"topic":     message.Topic,
-		})
+		}
+		if len(message.Artifacts) > 0 {
+			metadata[handlesMetadata] = strings.Join(message.Artifacts, ",")
+		}
+		artifactRecord, err := r.Artifacts.CreateJSON("mailbox_message", pid, message, nil, metadata)
 		if err != nil {
 			return Session{}, received, err
 		}
@@ -2814,7 +2865,11 @@ func (r *AgentRuntime) peerMessage(message ipc.Message) string {
 	if count == 1 {
 		unit = "line"
 	}
-	header := fmt.Sprintf("%s%s%s [%s], %d %s:", PeerMessagePrefix, sender, via, message.ID, count, unit)
+	attached := ""
+	if len(message.Artifacts) > 0 {
+		attached = ", attached " + framing.Inline(strings.Join(message.Artifacts, ", "))
+	}
+	header := fmt.Sprintf("%s%s%s [%s], %d %s%s:", PeerMessagePrefix, sender, via, message.ID, count, unit, attached)
 	if count == 0 {
 		return header
 	}

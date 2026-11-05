@@ -237,7 +237,7 @@ func TestRestartKeepsSubscriptionsAcrossBackoff(t *testing.T) {
 	engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
 	published := 0
 	engine.Sleep = func(context.Context, time.Duration) {
-		created, err := f.bus.Publish("pid-000001", "news", "in the backoff")
+		created, _, err := f.bus.Publish("pid-000001", "news", "in the backoff")
 		if err != nil {
 			t.Error(err)
 		}
@@ -317,5 +317,100 @@ func TestAChainNobodyClosesProducesNoOutcome(t *testing.T) {
 	}
 	if pending, _ := f.bus.Pending(); len(pending[process.PID]) != 1 {
 		t.Fatalf("pending = %+v", pending)
+	}
+}
+
+// handleSpec is a lead delegating to a worker and a verifier, siblings of each other.
+func handleSpec() agentflow.WorkflowSpec {
+	return agentflow.WorkflowSpec{
+		Name:       "handles",
+		EntryAgent: "lead",
+		Agents: []agentflow.AgentSpec{
+			{ID: "lead", SystemPrompt: "Lead.", AllowedAgents: []string{"worker", "verifier"}, Capabilities: capability.Set{Tools: []string{"message_agent", "spawn_agent", "publish_artifact", "list_artifacts"}}},
+			{ID: "worker", SystemPrompt: "Work.", Capabilities: capability.Set{Tools: []string{"publish_artifact"}}},
+			{ID: "verifier", SystemPrompt: "Check.", Capabilities: capability.Set{Tools: []string{"list_artifacts"}}},
+		},
+	}
+}
+
+func handleTool(name string, args func(runtime.GenerateRequest) map[string]string) func(runtime.GenerateRequest) runtime.GenerateResult {
+	return func(request runtime.GenerateRequest) runtime.GenerateResult {
+		return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: name, Args: args(request)}}}
+	}
+}
+
+func artifactIn(request runtime.GenerateRequest, opening string) string {
+	for i := len(request.History) - 1; i >= 0; i-- {
+		if strings.HasPrefix(request.History[i].Content, opening) {
+			if at := strings.Index(request.History[i].Content, "art-"); at >= 0 {
+				return request.History[i].Content[at : at+len("art-000000")]
+			}
+		}
+	}
+	return ""
+}
+
+// Chapter 11's verifier is a sibling of the worker, so no read rule covers it.
+// Today's route: the lead reads the worker's evidence as its parent, and has a PID
+// for the verifier only once it parks, since delegate takes no handle. So the
+// verifier waits, the lead attaches the handle, and re-delegating resumes it. A
+// child reads a parent's artifact the same way, and a child that never parks has
+// no route.
+func TestAVerifierGetsEvidenceThroughAWait(t *testing.T) {
+	f := newChainFixture(t)
+	var evidence, verifierPID string
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		handleTool("publish_artifact", func(runtime.GenerateRequest) map[string]string {
+			return map[string]string{"type": "test_log", "body": "all 12 tests passed"}
+		}),
+		exitStep(0, false, "work done"),
+	}}
+	var unattachedRead, attachedRead string
+	verifier := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			verifierPID = request.Process.PID
+			return handleTool("read_artifact", func(runtime.GenerateRequest) map[string]string { return map[string]string{"id": evidence} })(request)
+		},
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			unattachedRead = historyText(request)
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: "send the evidence"}}
+		},
+		handleTool("read_artifact", func(runtime.GenerateRequest) map[string]string { return map[string]string{"id": evidence} }),
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			attachedRead = historyText(request)
+			return exitStep(0, false, "verified")(request)
+		},
+	}}
+	lead := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		delegateStep("worker"),
+		handleTool("list_artifacts", func(runtime.GenerateRequest) map[string]string {
+			return map[string]string{"type": "published.test_log"}
+		}),
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			evidence = artifactIn(request, "list_artifacts:")
+			return handleTool("read_artifact", func(runtime.GenerateRequest) map[string]string { return map[string]string{"id": evidence} })(request)
+		},
+		delegateStep("verifier"),
+		handleTool("message_agent", func(runtime.GenerateRequest) map[string]string {
+			return map[string]string{"to": verifierPID, "body": "the test log", "artifacts": evidence}
+		}),
+		delegateStep("verifier"),
+		exitStep(0, false, "done"),
+	}}
+	engine := f.engine(scripts{"worker": worker, "verifier": verifier, "lead": lead})
+	if _, err := engine.Run(context.Background(), handleSpec(), agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	if evidence == "" {
+		t.Fatal("the lead could not list its child's evidence")
+	}
+	if requests := lead.requests(); !strings.Contains(historyText(requests[3]), "all 12 tests passed") {
+		t.Fatalf("the lead could not read it:\n%s", historyText(requests[3]))
+	}
+	if !strings.Contains(unattachedRead, "tool_error name=read_artifact") || strings.Contains(unattachedRead, "all 12 tests passed") {
+		t.Fatalf("a sibling read it with no handle:\n%s", unattachedRead)
+	}
+	if !strings.Contains(attachedRead, "all 12 tests passed") {
+		t.Fatalf("the verifier could not read the handle:\n%s", attachedRead)
 	}
 }

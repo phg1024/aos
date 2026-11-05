@@ -72,6 +72,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacySenderOutcomes {
 		fmt.Fprintln(w, "  the record predates sender outcomes; replayed without them")
 	}
+	if report.LegacyBusBounds {
+		fmt.Fprintln(w, "  the record predates the bus's bounds and handles; replayed without them")
+	}
 	if report.Identical() {
 		fmt.Fprintf(w, "  kernel: %d events and the process table identical\n", report.Events)
 		fmt.Fprintf(w, "  artifacts: %d identical (checkpoint usage seconds not compared)\n", report.Artifacts)

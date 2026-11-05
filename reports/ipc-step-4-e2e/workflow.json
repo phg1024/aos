@@ -1,0 +1,12 @@
+{
+  "name": "ipc-step-4-e2e",
+  "entry_agent": "lead",
+  "agents": [
+    {"id": "lead", "system_prompt": "Lead.", "max_steps": 400, "allowed_agents": ["stranger", "receiver"],
+     "capabilities": {"tools": ["spawn_agent", "message_agent", "publish_artifact", "list_artifacts"]}},
+    {"id": "stranger", "system_prompt": "Stranger.", "max_steps": 8,
+     "capabilities": {"tools": ["list_artifacts"]}},
+    {"id": "receiver", "system_prompt": "Receiver.", "max_steps": 400,
+     "capabilities": {"tools": []}}
+  ]
+}

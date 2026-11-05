@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"aos/internal/capability"
 	"aos/internal/runtime"
 )
 
@@ -84,5 +85,21 @@ func TestSpecCannotTurnTheFramingOff(t *testing.T) {
 	spec.Recall = runtime.RecallOff()
 	if err := spec.Validate(); !errors.Is(err, ErrWorkflowSpecInvalid) {
 		t.Fatalf("Validate with the framing off = %v", err)
+	}
+}
+
+func TestSystemPromptDescribesHandlesOnlyWhenOn(t *testing.T) {
+	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"message_agent"}}}}}
+	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}
+	if prompt := on.systemPrompt(); !strings.Contains(prompt, "read_artifact(id, offset?, limit?)") || !strings.Contains(prompt, "message_agent(to, body, artifacts?)") {
+		t.Fatalf("on:\n%s", prompt)
+	}
+	for name, off := range map[string]PromptBackend{
+		"replaying":  {Workflow: spec, Agent: spec.Agents[0], NoBusBounds: true},
+		"recall off": {Workflow: spec, Agent: spec.Agents[0], Recall: runtime.RecallOff()},
+	} {
+		if prompt := off.systemPrompt(); strings.Contains(prompt, "read_artifact") || !strings.Contains(prompt, "message_agent(to, body)\n") {
+			t.Fatalf("%s:\n%s", name, prompt)
+		}
 	}
 }

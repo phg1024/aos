@@ -162,7 +162,7 @@ func TestPublishDuringBackoffIsHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	k.Exit(worker, crashed)
-	held, err := bus.Publish(publisher, "news", "during the backoff")
+	held, _, err := bus.Publish(publisher, "news", "during the backoff")
 	if err != nil || len(held) != 1 || held[0].To != worker || !held[0].Held {
 		t.Fatalf("publish in the backoff = %+v, %v", held, err)
 	}
@@ -174,13 +174,13 @@ func TestPublishDuringBackoffIsHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Superseded, not yet transferred: the publish goes to the live end, once.
-	if early, err := bus.Publish(publisher, "news", "in the handover"); err != nil || len(early) != 1 || early[0].To != next.PID {
+	if early, _, err := bus.Publish(publisher, "news", "in the handover"); err != nil || len(early) != 1 || early[0].To != next.PID {
 		t.Fatalf("publish in the handover = %+v, %v", early, err)
 	}
 	if _, err := bus.Transfer(worker, next.PID); err != nil {
 		t.Fatal(err)
 	}
-	if late, err := bus.Publish(publisher, "news", "after"); err != nil || len(late) != 1 || late[0].To != next.PID {
+	if late, _, err := bus.Publish(publisher, "news", "after"); err != nil || len(late) != 1 || late[0].To != next.PID {
 		t.Fatalf("publish after = %+v, %v", late, err)
 	}
 	inbox, _ := bus.Receive(next.PID, false)
@@ -202,14 +202,14 @@ func TestPublishReachesAChainOnce(t *testing.T) {
 	bus.Subscribe(first, "news")
 	second := supersede(t, k, first)
 	bus.Subscribe(second, "news")
-	created, err := bus.Publish(publisher, "news", "once")
+	created, _, err := bus.Publish(publisher, "news", "once")
 	if err != nil || len(created) != 1 || created[0].To != second {
 		t.Fatalf("publish = %+v, %v", created, err)
 	}
 	if moved, err := bus.Transfer(first, second); err != nil || moved != 0 {
 		t.Fatalf("transfer = %d, %v", moved, err)
 	}
-	if created, _ := bus.Publish(publisher, "news", "still once"); len(created) != 1 {
+	if created, _, _ := bus.Publish(publisher, "news", "still once"); len(created) != 1 {
 		t.Fatalf("after the transfer = %+v", created)
 	}
 }
@@ -236,7 +236,7 @@ func TestClosedChainDropsSubscriptions(t *testing.T) {
 	if strings.Contains(string(raw), closed) {
 		t.Fatalf("after Unsubscribe: %s", raw)
 	}
-	created, err := bus.Publish(publisher, "news", "x")
+	created, _, err := bus.Publish(publisher, "news", "x")
 	if err != nil || len(created) != 1 || created[0].To != stays {
 		t.Fatalf("publish = %+v, %v", created, err)
 	}
@@ -326,7 +326,7 @@ func TestBrokenChainIsRefusedNotFollowed(t *testing.T) {
 			t.Fatalf("send to %s = %v", to, err)
 		}
 	}
-	created, err := bus.Publish(sender, "news", "x")
+	created, _, err := bus.Publish(sender, "news", "x")
 	if err != nil || len(created) != 1 || created[0].To != fine {
 		t.Fatalf("publish = %+v, %v", created, err)
 	}

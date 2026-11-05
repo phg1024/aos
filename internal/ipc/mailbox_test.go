@@ -43,7 +43,7 @@ func TestSendReceiveAndPublishSubscribe(t *testing.T) {
 	if err := bus.Subscribe(c, "artifact.created"); err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	if _, err := bus.Publish(a, "artifact.created", "art-1"); err != nil {
+	if _, _, err := bus.Publish(a, "artifact.created", "art-1"); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	inboxB, err := bus.Receive(b, false)
@@ -102,7 +102,7 @@ func TestMailToUnknownOrExitedProcessesIsRefused(t *testing.T) {
 	if _, err := bus.Send(a, b, "hi"); !errors.Is(err, ipc.ErrRecipientExited) {
 		t.Fatalf("exited recipient: %v", err)
 	}
-	if published, err := bus.Publish(a, "news", "x"); err != nil || len(published) != 0 {
+	if published, _, err := bus.Publish(a, "news", "x"); err != nil || len(published) != 0 {
 		t.Fatalf("publish to an exited subscriber: %v %v", published, err)
 	}
 	pending, _ := bus.Pending()
@@ -138,12 +138,12 @@ func TestTransferAndUnsubscribe(t *testing.T) {
 	if len(inbox) != 2 || inbox[0].To != recovered || inbox[0].Body != "one" {
 		t.Fatalf("recovered inbox = %+v", inbox)
 	}
-	published, _ := bus.Publish(a, "news", "x")
+	published, _, _ := bus.Publish(a, "news", "x")
 	if len(published) != 2 {
 		t.Fatalf("the recovered process should inherit the subscription: %+v", published)
 	}
 	bus.Unsubscribe(recovered, ipc.CauseChainEnded)
-	if published, _ := bus.Publish(a, "news", "y"); len(published) != 1 || published[0].To != other {
+	if published, _, _ := bus.Publish(a, "news", "y"); len(published) != 1 || published[0].To != other {
 		t.Fatalf("after unsubscribe: %+v", published)
 	}
 }
@@ -174,7 +174,7 @@ func TestOnlyTheOperatorSendsAsUser(t *testing.T) {
 	if _, err := bus.Send(ipc.OperatorSender, pid, "forged"); !errors.Is(err, ipc.ErrReservedSender) {
 		t.Fatalf("Send as %s = %v", ipc.OperatorSender, err)
 	}
-	if _, err := bus.Publish(ipc.OperatorSender, "news", "forged"); !errors.Is(err, ipc.ErrReservedSender) {
+	if _, _, err := bus.Publish(ipc.OperatorSender, "news", "forged"); !errors.Is(err, ipc.ErrReservedSender) {
 		t.Fatalf("Publish as %s = %v", ipc.OperatorSender, err)
 	}
 	if pending, _ := bus.Pending(); len(pending[pid]) != 0 {
@@ -198,7 +198,7 @@ func TestTopicMustBeOnePlainLine(t *testing.T) {
 		if err := bus.Subscribe(pid, topic); !errors.Is(err, ipc.ErrInvalidTopic) {
 			t.Errorf("Subscribe(%q) = %v", topic, err)
 		}
-		if _, err := bus.Publish(pid, topic, "hi"); !errors.Is(err, ipc.ErrInvalidTopic) {
+		if _, _, err := bus.Publish(pid, topic, "hi"); !errors.Is(err, ipc.ErrInvalidTopic) {
 			t.Errorf("Publish(%q) = %v", topic, err)
 		}
 	}
@@ -209,7 +209,7 @@ func TestTopicMustBeOnePlainLine(t *testing.T) {
 		if err := bus.Subscribe(pid, topic); err != nil {
 			t.Errorf("Subscribe(%q) = %v", topic, err)
 		}
-		if sent, err := bus.Publish(pid, topic, "hi"); err != nil || len(sent) != 1 {
+		if sent, _, err := bus.Publish(pid, topic, "hi"); err != nil || len(sent) != 1 {
 			t.Errorf("Publish(%q) = %+v, %v", topic, sent, err)
 		}
 	}

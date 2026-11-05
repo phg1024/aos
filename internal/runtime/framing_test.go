@@ -233,7 +233,7 @@ func TestPeerHeaderStaysOneLine(t *testing.T) {
 	if err := s.bus.Subscribe(worker.PID, "news"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.bus.Publish(peer.PID, "news", "hi"); err != nil {
+	if _, _, err := s.bus.Publish(peer.PID, "news", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	// As an older bus could have stored it.

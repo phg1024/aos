@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Step 4: Bounds and Handles</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Step 4: Bounds and Handles</h1>
+    <p>Step 4 of the slice in <code>ipc-design.md</code>, for gaps B6 and B8a. A message is held to 16 KiB and a mailbox to 256 messages or 1 MiB. Larger data goes in a published artifact, its handle goes in <code>message_agent</code>'s <code>artifacts:</code>, and the receiver reads it with <code>read_artifact</code>. <code>list_artifacts</code> shows only what the caller may read.</p>
+    <ul>
+      <li><span class="good">Every refusal, by every route, leaves the sender running</span> and tells it what it can do, naming only tools it holds.</li>
+      <li><span class="good">A person's text is neither refused nor lost.</span> A full mailbox takes it anyway, and <code>aos-tui</code> turns a line over the cap into a handle.</li>
+      <li><span class="good">A full mailbox no longer lands in one request.</span> The contract's text would have made a process stuck for good on any window under 1 MiB; that was measured, and changed.</li>
+      <li><span class="good">Old records replay as before,</span> gated by <code>bus_bounds</code>.</li>
+    </ul>
+    <p><b>What this does not close:</b> <span class="bad">one body larger than the model's window still fails every request.</span> Such a body can exist only from before the cap. <span class="warn">A verifier, being a sibling, gets evidence only if it parks and its lead attaches a handle.</span> Decision 10's one bus file is not built, and nothing bounds the number of mailboxes.</p>
+  </div>
+
+  <h2>1. The Eleven Questions</h2>
+  <table>
+    <tr><th>#</th><th>Question</th><th>What is true</th><th>Evidence</th></tr>
+    <tr><td>1</td><td>The refusal's text</td><td>The bus says only what is wrong; the runtime adds the remedy from the sender's capabilities. It names <code>artifacts</code> and says an ID in a body grants nothing. A sender without <code>publish_artifact</code> is told to send less, and a publish is told it carries no handles. Decision 7 changed</td><td><code>TestRefusalNamesOnlyWhatTheSenderHolds</code>, and <code>TestTheRefusalsRemedyWorks</code>, a model doing what it says</td></tr>
+    <tr><td>2</td><td>The <code>send</code> action path</td><td class="bad">It was as you feared: any bus error not named went to <code>failRuntime</code>, a dead sender. <span class="good">Both are now named on <code>send</code>, and the cap on <code>publish</code>; a full subscriber is a <code>skipped=</code> on the result.</span> Without <code>ContinueOnToolError</code> a refusal ends the process like any tool error; the engine, TUI and probes all set it. <span class="good">Also found:</span> the repeated-call suppression would have answered a retry of a refused <code>message_agent</code>, saying "repeated unsuccessful" without asking the bus. A refusal that may change no longer counts</td><td><code>TestRefusalsLeaveTheSenderRunning</code>: six cases, each taking a next step with the process running. <code>TestARefusedCallCanBeRepeatedOnceThingsChange</code></td></tr>
+    <tr><td>3</td><td>The operator</td><td><b>Exempt from the bound, held to the cap, and converted, not refused.</b> A flood of peers must not stop a person reaching their agent, and one person typing cannot flood. A line over 16 KiB is published under the root, and the mail holds its first 4 KiB and the handle. It comes after the flood, in the batches, which is the cost</td><td><code>TestAnOverLongLineStaysWhole</code> reads it back byte for byte through <code>deliver</code>; <code>TestALineReachesAFullMailbox</code>. <span class="warn">Not tested: the loop's call, the "not delivered" line, <code>spawnRoot</code>'s metadata in <code>main.go</code>.</span> <span class="warn">A store that cannot write gives "not delivered", and the text is then only in the terminal</span></td></tr>
+    <tr><td>4</td><td>Chain identity</td><td>Rule 1 walks <code>resumed_from</code>; rule 3 walks <code>ParentPID</code> up from the producer. Both hold across recoveries and a closed link, since every link points backward. <code>Artifacts</code> is a field of the message on every copy and on the dead-letter body. <b>A rollback past the receipt keeps the right:</b> the grant is a <code>mailbox_message</code> record, and a rollback discards no record. The same message is re-delivered with its handle, so the two agree. New: a root continuing an ended one records <code>continues</code>, or it could not read handles in its own history</td><td><code>TestChainIdentityInTheReadRules</code>, <code>TestHandlesTravelWithTheMail</code>, <code>TestAGrantSurvivesARollbackPastTheReceipt</code>, <code>TestANewRootHoldsWhatTheOldOneHeld</code></td></tr>
+    <tr><td>5</td><td>Attenuation and forgery</td><td>All three reasons refused at the send, with one text, so a refusal says nothing about what exists; the kernel's log has the true reason. A forged <code>artifacts:</code> or header in a body grants nothing, and <code>send</code> has no such field</td><td><code>TestHandleNeedsTheSenderToReadIt</code> compares the three texts; <code>TestAForgedHandleGrantsNothing</code>; <code>TestRuntimeRecordsAreNotReadable</code></td></tr>
+    <tr><td>6</td><td><code>read_artifact</code>'s output</td><td>The same path and escape as every tool. Pages: a rune across an edge, offset past the end (empty page), huge limit (a page), negative limit (tool error), a limit smaller than a rune (moves by the rune, so it can run over by 3 bytes). The store checks the hash on every read. <span class="warn">An index entry from before hashing is read unverified, as ever</span></td><td><code>TestReadArtifactPages</code>, <code>TestReadArtifactPagesTenMegabytesToTheEnd</code> (as the model reads it, byte for byte), <code>TestAReadOfADamagedArtifactIsAToolError</code>, B5's <code>read_artifact</code> case</td></tr>
+    <tr><td>7</td><td>Gating <code>list_artifacts</code></td><td>Users: <code>workflows/two-agent-mini.json</code>, as a fallback in its prompt, and a count in <code>internal/tui/render</code>. <code>judge</code> reads the kernel. <code>aos inspect</code> reads the store, ungated. A process no longer lists its own checkpoints. <b>The verifier's route:</b> rule 3 does not cover it. It <code>wait</code>s, the lead gets its PID, attaches the handle, and re-delegates. A child reads a parent's artifact the same way. <span class="bad">A child that never parks has no route.</span> The rules were not widened</td><td><code>TestAVerifierGetsEvidenceThroughAWait</code>, which runs the whole route through the engine</td></tr>
+    <tr><td>8</td><td>Old records</td><td><code>bus_bounds: v1</code>. Without it: no cap, no bound, no batches, ungated list, the old prompt. A resumed old state directory keeps every message; an over-cap body comes alone and whole, and new sends wait for the drain</td><td><code>TestReplayOfARecordWithoutBusBounds</code>, <code>TestAnOldStateDirKeepsEveryMessage</code>; your recordings below</td></tr>
+    <tr><td>9</td><td>The bound under concurrency</td><td>The check is under the bus lock with the insert. Mail leaves only after a call returned with its body and a checkpoint, and a failed call moves nothing. A held mailbox fills and refuses, and the refusal says it may never read this. <b>The chapter's limit changes:</b> a chain nobody closes gives its senders a refusal once full, and nothing for mail already in</td><td><code>TestTheBoundHoldsAcrossProcesses</code>: 4 OS processes, 100 sends each, with and without a drain; <code>TestAFullMailboxDrainsOnAReturnedCall</code>; <code>TestAHeldMailboxFillsAndRefuses</code></td></tr>
+    <tr><td>10</td><td>Batch size</td><td class="bad">The doc's claim was unsafe. <span class="good">With batches it holds on the smallest window <code>Validate</code> admits,</span> at the cost of up to 64 steps. See section 2. <span class="bad">One body over the window is stuck:</span> kept, not lost, and it does not drain</td><td><code>TestAFullMailboxFitsTheWindow</code>, <code>TestABodyBeyondTheWindowStaysStuckAndKept</code></td></tr>
+    <tr><td>11</td><td>Costs</td><td>See section 3. <span class="warn">The bus is about 1 MiB per mailbox with mail, and nothing bounds the number of mailboxes. Dead-letter files grow for the life of the state directory.</span> So decision 10's bound is per mailbox, not a bound on the bus</td><td><code>TestIPCB13BoundCost</code></td></tr>
+  </table>
+
+  <h2>2. A Full Mailbox and One Request</h2>
+  <p>A backend that fails any request over the window, on the smallest window <code>Validate</code> admits at the default ratio: 58,100 tokens, 174,300 chars. These bytes count history only; the system prompt comes on top.</p>
+  <table>
+    <tr><th>Mailbox</th><th>Window</th><th>Calls to drain</th><th>Largest history</th><th>Archived before a read</th></tr>
+    <tr><td class="bad">64 at the cap, as the contract read: all in one step</td><td>174,300</td><td class="bad">Never: every call fails</td><td class="bad">1,052,884</td><td>-</td></tr>
+    <tr><td>64 at the cap</td><td>174,300</td><td>32</td><td>165,752</td><td>0</td></tr>
+    <tr><td>256 of 4 KiB</td><td>174,300</td><td>32</td><td>167,469</td><td>0</td></tr>
+    <tr><td>300 of 4 KiB, after a handover</td><td>174,300</td><td>38</td><td>167,469</td><td>0</td></tr>
+    <tr><td>64 at the cap, unknown window</td><td>none</td><td>64</td><td>16,441</td><td>0</td></tr>
+    <tr><td>256 of 100 bytes, unknown window</td><td>none</td><td>22</td><td>2,519</td><td>0</td></tr>
+  </table>
+  <ul>
+    <li><b>The rule:</b> one step takes at most 32 KiB, <code>KeepMessages</code> messages and half the trigger, and at least one message. 32 KiB is less than a tool output because that window has 34 KiB above its trigger.</li>
+    <li><span class="warn">The cost is steps.</span> The default budget of 24 does not cover 1 MiB. The process exits on its budget with the rest unread; with a restart policy the chain closes and its senders are told.</li>
+    <li><span class="warn">Framing adds to bodies:</span> a body of newlines renders to about 3 times its bytes, and the batch counts bodies.</li>
+    <li><span class="warn">A higher ratio has less room above the trigger.</span> <code>Validate</code> checks hysteresis, not this room, which was already true of tool output.</li>
+  </ul>
+
+  <h2>3. Costs</h2>
+  <p><code>TestIPCB13BoundCost</code>, mean of 25 sends, on this machine under the probes' load. These show the shape, not a benchmark. Every send still rewrites and fsyncs three files.</p>
+  <table>
+    <tr><th>Full mailboxes (64 bodies at the cap each)</th><th><code>mailboxes.json</code></th><th>A small send to another mailbox</th><th>A refusal (no bus file written)</th></tr>
+    <tr><td>0</td><td>4 KB</td><td>20.8 ms</td><td>-</td></tr>
+    <tr><td>1</td><td>1.06 MB</td><td>27.1 ms</td><td>12.2 ms</td></tr>
+    <tr><td>4</td><td>4.24 MB</td><td>48.6 ms</td><td>21.2 ms</td></tr>
+    <tr><td>16</td><td>16.9 MB</td><td>126 ms</td><td>58.7 ms</td></tr>
+  </table>
+  <ul>
+    <li>Reading one page of a 10 MiB artifact reads, hashes and decodes the whole payload: 31.5 ms over 25 trials. 160 pages took 14 s with the runtime's own work, against a model call each of seconds.</li>
+    <li><span class="warn">The number of mailboxes is not bounded,</span> so neither is the bus: the table is a slope, not a limit. A workflow of a few agents stays in tens of milliseconds, and hundreds of busy agents would not.</li>
+    <li><span class="warn">Dead-letter files</span> last as long as the state directory, each now at most about 16 KiB from new mail.</li>
+    <li><span class="warn">A refused big send still sits in the sender's history:</span> B6 measured its checkpoint at 2.1 MB for 1 MiB and 21 MB for 10 MiB, since its turns hold what it wrote.</li>
+  </ul>
+
+  <h2>4. Differences From the Contract</h2>
+  <p>Decisions 1, 7, 8 and 10 are changed in place, and each says so. The table is in <code>ipc-design.md</code>, "Implemented: Step 4".</p>
+  <table>
+    <tr><th>The text said</th><th>Built</th></tr>
+    <tr><td>"publish it with publish_artifact and send the artifact_id"</td><td>Names <code>artifacts</code>, and only tools held</td></tr>
+    <tr><td>"at most 1 MiB of unread mail can arrive in one step"</td><td>Batches</td></tr>
+    <tr><td>The cap and bound on any send</td><td>The operator: cap yes, bound no, conversion in <code>aos-tui</code></td></tr>
+    <tr><td>"under the receiver's capabilities"</td><td><code>read_artifact</code> is always available; its rules are the gate</td></tr>
+    <tr><td><code>published:*</code></td><td><code>published.*</code></td></tr>
+    <tr><td>Not there</td><td><code>Metadata["continues"]</code> on a new root; refusals that may change do not count as repeats</td></tr>
+  </table>
+  <p>Two older tests now set <code>NoBusBounds</code>, with what they expect unchanged: <code>TestArchivedMailIsNotShownUntilRead</code> and <code>TestAdoptionRequiresIdenticalMessages</code> need several messages in one step, which batches split. <code>TestMailArchivedAfterAFailedCall</code> shows the bounded path to the same notice.</p>
+
+  <h2>5. Not Covered</h2>
+  <ul>
+    <li><span class="bad">One body larger than the window</span> does not drain.</li>
+    <li><span class="bad">A child that never parks</span> has no route to a parent's artifact.</li>
+    <li><span class="warn">A chain nobody closes,</span> with room, still gives no outcome.</li>
+    <li><span class="warn">Archived mail nobody reads</span> holds its place, so that mailbox can stay full until its chain ends.</li>
+    <li><span class="warn">The sender's own turn holds what it wrote:</span> publishing 10 MiB is 10 MiB of model output and 21 MB of checkpoint. <code>publish_artifact</code> has no path form.</li>
+    <li><span class="warn">Rights are not revoked.</span> A chain keeps a handle it was given.</li>
+    <li><span class="warn">The bus's total size,</span> and dead-letter files.</li>
+  </ul>
+
+  <h2>6. Evidence</h2>
+  <pre>go test -count=1 ./internal/framing ./internal/kernel ./internal/ipc ./internal/artifact ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./internal/inspect ./internal/statedir ./internal/scheduler ./internal/lease ./cmd/aos ./cmd/aos-tui
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B6|B8|B10|B11|B12|B13' -timeout 1800s ./bench/ipc/
+
+# End to end through the real command, with a scripted model and no phg-gpu:
+go build -buildvcs=false -o /tmp/aos ./cmd/aos
+reports/ipc-step-4-e2e/run.sh /tmp/aos /tmp/step4-state</pre>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Full package list, 14 packages</td><td class="good">3 runs: 14 of 14 pass each time; no orphaned helper before, between or after</td></tr>
+    <tr><td>Probes, <code>AOS_IPC_TRIALS=25</code></td><td class="good">B1, B2, B3, B4, B5, B6, B8, B10, B11, B12 and B13 pass. B4 over 25 trials: 0 lost, 0 duplicated, 0 corrupted, 0 out of order</td></tr>
+    <tr><td>Eval's saved trials and a v0.1.4 record</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
+    <tr><td>Your three recordings, <code>ch6/</code></td><td class="good"><code>rec</code>: identical. <code>rec2</code>: refused, tampered <code>art-000026</code>. <code>rec3</code>: first divergence at call 29 (step 14, <code>pid-000002</code>). As you said</td></tr>
+    <tr><td>52 mutations, each on a copy, each with its named test</td><td class="good">All 52 fail the named test. <code>24533d4</code> cannot compile the new tests, so these stand in for "fails on the old source". Two first passed through a timeout only, and the test now fails on the first message archived before a read</td></tr>
+    <tr><td>The bound checked outside the lock</td><td class="good">Caught at one trial by <code>TestTheBoundHoldsAcrossProcesses</code>. Unlike step 3's race, the gap here is a whole file read and the senders do not pause</td></tr>
+    <tr><td>End to end, <code>reports/ipc-step-4-e2e/run.sh</code>, through <code>aos run</code></td><td class="good">Exit 0. <code>ipc.rejected</code>: two <code>too_large</code> (<code>send</code> and <code>message_agent</code>, 1,048,576 bytes), one <code>mailbox_full</code>. One <code>capability.denied</code>, the stranger's read of the handle. 257 sent, 257 delivered, nothing left in any mailbox. The receiver read the 1 MiB handle, and the send after the drain was accepted</td></tr>
+    <tr><td>Flakes</td><td>None seen in these runs. <code>TestTheBoundHoldsAcrossProcesses</code>'s draining case varies in how many get in (311 accepted once); its asserts are on the totals</td></tr>
+  </table>
+</body>
+</html>

@@ -51,6 +51,9 @@ type PromptBackend struct {
 	// in runtime-written turns, and no word about framing in the system
 	// prompt. It is for replaying a record made before it.
 	NoPeerFraming bool
+	// NoBusBounds leaves read_artifact and message_agent's artifacts out of
+	// the prompt, for replaying a record made before them.
+	NoBusBounds bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -97,6 +100,10 @@ func (b PromptBackend) PromptMessages(request runtime.GenerateRequest) []runtime
 
 // framed reports whether the prompt escapes and explains the framing.
 func (b PromptBackend) framed() bool { return !b.NoPeerFraming && !b.Recall.NoPromptFraming }
+
+// handles says whether the prompt describes artifact handles. Frozen probe arms
+// (RecallOff) keep the prompts they were measured with.
+func (b PromptBackend) handles() bool { return !b.NoBusBounds && !b.Recall.NoPromptFraming }
 
 // promptContent is a history message as the prompt shows it. Turns the
 // agent did not write carry their number, so it can cite them as
@@ -580,7 +587,11 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("\n\nAllowed tools (tool_call args; ? marks optional args):\n")
 	for _, tool := range sortedStrings(b.Agent.Capabilities.Tools) {
 		builder.WriteString("- ")
-		builder.WriteString(toolSignature(tool))
+		if tool == "message_agent" && b.handles() {
+			builder.WriteString("message_agent(to, body, artifacts?) (artifacts: comma-separated IDs of artifacts you may read, which the receiver may then read; an ID in the body grants nothing)")
+		} else {
+			builder.WriteString(toolSignature(tool))
+		}
 		builder.WriteString("\n")
 	}
 	// The runtime lets every agent search and read its own compacted
@@ -593,6 +604,9 @@ func (b PromptBackend) systemPrompt() string {
 	}
 	if !slices.Contains(b.Agent.Capabilities.Tools, "update_memory") {
 		builder.WriteString("- " + toolSignature("update_memory") + " (always available: sets or deletes one entry of your working memory)\n")
+	}
+	if b.handles() && !slices.Contains(b.Agent.Capabilities.Tools, "read_artifact") {
+		builder.WriteString("- read_artifact(id, offset?, limit?) (always available: reads a published artifact in pages of at most 64 KiB, if your process published it, it came attached to mail you received, or a process you delegated to published it)\n")
 	}
 	if !b.Recall.NoAgentIndex && !slices.Contains(b.Agent.Capabilities.Tools, "index_memory") {
 		builder.WriteString("- " + toolSignature("index_memory") + " (available after a handoff notice: indexes the messages it archives)\n")

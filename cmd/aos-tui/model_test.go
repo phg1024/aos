@@ -172,7 +172,7 @@ func TestSwitchingModelsMidSession(t *testing.T) {
 	completer := &swapCompleter{backend: newBackend(active.config)}
 	spec, agent := loadInteractiveSpec("", "", "You are a test agent.", t.TempDir(), nil, nil, nil)
 	r := f.runtime(agentflow.PromptBackend{Completer: completer, Workflow: spec, Agent: agent})
-	process, _ := f.spawn()
+	process, _ := f.spawn("")
 	root := tuiRoot{process: process}
 
 	if _, result, err := f.say(t, r, &root, "what is the first question?"); err != nil || !result.Yielded {

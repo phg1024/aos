@@ -117,10 +117,14 @@ func runTUI() []string {
 
 	// A state directory that already holds this agent's session continues
 	// it; otherwise a new interactive process starts.
-	spawnRoot := func() (kernel.Process, error) {
+	spawnRoot := func(continues string) (kernel.Process, error) {
+		metadata := map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir}
+		if continues != "" {
+			metadata[runtime.ContinuesMetadata] = continues
+		}
 		return k.Spawn(kernel.ProcessSpec{
 			Role:          "agent:" + agent.ID,
-			Metadata:      map[string]string{"agent_id": agent.ID, "goal": "Interactive terminal session", "workdir": absWorkdir},
+			Metadata:      metadata,
 			Mounts:        agentMounts(agent, absWorkdir),
 			CapabilitySet: agentCapabilities(agent, absWorkdir),
 			Delegable:     agent.Delegable,
@@ -497,7 +501,7 @@ func runTUI() []string {
 		// The line reaches the agent through its mailbox. An agent that
 		// exited cannot receive mail; resuming it recovers it, and the line
 		// goes with the recovery instead.
-		appended, err := deliver(bus, &root, message)
+		appended, err := deliver(bus, store, &root, message)
 		if err != nil {
 			footer.Println(ui.Error("not delivered: " + err.Error()))
 			interrupted = wasInterrupted

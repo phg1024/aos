@@ -36,6 +36,8 @@ type StaticBackendFactory struct {
 	Skills    skills.Registry
 	// NoPeerFraming is PromptBackend.NoPeerFraming for every backend.
 	NoPeerFraming bool
+	// NoBusBounds is PromptBackend.NoBusBounds for every backend.
+	NoBusBounds bool
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -50,6 +52,7 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		Skills:        loadedSkills,
 		Recall:        workflow.Recall,
 		NoPeerFraming: f.NoPeerFraming,
+		NoBusBounds:   f.NoBusBounds,
 	}, nil
 }
 
@@ -145,6 +148,10 @@ type Engine struct {
 	// made before dead letters. When it is off, run.started says so
 	// (sender_outcomes).
 	NoSenderOutcomes bool
+	// NoBusBounds is AgentRuntime.NoBusBounds, for replaying a record made
+	// before bounds and handles; the caller sets Bus.NoBounds with it. When it
+	// is off, run.started says so (bus_bounds).
+	NoBusBounds bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -478,6 +485,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoToolIntents:    e.NoToolIntents,
 		NoLeaseFencing:   e.NoLeaseFencing,
 		NoPeerFraming:    e.NoPeerFraming,
+		NoBusBounds:      e.NoBusBounds,
 		NoSenderOutcomes: e.NoSenderOutcomes,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)

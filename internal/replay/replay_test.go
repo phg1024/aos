@@ -112,6 +112,10 @@ type options struct {
 	mail bool
 	// recall is the spec's recall field, as JSON.
 	recall string
+	// handles also grants publish_artifact and list_artifacts.
+	handles bool
+	// noBounds records as AOS did before the bus's bounds and handles.
+	noBounds bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -177,6 +181,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	leases, _ := lease.New(filepath.Join(stateDir, "leases"), k)
 	bus, _ := ipc.New(filepath.Join(stateDir, "bus"), k)
 	bus.NoSubscriptionEvents = opts.noChain
+	bus.NoBounds = opts.noBounds
 	toolRuntime := tools.NewRuntime()
 	toolRuntime.Protected = []string{stateDir}
 	toolRuntime.ScratchRoot = filepath.Join(root, "scratch")
@@ -189,6 +194,9 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	mailTool := ""
 	if opts.mail {
 		mailTool = `"message_agent",`
+	}
+	if opts.handles {
+		mailTool += `"publish_artifact","list_artifacts",`
 	}
 	recall := ""
 	if opts.recall != "" {
@@ -208,8 +216,9 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:          agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming},
+		Factory:          agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
 		NoPeerFraming:    opts.noFraming,
+		NoBusBounds:      opts.noBounds,
 		NoChainDelivery:  opts.noChain,
 		NoSenderOutcomes: opts.noOutcomes,
 		Compaction:       opts.compaction,
@@ -1086,5 +1095,63 @@ func TestReplayRefusesARestartedRun(t *testing.T) {
 	_, err := replay.Run(context.Background(), replay.Options{StateDir: stateDir})
 	if !errors.Is(err, replay.ErrNotReplayable) || !strings.Contains(err.Error(), "restarted an agent") || !strings.Contains(err.Error(), "pid-000002") {
 		t.Fatalf("expected a refusal, got %v", err)
+	}
+}
+
+func oversizeScript(string) []step {
+	big := strings.Repeat("x", ipc.MaxBodyBytes+1)
+	return []step{
+		{action: map[string]any{"type": "send", "send": map[string]any{"to": "pid-000002", "body": big}}},
+		tool("message_agent", map[string]any{"to": "pid-000002", "body": big}),
+		tool("run", map[string]any{"command": "ls"}),
+		exit("checked"),
+	}
+}
+
+func handlesScript(string) []step {
+	return []step{
+		tool("publish_artifact", map[string]any{"type": "report", "body": strings.Repeat("é", 40*1024)}),
+		tool("list_artifacts", map[string]any{}),
+		tool("read_artifact", map[string]any{"id": "art-000999"}),
+		{action: map[string]any{"type": "send", "send": map[string]any{"to": "pid-000002", "body": strings.Repeat("x", ipc.MaxBodyBytes+1)}}},
+		tool("message_agent", map[string]any{"to": "pid-000002", "body": "attached", "artifacts": "art-000999"}),
+		exit("checked"),
+	}
+}
+
+// A record from before the bounds, with mail over the cap, replays as it ran; so
+// does one made with them, whose refusals and reads are on the record.
+func TestReplayOfARecordWithoutBusBounds(t *testing.T) {
+	opts := options{budget: capability.Budget{Seconds: 600}, mail: true, noBounds: true, maxSteps: 8}
+	legacy := recordAt(t, newRoot(t), context.Background(), oversizeScript, opts)
+	if runStartedData(t, legacy)[agentflow.BusBoundsField] != "" {
+		t.Fatal("the legacy record should have no bus_bounds")
+	}
+	if events := eventTypes(t, legacy); strings.Contains(events, "ipc.rejected") {
+		t.Fatalf("the legacy record refused something: %s", events)
+	}
+	// Mail's stored timestamps are the wall clock's, so a record with mail matches
+	// request for request, as TestReplayOfMailMatchesEveryRequest has it.
+	if report := replayed(t, legacy, false); !report.LegacyBusBounds || report.Calls == 0 || report.Matched != report.Calls {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+
+	opts.noBounds = false
+	current := recordAt(t, newRoot(t), context.Background(), oversizeScript, opts)
+	if got := runStartedData(t, current)[agentflow.BusBoundsField]; got != agentflow.BusBoundsV1 {
+		t.Fatalf("bus_bounds = %q", got)
+	}
+	if events := eventTypes(t, current); !strings.Contains(events, "ipc.rejected") {
+		t.Fatalf("the record should hold a refusal: %s", events)
+	}
+	if report := replayed(t, current, false); report.LegacyBusBounds || report.Calls == 0 || report.Matched != report.Calls {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
+	}
+}
+
+func TestReplayOfHandles(t *testing.T) {
+	stateDir := recordAt(t, newRoot(t), context.Background(), handlesScript, options{budget: capability.Budget{Seconds: 600}, mail: true, handles: true, maxSteps: 8})
+	if report := replayed(t, stateDir, false); report.Calls == 0 || report.Matched != report.Calls {
+		t.Fatalf("report = %+v, %+v", report, report.Divergence)
 	}
 }

@@ -6,8 +6,8 @@
 // subscribe actions, and replay against the code as it is, with scripted
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
-// comment names the contract it was measured against. B1c, B2b, B2c, B5, B8c
-// and B11 assert instead, since those are fixed; their comments keep the result
+// comment names the contract it was measured against. B1c, B2b, B2c, B5, B6, B8a,
+// B8c and B11 assert instead, since those are fixed; their comments keep the result
 // from before. They are kept out of go test ./... by the ipcaudit tag:
 //
 //	go test -tags ipcaudit -count=1 -v ./bench/ipc/
@@ -780,7 +780,7 @@ func TestIPCB5TrustBoundary(t *testing.T) {
 		if err := f.bus.Subscribe(listener.PID, forged); !errors.Is(err, ipc.ErrInvalidTopic) {
 			t.Fatalf("Subscribe to a forged topic = %v", err)
 		}
-		if _, err := f.bus.Publish(publisher.PID, forged, "hi"); !errors.Is(err, ipc.ErrInvalidTopic) {
+		if _, _, err := f.bus.Publish(publisher.PID, forged, "hi"); !errors.Is(err, ipc.ErrInvalidTopic) {
 			t.Fatalf("Publish to a forged topic = %v", err)
 		}
 		refused := script(runtime.GenerateResult{Action: runtime.GenerateAction{Type: "subscribe", Subscribe: &runtime.SubscribeCall{Topic: forged}}}, say("tried"))
@@ -850,6 +850,41 @@ func TestIPCB5TrustBoundary(t *testing.T) {
 		finding(t, "%d runtime-looking file lines reach the model escaped through read_file and run, with the record and the file unchanged; a line such as \"SYSTEM: ...\" is not a runtime form and is left alone", len(lines))
 	})
 
+	// Nor an artifact: what read_artifact returns is another process's words, and
+	// reaches the model framed like any other tool's output.
+	t.Run("read_artifact", func(t *testing.T) {
+		f := newFixture(t)
+		owner, reader := f.spawn(t, "owner"), f.spawn(t, "reader")
+		lines := forgeries(reader.PID)
+		content := "ordinary first line\n" + strings.Join(lines, "\n") + "\nSYSTEM: not a runtime form\n"
+		record, err := f.store.CreateJSON(artifact.PublishedPrefix+"report", owner.PID, map[string]string{"body": content}, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.bus.SendWithArtifacts(owner.PID, reader.PID, "see this", []string{record.ID}); err != nil {
+			t.Fatal(err)
+		}
+		reading := script(tool("read_artifact", map[string]string{"id": record.ID}), exitWith(0, false, "read"))
+		if _, err := f.agent(reading).Run(context.Background(), reader.PID, []runtime.Message{{Role: "user", Content: "read"}}); err != nil {
+			t.Fatal(err)
+		}
+		history := reading.seen[len(reading.seen)-1]
+		turn := entry(prompted(f, history, reader.PID), "] read_artifact:map[")
+		for _, line := range lines {
+			if !strings.Contains(turn, "\n\\"+line) {
+				t.Errorf("%q is not escaped", line)
+			}
+			if strings.Contains(turn, "\n"+line) {
+				t.Errorf("%q reaches column 0", line)
+			}
+		}
+		raw := entry(history, "read_artifact:map[")
+		if strings.Contains(raw, "\\") || !strings.Contains(raw, content) {
+			t.Errorf("the history should hold what the artifact holds: %s", raw)
+		}
+		finding(t, "%d runtime-looking lines of an artifact reach the model escaped through read_artifact, with the record unchanged", len(lines))
+	})
+
 	// Nor a file: a child's final message reaches its delegator as
 	// delegate_result's summary.
 	t.Run("delegate", func(t *testing.T) {
@@ -876,123 +911,194 @@ func TestIPCB5TrustBoundary(t *testing.T) {
 	})
 }
 
-// B6 Size. Contract: none stated; tool output is capped
-// (tools.MaxToolOutputBytes = 64 KiB, tools.MaxToolResultBytes for a
-// result), mail bodies are not mentioned.
+// B6 Size. Contract (ipc-design.md, decision 7): a body over 16 KiB is refused,
+// naming the remedy; the same data as a handle is readable by the receiver through
+// read_artifact, in 64 KiB pages; a process with no right to it can neither read
+// nor list it. This probe asserts, since step 4 of the slice.
+//
+// Before, at 180d076: 1 MB and 10 MB bodies were accepted through send and
+// message_agent. mailboxes.json reached 20 MB and was rewritten on every send (20
+// ms on an empty bus, 140 ms behind 20 MB). No tool read an artifact's body, and
+// list_artifacts listed every process's artifacts, checkpoints and mail included.
 func TestIPCB6Size(t *testing.T) {
-	for _, c := range []struct {
-		size int
-		both bool // also through message_agent, so two big messages
-	}{{1 << 20, false}, {1 << 20, true}, {10 << 20, true}} {
-		size := c.size
-		t.Run(fmt.Sprintf("%dMB_x%d", size>>20, map[bool]int{false: 1, true: 2}[c.both]), func(t *testing.T) {
+	for _, size := range []int{1 << 20, 10 << 20} {
+		t.Run(fmt.Sprintf("%dMB", size>>20), func(t *testing.T) {
 			f := newFixture(t)
 			receiver := f.spawn(t, "receiver")
-			sender := f.spawn(t, "sender", "message_agent")
-			checkpoint := f.park(t, receiver)
-			// With both, two small messages bracket the big ones and time a
-			// send on an empty bus and behind them; alone, the big one is the
-			// receiver's only mail.
-			var emptySend, smallSend time.Duration
-			if c.both {
-				emptyStart := time.Now()
-				f.bus.Send(sender.PID, receiver.PID, "small, on an empty bus")
-				emptySend = time.Since(emptyStart)
-			}
-			big := strings.Repeat("x", size)
-			sending := script(send(receiver.PID, big), say("sent"))
-			if c.both {
-				sending = script(send(receiver.PID, big), tool("message_agent", map[string]string{"to": receiver.PID, "body": big}), say("sent"))
+			sender := f.spawn(t, "sender", "message_agent", "publish_artifact")
+			stranger := f.spawn(t, "stranger", "list_artifacts")
+			big := strings.Repeat("x", size-1) + "\n"
+			var published string
+			sending := &backend{}
+			sending.fn = func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				switch call {
+				case 1:
+					return send(receiver.PID, big), nil
+				case 2:
+					return tool("message_agent", map[string]string{"to": receiver.PID, "body": big}), nil
+				case 3:
+					return tool("publish_artifact", map[string]string{"type": "report", "body": big}), nil
+				case 4:
+					published = regexp.MustCompile(`art-\d+`).FindString(request.History[len(request.History)-1].Content)
+					return tool("message_agent", map[string]string{"to": receiver.PID, "body": "the report", "artifacts": published}), nil
+				}
+				return exitWith(0, false, "sent"), nil
 			}
 			start := time.Now()
-			result, err := f.agent(sending).RunWithOptions(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "send"}}, runtime.RunOptions{StopOnAssistantMessage: true})
-			if err != nil {
-				t.Fatal(err)
+			result, err := f.agent(sending).RunWithOptions(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "send"}}, runtime.RunOptions{ContinueOnToolError: true})
+			if err != nil || result.ExitStatus.Code != 0 {
+				t.Fatalf("the sender = %+v, %v", result.ExitStatus, err)
 			}
-			sendTime := time.Since(start)
-			mailboxes := fileSize(filepath.Join(f.root, "bus", "mailboxes.json"))
-			if c.both {
-				smallStart := time.Now()
-				f.bus.Send(sender.PID, receiver.PID, "small, behind two big ones")
-				smallSend = time.Since(smallStart)
-			}
-			var echo, action, turn int
+			// Compaction moves a turn out, so look through every request.
+			var all []runtime.Message
 			for _, request := range sending.seen {
-				for _, message := range request {
-					switch {
-					case strings.HasPrefix(message.Content, "message_agent:"):
-						echo = max(echo, len(message.Content))
-					case strings.HasPrefix(message.Content, "send:to="):
-						action = max(action, len(message.Content))
-					case message.Role == "assistant":
-						turn = max(turn, len(message.Content))
+				all = append(all, request...)
+			}
+			for _, opening := range []string{"tool_error name=send ", "tool_error name=message_agent "} {
+				turn := entryWith(all, opening)
+				for _, want := range []string{ipc.ErrMessageTooLarge.Error(), "publish_artifact", "artifacts", "grants nothing"} {
+					if !strings.Contains(turn, want) {
+						t.Errorf("%s: missing %q: %s", opening, want, turn)
 					}
 				}
 			}
-			finding(t, "%d MB body: the sender's sends took %s and were accepted; in its history the send result is %d bytes, the message_agent result (which echoes the body) %d bytes, capped; its own action turn carries the body, %d bytes; its checkpoint %s is %d bytes; mailboxes.json is %d bytes",
-				size>>20, sendTime.Round(time.Millisecond), action, echo, turn, result.CheckpointID, f.payloadSize(t, result.CheckpointID), mailboxes)
-			if c.both {
-				finding(t, "a small send: %s on an empty bus, %s behind the big ones (each send rewrites mailboxes.json whole)", emptySend.Round(time.Microsecond), smallSend.Round(time.Microsecond))
+			if rejected := f.events(t, "ipc.rejected"); len(rejected) != 2 || rejected[0].Data["reason"] != "too_large" {
+				t.Errorf("ipc.rejected = %+v", rejected)
 			}
+			pending := f.pending(t)[receiver.PID]
+			if len(pending) != 1 || !slices.Equal(pending[0].Artifacts, []string{published}) {
+				t.Fatalf("the mailbox holds %d messages: %+v", len(pending), pending)
+			}
+			mailboxes := fileSize(filepath.Join(f.root, "bus", "mailboxes.json"))
+			finding(t, "%d MiB body: refused by send and message_agent, published and sent as a handle, in %s; mailboxes.json %d bytes; the sender's checkpoint %s is %d bytes, since its own turns hold what it wrote",
+				size>>20, time.Since(start).Round(time.Millisecond), mailboxes, result.CheckpointID, f.payloadSize(t, result.CheckpointID))
 
-			eventsBefore := fileSize(filepath.Join(f.root, "kernel", "events.json"))
-			reading := script(say("read"))
-			resumed, err := f.agent(reading).Resume(context.Background(), receiver.PID, checkpoint, nil, runtime.RunOptions{StopOnAssistantMessage: true})
-			if err != nil {
+			// The receiver reads it in pages, to the end, byte for byte.
+			var got strings.Builder
+			pages, offset, largest := 0, "0", 0
+			page := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:\d+ total_bytes:\d+\]$`)
+			reading := &backend{}
+			reading.fn = func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				if call > 1 {
+					match := page.FindStringSubmatch(request.History[len(request.History)-1].Content)
+					if match == nil {
+						return runtime.GenerateResult{}, fmt.Errorf("not a page: %.200s", request.History[len(request.History)-1].Content)
+					}
+					got.WriteString(match[1])
+					largest = max(largest, len(match[1]))
+					pages++
+					if match[2] == "" {
+						return exitWith(0, false, "read"), nil
+					}
+					offset = match[2]
+				}
+				return tool("read_artifact", map[string]string{"id": published, "offset": offset}), nil
+			}
+			agent := f.agent(reading)
+			agent.MaxSteps = 200
+			start = time.Now()
+			if _, err := agent.RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "read"}}, runtime.RunOptions{}); err != nil {
 				t.Fatal(err)
 			}
-			var longest int
-			for _, message := range reading.first() {
-				longest = max(longest, len(message.Content))
+			if got.String() != big {
+				t.Errorf("read back %d bytes of %d", got.Len(), len(big))
 			}
-			var mailArtifacts []string
-			records, _ := f.store.List()
-			for _, record := range records {
-				switch {
-				case record.Type == "mailbox_message":
-					mailArtifacts = append(mailArtifacts, fmt.Sprintf("%s/%s=%d", record.Metadata["direction"], record.ID, f.payloadSize(t, record.ID)))
-				case record.Type == "memory_segment" && record.ProducerPID == receiver.PID:
-					mailArtifacts = append(mailArtifacts, fmt.Sprintf("memory_segment/%s=%d", record.ID, f.payloadSize(t, record.ID)))
-				}
+			if largest > tools.MaxToolOutputBytes {
+				t.Errorf("a page of %d bytes", largest)
 			}
-			total := 0
-			for _, message := range reading.first() {
-				total += len(message.Content)
+			finding(t, "the receiver read %d MiB in %d pages of at most %d bytes, byte for byte, in %s", size>>20, pages, largest, time.Since(start).Round(time.Millisecond))
+
+			// Nobody else does.
+			denied := script(tool("read_artifact", map[string]string{"id": published}), tool("list_artifacts", map[string]string{}), exitWith(0, false, "tried"))
+			if _, err := f.agent(denied).RunWithOptions(context.Background(), stranger.PID, []runtime.Message{{Role: "user", Content: "read " + published}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+				t.Fatal(err)
 			}
-			finding(t, "the receiver's first request: %d entries, %d bytes, the largest %d bytes (%d over 64 KiB); its checkpoint %s is %d bytes; artifacts (type/id=bytes): %s; events.json grew %d bytes on receive (ids only)",
-				len(reading.first()), total, longest, oversized(reading.first()), resumed.CheckpointID, f.payloadSize(t, resumed.CheckpointID), strings.Join(mailArtifacts, " "), fileSize(filepath.Join(f.root, "kernel", "events.json"))-eventsBefore)
+			view := denied.seen[len(denied.seen)-1]
+			if turn := entryWith(view, "tool_error name=read_artifact "); !strings.Contains(turn, runtime.ErrArtifactNotReadable.Error()) {
+				t.Errorf("an unrelated read: %q", turn)
+			}
+			if turn := entryWith(view, "list_artifacts:"); strings.Contains(turn, published) || !strings.Contains(turn, "count:0") {
+				t.Errorf("an unrelated listing: %s", turn)
+			}
 		})
 	}
+}
 
-	// An artifact handle instead of inline text.
-	f := newFixture(t)
-	receiver := f.spawn(t, "receiver", "list_artifacts", "read_memory")
-	sender := f.spawn(t, "sender", "publish_artifact", "message_agent")
-	var published string
-	publishing := &backend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
-		switch call {
-		case 1:
-			return tool("publish_artifact", map[string]string{"type": "report", "body": "the large result"}), nil
-		case 2:
-			last := request.History[len(request.History)-1].Content
-			published = regexp.MustCompile(`art-\d+`).FindString(last)
-			return say("published " + published), nil
-		}
-		return exitWith(0, false, "done"), nil
-	}}
-	f.agent(publishing).RunWithOptions(context.Background(), sender.PID, []runtime.Message{{Role: "user", Content: "publish"}}, runtime.RunOptions{StopOnAssistantMessage: true})
-	reading := script(tool("list_artifacts", map[string]string{}), tool("read_memory", map[string]string{"artifact_id": published}), say("tried"))
-	f.agent(reading).RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "read " + published}}, runtime.RunOptions{StopOnAssistantMessage: true, ContinueOnToolError: true})
-	view := reading.seen[len(reading.seen)-1]
-	for _, message := range view {
-		if strings.HasPrefix(message.Content, "list_artifacts:") {
-			finding(t, "receiver list_artifacts (ungated by producer): %d bytes, lists %d artifacts including other processes' checkpoints and mail", len(message.Content), strings.Count(message.Content, "art-"))
-		}
-		if strings.Contains(message.Content, "read_memory") && strings.Contains(message.Content, "error") {
-			finding(t, "receiver reading the published handle %s: %s", published, message.Content)
+// entryWith is the newest entry that opens with opening.
+func entryWith(messages []runtime.Message, opening string) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if strings.HasPrefix(messages[i].Content, opening) {
+			return messages[i].Content
 		}
 	}
-	finding(t, "no tool reads a published artifact's body: read_memory takes only the reader's own memory_segment artifacts (runtime.go read_memory, ownedBy); so a handle cannot replace inline text today")
+	return ""
+}
+
+// B6's cost at the worst case the bounds allow. Each send still rewrites the whole
+// bus, so it follows the size of the bus, and nothing bounds the number of
+// mailboxes. Measure-only.
+func TestIPCB13BoundCost(t *testing.T) {
+	trials := 5
+	if raw := os.Getenv("AOS_IPC_TRIALS"); raw != "" {
+		trials, _ = strconv.Atoi(raw)
+	}
+	cost := func(f fixture, from, to string) time.Duration {
+		var total time.Duration
+		for i := 0; i < trials; i++ {
+			start := time.Now()
+			if _, err := f.bus.Send(from, to, "small"); err != nil {
+				t.Fatal(err)
+			}
+			total += time.Since(start)
+		}
+		return (total / time.Duration(trials)).Round(time.Microsecond)
+	}
+	for _, full := range []int{0, 1, 4, 16} {
+		f := newFixture(t)
+		sender, free := f.spawn(t, "sender"), f.spawn(t, "free")
+		for m := 0; m < full; m++ {
+			pid := f.spawn(t, fmt.Sprintf("full%d", m)).PID
+			for i := 0; i < 64; i++ {
+				if _, err := f.bus.Send(sender.PID, pid, strings.Repeat("x", ipc.MaxBodyBytes)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		send := cost(f, sender.PID, free.PID)
+		var refusal time.Duration
+		if full > 0 {
+			target := "pid-000003"
+			for i := 0; i < trials; i++ {
+				start := time.Now()
+				if _, err := f.bus.Send(sender.PID, target, "small"); !errors.Is(err, ipc.ErrMailboxFull) {
+					t.Fatalf("send = %v", err)
+				}
+				refusal += time.Since(start)
+			}
+			refusal = (refusal / time.Duration(trials)).Round(time.Microsecond)
+		}
+		finding(t, "%d full mailboxes (64 bodies at the cap each): mailboxes.json %d bytes; a small send %s, a refusal %s, over %d trials",
+			full, fileSize(filepath.Join(f.root, "bus", "mailboxes.json")), send, refusal, trials)
+	}
+	// Reading a handle hashes the whole payload, per page.
+	f := newFixture(t)
+	owner := f.spawn(t, "owner")
+	record, err := f.store.CreateJSON(artifact.PublishedPrefix+"report", owner.PID, map[string]string{"body": strings.Repeat("x", 10<<20)}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var total time.Duration
+	var body struct {
+		Body string `json:"body"`
+	}
+	for i := 0; i < trials; i++ {
+		start := time.Now()
+		if err := f.store.ReadJSON(record.ID, &body); err != nil {
+			t.Fatal(err)
+		}
+		total += time.Since(start)
+	}
+	finding(t, "one read of a 10 MiB artifact's payload, hash check and decode: %s, over %d trials", (total / time.Duration(trials)).Round(time.Microsecond), trials)
 }
 
 // B7 Request/response. Contract: none for mail. The engine's wait is the
@@ -1044,12 +1150,17 @@ func lastWith(messages []runtime.Message, prefix string) string {
 // live subscriber; (ipc.Transfer, runtime.Recover) subscriptions move to
 // the successor.
 func TestIPCB8BackpressureAndTopics(t *testing.T) {
+	// B8a asserts, since step 4 of the slice (ipc-design.md, decision 8). Before,
+	// at 180d076: 2,000 unread messages to one mailbox, all accepted, with
+	// mailboxes.json at 542 KB and 33 ms a send by then.
 	f := newFixture(t)
 	receiver := f.spawn(t, "receiver")
-	sender := f.spawn(t, "sender")
-	const n = 2000
+	sender := f.spawn(t, "sender", "message_agent")
+	listener := f.spawn(t, "listener")
+	f.bus.Subscribe(receiver.PID, "alerts")
+	f.bus.Subscribe(listener.PID, "alerts")
 	var firstHundred, lastHundred time.Duration
-	for i := 0; i < n; i++ {
+	for i := 0; i < ipc.MaxMailboxMessages; i++ {
 		start := time.Now()
 		if _, err := f.bus.Send(sender.PID, receiver.PID, fmt.Sprintf("flood %04d %s", i, strings.Repeat("y", 100))); err != nil {
 			t.Fatalf("send %d refused: %v", i, err)
@@ -1057,22 +1168,48 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 		switch elapsed := time.Since(start); {
 		case i < 100:
 			firstHundred += elapsed
-		case i >= n-100:
+		case i >= ipc.MaxMailboxMessages-100:
 			lastHundred += elapsed
 		}
 	}
-	finding(t, "%d unread messages to one mailbox: all accepted; mailboxes.json %d bytes; mean send %s for the first 100, %s for the last 100 (no bound, no backpressure; cost grows with the backlog)",
-		n, fileSize(filepath.Join(f.root, "bus", "mailboxes.json")), (firstHundred / 100).Round(time.Microsecond), (lastHundred / 100).Round(time.Microsecond))
+	if _, err := f.bus.Send(sender.PID, receiver.PID, "the 257th"); !errors.Is(err, ipc.ErrMailboxFull) {
+		t.Fatalf("B8a: the 257th = %v", err)
+	}
+	created, skipped, err := f.bus.Publish(sender.PID, "alerts", "to whoever has room")
+	if err != nil || len(created) != 1 || created[0].To != listener.PID || !slices.Equal(skipped, []string{receiver.PID}) {
+		t.Fatalf("B8a: publish = %+v, skipped %v, %v", created, skipped, err)
+	}
+	rejected := f.events(t, "ipc.rejected")
+	if len(rejected) != 2 || rejected[0].Data["reason"] != "mailbox_full" || rejected[1].Data["topic"] != "alerts" {
+		t.Fatalf("B8a: ipc.rejected = %+v", rejected)
+	}
+	finding(t, "%d unread messages to one mailbox: all accepted, the next refused; mailboxes.json %d bytes; mean send %s for the first 100, %s for the last 100",
+		ipc.MaxMailboxMessages, fileSize(filepath.Join(f.root, "bus", "mailboxes.json")), (firstHundred / 100).Round(time.Microsecond), (lastHundred / 100).Round(time.Microsecond))
+
+	// A runtime notice is not mail: the owner of a full mailbox still hears that
+	// its own mail went unread.
+	gone := f.spawn(t, "gone")
+	if _, err := f.bus.Send(receiver.PID, gone.PID, "unread"); err != nil {
+		t.Fatal(err)
+	}
+	f.exit(t, gone.PID, kernel.ExitStatus{Code: 0, Reason: "finished"})
+	hearing := script(say("heard"))
+	if _, err := f.agent(hearing).RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{StopOnAssistantMessage: true}); err != nil {
+		t.Fatal(err)
+	}
+	if turn := entryWith(hearing.first(), "undelivered:"); !strings.Contains(turn, "to gone (") {
+		t.Fatalf("B8a: the notice did not reach a full mailbox's owner: %+v", hearing.first())
+	}
 
 	g := newFixture(t)
 	x := g.spawn(t, "x")
 	y := g.spawn(t, "y")
 	publisher := g.spawn(t, "publisher")
-	early, _ := g.bus.Publish(publisher.PID, "news", "before anyone subscribed")
+	early, _, _ := g.bus.Publish(publisher.PID, "news", "before anyone subscribed")
 	g.bus.Subscribe(x.PID, "news")
 	g.bus.Subscribe(y.PID, "news")
 	g.bus.Subscribe(publisher.PID, "news")
-	both, _ := g.bus.Publish(publisher.PID, "news", "to every subscriber")
+	both, _, _ := g.bus.Publish(publisher.PID, "news", "to every subscriber")
 	var ids []string
 	for _, message := range both {
 		ids = append(ids, message.To+"="+message.ID)
@@ -1101,7 +1238,7 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 	if got := subscriptions(); !strings.Contains(got, subscriber.PID) {
 		t.Fatalf("B8c: after the exit, subscriptions.json = %s", got)
 	}
-	whileExited, _ := h.bus.Publish(poster.PID, "news", "while the subscriber is exited")
+	whileExited, _, _ := h.bus.Publish(poster.PID, "news", "while the subscriber is exited")
 	if len(whileExited) != 1 {
 		t.Fatalf("B8c: a publish in the gap reached %d", len(whileExited))
 	}
@@ -1110,7 +1247,7 @@ func TestIPCB8BackpressureAndTopics(t *testing.T) {
 	listening := &backend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		if call == 1 {
 			afterSubscriptions = subscriptions()
-			after, _ = h.bus.Publish(poster.PID, "news", "after the Recover")
+			after, _, _ = h.bus.Publish(poster.PID, "news", "after the Recover")
 			return say("noted"), nil
 		}
 		return exitWith(0, false, "done"), nil

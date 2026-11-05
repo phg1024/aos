@@ -18,6 +18,11 @@ B1c are fixed, and their probes assert it. See
 [Implemented: Step 3](#implemented-step-3). A chain nobody closes still produces
 no outcome. Steps 4 and 5 are not built.
 
+**Update, 2026-11-04:** step 4 of the slice (bounds and handles) is built: B6 and
+B8a are fixed, and their probes assert it. See
+[Implemented: Step 4](#implemented-step-4). Decisions 1, 7, 8 and 10 changed as it was
+built, and say so. Step 5 is not built.
+
 **Revised, 2026-11-03,** after the book session's review of `951c787`:
 
 - **A twelfth decision, rollback and mail.** A rollback loses acked mail,
@@ -255,10 +260,12 @@ the bus alone, with no checkpoint to read.*
     would repeat B1c's mistake one layer down: today an ack stands for
     "seen", and a reference would stand for it next.
   - **Why compaction may still archive it:** the request has to fit the
-    window. Step 4's cap makes this rare: at most 1 MiB of unread mail
-    can arrive in one step, and that only from a full mailbox. A mailbox
-    over its bound after a Recover or a rollback is the exception
-    (decision 8).
+    window. Step 4 makes this rare: one step takes in no more than compaction
+    keeps live and at most 32 KiB (decision 8), so a batch is not archived in the
+    step it arrives. Mail can still be pushed out by later turns after a call that
+    failed (`TestMailArchivedAfterAFailedCall`). *This changed as step 4 was built: it
+    said at most 1 MiB could arrive in one step, which measured as a request no
+    small window can take.*
 
 ### 2. Sender outcomes (B2c, B1c, B7)
 
@@ -688,12 +695,21 @@ tells the sender what to do. `message_agent` can attach artifact
 handles, and a new `read_artifact` reads one under the receiver's
 capabilities. `list_artifacts` is gated to the same set.**
 
-- **The cap:** `ipc.MaxBodyBytes = 16 KiB`. A larger body is
-  `ErrMessageTooLarge`, logged as `ipc.rejected` with reason `too_large`:
-  `message body is 1048576 bytes, over 16384; publish it with
-  publish_artifact and send the artifact_id`.
-  - It applies at the bus, so `send`, `publish` and `message_agent` all
-    hit it.
+- **The cap:** `ipc.MaxBodyBytes = 16 KiB`, handles included. A larger body is
+  `ErrMessageTooLarge`, logged as `ipc.rejected` with reason `too_large`. What the
+  sender sees depends on what it holds, which the bus does not know, so the runtime
+  adds the remedy:
+
+  ```
+  message is too large: 1048576 bytes, over 16384; publish_artifact it, then message_agent with the artifact_id in artifacts (an ID in the body grants nothing)
+  ```
+
+  - A sender without `publish_artifact` is told to send less, and no tool it cannot
+    call is named. A `publish` carries no handles, and its text says that.
+    *This changed as step 4 was built: the text said to send the `artifact_id`, which a
+    model would put in the body, where it grants nothing.*
+  - It applies at the bus, so `send`, `publish`, `message_agent` and the operator's
+    mail all hit it.
   - **Why 16 KiB:**
     - A message is a turn the receiver's model reads in full. Tool output
       is capped at 64 KiB (`tools.MaxToolOutputBytes`), and a message
@@ -712,7 +728,8 @@ capabilities. `list_artifacts` is gated to the same set.**
     record is the receiver chain's grant.
   - **`read_artifact(id, offset, limit)`** returns a published
     artifact's body in pages of at most 64 KiB, like `read_memory`'s
-    ranges.
+    ranges. Every process has it, as with `read_memory`: its rules are the gate,
+    and a handle would be no use to a receiver that also needed the tool granted.
 - **Who may read whose artifacts.** A process may read an artifact if
   one of these holds:
   1. its own chain produced it;
@@ -723,7 +740,9 @@ capabilities. `list_artifacts` is gated to the same set.**
   read what they publish.
   - Siblings and unrelated processes need a handle.
   - Runtime records (checkpoints, verdicts, ledger entries) are never
-    readable through `read_artifact`. Only `published:*` types are.
+    readable through `read_artifact`. Only `published.*` types are.
+  - A refusal reads the same whether the ID does not exist, is a runtime record, or
+    is another process's, and the kernel's log has the true reason.
 - **`list_artifacts`** lists only what the caller may read. Today it
   lists every process's artifacts (`runtime.go:2451`).
 - **A sub-agent's summary is a claim.** A delegate result's `summary`,
@@ -754,7 +773,8 @@ them.**
     `mailbox_full`), and a model can act on it: wait, send less, or send
     a handle.
 - **Publish:** delivers to the subscribers with room. Its result lists
-  the ones it skipped, and each skip is an `ipc.rejected`.
+  the ones it skipped, and each skip is an `ipc.rejected`. A skipped subscriber stays
+  subscribed.
 - **The cap and the bound are checked only on a new send or publish.**
   `Transfer` and a rollback's re-delivery are never refused, and they may
   take a mailbox over its bound.
@@ -769,6 +789,11 @@ them.**
   - A send forwarded along the chain (decision 3) is a new send, checked
     against the live end's mailbox.
 - **Also exempt from the bound:**
+  - the operator's mail: a flood of peers' mail must not stop a person from reaching
+    their agent, and one person typing cannot flood anything. It counts towards the
+    bound for everyone else. The cap still holds: `aos-tui` publishes a line over it
+    and sends its start with the handle, so the text is neither refused nor lost.
+    *This changed as step 4 was built: the decision did not cover the operator.*
   - runtime notices, which are not mail (decision 2);
   - replies to open requests, whose room was reserved when the request
     was sent (decision 6).
@@ -798,6 +823,12 @@ them.**
   - 256 messages is far above B3/B4's working sets, and well below B8a's
     2,000. A model that has 256 unread messages is not reading its mail.
   - 1 MiB is 64 bodies at the cap.
+- **A full mailbox does not land in one request.** One step takes at most 32 KiB of
+  mail, at least one message, and no more than compaction keeps live (`KeepMessages`,
+  and half of the window's trigger): the rest stays pending for the next step. So a
+  full mailbox takes up to 64 steps, which is its cost. *This changed as step 4 was
+  built: with no batches, a full mailbox made a request of 1 MiB, every call to a
+  smaller window failed, nothing left the mailbox, and the process was stuck.*
 
 ### 9. Addressing policy (B10a)
 
@@ -850,8 +881,12 @@ allow.**
     33 ms at 542 KB.
   - With decisions 7 and 8, a live mailbox holds at most 1 MiB, apart
     from a brief overshoot after a Recover or a rollback. So the bus is
-    about 1 MiB per live chain with mail. A workflow of a few agents stays
-    in the tens of milliseconds per send, against model steps of seconds.
+    about 1 MiB per live chain with mail. Nothing bounds the number of mailboxes.
+    Measured at step 4 (`TestIPCB13BoundCost`, three files rewritten and fsynced per
+    send, as step 4 leaves them), mean of 25 sends on this machine, at 0, 1, 4 and 16 full
+    mailboxes: 20.8, 27.1, 48.6 and 126 ms a small send, on a `mailboxes.json` of 4 KB, 1, 4 and 17 MB. A refusal
+    writes no bus file: 12, 21 and 59 ms. A workflow of a few agents stays in the tens of
+    milliseconds, against model steps of seconds.
   - The cost would matter with hundreds of busy agents on one state
     directory. That is when a journal, or one file per mailbox, earns its
     complexity. Not now.
@@ -2178,3 +2213,164 @@ is the reason they are retryable at all.
 - **Nothing prunes `bus/dead_letters/`.** See "Fixed after review of `9a05e8c`".
 - **Reading mail is not checked against acting on it.** Shown means a request had the
   body and the call returned, not that the agent did anything with it.
+
+## Implemented: Step 4
+
+Built on 2026-11-04: the size cap, the mailbox bound, handles, `read_artifact` and the
+gated `list_artifacts`. Step 5 is not built.
+
+```
+go test -count=1 ./internal/framing ./internal/kernel ./internal/ipc ./internal/artifact ./internal/runtime ./internal/agentflow ./internal/replay ./internal/tools ./internal/inspect ./internal/statedir ./internal/scheduler ./internal/lease ./cmd/aos ./cmd/aos-tui
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B6|B8|B11|B12|B13' -timeout 1200s ./bench/ipc/
+reports/ipc-step-4-e2e/run.sh <aos binary> <new state dir>
+```
+
+### What is enforced
+
+- **The cap and the bound,** at the bus, under the lock that inserts:
+  `ErrMessageTooLarge`, `ErrMailboxFull`, each an `ipc.rejected` with reason `too_large`
+  or `mailbox_full`. `Message.Artifacts` count towards both.
+- **Every refusal is a tool error, by every route.** `send` and `publish` used to end the
+  process on any bus error they did not name. They now name these. A publish reports
+  `skipped=` instead of failing.
+- **Handles.** `message_agent` takes `artifacts:`. The runtime checks the sender may read
+  each one, the bus carries them, and the receive's `mailbox_message` record names them
+  in its metadata: that record is the grant.
+- **`read_artifact(id, offset, limit)`,** always available, pages of at most 64 KiB, cut
+  on a rune, through the store's hash check. Its result reaches the model through the same
+  escape as any tool's, and a memory segment holds a reference to it, not a copy.
+- **`list_artifacts`** lists what the caller may read: published artifacts under the three
+  rules. A published type is an agent's words, so it goes through `framing.Inline`.
+- **Batches.** One step takes at most 32 KiB of mail, `KeepMessages` messages and half the
+  compaction trigger, and at least one message.
+- **`bus_bounds: v1`** on `run.started`. A record without it replays with
+  `Bus.NoBounds`, `AgentRuntime.NoBusBounds` and the old prompt.
+
+### Differences from the contract text
+
+Decisions 1, 7, 8 and 10 are changed in place, and each says so.
+
+| The text said | What was built | Why |
+|---|---|---|
+| The refusal says "publish it with publish_artifact and send the artifact_id" | It names `artifacts`, says an ID in a body grants nothing, and names `publish_artifact` only to a process that holds it | A model following the old text writes mail the receiver cannot read |
+| "at most 1 MiB of unread mail can arrive in one step" | At most 32 KiB, `KeepMessages` messages and half the trigger per step | Measured: that request failed every call to a smaller window, and the process never drained |
+| The cap "applies at the bus" and the bound to any send | The operator is held to the cap and not the bound, and `aos-tui` turns a line over the cap into a handle | Step 3's worst defect was losing an operator's text |
+| "reads one under the receiver's capabilities" | `read_artifact` is always available, like `read_memory` | The rules are the gate, and a handle is no use to a receiver that also needs the tool |
+| `published:*` | `published.*` | The store's prefix is `published.` |
+| Not in the text | A new root records the root it continues (`Metadata["continues"]`), and that counts as its chain for reading | Its history holds the old root's handles, and a takeover is not a recovery |
+| Not in the text | A refusal that may change (`ErrMailboxFull`, `ErrArtifactNotReadable`) does not count towards the repeated-call suppression | The refusal says to send again; suppression answered for the bus without asking it. Found by the verifier test |
+
+### What rights are, across a chain
+
+| Path | What is true | Test |
+|---|---|---|
+| Rule 1 after Recover | Walks `resumed_from` back from the live process, up to `maxResumeChain`; past that it fails closed | `TestChainIdentityInTheReadRules` |
+| Rule 3 | Walks `ParentPID` up from the producer. Every link points backward, so an old PID on the way is in the caller's chain. Holds across the parent's and the child's Recover and a closed link | The same |
+| Rule 2 through Transfer, forwarding, re-delivery, a sweep | `Artifacts` is a field of the message, on every copy, and of the dead-letter body | `TestHandlesTravelWithTheMail` |
+| Rule 2 and rollback | Rights only grow. A rollback discards no record, so rolling back past a receipt keeps the right. The same message is re-delivered with its handle and gets a second record. So the two agree: the chain was given it, and is told again | `TestAGrantSurvivesARollbackPastTheReceipt` |
+| Mail not received yet | No grant: the record is written at the receipt | `TestAGrantStartsAtTheReceipt` |
+| `takeOver`, `startRoot` | Unread mail moves with its handle. Read mail's grant stays on the old chain, reached through `continues` | `TestANewRootHoldsWhatTheOldOneHeld` |
+| A forged `artifacts:` in a body or a header look-alike | Grants nothing: a record names handles only from `Message.Artifacts`, which only `message_agent` sets after the check | `TestAForgedHandleGrantsNothing` |
+
+### Routes that exist for evidence
+
+- **A verifier is a sibling of the worker,** so rule 3 does not cover it, and Chapter 11's
+  "the verifier should check the evidence" needs a handle. `delegate` has no `artifacts:`,
+  and the lead has no PID until the verifier exists. The route today: the verifier
+  `wait`s, the lead gets its PID in the delegate result, attaches the handle with
+  `message_agent`, and re-delegates (`TestAVerifierGetsEvidenceThroughAWait`). A child
+  reads a parent's artifact the same way. **A child that never parks has no route,** and
+  neither has a verifier whose workflow does not script that. The rules were not widened.
+- **Who used `list_artifacts`:** `workflows/two-agent-mini.json`, whose prompt uses it only as
+  a fallback, and its count in `internal/tui/render`. The verdict (`judge`) reads the
+  kernel, not artifacts. `aos inspect` reads the store directly, ungated, as the operator.
+  A process no longer lists its own checkpoints, or delegate results: both are runtime
+  records.
+
+### The batch, measured
+
+`TestAFullMailboxFitsTheWindow`, with a backend that fails any request over the window, on
+the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,300 chars at
+`EstimatedCharsPerToken`). History only: the system prompt comes on top.
+
+| Mailbox | Window | Calls to drain | Largest history | Archived before a read |
+|---|---|---|---|---|
+| 64 bodies at the cap | 174,300 | 32 | 165,752 | 0 |
+| 256 messages of 4 KiB | 174,300 | 32 | 167,469 | 0 |
+| 300 of 4 KiB, after a handover | 174,300 | 38 | 167,469 | 0 |
+| 64 bodies at the cap, unknown window | none | 64 | 16,441 | 0 |
+| 256 of 100 bytes, unknown window | none | 22 | 2,519 | 0 |
+
+- **Without batches:** the first request holds the whole mailbox and every call fails
+  (`no batches` in the mutation list), so nothing drains.
+- **The cost is steps.** A step budget of 24, the default, does not cover a 1 MiB mailbox at
+  32 KiB a step. The process exits on its budget with the rest unread, and with a restart
+  policy the chain closes, so its senders are told. In `aos-tui` each line has a fresh
+  allowance. A person's line behind a full mailbox waits its turn in the batches.
+- **Over its bound after a handover:** the same batches, so it drains.
+- **The limit that remains: one body larger than the window.** A body over the cap can exist
+  only from before the cap. It comes alone, every call fails, and the process exits
+  retryably with the message kept: it does not drain, and Recover repeats it
+  (`TestABodyBeyondTheWindowStaysStuckAndKept`). A body under the cap always fits.
+- **Compaction can overshoot by what one batch or tool output adds.** At a higher ratio than
+  the default, the room above the trigger shrinks. `Validate` checks the hysteresis and not
+  this room, which was true of tool output before.
+
+### What this does not close
+
+- **A chain nobody closes,** with room in its mailbox, still gives no outcome. What changed: at
+  256 messages or 1 MiB its senders are refused (`TestAHeldMailboxFillsAndRefuses`), and
+  the refusal says it may never read this. Mail already in gets nothing more than `held`.
+- **Archived mail nobody reads** holds its place in the mailbox. A receiver that ignores
+  `archived unread:` can stay full until its chain ends. The refusal is right about that, and
+  its senders are told at the chain's end.
+- **The sender's own turn holds what it wrote.** `publish_artifact` takes a `body`, so 10 MiB
+  costs a model 10 MiB of output, and its checkpoint grows by that (B6: 21 MB). There is no
+  path form.
+- **Handle lists** count towards the cap, not separately.
+- **Rights are not revoked.** A chain that was attached a handle keeps it.
+- **An index entry from before hashing** has no `sha256` and is read unverified, as the store
+  has always done.
+- **Framing adds to a body.** The batch counts bodies. A body of newlines at the cap renders
+  to about 3 times its bytes.
+- **The bus's size.** The bound is per mailbox and nothing bounds the number of mailboxes;
+  `TestIPCB13BoundCost` has the cost. `bus/dead_letters/` still grows for the life of the state
+  directory, now by at most 16 KiB per letter from new mail. Decision 10's one file is not
+  built.
+- **`aos-tui`'s loop itself** is not under test: `deliver`, `operatorBody`, `continueEnded`
+  and `startRoot` are, called as the loop calls them, but the loop's call, the "not delivered"
+  line and `spawnRoot`'s metadata in `main.go` are not. A store that cannot write gives "not
+  delivered", and the text is then only in the terminal.
+- **Without `ContinueOnToolError`** a refusal ends the process, like any tool error
+  (`TestWithoutContinueARefusalEndsTheSenderLikeAnyToolError`). The engine, the TUI and the
+  probes all set it.
+
+### Tests
+
+- `ipc`: `TestTheCapRefusesAndLogs`, `TestTheBoundCountsMessagesAndBytes`,
+  `TestAHeldMailboxFillsAndRefuses`, `TestPublishSkipsAFullSubscriber`,
+  `TestTheOperatorIsNotHeldToTheBound`, `TestHandoverMayOvershootTheBound`,
+  `TestRedeliveryIgnoresTheCap`, `TestReceiveBatchTakesWhatFitsInOrder`,
+  `TestHandlesTravelWithTheMail`, `TestNoBoundsTakesAnything`.
+- `runtime`: `TestRefusalsLeaveTheSenderRunning`, `TestRefusalNamesOnlyWhatTheSenderHolds`,
+  `TestTheRefusalsRemedyWorks`, `TestHandleNeedsTheSenderToReadIt`,
+  `TestRuntimeRecordsAreNotReadable`, `TestAForgedHandleGrantsNothing`,
+  `TestChainIdentityInTheReadRules`, `TestAGrantSurvivesARollbackPastTheReceipt`,
+  `TestAGrantStartsAtTheReceipt`, `TestAHandleCanBePassedOn`, `TestListArtifactsIsGated`,
+  `TestReadArtifactPages`, `TestReadArtifactPagesTenMegabytesToTheEnd`,
+  `TestAReadOfADamagedArtifactIsAToolError`, `TestAFullMailboxDrainsOnAReturnedCall`,
+  `TestTheBoundHoldsAcrossProcesses`, `TestAFullMailboxFitsTheWindow`,
+  `TestABodyBeyondTheWindowStaysStuckAndKept`, `TestAnOldStateDirKeepsEveryMessage`,
+  `TestMailArchivedAfterAFailedCall`, `TestARefusedCallCanBeRepeatedOnceThingsChange`,
+  `TestWithoutContinueARefusalEndsTheSenderLikeAnyToolError`.
+- `agentflow`: `TestAVerifierGetsEvidenceThroughAWait`,
+  `TestSystemPromptDescribesHandlesOnlyWhenOn`.
+- `replay`: `TestReplayOfARecordWithoutBusBounds`, `TestReplayOfHandles`.
+- `aos-tui`: `TestAnOverLongLineStaysWhole`, `TestALineAtTheCapIsSentAsItIs`,
+  `TestAnOverLongLineThatCannotBeKeptIsNotDelivered`, `TestALineReachesAFullMailbox`,
+  `TestANewRootHoldsWhatTheOldOneHeld`.
+- `bench/ipc`: B6 and B8a assert, with their `180d076` results in comments; B5 runs imitation
+  through `read_artifact`; `TestIPCB13BoundCost` measures.
+- Two older tests set `NoBusBounds`, with what they expect unchanged:
+  `TestArchivedMailIsNotShownUntilRead` and `TestAdoptionRequiresIdenticalMessages` need
+  several messages in one step, which batches now split.

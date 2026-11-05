@@ -25,6 +25,13 @@
 // a send that gets in after a Sweep reads the kernel after that exit, and is
 // refused. A chain nobody closes has not ended, and its mail just waits.
 //
+// A new send or publish is held to a size (MaxBodyBytes) and a mailbox to a
+// bound (MaxMailboxMessages, MaxMailboxBytes). Both are refusals the sender can
+// act on, checked under the lock that inserts. Mail already accepted is never
+// refused: a Transfer or a rollback's re-delivery may take a mailbox over its
+// bound, and then it takes no new mail until it drains. The operator's mail is
+// held to the size and not the bound, and counts towards it for everyone else.
+//
 // Forwarding reads the kernel under the bus's lock, and Transfer takes that
 // lock after Supersede, so a send racing a recovery either sees the successor
 // or lands in time to be moved. The kernel's lock may be taken inside the
@@ -74,6 +81,26 @@ func checkTopic(topic string) error {
 	return nil
 }
 
+// MaxBodyBytes is the most a new message may carry inline, handles included: a
+// message is a turn its receiver's model reads in full. More goes in a published
+// artifact, and the message carries its handle.
+const MaxBodyBytes = 16 * 1024
+
+// MaxMailboxMessages and MaxMailboxBytes bound a mailbox's unacknowledged mail,
+// whichever comes first. A send past them is refused, and a publish skips that
+// subscriber.
+const (
+	MaxMailboxMessages = 256
+	MaxMailboxBytes    = 1 << 20
+)
+
+// ErrMessageTooLarge: a body over MaxBodyBytes. It says only what is wrong: what
+// the sender can do depends on what it holds, which the bus does not know.
+var ErrMessageTooLarge = errors.New("message is too large")
+
+// ErrMailboxFull: the recipient holds as much unread mail as it may.
+var ErrMailboxFull = errors.New("recipient's mailbox is full")
+
 // OperatorSender is the sender of mail from whoever runs AOS: it reaches
 // the agent as a user turn. Only SendAsOperator sends as it.
 const OperatorSender = "user"
@@ -82,11 +109,14 @@ const OperatorSender = "user"
 var ErrReservedSender = errors.New("the sender name is reserved for the operator")
 
 type Message struct {
-	ID        string    `json:"id"`
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Topic     string    `json:"topic,omitempty"`
-	Body      string    `json:"body"`
+	ID    string `json:"id"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Topic string `json:"topic,omitempty"`
+	Body  string `json:"body"`
+	// Artifacts are handles: the runtime checks the sender may read each one
+	// before it sends, and a receiver's record of them is its chain's grant.
+	Artifacts []string  `json:"artifacts,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 	// Deliveries counts how often Receive handed the message out without
 	// it being acknowledged; 0 means pending. Mailboxes written before
@@ -137,7 +167,10 @@ type Bus struct {
 	// NoSubscriptionEvents leaves out ipc.subscribed and ipc.unsubscribed, for
 	// replaying a record made before them.
 	NoSubscriptionEvents bool
-	mu                   sync.Mutex
+	// NoBounds accepts any size into any mailbox, for replaying a record made
+	// before the bounds.
+	NoBounds bool
+	mu       sync.Mutex
 }
 
 // Why a subscription came or went, on its ipc.subscribed or ipc.unsubscribed
@@ -173,23 +206,35 @@ func New(root string, k *kernel.Kernel) (*Bus, error) {
 }
 
 // Send queues body for to, which may be any PID of a process chain. The
-// returned message names the process it reached. An unknown process, or a
-// chain that has ended, is refused.
+// returned message names the process it reached. An unknown process, a chain
+// that has ended, a body over the cap and a full mailbox are refused.
 func (b *Bus) Send(from, to, body string) (Message, error) {
+	return b.SendWithArtifacts(from, to, body, nil)
+}
+
+// SendWithArtifacts is Send with handles attached. The bus records them as it is
+// given them: the caller answers for the sender's right to pass each one on.
+func (b *Bus) SendWithArtifacts(from, to, body string, artifacts []string) (Message, error) {
 	if from == OperatorSender {
 		return Message{}, fmt.Errorf("%w: %s", ErrReservedSender, from)
 	}
-	return b.send(from, to, body)
+	return b.send(from, to, body, artifacts, b.NoBounds)
 }
 
 // SendAsOperator queues body for to, from the operator. It is for a program
 // that holds the state directory, such as aos-tui, and so already has the
-// operator's reach; the runtime, which sends for agents, never calls it.
-func (b *Bus) SendAsOperator(to, body string) (Message, error) {
-	return b.send(OperatorSender, to, body)
+// operator's reach; the runtime, which sends for agents, never calls it. A full
+// mailbox does not refuse it: a flood of peers' mail must not stop a person from
+// reaching their agent, and one person typing cannot flood anything. The size
+// still holds, and a program sending more publishes it and attaches the handle.
+func (b *Bus) SendAsOperator(to, body string, artifacts ...string) (Message, error) {
+	return b.send(OperatorSender, to, body, artifacts, true)
 }
 
-func (b *Bus) send(from, to, body string) (Message, error) {
+func (b *Bus) send(from, to, body string, artifacts []string, anyMailbox bool) (Message, error) {
+	if err := b.checkSize(from, to, "", body, artifacts); err != nil {
+		return Message{}, err
+	}
 	var sent Message
 	err := b.update(func(t *tx) error {
 		end, err := b.chainEnd(to)
@@ -197,7 +242,14 @@ func (b *Bus) send(from, to, body string) (Message, error) {
 			b.record(from, "ipc.rejected", map[string]string{"to": to, "reason": err.Error()})
 			return err
 		}
-		sent = t.enqueue(Message{From: from, To: end.PID, Body: body})
+		message := Message{From: from, To: end.PID, Body: body, Artifacts: artifacts}
+		if !anyMailbox {
+			if err := t.room(message, end); err != nil {
+				b.record(from, "ipc.rejected", map[string]string{"to": end.PID, "reason": reasonMailboxFull})
+				return err
+			}
+		}
+		sent = t.enqueue(message)
 		sent.Held = end.State == kernel.StateExited
 		return nil
 	})
@@ -209,6 +261,56 @@ func (b *Bus) send(from, to, body string) (Message, error) {
 	}
 	b.record(from, "ipc.sent", sentEvent(sent))
 	return sent, nil
+}
+
+// The reason on an ipc.rejected event for each bound.
+const (
+	reasonTooLarge    = "too_large"
+	reasonMailboxFull = "mailbox_full"
+)
+
+// checkSize refuses a new message over the cap, whatever it is addressed to.
+func (b *Bus) checkSize(from, to, topic, body string, artifacts []string) error {
+	size := messageBytes(Message{Body: body, Artifacts: artifacts})
+	if b.NoBounds || size <= MaxBodyBytes {
+		return nil
+	}
+	data := map[string]string{"reason": reasonTooLarge, "bytes": strconv.Itoa(size)}
+	if to != "" {
+		data["to"] = to
+	}
+	if topic != "" {
+		data["topic"] = topic
+	}
+	b.record(from, "ipc.rejected", data)
+	return fmt.Errorf("%w: %d bytes, over %d", ErrMessageTooLarge, size, MaxBodyBytes)
+}
+
+// messageBytes is what a message counts for against the cap and the bound.
+func messageBytes(message Message) int {
+	size := len(message.Body)
+	for _, id := range message.Artifacts {
+		size += len(id)
+	}
+	return size
+}
+
+// room refuses message if end's mailbox has no room for it. A mailbox over its
+// bound after a handover has none until it drains below it.
+func (t *tx) room(message Message, end kernel.Process) error {
+	mailbox := t.mailboxes[end.PID]
+	size := 0
+	for _, queued := range mailbox {
+		size += messageBytes(queued)
+	}
+	if len(mailbox) < MaxMailboxMessages && size+messageBytes(message) <= MaxMailboxBytes {
+		return nil
+	}
+	held := ""
+	if end.State == kernel.StateExited {
+		held = "; " + HeldMeaning
+	}
+	return fmt.Errorf("%w: %s holds %d unread messages, %d bytes (at most %d messages, %d bytes)%s", ErrMailboxFull, end.PID, len(mailbox), size, MaxMailboxMessages, MaxMailboxBytes, held)
 }
 
 // Subscribe adds pid to topic's subscribers.
@@ -271,19 +373,23 @@ func (b *Bus) Subscriptions(pid string) ([]string, error) {
 // Publish queues body for the last process of every subscriber's chain, once
 // per chain. One that exited retryably holds it for its successor. A
 // subscriber whose chain has ended, or that the kernel does not know, is
-// dropped; one whose chain is broken gets nothing and is kept.
-func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
+// dropped; one whose chain is broken gets nothing and is kept. One whose mailbox
+// is full is skipped and stays subscribed: skipped names the last process of
+// each such chain, and each skip is an ipc.rejected.
+func (b *Bus) Publish(from, topic, body string) (created []Message, skipped []string, err error) {
 	if from == OperatorSender {
-		return nil, fmt.Errorf("%w: %s", ErrReservedSender, from)
+		return nil, nil, fmt.Errorf("%w: %s", ErrReservedSender, from)
 	}
 	if err := checkTopic(topic); err != nil {
 		b.record(from, "ipc.rejected", map[string]string{"reason": "invalid_topic"})
-		return nil, err
+		return nil, nil, err
 	}
-	var created []Message
+	if err := b.checkSize(from, "", topic, body, nil); err != nil {
+		return nil, nil, err
+	}
 	var dropped []string
 	var moved [][2]string
-	err := b.update(func(t *tx) error {
+	err = b.update(func(t *tx) error {
 		subscribers := t.subscriptions[topic]
 		kept := make([]string, 0, len(subscribers))
 		for _, pid := range subscribers {
@@ -306,6 +412,13 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 				continue
 			}
 			kept = append(kept, end.PID)
+			if !b.NoBounds {
+				if err := t.room(Message{Body: body}, end); err != nil {
+					b.record(from, "ipc.rejected", map[string]string{"to": end.PID, "topic": topic, "reason": reasonMailboxFull})
+					skipped = append(skipped, end.PID)
+					continue
+				}
+			}
 			message := t.enqueue(Message{From: from, To: end.PID, Topic: topic, Body: body})
 			message.Held = end.State == kernel.StateExited
 			created = append(created, message)
@@ -316,7 +429,7 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, pid := range dropped {
 		b.recordSubscription("ipc.unsubscribed", pid, topic, CauseChainEnded)
@@ -330,7 +443,7 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 		data["topic"] = topic
 		b.record(from, "ipc.sent", data)
 	}
-	return created, nil
+	return created, skipped, nil
 }
 
 // Receive hands out pid's messages and marks them delivered. They stay in
@@ -338,12 +451,36 @@ func (b *Bus) Publish(from, topic, body string) ([]Message, error) {
 // out are included again, as a receiver starting from a checkpoint needs;
 // without it, only messages not yet delivered.
 func (b *Bus) Receive(pid string, redeliver bool) ([]Message, error) {
+	return b.ReceiveBatch(pid, redeliver, nil, Batch{})
+}
+
+// Batch limits what one ReceiveBatch hands out. A zero field means no limit.
+type Batch struct {
+	Messages int
+	Bytes    int
+}
+
+// ReceiveBatch is Receive that stops at limit, counting messages not in seen, in
+// order, and always hands out at least one: the rest stay pending for the next
+// call, so no one step of a receiver takes a whole full mailbox into one request.
+// Messages in seen are ones the receiver already holds and drops, so they cost it
+// nothing.
+func (b *Bus) ReceiveBatch(pid string, redeliver bool, seen []string, limit Batch) ([]Message, error) {
 	var out []Message
 	now := time.Now().UTC()
 	err := b.update(func(t *tx) error {
+		taken, count := 0, 0
 		for i, message := range t.mailboxes[pid] {
 			if message.Deliveries > 0 && !redeliver {
 				continue
+			}
+			if !slices.Contains(seen, message.ID) {
+				size := messageBytes(message)
+				if count > 0 && ((limit.Bytes > 0 && taken+size > limit.Bytes) || (limit.Messages > 0 && count >= limit.Messages)) {
+					break
+				}
+				taken += size
+				count++
 			}
 			message.Deliveries++
 			message.DeliveredAt = &now

@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"aos/internal/artifact"
 	"aos/internal/ipc"
@@ -23,7 +26,7 @@ type rootFixture struct {
 	kernel *kernel.Kernel
 	store  *artifact.Store
 	bus    *ipc.Bus
-	spawn  func() (kernel.Process, error)
+	spawn  func(continues string) (kernel.Process, error)
 }
 
 func newRootFixture(t *testing.T) rootFixture {
@@ -41,8 +44,12 @@ func newRootFixture(t *testing.T) rootFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spawn := func() (kernel.Process, error) {
-		return k.Spawn(kernel.ProcessSpec{Role: "agent:interactive", Metadata: map[string]string{"agent_id": "interactive"}})
+	spawn := func(continues string) (kernel.Process, error) {
+		metadata := map[string]string{"agent_id": "interactive"}
+		if continues != "" {
+			metadata[runtime.ContinuesMetadata] = continues
+		}
+		return k.Spawn(kernel.ProcessSpec{Role: "agent:interactive", Metadata: metadata})
 	}
 	return rootFixture{dir: dir, kernel: k, store: store, bus: bus, spawn: spawn}
 }
@@ -58,7 +65,7 @@ func (f rootFixture) say(t *testing.T, r *runtime.AgentRuntime, root *tuiRoot, l
 	if err != nil {
 		t.Fatalf("continueEnded: %v", err)
 	}
-	appended, err := deliver(f.bus, root, line)
+	appended, err := deliver(f.bus, f.store, root, line)
 	if err != nil {
 		t.Fatalf("deliver: %v", err)
 	}
@@ -82,7 +89,7 @@ func TestExitedRootContinuesInANewAgent(t *testing.T) {
 	f := newRootFixture(t)
 	backend := &runtime.FakeBackend{Steps: []runtime.GenerateResult{message("Uptime Kuma runs on 10.0.0.5"), exitDone(), message("port 3001")}}
 	r := f.runtime(backend)
-	first, err := f.spawn()
+	first, err := f.spawn("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +155,7 @@ func TestStepWarningCountsAgainstTheTurn(t *testing.T) {
 	}
 	backend := &runtime.FakeBackend{Steps: steps}
 	r := f.runtime(backend)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	for turn := 1; turn <= 2; turn++ {
 		if _, result, err := f.say(t, r, &root, fmt.Sprintf("turn %d", turn)); err != nil || !result.Yielded {
@@ -186,7 +193,7 @@ func TestStepWarningCountsAgainstTheTurn(t *testing.T) {
 func TestFailedTurnKeepsTheLastGoodState(t *testing.T) {
 	f := newRootFixture(t)
 	r := f.runtime(&runtime.FakeBackend{Steps: []runtime.GenerateResult{message("hi")}})
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	if _, _, err := f.say(t, r, &root, "hello"); err != nil {
 		t.Fatal(err)
@@ -196,7 +203,7 @@ func TestFailedTurnKeepsTheLastGoodState(t *testing.T) {
 
 	// Without continueEnded (the old loop), the line goes with a recovery
 	// that Recover refuses.
-	appended, err := deliver(f.bus, &root, "are you there?")
+	appended, err := deliver(f.bus, f.store, &root, "are you there?")
 	if err != nil || len(appended) != 1 {
 		t.Fatalf("deliver to an exited agent: %v %v", appended, err)
 	}
@@ -234,7 +241,7 @@ func TestFailedTurnKeepsTheLastGoodState(t *testing.T) {
 // ended root never read to the new one.
 func TestContinueEndedOnlyReplacesFinalExits(t *testing.T) {
 	f := newRootFixture(t)
-	live, _ := f.spawn()
+	live, _ := f.spawn("")
 	root := tuiRoot{process: live, checkpointID: "art-x"}
 	if note, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); note != "" || err != nil || root.process.PID != live.PID {
 		t.Fatalf("live root replaced: %q %v", note, err)
@@ -245,7 +252,7 @@ func TestContinueEndedOnlyReplacesFinalExits(t *testing.T) {
 	}
 
 	// No checkpoint yet: even a retryable exit cannot be recovered.
-	unread, _ := f.spawn()
+	unread, _ := f.spawn("")
 	if _, err := f.bus.SendAsOperator(unread.PID, "first line"); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +279,7 @@ func TestExitEndsTheTurnInTheSameAgent(t *testing.T) {
 	f := newRootFixture(t)
 	backend := &runtime.FakeBackend{Steps: []runtime.GenerateResult{message("Uptime Kuma runs on 10.0.0.5"), exitDone(), message("port 3001")}}
 	r := f.runtime(backend)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	turn := func(line string) (string, runtime.RunResult) {
 		t.Helper()
@@ -280,7 +287,7 @@ func TestExitEndsTheTurnInTheSameAgent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		appended, err := deliver(f.bus, &root, line)
+		appended, err := deliver(f.bus, f.store, &root, line)
 		if err != nil || appended != nil {
 			t.Fatalf("deliver %q: %v %v", line, appended, err)
 		}
@@ -332,10 +339,10 @@ func captureFooter(t *testing.T, fn func(*render.FooterBar)) string {
 // has ended cannot hold one, and the next turn carries it.
 func TestDeliverFollowsTheChain(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
-	appended, err := deliver(f.bus, &root, "still there?")
+	appended, err := deliver(f.bus, f.store, &root, "still there?")
 	if err != nil || appended != nil {
 		t.Fatalf("deliver to an open chain = %v, %v", appended, err)
 	}
@@ -343,7 +350,7 @@ func TestDeliverFollowsTheChain(t *testing.T) {
 		t.Fatalf("pending = %+v", pending)
 	}
 	f.kernel.Close(first.PID, "declined")
-	appended, err = deliver(f.bus, &root, "and now?")
+	appended, err = deliver(f.bus, f.store, &root, "and now?")
 	if err != nil || len(appended) != 1 || appended[0].Content != "and now?" {
 		t.Fatalf("deliver to a closed chain = %v, %v", appended, err)
 	}
@@ -353,7 +360,7 @@ func TestDeliverFollowsTheChain(t *testing.T) {
 // closed, after its mail and subscriptions have moved.
 func TestContinueEndedClosesTheChainItReplaces(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	f.bus.Subscribe(first.PID, "news")
 	f.bus.SendAsOperator(first.PID, "unread")
@@ -380,7 +387,7 @@ func TestContinueEndedClosesTheChainItReplaces(t *testing.T) {
 // next attempt still moves the mail.
 func TestContinueEndedClosesBeforeItMovesTheMail(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	f.bus.SendAsOperator(first.PID, "unread")
 	f.kernel.Exit(first.PID, kernel.ExitStatus{Code: 1, Reason: "crashed", Retryable: true})
@@ -430,7 +437,7 @@ func (b sendsThenExits) Generate(_ context.Context, request runtime.GenerateRequ
 // letter.
 func TestAFinalExitLeavesMailForTheNewRoot(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	root := tuiRoot{process: first}
 	backend := sendsThenExits{bus: f.bus, line: "typed during the last step"}
 	if _, err := f.runtime(backend).RunWithOptions(context.Background(), first.PID, []runtime.Message{{Role: "user", Content: "hi"}}, runtime.RunOptions{}); err != nil {
@@ -459,7 +466,7 @@ func TestAFinalExitLeavesMailForTheNewRoot(t *testing.T) {
 // the first request holds it and nothing is swept.
 func TestAStartingTUIMovesAnEndedRootsMail(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	backend := sendsThenExits{bus: f.bus, line: "typed as it exited"}
 	result, err := f.runtime(backend).RunWithOptions(context.Background(), first.PID, []runtime.Message{{Role: "user", Content: "hi"}}, runtime.RunOptions{})
 	if err != nil || result.ExitStatus.Code != 0 {
@@ -499,7 +506,7 @@ func TestAStartingTUIMovesAnEndedRootsMail(t *testing.T) {
 // A root still able to go on keeps its mail: startRoot replaces nothing.
 func TestAStartingTUILeavesARecoverableRootsMail(t *testing.T) {
 	f := newRootFixture(t)
-	first, _ := f.spawn()
+	first, _ := f.spawn("")
 	record, err := f.store.CreateJSON("checkpoint", first.PID, runtime.Session{Messages: []runtime.Message{{Role: "user", Content: "hi"}}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -526,4 +533,236 @@ func (b readingBackend) Generate(_ context.Context, request runtime.GenerateRequ
 		*b.history = request.History
 	}
 	return exitDone(), nil
+}
+
+// readBack runs a root that reads id whole, as a model following the message
+// would, and returns what the tool gave it.
+func (f rootFixture) readBack(t *testing.T, pid, id string) string {
+	t.Helper()
+	var got strings.Builder
+	offset := "0"
+	backend := &scriptedBackend{fn: func(call int, request runtime.GenerateRequest) runtime.GenerateResult {
+		if call > 1 {
+			last := request.History[len(request.History)-1].Content
+			if strings.HasPrefix(last, "tool_error") {
+				t.Fatalf("read_artifact %s: %s", id, last)
+			}
+			match := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:\d+ total_bytes:\d+\]$`).FindStringSubmatch(last)
+			if match == nil {
+				t.Fatalf("not a page: %.200s", last)
+			}
+			got.WriteString(match[1])
+			if match[2] == "" {
+				return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 1, Reason: "read", Retryable: true}}}
+			}
+			offset = match[2]
+		}
+		return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_artifact", Args: map[string]string{"id": id, "offset": offset}}}}
+	}}
+	agent := f.runtime(backend)
+	agent.MaxSteps = 40
+	if _, err := agent.RunWithOptions(context.Background(), pid, []runtime.Message{{Role: "user", Content: "read"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+		t.Fatal(err)
+	}
+	return got.String()
+}
+
+type scriptedBackend struct {
+	calls int
+	fn    func(call int, request runtime.GenerateRequest) runtime.GenerateResult
+}
+
+func (b *scriptedBackend) Generate(_ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+	b.calls++
+	return b.fn(b.calls, request), nil
+}
+
+// A paste over the bus's cap is not refused and not lost: the mail holds its start
+// and a handle, and the root reads the whole of it, by the path the loop uses.
+func TestAnOverLongLineStaysWhole(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn("")
+	root := tuiRoot{process: first}
+	line := strings.Repeat("a line of a long paste, 世界\n", 5000)
+	if len(line) <= ipc.MaxBodyBytes {
+		t.Fatal("the line should be over the cap")
+	}
+	appended, err := deliver(f.bus, f.store, &root, line)
+	if err != nil || appended != nil {
+		t.Fatalf("deliver = %+v, %v", appended, err)
+	}
+	pending, _ := f.bus.Pending()
+	box := pending[first.PID]
+	if len(box) != 1 || len(box[0].Artifacts) != 1 || len(box[0].Body) > ipc.MaxBodyBytes {
+		t.Fatalf("mailbox: %d messages, %v, %d bytes", len(box), box[0].Artifacts, len(box[0].Body))
+	}
+	id := box[0].Artifacts[0]
+	if !strings.HasPrefix(box[0].Body, "a line of a long paste") || !strings.Contains(box[0].Body, "read_artifact id="+id) || !utf8.ValidString(box[0].Body) {
+		t.Fatalf("body: %.100s ... %s", box[0].Body, box[0].Body[len(box[0].Body)-120:])
+	}
+	if got := f.readBack(t, first.PID, id); got != line {
+		t.Fatalf("read back %d bytes of %d", len(got), len(line))
+	}
+}
+
+func TestALineAtTheCapIsSentAsItIs(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn("")
+	root := tuiRoot{process: first}
+	line := strings.Repeat("x", ipc.MaxBodyBytes)
+	if _, err := deliver(f.bus, f.store, &root, line); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.bus.Pending()
+	if box := pending[first.PID]; len(box) != 1 || box[0].Body != line || box[0].Artifacts != nil {
+		t.Fatalf("mailbox: %+v", box)
+	}
+}
+
+// A store that cannot keep the paste sends nothing and says so, which the loop
+// prints as "not delivered". The text is then only in the terminal: the stated
+// limit, on a state directory that cannot write anyway.
+func TestAnOverLongLineThatCannotBeKeptIsNotDelivered(t *testing.T) {
+	f := newRootFixture(t)
+	root := tuiRoot{process: kernel.Process{PID: "pid-gone"}}
+	f.store.BindProducers(func(pid string) error { return errors.New("unknown") })
+	if _, err := deliver(f.bus, f.store, &root, strings.Repeat("x", ipc.MaxBodyBytes+1)); err == nil {
+		t.Fatal("expected an error")
+	}
+	if pending, _ := f.bus.Pending(); len(pending) != 0 {
+		t.Fatalf("pending: %+v", pending)
+	}
+}
+
+// A person reaches an agent whose mailbox peers have filled.
+func TestALineReachesAFullMailbox(t *testing.T) {
+	f := newRootFixture(t)
+	first, _ := f.spawn("")
+	peer, _ := f.spawn("")
+	for i := 0; i < ipc.MaxMailboxMessages; i++ {
+		if _, err := f.bus.Send(peer.PID, first.PID, "flood"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := tuiRoot{process: first}
+	if _, err := deliver(f.bus, f.store, &root, "stop what you are doing"); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	pending, _ := f.bus.Pending()
+	box := pending[first.PID]
+	if len(box) != ipc.MaxMailboxMessages+1 || box[len(box)-1].Body != "stop what you are doing" {
+		t.Fatalf("%d messages", len(box))
+	}
+	// It comes after the flood, which is read in batches: the stated cost. Keep
+	// a run short by asking only that it gets there.
+	var seen string
+	backend := &scriptedBackend{fn: func(call int, request runtime.GenerateRequest) runtime.GenerateResult {
+		for _, message := range request.History {
+			if message.Role == "user" {
+				seen += message.Content + "\n"
+			}
+		}
+		if strings.Contains(seen, "stop what") {
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "stopped"}}}
+		}
+		return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "message", Message: "reading"}}
+	}}
+	agent := f.runtime(backend)
+	agent.MaxSteps = 60
+	if _, err := agent.RunWithOptions(context.Background(), first.PID, []runtime.Message{{Role: "user", Content: "start"}}, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(seen, "stop what you are doing") {
+		t.Fatal("the line never reached a request")
+	}
+}
+
+// A new root continues an ended one's conversation, so it can read what that one
+// could: its own publications, and handles in its history. The mail it had not
+// read comes over with its handle. Both ways of taking over.
+func TestANewRootHoldsWhatTheOldOneHeld(t *testing.T) {
+	setup := func(t *testing.T) (rootFixture, kernel.Process, string, string) {
+		f := newRootFixture(t)
+		old, _ := f.spawn("")
+		peer, _ := f.kernel.Spawn(kernel.ProcessSpec{Role: "agent:peer", Metadata: map[string]string{"agent_id": "peer"}})
+		own, err := f.store.CreateJSON(artifact.PublishedPrefix+"note", old.PID, map[string]string{"body": "published by the old root"}, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attached, err := f.store.CreateJSON(artifact.PublishedPrefix+"note", peer.PID, map[string]string{"body": "attached to mail"}, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.bus.SendWithArtifacts(peer.PID, old.PID, "unread with a handle", []string{attached.ID}); err != nil {
+			t.Fatal(err)
+		}
+		// The old root exits for good with that mail unread.
+		if _, err := f.kernel.Exit(old.PID, kernel.ExitStatus{Code: 0, Reason: "done"}); err != nil {
+			t.Fatal(err)
+		}
+		return f, old, own.ID, attached.ID
+	}
+	check := func(t *testing.T, f rootFixture, pid, own, attached string) {
+		t.Helper()
+		pending, _ := f.bus.Pending()
+		if box := pending[pid]; len(box) != 1 || !slices.Equal(box[0].Artifacts, []string{attached}) {
+			t.Fatalf("the mail did not come over with its handle: %+v", box)
+		}
+		if got := f.readBack(t, pid, own); got != "published by the old root" {
+			t.Fatalf("own: %q", got)
+		}
+		// That run took the mail in and exited retryably; the successor holds the grant.
+		end, err := f.kernel.ChainEnd(pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := f.kernel.Supersede(end.PID, kernel.ProcessSpec{Role: end.Role, Metadata: map[string]string{"agent_id": "interactive", "resumed_from": end.PID}}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.readBack(t, next.PID, attached); got != "attached to mail" {
+			t.Fatalf("attached: %q", got)
+		}
+	}
+	t.Run("continueEnded", func(t *testing.T) {
+		f, old, own, attached := setup(t)
+		root := tuiRoot{process: old, seed: []runtime.Message{{Role: "user", Content: "before"}}}
+		if _, err := continueEnded(f.kernel, f.store, f.bus, &root, f.spawn); err != nil {
+			t.Fatal(err)
+		}
+		if root.process.Metadata[runtime.ContinuesMetadata] != old.PID {
+			t.Fatalf("metadata: %+v", root.process.Metadata)
+		}
+		check(t, f, root.process.PID, own, attached)
+	})
+	t.Run("startRoot", func(t *testing.T) {
+		f, old, own, attached := setup(t)
+		if _, err := f.store.CreateJSON("checkpoint", old.PID, runtime.Session{Messages: []runtime.Message{{Role: "user", Content: "before"}}}, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		root, _, resumed, err := startRoot(f.kernel, f.bus, f.dir, "interactive", f.spawn)
+		if err != nil || !resumed {
+			t.Fatalf("startRoot: %v, resumed %t", err, resumed)
+		}
+		if root.process.Metadata[runtime.ContinuesMetadata] != old.PID {
+			t.Fatalf("metadata: %+v", root.process.Metadata)
+		}
+		check(t, f, root.process.PID, own, attached)
+	})
+	t.Run("an unrelated root does not", func(t *testing.T) {
+		f, _, own, _ := setup(t)
+		other, _ := f.spawn("")
+		backend := &scriptedBackend{fn: func(call int, request runtime.GenerateRequest) runtime.GenerateResult {
+			if call == 1 {
+				return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "tool", ToolCall: &runtime.ToolCall{Name: "read_artifact", Args: map[string]string{"id": own}}}}
+			}
+			if last := request.History[len(request.History)-1].Content; !strings.Contains(last, runtime.ErrArtifactNotReadable.Error()) {
+				t.Errorf("read: %s", last)
+			}
+			return runtime.GenerateResult{Action: runtime.GenerateAction{Type: "exit", ExitStatus: &kernel.ExitStatus{Code: 0, Reason: "done"}}}
+		}}
+		if _, err := f.runtime(backend).RunWithOptions(context.Background(), other.PID, []runtime.Message{{Role: "user", Content: "read"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

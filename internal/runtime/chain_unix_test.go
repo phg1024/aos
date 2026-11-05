@@ -544,11 +544,29 @@ func TestChainRaceHelper(t *testing.T) {
 				fmt.Fprintf(out, "%s\t%s\t%s\n", message.ID, message.To, body)
 				continue
 			}
-			messages, err := s.bus.Publish(args[2], args[3], body)
+			messages, _, err := s.bus.Publish(args[2], args[3], body)
 			if err != nil || len(messages) != 1 {
 				t.Fatalf("publish %d = %+v, %v", i, messages, err)
 			}
 			fmt.Fprintf(out, "%s\t%s\t%s\n", messages[0].ID, messages[0].To, body)
+		}
+	case "flood":
+		n, _ := strconv.Atoi(args[4])
+		out, err := os.Create(args[5])
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer out.Close()
+		for i := 0; i < n; i++ {
+			message, err := s.bus.Send(args[2], args[3], fmt.Sprintf("%s#%05d", args[2], i))
+			switch {
+			case errors.Is(err, ipc.ErrMailboxFull):
+				fmt.Fprintln(out, "refused")
+			case err != nil:
+				t.Fatalf("send %d: %v", i, err)
+			default:
+				fmt.Fprintln(out, message.ID)
+			}
 		}
 	case "close":
 		if _, err := s.kernel.Close(args[2], "closed by another process"); err != nil {
