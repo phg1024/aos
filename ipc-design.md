@@ -2405,9 +2405,40 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
     in a row:` and the endpoint's error. The mail stays in the mailbox. It can be Recovered,
     and it fails the same way. An agent with a restart policy restarts until the policy
     escalates, and then the chain closes and its senders are told. Without one, the chain stays
-    open until a re-delegation closes it. The way out is a lower `AOS_LLM_CONTEXT_WINDOW` or
-    `AOS_COMPACT_RATIO`, so that the trigger falls below the real window: the next attempts
-    then compact, as above.
+    open until a re-delegation closes it.
+  - **What an operator can do, and by what route.** Checked in the code: `aos run` has no recover
+    or resume command (its subcommands are `run`, `inspect`, `reap`, `replay` and
+    `probe-memory`), and a restart policy's Recover runs inside the same process, under the same
+    policy. A second `aos run` on that state directory starts a new root, and the old chain stays
+    as it was. So a changed setting reaches this process only through `aos-tui`, for its root
+    (`/recover`, the next line typed, or starting it again on the state directory, with `/model`
+    to change profile), or through a program using the packages. Lowering the trigger then
+    depends on where the real limit is. *Measured by the book session on `929c3ba`, with a scripted
+    window backend, one attempt per call, and Recover under a changed policy on one state
+    directory: not through a real restart of a command.*
+    - **There is a floor.** `Validate` refuses a trigger whose gap to its target cannot hold a tool
+      result, so the trigger cannot go below about 139,264 chars. `aos run` with
+      `AOS_LLM_CONTEXT_WINDOW` of 20000, 40000 or 58000 exits at startup, saying to use a larger
+      window, and 60000 starts. **Below that floor, lowering either variable gives only that
+      refusal:** a real limit of 100,000 at ratio 0.5, or a window of 40000 with a real limit of
+      120,000 at 0.6, are all refused.
+    - **Above the floor it works, and not at the next attempt.** Real limit 160,000, started at a
+      window of 100000 and lowered to 58100: 4 Recovers, 55 calls, largest 167,596, all drained. It
+      needs a handoff before it can compact, and at the default retry policy each failed Recover
+      costs its 12 attempts and about 10 minutes, so about 30 minutes. That time is arithmetic, not
+      measured.
+    - **Below the floor, the way out is to leave the window unset,** which gives the default policy.
+      Real limit 100,000, recovered with no window: 1 Recover, 56 calls, largest 16,744, with 1
+      message left when the test's own limit of 60 steps ended the run.
+    - **What each costs.** A lower trigger holds for the rest of the run: less live history against
+      the model's real window, and more compaction. An unset window costs more, and nothing refuses
+      it: the spec has no window setting, and `Validate` passes the zero policy. The agent's workflow
+      keeps running, with 8,000 chars and 24 messages live. There is **no handoff**, so history is
+      archived with no notice and no step to update working memory or write an index first, and
+      `index_memory`'s notice never comes. Large tool outputs compact often. Mail over 2,000 bytes
+      comes one message a step. An agent on a long task then leans on `search_memory` and
+      `read_memory`, so its work continues with less of it in view. That has not been measured on a
+      real task.
 - **Over its bound after a handover:** the same batches, so it drains.
 - **The limit that remains: one body larger than the window.** A body over the cap can exist
   only from before the cap. It comes alone, every call fails, and the process exits
