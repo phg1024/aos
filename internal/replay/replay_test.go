@@ -116,6 +116,8 @@ type options struct {
 	handles bool
 	// noBounds records as AOS did before the bus's bounds and handles.
 	noBounds bool
+	// noRedelegationClose records without the redelegation_close field.
+	noRedelegationClose bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -216,18 +218,20 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:          agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
-		NoPeerFraming:    opts.noFraming,
-		NoBusBounds:      opts.noBounds,
-		NoChainDelivery:  opts.noChain,
-		NoSenderOutcomes: opts.noOutcomes,
-		Compaction:       opts.compaction,
-		BackendRetry:     runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
-		Budget:           opts.budget,
-		RunRecord:        map[string]string{"build_version": "test"},
-		NoToolIntents:    opts.noIntents,
-		NoLeaseFencing:   opts.noFencing,
-		NoLeaseClock:     opts.noLeaseClock,
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		NoPeerFraming: opts.noFraming,
+		NoBusBounds:   opts.noBounds,
+
+		NoRedelegationClose: opts.noRedelegationClose,
+		NoChainDelivery:     opts.noChain,
+		NoSenderOutcomes:    opts.noOutcomes,
+		Compaction:          opts.compaction,
+		BackendRetry:        runtime.BackendRetryPolicy{Attempts: 3, Base: time.Millisecond, Max: time.Millisecond},
+		Budget:              opts.budget,
+		RunRecord:           map[string]string{"build_version": "test"},
+		NoToolIntents:       opts.noIntents,
+		NoLeaseFencing:      opts.noFencing,
+		NoLeaseClock:        opts.noLeaseClock,
 	}
 	_, _ = engine.Run(ctx, spec, agentflow.RunRequest{Goal: "write a.txt, then check it"})
 	return stateDir, workspace
@@ -1153,5 +1157,26 @@ func TestReplayOfHandles(t *testing.T) {
 	stateDir := recordAt(t, newRoot(t), context.Background(), handlesScript, options{budget: capability.Budget{Seconds: 600}, mail: true, handles: true, maxSteps: 8})
 	if report := replayed(t, stateDir, false); report.Calls == 0 || report.Matched != report.Calls {
 		t.Fatalf("report = %+v, %+v", report, report.Divergence)
+	}
+}
+
+// A run.started with or without redelegation_close replays as recorded. A record
+// that re-delegated has more than one agent process, and replay refuses those.
+func TestReplayOfARecordWithoutRedelegationClose(t *testing.T) {
+	opts := options{budget: capability.Budget{Seconds: 600}, noRedelegationClose: true}
+	legacy := recordAt(t, newRoot(t), context.Background(), roundTripScript, opts)
+	if runStartedData(t, legacy)[agentflow.RedelegationCloseField] != "" {
+		t.Fatal("the legacy record should have no redelegation_close")
+	}
+	if report := replayed(t, legacy, false); !report.Identical() {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+	opts.noRedelegationClose = false
+	current := recordAt(t, newRoot(t), context.Background(), roundTripScript, opts)
+	if got := runStartedData(t, current)[agentflow.RedelegationCloseField]; got != agentflow.RedelegationCloseV1 {
+		t.Fatalf("redelegation_close = %q", got)
+	}
+	if report := replayed(t, current, false); !report.Identical() {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
 	}
 }

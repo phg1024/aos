@@ -364,6 +364,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	engine.NoBusBounds = started.Data[agentflow.BusBoundsField] == ""
 	bus.NoBounds = engine.NoBusBounds
 	report.LegacyBusBounds = engine.NoBusBounds
+	// Replay refuses a run with more than one agent process, so no replayed run
+	// re-delegates; the field is reproduced as recorded.
+	engine.NoRedelegationClose = started.Data[agentflow.RedelegationCloseField] == ""
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

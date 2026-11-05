@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC: Closing the Old Chain on Re-delegation</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Closing the Old Chain on Re-delegation</h1>
+    <p>The user's decision, 2026-11-04. When a delegator delegates again to an agent whose last child exited retryably, with no restart policy, the engine closes that child's chain, so its senders get <code>undelivered:</code>. Only this case. It builds on nothing in step 4's bounds, and was committed after it.</p>
+    <p><b>What it costs:</b> <span class="warn">an operator can no longer Recover that exit.</span> <b>What it does not do:</b> <span class="warn">move the old chain's mail to the new child.</span> This is a close, not a <code>Transfer</code>.</p>
+  </div>
+
+  <h2>1. What You Asked</h2>
+  <table>
+    <tr><th>Question</th><th>What is true</th><th>Test</th></tr>
+    <tr><td>Order</td><td>Spawn the new child, build its backend, close the old chain, its first step. Inside its first step, before its first call, it sweeps</td><td><code>TestReDelegationClosesTheOldChain</code> reads the state at the new child's first call: closed, one letter</td></tr>
+    <tr><td>Does the delegator hear in time?</td><td>It hears at its next step, after the new child's result, since delegation is synchronous. <span class="warn">That is too late to change the new child's goal, and in time for anything after it</span></td><td>The same: <code>delegate_result</code>, then <code>undelivered:</code></td></tr>
+    <tr><td>Mail to the old name or PID</td><td>A send to the old PID is refused, saying closed, and not rerouted. An agent's name is not an address. <span class="good">One correction:</span> the send's error is <code>ErrRecipientExited</code>. <code>ErrChainClosed</code> is what Recover and <code>Supersede</code> get</td><td>The same</td></tr>
+    <tr><td>Mail not moved</td><td>It is dead letters, each body kept. The new child's first request does not hold it. Stated in the doc, against <code>continueEnded</code>. Subscriptions end as well</td><td>The same</td></tr>
+    <tr><td>"The same agent"</td><td>The same agent ID, delegated by the same delegator's chain, including the processes it was recovered from. Another delegator's child, and another agent, are left alone</td><td><code>TestWhatADelegationDoesNotClose</code>, <code>TestARecoveredDelegatorStillClosesItsOldChild</code></td></tr>
+    <tr><td>A failed start</td><td class="good">Does not close. The close is the last thing before the first step. If the backend cannot be built, the old chain stays open, and the delegation's error ends the delegator's run as it did. <span class="warn">If a step then fails, the old chain is already closed: the child did start</span></td><td><code>TestAFailedStartLeavesTheOldChainOpen</code></td></tr>
+    <tr><td>A restart policy, or already recovered</td><td>No close. An agent with a policy is left to it, and an exit recovered has a successor. If that successor exited retryably with no policy, it is the chain's end, and is what closes</td><td><code>TestARestartPolicyKeepsTheOldChainOpen</code>, <code>TestWhatADelegationDoesNotClose</code></td></tr>
+    <tr><td>An abandoned child</td><td>Stays open, even when a recovered delegator re-delegates</td><td><code>TestAnAbandonedChildStaysOpen</code></td></tr>
+    <tr><td>A crash in between</td><td><b>After the spawn, before the close:</b> the old chain is open, and Recover still works, and a child sits in <code>ready</code>. <b>After the close:</b> the old chain is closed with its mail unswept until the next step anywhere. <span class="warn">A child left <code>ready</code> or <code>running</code> is what any crash leaves, and nothing here reaps it</span></td><td><code>TestACrashAfterTheCloseLeavesAStateTheNextRunHandles</code>: <span class="warn">simulated by a panic in the new child's first call, not a kill</span>. The window before the close has no test of its own</td></tr>
+    <tr><td>Recover afterwards</td><td>Refused: <code>ErrNotRecoverable</code> wrapping <code>ErrChainClosed</code></td><td><code>TestReDelegationClosesTheOldChain</code></td></tr>
+    <tr><td>The table and the costs paragraph</td><td>"Retryable, and the agent has no restart policy" split in two. The new row has the engine closing. The costs paragraph now says it covers the rows left, and that this was the common way to get such a mailbox</td><td><code>ipc-design.md</code>, "Who closes"</td></tr>
+    <tr><td>Old records</td><td><code>redelegation_close: v1</code>, <code>Engine.NoRedelegationClose</code>. <span class="warn">Replay refuses a run with more than one agent process, so no replayed run reaches this code today.</span> The field is reproduced as recorded, and is there for a future multi-agent replay</td><td><code>TestReplayOfARecordWithoutRedelegationClose</code>, and the recordings below</td></tr>
+  </table>
+
+  <h2>2. Evidence</h2>
+  <pre>go test -count=1 ./internal/agentflow ./internal/replay
+AOS_IPC_TRIALS=25 go test -tags ipcaudit -count=1 -v -run 'B1|B2|B3|B4|B5|B6|B8|B10|B11|B12|B13' -timeout 1800s ./bench/ipc/</pre>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Full package list, 14 packages</td><td class="good">3 runs: 14 of 14 pass each time; no orphaned helper before, between or after</td></tr>
+    <tr><td>Probes, <code>AOS_IPC_TRIALS=25</code></td><td class="good">B1, B2, B3, B4, B5, B6, B8, B10, B11, B12 and B13 pass. B4 over 25 trials: 0 lost, 0 duplicated, 0 corrupted, 0 out of order</td></tr>
+    <tr><td>Eval's saved trials and a v0.1.4 record</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
+    <tr><td>Your three recordings, <code>ch6/</code></td><td class="good"><code>rec</code>: identical. <code>rec2</code>: refused, tampered <code>art-000026</code>. <code>rec3</code>: first divergence at call 29. As you said</td></tr>
+    <tr><td>Step 4's end-to-end scenario, rerun</td><td class="good">Exit 0, the same three refusals and one denial, nothing left in any mailbox. It does not re-delegate after a retryable exit, so <span class="warn">this close has no run through <code>aos run</code></span>: only the engine, with scripted backends</td></tr>
+    <tr><td>11 mutations, each on a copy, each with its named test</td><td class="good">All 11 fail the named test: no close at all, close before the child can start, close after its run, mail moved to the new child, policy ignored, abandoned closed, only direct children, any agent, marker ignored, marker not written, replay ignoring the marker</td></tr>
+    <tr><td>Not mutated</td><td class="warn"><code>child.SupersededBy == ""</code>: <code>Close</code> refuses a superseded process anyway, so removing it changes only a trace line</td></tr>
+  </table>
+  <p>The tests use step 4's helpers, so they were not run on its parent. The mutation <code>no close at all</code> is the same source with the close removed, and <code>TestReDelegationClosesTheOldChain</code> fails on it.</p>
+</body>
+</html>

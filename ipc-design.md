@@ -23,6 +23,11 @@ B8a are fixed, and their probes assert it. See
 [Implemented: Step 4](#implemented-step-4). Decisions 1, 7, 8 and 10 changed as it was
 built, and say so. Step 5 is not built.
 
+**Update, 2026-11-04:** by the user's decision, the engine closes the old chain when a
+delegator re-delegates after a retryable exit with no restart policy. See
+[Should the engine close more?](#should-the-engine-close-more) and
+[Who closes](#who-closes-and-what-a-delegated-childs-end-does).
+
 **Revised, 2026-11-03,** after the book session's review of `951c787`:
 
 - **A twelfth decision, rollback and mail.** A rollback loses acked mail,
@@ -1647,7 +1652,8 @@ sender.**
 | `not_restarted`, cause `no_checkpoint` | The same | Dropped | Stays | The same |
 | `not_restarted`, cause `not_recoverable`, with a successor (another engine won) | Nobody: `Close` refuses, since the chain goes on | Moved by that Recover | Moved | Sees the original exit |
 | `not_restarted`, cause `error` (the budget check could not read the checkpoint) | Nobody, on purpose: it says nothing about the exit | Kept | Held | Sees the exit |
-| Retryable, and the agent has no restart policy | Nobody | Kept | Held | Sees the exit |
+| Retryable, no restart policy, and the delegator delegates to that agent again | The engine, `DelegateHandler` through `closeReplaced`, once the new child can start. *Added 2026-11-04: see [Should the engine close more?](#should-the-engine-close-more)* | Dropped | Stays until the next step anywhere sweeps it; not moved to the new child | Sees the first exit, then the new child's result, then `undelivered:` if it sent any |
+| Retryable, no restart policy, and nobody delegates to it again | Nobody | Kept | Held | Sees the exit |
 | Abandoned, because its delegator finished | Nobody | Kept | Held | Has finished |
 | A run that returned an error to the engine, or was cancelled | Nobody | Kept | Held | Sees the error |
 
@@ -1655,9 +1661,11 @@ sender.**
   child.** The chains are separate. A parent that finishes abandons a live
   child, with a retryable exit, which leaves the child's chain open, as
   decision 2 says, so that an operator may still Recover it.
-- **The cost of the last four rows:** a delegator that re-delegates gets a new
-  chain, and the old one stays open. Anyone still subscribed to or mailing it
-  adds to a mailbox nobody reads. Step 4's bound limits this; step 2 does not.
+- **The cost of the last four rows:** the chain stays open, and anyone still subscribed
+  to or mailing it adds to a mailbox nobody reads. Step 4's bound limits this: past 256
+  messages or 1 MiB its senders are refused. Until 2026-11-04 this also held for a
+  delegator that re-delegates, the row now split out above, which was the common way to
+  get such a mailbox.
 
 ### Double re-delivery
 
@@ -2136,14 +2144,48 @@ it is there. Kernel operations on a long log are the cost that was already there
 
 ### Should the engine close more?
 
-I left this as it is, as asked. My view is that **one case is worth closing, and the
-others are not.** When a delegator re-delegates to the same agent after a retryable exit
-with no restart policy, the old chain has been replaced in all but name: nobody in this
-run will recover it, and mail to it waits for good. Closing it there gives its senders
-an outcome. It would also end an operator's Recover of that exit, so it is a decision
-like the one already confirmed for escalated exits, and it is the user's to take. An abandoned
-child, and an exit left when a run ends, should stay open, since an operator's Recover
-is the reason they are retryable at all.
+**Decided by the user, 2026-11-04: close the old chain in this one case.** When a
+delegator delegates again to an agent whose last child exited retryably, with no restart
+policy, the engine closes that child's chain. Its replacement exists, so nobody in this run
+will recover it, and mail to it would wait for good. Closing it gives its senders an
+outcome.
+
+- **What it costs:** an operator can no longer Recover that exit, and is refused with
+  `ErrChainClosed`. The work the child did is still on the record, as are its checkpoints
+  and its mail's bodies. The new child starts from its goal, not from them.
+- **What stays open, for an operator's Recover:** a first delegation that nobody repeats, an
+  abandoned child, cause `error`, an agent with a restart policy, and an exit left when a run
+  ends.
+- **It is a close, not a `Transfer`.** Mail waiting for the old chain does not move to the new
+  child, unlike `continueEnded`, where a new root continues one conversation. A new
+  delegation is a new task, with a goal of its own, and mail written to the old child may
+  make no sense to it. The mail becomes dead letters, each kept in `bus/dead_letters/`.
+  Subscriptions end too: the new child subscribes if it wants them.
+- **What counts as the same agent:** the same agent ID, delegated by the same delegator's
+  chain, including the processes it was recovered from. Another delegator's child of that
+  agent is left alone.
+- **Order:** spawn the child, build its backend, close the old chain, then its first step.
+  A child that cannot start has replaced nothing, so the old chain stays open
+  (`TestAFailedStartLeavesTheOldChainOpen`). The delegation's error ends the delegator's run,
+  as it did.
+- **Who hears, and when:** the new child's first step sweeps, as any process's step does, so
+  the letters exist before its first call. A sender hears at its next step. If the delegator
+  is the sender, that is its next step after the new child's result: the delegation is
+  synchronous, so it cannot hear sooner.
+- **An old address stays old.** A PID names its chain. A send to the old PID is refused with
+  `ErrRecipientExited`, saying closed. It is not rerouted to the new child, and an agent's name
+  is no address (`ErrUnknownRecipient`). `ErrChainClosed` is the refusal Recover gets, and
+  `Supersede`: mail never sees it.
+- **A crash between the two.** After the spawn and before the close: the old chain is open, and
+  a child sits in `ready` with no step. Recover still works on the old one. After the close: the
+  old chain is closed with its mail unswept, and the next step anywhere sweeps it
+  (`TestACrashAfterTheCloseLeavesAStateTheNextRunHandles`, which simulates it with a panic in the
+  new child's first call). A child left `ready` or `running` is not new: any crash leaves one,
+  and nothing here reaps it.
+- **Old records:** `redelegation_close: v1` on `run.started`, with
+  `Engine.NoRedelegationClose`. Replay refuses a run with more than one agent process, so no
+  replayed run reaches this code today, and the field is reproduced as recorded. A future
+  multi-agent replay has what it needs.
 
 ### Tests
 
@@ -2161,7 +2203,12 @@ is the reason they are retryable at all.
   `TestSweepKeepsEveryBody`, `TestSweepThatCannotKeepABodyLeavesTheMail`,
   `TestExitWithNoCheckpointAfterTheCallIsNotShown`.
 - `agentflow`: `TestParentHearsOfUnreadMailAfterTheDelegateResult`,
-  `TestAChainNobodyClosesProducesNoOutcome`.
+  `TestAChainNobodyClosesProducesNoOutcome`. For the close on re-delegation:
+  `TestReDelegationClosesTheOldChain`, `TestAFailedStartLeavesTheOldChainOpen`,
+  `TestWhatADelegationDoesNotClose`, `TestARecoveredDelegatorStillClosesItsOldChild`,
+  `TestARestartPolicyKeepsTheOldChainOpen`, `TestAnAbandonedChildStaysOpen`,
+  `TestACrashAfterTheCloseLeavesAStateTheNextRunHandles`; `replay`:
+  `TestReplayOfARecordWithoutRedelegationClose`.
 - `replay`: `TestSenderOutcomesAddNothingToAPlainRun`,
   `TestReplayOfARecordWithoutSenderOutcomes`.
 - `aos-tui`: `TestAFinalExitLeavesMailForTheNewRoot`,
@@ -2318,7 +2365,8 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
 
 ### What this does not close
 
-- **A chain nobody closes,** with room in its mailbox, still gives no outcome. What changed: at
+- **A chain nobody closes,** with room in its mailbox, still gives no outcome (a re-delegation
+  now closes one: see [Should the engine close more?](#should-the-engine-close-more)). What changed: at
   256 messages or 1 MiB its senders are refused (`TestAHeldMailboxFillsAndRefuses`), and
   the refusal says it may never read this. Mail already in gets nothing more than `held`.
 - **Archived mail nobody reads** holds its place in the mailbox. A receiver that ignores

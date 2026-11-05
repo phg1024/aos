@@ -3,6 +3,7 @@ package agentflow_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -412,5 +413,383 @@ func TestAVerifierGetsEvidenceThroughAWait(t *testing.T) {
 	}
 	if !strings.Contains(attachedRead, "all 12 tests passed") {
 		t.Fatalf("the verifier could not read the handle:\n%s", attachedRead)
+	}
+}
+
+// failingFor refuses a backend for one agent once it has been asked count times,
+// and otherwise is scripts.
+type failingFor struct {
+	scripts
+	agent string
+	after int
+	asked *int
+}
+
+func (f failingFor) BackendFor(agent agentflow.AgentSpec, spec agentflow.WorkflowSpec) (runtime.Backend, error) {
+	if agent.ID == f.agent {
+		*f.asked++
+		if *f.asked > f.after {
+			return nil, errors.New("the model is not configured")
+		}
+	}
+	return f.scripts.BackendFor(agent, spec)
+}
+
+// reDelegate is a coordinator delegating to the worker twice, then exiting. between
+// runs at its second step, with the first worker's PID.
+func reDelegate(between func(first string)) *script {
+	return &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		delegateStep("worker"),
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			if between != nil {
+				between(lastDelegatedPID(request))
+			}
+			return delegateStep("worker")(request)
+		},
+		exitStep(0, false, "done"),
+	}}
+}
+
+func lastDelegatedPID(request runtime.GenerateRequest) string {
+	text := historyText(request)
+	at := strings.LastIndex(text, "pid=")
+	if at < 0 {
+		return ""
+	}
+	return strings.Fields(text[at+len("pid="):])[0]
+}
+
+// The case the user decided: a re-delegation after a retryable exit, no restart
+// policy. The old chain closes before the new child's first step, its mail becomes
+// dead letters and does not move, and its senders hear of it.
+func TestReDelegationClosesTheOldChain(t *testing.T) {
+	f := newChainFixture(t)
+	var first, parent, second string
+	var closedAtFirstStep, firstRequest string
+	sweptAtFirstStep := 0
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		subscribeStep("news"),
+		exitStep(1, true, "fails"),
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			second = request.Process.PID
+			firstRequest = historyText(request)
+			old, err := f.kernel.Get(first)
+			if err != nil {
+				t.Error(err)
+			}
+			closedAtFirstStep = fmt.Sprint(old.Closed)
+			sweptAtFirstStep = len(f.events(t, ipc.DeadLetterEvent))
+			return exitStep(0, false, "second worker done")(request)
+		},
+	}}
+	coordinator := reDelegate(func(pid string) {
+		first = pid
+		if _, err := f.bus.Send(parent, pid, "for the first worker"); err != nil {
+			t.Error(err)
+		}
+	})
+	inner := coordinator.replies[0]
+	coordinator.replies[0] = func(request runtime.GenerateRequest) runtime.GenerateResult {
+		parent = request.Process.PID
+		return inner(request)
+	}
+	engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+	if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	if closedAtFirstStep != "true" {
+		t.Fatalf("at the new child's first step the old chain closed = %q", closedAtFirstStep)
+	}
+	// The new child's first step sweeps, as any process's step does.
+	if sweptAtFirstStep != 1 {
+		t.Fatalf("dead letters at the new child's first step = %d", sweptAtFirstStep)
+	}
+	old, err := f.kernel.Get(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !old.Closed || !old.ChainEnded() {
+		t.Fatalf("old = %+v", old)
+	}
+	closed := f.events(t, "process.closed")
+	if len(closed) != 1 || closed[0].ProcessID != first || closed[0].Data["reason"] != "re-delegated as "+second {
+		t.Fatalf("process.closed = %+v", closed)
+	}
+	// Not a Transfer: the new child never holds it.
+	if strings.Contains(firstRequest, "for the first worker") {
+		t.Fatalf("the mail moved to the new child:\n%s", firstRequest)
+	}
+	letters := f.events(t, ipc.DeadLetterEvent)
+	if len(letters) != 1 || letters[0].Data["to"] != first || letters[0].Data["closed"] != "true" {
+		t.Fatalf("ipc.dead_letter = %+v", letters)
+	}
+	if topics, _ := f.bus.Subscriptions(first); len(topics) != 0 {
+		t.Fatalf("its subscriptions stayed: %v", topics)
+	}
+	if topics, _ := f.bus.Subscriptions(second); len(topics) != 0 {
+		t.Fatalf("its subscriptions moved: %v", topics)
+	}
+	// The delegator hears at its next step, after the new child's result.
+	requests := coordinator.requests()
+	history := historyText(requests[2])
+	result, notice := strings.LastIndex(history, "delegate_result"), strings.Index(history, "undelivered:")
+	if notice < 0 || notice < result || !strings.Contains(history, `"fails", closed`) {
+		t.Fatalf("the delegator's next request:\n%s", history)
+	}
+	if pending, _ := f.bus.Pending(); len(pending) != 0 {
+		t.Fatalf("pending: %+v", pending)
+	}
+	// An address is a chain, not an agent: the old PID is refused, not rerouted, and
+	// an agent's name is no address.
+	if _, err := f.bus.Send(parent, first, "too late"); !errors.Is(err, ipc.ErrRecipientExited) || !strings.Contains(err.Error(), "closed") {
+		t.Fatalf("send to the old PID = %v", err)
+	}
+	if _, err := f.bus.Send(parent, "worker", "by name"); !errors.Is(err, ipc.ErrUnknownRecipient) {
+		t.Fatalf("send to the name = %v", err)
+	}
+	// An operator's Recover of that exit is refused.
+	agent := &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: worker}
+	if _, err := agent.Recover(context.Background(), first, old.ExitStatus.Checkpoint, nil, runtime.RunOptions{}); !errors.Is(err, kernel.ErrChainClosed) || !errors.Is(err, runtime.ErrNotRecoverable) {
+		t.Fatalf("Recover = %v", err)
+	}
+}
+
+// A new child that cannot start has replaced nothing, so the old chain stays open.
+func TestAFailedStartLeavesTheOldChainOpen(t *testing.T) {
+	f := newChainFixture(t)
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails")}}
+	asked := 0
+	engine := f.engine(nil)
+	engine.Factory = failingFor{scripts: scripts{"worker": worker, "coordinator": reDelegate(nil)}, agent: "worker", after: 1, asked: &asked}
+	// The delegation's failure ends the delegator's run, as any such error does.
+	if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err == nil || !strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("run = %v", err)
+	}
+	if asked != 2 {
+		t.Fatalf("asked for a backend %d times", asked)
+	}
+	if closed := f.events(t, "process.closed"); len(closed) != 0 {
+		t.Fatalf("process.closed = %+v", closed)
+	}
+	workers := f.workers(t)
+	slices.SortFunc(workers, func(a, b kernel.Process) int { return strings.Compare(a.PID, b.PID) })
+	if workers[0].Closed || workers[0].ChainEnded() {
+		t.Fatalf("the old worker = %+v", workers[0])
+	}
+}
+
+// Only this case. Each of these leaves the first worker's chain as it was.
+func TestWhatADelegationDoesNotClose(t *testing.T) {
+	noneClosed := func(t *testing.T, f chainFixture) {
+		t.Helper()
+		if closed := f.events(t, "process.closed"); len(closed) != 0 {
+			t.Fatalf("process.closed = %+v", closed)
+		}
+	}
+	t.Run("the first delegation", func(t *testing.T) {
+		f := newChainFixture(t)
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails")}}
+		coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "done")}}
+		engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+		if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		noneClosed(t, f)
+	})
+	t.Run("a final exit", func(t *testing.T) {
+		f := newChainFixture(t)
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, false, "fails for good"), exitStep(0, false, "done")}}
+		engine := f.engine(scripts{"worker": worker, "coordinator": reDelegate(nil)})
+		if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		noneClosed(t, f)
+	})
+	t.Run("a retryable exit already recovered", func(t *testing.T) {
+		f := newChainFixture(t)
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+			reply(runtime.GenerateResult{Action: runtime.GenerateAction{Type: "message", Message: "a checkpoint"}}),
+			exitStep(1, true, "fails"),
+			exitStep(0, false, "recovered and done"),
+			exitStep(0, false, "second done"),
+		}}
+		var recovered runtime.RunResult
+		coordinator := reDelegate(func(pid string) {
+			old, err := f.kernel.Get(pid)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			agent := &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: worker}
+			if recovered, err = agent.Recover(context.Background(), pid, old.ExitStatus.Checkpoint, nil, runtime.RunOptions{}); err != nil {
+				t.Error(err)
+			}
+		})
+		engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+		if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		if recovered.ExitStatus.Code != 0 {
+			t.Fatalf("recovered = %+v", recovered.ExitStatus)
+		}
+		noneClosed(t, f)
+	})
+	t.Run("another agent", func(t *testing.T) {
+		f := newChainFixture(t)
+		spec := chainSpec(nil, 30)
+		spec.Agents[0].AllowedAgents = []string{"worker", "other"}
+		spec.Agents = append(spec.Agents, agentflow.AgentSpec{ID: "other", SystemPrompt: "Other."})
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails")}}
+		other := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(0, false, "done")}}
+		coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), delegateStep("other"), exitStep(0, false, "done")}}
+		engine := f.engine(scripts{"worker": worker, "other": other, "coordinator": coordinator})
+		if _, err := engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		noneClosed(t, f)
+	})
+	t.Run("another delegator's child", func(t *testing.T) {
+		f := newChainFixture(t)
+		spec := chainSpec(nil, 30)
+		spec.Agents[0].AllowedAgents = []string{"worker", "middle"}
+		spec.Agents = append(spec.Agents, agentflow.AgentSpec{ID: "middle", SystemPrompt: "Middle.", AllowedAgents: []string{"worker"}, Capabilities: capability.Set{Tools: []string{"message_agent", "spawn_agent"}}})
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails"), exitStep(0, false, "done")}}
+		middle := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("worker"), exitStep(0, false, "done")}}
+		coordinator := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{delegateStep("middle"), delegateStep("worker"), exitStep(0, false, "done")}}
+		engine := f.engine(scripts{"worker": worker, "middle": middle, "coordinator": coordinator})
+		if _, err := engine.Run(context.Background(), spec, agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		noneClosed(t, f)
+	})
+	t.Run("the marker off", func(t *testing.T) {
+		f := newChainFixture(t)
+		worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(1, true, "fails"), exitStep(0, false, "done")}}
+		engine := f.engine(scripts{"worker": worker, "coordinator": reDelegate(nil)})
+		engine.NoRedelegationClose = true
+		if _, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err != nil {
+			t.Fatal(err)
+		}
+		noneClosed(t, f)
+	})
+}
+
+// runThenRecover has a delegator's first run end with a worker's retryable exit
+// left open, then recovers the delegator under spec, and it delegates again.
+func runThenRecover(t *testing.T, f chainFixture, spec agentflow.WorkflowSpec, firstWorker runtime.GenerateResult) kernel.Process {
+	t.Helper()
+	var worker string
+	workers := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			worker = request.Process.PID
+			return firstWorker
+		},
+		exitStep(0, false, "second done"),
+	}}
+	lead := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		delegateStep("worker"),
+		exitStep(1, true, "the delegator fails"),
+		delegateStep("worker"),
+		exitStep(0, false, "done"),
+	}}
+	engine := f.engine(scripts{"worker": workers, "coordinator": lead})
+	if first, err := engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"}); err == nil && first.ExitStatus.Code == 0 {
+		t.Fatalf("the first run = %+v", first)
+	}
+	var delegator kernel.Process
+	processes, _ := f.kernel.Processes()
+	for _, process := range processes {
+		if process.Metadata["agent_id"] == "coordinator" {
+			delegator = process
+		}
+	}
+	coordinator, _ := spec.Agent("coordinator")
+	runner := &runtime.AgentRuntime{Kernel: f.kernel, Artifacts: f.store, Bus: f.bus, Tools: tools.NewRuntime(), Backend: lead}
+	runner.DelegateHandler = engine.DelegateHandler(spec, agentflow.RunRequest{Goal: "go"}, coordinator, nil)
+	if _, err := runner.Recover(context.Background(), delegator.PID, delegator.ExitStatus.Checkpoint, nil, runtime.RunOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(lead.requests()); got != 4 {
+		t.Fatalf("the delegator took %d steps", got)
+	}
+	old, err := f.kernel.Get(worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return old
+}
+
+// A delegator recovered after the first worker's exit still replaces it: the old
+// child's ParentPID names the delegator's old process.
+func TestARecoveredDelegatorStillClosesItsOldChild(t *testing.T) {
+	f := newChainFixture(t)
+	if old := runThenRecover(t, f, chainSpec(nil, 30), exitStep(1, true, "fails")(runtime.GenerateRequest{})); !old.Closed {
+		t.Fatalf("the old child = %+v", old)
+	}
+}
+
+// An agent with a restart policy is left to it, and an exit the policy left open
+// keeps an operator's Recover.
+func TestARestartPolicyKeepsTheOldChainOpen(t *testing.T) {
+	f := newChainFixture(t)
+	if old := runThenRecover(t, f, chainSpec(&supervisor.RestartPolicy{Max: 1, Backoff: "0s"}, 30), exitStep(1, true, "fails")(runtime.GenerateRequest{})); old.Closed {
+		t.Fatalf("the old child = %+v", old)
+	}
+}
+
+// An abandoned child, whose delegator ended before it could answer, stays open too:
+// an operator's Recover is why it is retryable.
+func TestAnAbandonedChildStaysOpen(t *testing.T) {
+	f := newChainFixture(t)
+	waits := runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: "a question"}}
+	old := runThenRecover(t, f, chainSpec(nil, 30), waits)
+	if old.ExitStatus == nil || old.ExitStatus.Reason != agentflow.AbandonedReason || old.Closed {
+		t.Fatalf("the old child = %+v", old)
+	}
+}
+
+// A crash just after the close. The state directory holds a closed chain, its mail
+// and a new child that took no step; the next run's first step sweeps the mail, and
+// nothing is lost or moved. Simulated: the new child's backend panics at its first
+// call, which the sweep precedes, so this also shows the kept body.
+func TestACrashAfterTheCloseLeavesAStateTheNextRunHandles(t *testing.T) {
+	f := newChainFixture(t)
+	var first string
+	worker := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{
+		func(request runtime.GenerateRequest) runtime.GenerateResult {
+			first = request.Process.PID
+			return exitStep(1, true, "fails")(request)
+		},
+		func(runtime.GenerateRequest) runtime.GenerateResult { panic("killed") },
+	}}
+	coordinator := reDelegate(func(pid string) {
+		if _, err := f.bus.Send("pid-000001", pid, "held for the first worker"); err != nil {
+			t.Error(err)
+		}
+	})
+	engine := f.engine(scripts{"worker": worker, "coordinator": coordinator})
+	func() {
+		defer func() { recover() }()
+		engine.Run(context.Background(), chainSpec(nil, 30), agentflow.RunRequest{Goal: "go"})
+	}()
+	old, err := f.kernel.Get(first)
+	if err != nil || !old.Closed {
+		t.Fatalf("old = %+v, %v", old, err)
+	}
+	// Nothing moved to the new child, and the next run goes on.
+	next := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(0, false, "done")}}
+	again := f.engine(scripts{"coordinator": next})
+	spec := chainSpec(nil, 30)
+	spec.Agents[0].AllowedAgents = nil
+	if _, err := again.Run(context.Background(), spec, agentflow.RunRequest{Goal: "again"}); err != nil {
+		t.Fatal(err)
+	}
+	letters := f.events(t, ipc.DeadLetterEvent)
+	if len(letters) != 1 || letters[0].Data["to"] != first {
+		t.Fatalf("ipc.dead_letter = %+v", letters)
+	}
+	body, err := f.bus.DeadLetterBody(letters[0].Data["id"])
+	if err != nil || body.Body != "held for the first worker" {
+		t.Fatalf("the kept body = %+v, %v", body, err)
 	}
 }

@@ -58,6 +58,14 @@ const (
 	BusBoundsV1    = "v1"
 )
 
+// RedelegationCloseField is the run.started field that says a delegator's new
+// delegation of an agent closes the chain of its retryable exit, with the value
+// RedelegationCloseV1. Records without it left that chain open.
+const (
+	RedelegationCloseField = "redelegation_close"
+	RedelegationCloseV1    = "v1"
+)
+
 // LeaseClockField is the run.started field that says lease expiries come
 // from the kernel's clock, with the value LeaseClockKernel, so a replay
 // reproduces them. Records without it took expiries from the wall clock.
@@ -124,6 +132,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoBusBounds {
 		data[BusBoundsField] = BusBoundsV1
+	}
+	if !e.NoRedelegationClose {
+		data[RedelegationCloseField] = RedelegationCloseV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

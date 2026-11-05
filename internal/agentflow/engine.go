@@ -152,6 +152,9 @@ type Engine struct {
 	// before bounds and handles; the caller sets Bus.NoBounds with it. When it
 	// is off, run.started says so (bus_bounds).
 	NoBusBounds bool
+	// NoRedelegationClose leaves the old chain open when a delegator
+	// re-delegates. When it is off, run.started says so (redelegation_close).
+	NoRedelegationClose bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -344,7 +347,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		RootPID:    root.PID,
 		OutputPath: req.OutputPath,
 	}
-	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil)
+	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil, nil)
 	if err != nil {
 		// Return what exists so callers can still report on the failed run.
 		summary.ExitStatus = kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
@@ -409,7 +412,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 // process record; a child's capabilities, delegable authority and mounts
 // are narrowed to what grantor may grant. The entry agent has no grantor:
 // the workflow spec and run request are the trust root.
-func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string, grantor *kernel.Process) (AgentRun, error) {
+func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string, grantor *kernel.Process, replaces []string) (AgentRun, error) {
 	agent, ok := spec.Agent(agentID)
 	if !ok {
 		return AgentRun{}, fmt.Errorf("%w: %s", ErrUnknownAgent, agentID)
@@ -437,6 +440,8 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	e.emitKernelTrace(agent.ID, process.PID, "start", req.Goal, process.LastEventID)
 	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
 	run, err := e.drive(spec, req, agent, process, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+		// Only now: a new child that could not start has replaced nothing.
+		e.closeReplaced(agent.ID, replaces, process.PID)
 		return agentRuntime.RunWithOptions(ctx, process.PID, initial, options)
 	})
 	return e.supervise(ctx, spec, req, agent, parentPID, run, err)
@@ -641,7 +646,11 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			childAgent, _ := spec.Agent(call.AgentID)
 			childRun, err = e.resumeAgent(ctx, spec, childReq, childAgent, *parked, call.Goal, grantor)
 		} else {
-			childRun, err = e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor)
+			var replaces []string
+			if replaces, err = e.replacedChains(spec, parent.PID, call.AgentID); err != nil {
+				return runtime.DelegateResult{}, err
+			}
+			childRun, err = e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor, replaces)
 		}
 		if err != nil {
 			return runtime.DelegateResult{}, err
@@ -660,6 +669,47 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			Status:       childRun.Status,
 			Question:     childRun.Question,
 		}, nil
+	}
+}
+
+// replacedChains finds what a new delegation of agentID replaces: this delegator's
+// earlier children of that agent, or those of the processes it was recovered from,
+// that exited retryably and that nothing recovered. An agent with a restart policy
+// is left to the policy, whose decisions are its own, and an abandoned child to an
+// operator: its delegator ended before it could answer.
+func (e *Engine) replacedChains(spec WorkflowSpec, parentPID, agentID string) ([]string, error) {
+	agent, ok := spec.Agent(agentID)
+	if e.NoRedelegationClose || !ok || agent.Restart != nil {
+		return nil, nil
+	}
+	var replaced []string
+	for current, hops := parentPID, 0; current != "" && hops < 64; hops++ {
+		children, err := e.Kernel.Children(current)
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range children {
+			if child.Metadata["agent_id"] == agentID && child.State == kernel.StateExited && !child.ChainEnded() && child.SupersededBy == "" && child.ExitStatus.Reason != AbandonedReason {
+				replaced = append(replaced, child.PID)
+			}
+		}
+		process, err := e.Kernel.Get(current)
+		if err != nil {
+			return nil, err
+		}
+		current = process.Metadata["resumed_from"]
+	}
+	return replaced, nil
+}
+
+// closeReplaced ends the chains a new delegation replaces, so their senders get an
+// outcome. Their mail does not move to the new child, which is another chain and
+// another task, and the next step anywhere sweeps it to dead letters.
+func (e *Engine) closeReplaced(agentID string, chains []string, successor string) {
+	for _, pid := range chains {
+		reason := "re-delegated as " + successor
+		e.closeChain(pid, reason)
+		e.emitKernelTrace(agentID, pid, "closed", reason, e.lastKernelEvent(pid))
 	}
 }
 
