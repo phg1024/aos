@@ -2415,7 +2415,8 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
     to change profile), or through a program using the packages. Lowering the trigger then
     depends on where the real limit is. *Measured by the book session on `929c3ba`, with a scripted
     window backend, one attempt per call, and Recover under a changed policy on one state
-    directory: not through a real restart of a command.*
+    directory: not through a real restart of a command. `TestAChangedPolicyGetsOut` now reproduces
+    the two cases and the floor.*
     - **There is a floor.** `Validate` refuses a trigger whose gap to its target cannot hold a tool
       result, so the trigger cannot go below about 139,264 chars. `aos run` with
       `AOS_LLM_CONTEXT_WINDOW` of 20000, 40000 or 58000 exits at startup, saying to use a larger
@@ -2509,6 +2510,8 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
 - `bench/ipc`: B6 and B8a assert, with their `180d076` results in comments; B5 runs imitation
   through `read_artifact`; B14 runs the batch table at full size and asserts it;
   `TestIPCB13BoundCost` measures.
+- B1a, B1b, B3 and B4 now fail on a defect, as "they become regression checks" said; they only
+  logged until then. `TestAChangedPolicyGetsOut` covers recovery under a changed policy.
 - **Sizes and seeding.** Package tests that need a full mailbox write the bus's file instead of
   sending 256 times, which is what took the time, and leave the last sends real where the bound
   is what they test. `TestAFullMailboxFitsTheWindow` keeps a case per rule of the batch at a

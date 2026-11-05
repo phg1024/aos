@@ -6,8 +6,8 @@
 // subscribe actions, and replay against the code as it is, with scripted
 // agents only, and logs what happened as "FINDING:" lines. A probe fails
 // only when it cannot run: a defect is recorded as observed behavior, and a
-// comment names the contract it was measured against. B1c, B2b, B2c, B5, B6, B8a,
-// B8c, B11 and B14 assert instead, since those are fixed; their comments keep the result
+// comment names the contract it was measured against. B1, B2b, B2c, B3, B4, B5, B6,
+// B8a, B8c, B11 and B14 assert instead, since those are fixed; their comments keep the result
 // from before. They are kept out of go test ./... by the ipcaudit tag:
 //
 //	go test -tags ipcaudit -count=1 -v ./bench/ipc/
@@ -360,7 +360,14 @@ func TestIPCB1CrashWindows(t *testing.T) {
 		finding(t, "SIGKILL after delivery, before a checkpoint: after reap and Recover the message (%s) is in the successor's first request %d time(s); pending after its checkpoint: %d; ipc events: %s",
 			sent.ID, copies, len(f.pending(t)), strings.Join(kinds, ","))
 		if copies != 1 {
-			t.Logf("expected exactly once")
+			t.Errorf("B1a: the successor saw the message %d times, want once", copies)
+		}
+		if left := len(f.pending(t)); left != 0 {
+			t.Errorf("B1a: %d mailboxes still hold mail after the checkpoint", left)
+		}
+		// A chain that ended sweeps its mail, so empty alone does not say it was acked.
+		if letters := f.events(t, ipc.DeadLetterEvent); len(letters) != 0 {
+			t.Errorf("B1a: read and checkpointed, and still a dead letter: %+v", letters)
 		}
 	})
 
@@ -382,8 +389,19 @@ func TestIPCB1CrashWindows(t *testing.T) {
 		if _, err := f.agent(next).Recover(context.Background(), worker.PID, "", nil, runtime.RunOptions{}); err != nil {
 			t.Fatal(err)
 		}
+		copies := strings.Count(text(next.first()), "recorded but not acked")
 		finding(t, "killed after the checkpoint recorded the message, before the ack: the successor sees it %d time(s) (from the checkpoint; the redelivery is dropped by MailboxSeen); pending after: %d",
-			strings.Count(text(next.first()), "recorded but not acked"), len(f.pending(t)))
+			copies, len(f.pending(t)))
+		if copies != 1 {
+			t.Errorf("B1b: the successor saw the message %d times, want once", copies)
+		}
+		if left := len(f.pending(t)); left != 0 {
+			t.Errorf("B1b: %d mailboxes still hold mail after the checkpoint", left)
+		}
+		// A chain that ended sweeps its mail, so empty alone does not say it was acked.
+		if letters := f.events(t, ipc.DeadLetterEvent); len(letters) != 0 {
+			t.Errorf("B1b: read and checkpointed, and still a dead letter: %+v", letters)
+		}
 	})
 
 	// B1c asserts, since step 3 of the slice (ipc-design.md, decisions 1 and 2).
@@ -583,6 +601,12 @@ func TestIPCB3Ordering(t *testing.T) {
 	finding(t, "order in the first successor's first request: %v", bodiesIn(failing.first(), pattern))
 	finding(t, "order after a second Recover (A4 was sent to the failed successor): %v", bodiesIn(next.first(), pattern))
 	finding(t, "send order was A1 B1 A2 | delivered | B2 A3 | exit | Recover | A4 | fail | Recover")
+	if got, want := bodiesIn(failing.first(), pattern), []string{"ordered A1", "ordered B1", "ordered A2", "ordered B2", "ordered A3"}; !slices.Equal(got, want) {
+		t.Errorf("B3: the first successor saw %v, want %v", got, want)
+	}
+	if got, want := bodiesIn(next.first(), pattern), []string{"ordered A1", "ordered B1", "ordered A2", "ordered B2", "ordered A3", "ordered A4"}; !slices.Equal(got, want) {
+		t.Errorf("B3: the second successor saw %v, want %v", got, want)
+	}
 }
 
 // B4 Concurrency. Contract (internal/ipc package doc): buses in separate
@@ -655,6 +679,9 @@ func TestIPCB4ConcurrentProcesses(t *testing.T) {
 		totalOrder += order
 	}
 	finding(t, "over %d trials: lost %d, duplicated %d, corrupted %d, order violations %d", trials, totalLost, totalDup, totalCorrupt, totalOrder)
+	if totalLost != 0 || totalDup != 0 || totalCorrupt != 0 || totalOrder != 0 {
+		t.Errorf("B4: over %d trials: lost %d, duplicated %d, corrupted %d, order violations %d", trials, totalLost, totalDup, totalCorrupt, totalOrder)
+	}
 }
 
 // B5 Trust boundary. Contract (ipc-design.md, decision 5): a peer's message

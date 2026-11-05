@@ -777,8 +777,11 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 	}
 	maxSteps += session.Extended.Steps
 	// budgetExit ends the process when a budget runs out, or the model
-	// endpoint stays down: retryable, since an operator may grant more or
-	// the endpoint come back, with a checkpoint that keeps the usage.
+	// endpoint stays down: retryable, with a checkpoint that keeps the usage,
+	// since an operator may grant more or the endpoint come back. That is for
+	// a process nobody supervises. For an agent with a restart policy, a spent
+	// budget is the policy's to decline: it closes the chain (not_restarted,
+	// cause budget_spent), and Recover refuses it from then on.
 	budgetExit := func(reason string) (RunResult, error) {
 		record, err := r.saveCheckpoint(pid, synced(), latest(), "final", &unacked)
 		if err != nil {

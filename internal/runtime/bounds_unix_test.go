@@ -1721,3 +1721,106 @@ func TestAnOldNoteDoesNotStandInForANewOne(t *testing.T) {
 		}
 	})
 }
+
+// Recovering under a changed compaction policy: what an operator can do about a call
+// failing on size below the trigger. Each case fails first under the old policy.
+func TestAChangedPolicyGetsOut(t *testing.T) {
+	start := func(t *testing.T, s mailState, policy runtime.CompactionPolicy, limit int) (kernel.Process, runtime.RunResult) {
+		t.Helper()
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		s.fillMailbox(t, sender.PID, receiver.PID, 24, ipc.MaxBodyBytes)
+		largest := 0
+		agent := s.agent(windowed(limit, &largest, func(int) runtime.GenerateResult { return sayAction("reading") }))
+		agent.Compaction = policy
+		agent.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+		agent.MaxSteps = 60
+		result, err := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+		if err != nil || !result.ExitStatus.Retryable || !strings.Contains(result.ExitStatus.Reason, "exceeds the context window") {
+			t.Fatalf("the first run should fail on size: %+v, %v", result.ExitStatus, err)
+		}
+		return receiver, result
+	}
+	// recoverUnder repeats Recover under policy while calls fail, up to most times. It
+	// returns the last result, the Recovers, the failed calls and the largest request.
+	recoverUnder := func(t *testing.T, s mailState, policy runtime.CompactionPolicy, limit, most int, result runtime.RunResult) (runtime.RunResult, int, int, int) {
+		t.Helper()
+		largest, failed := 0, 0
+		backend := windowed(limit, &largest, func(int) runtime.GenerateResult { return sayAction("reading") })
+		inner := backend.fn
+		backend.fn = func(call int, ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			got, err := inner(call, ctx, request)
+			if err != nil {
+				failed++
+			}
+			return got, err
+		}
+		agent := s.agent(backend)
+		agent.Compaction = policy
+		agent.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+		agent.MaxSteps = 60
+		recovers := 0
+		for recovers < most {
+			var err error
+			if result, err = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{}); err != nil {
+				t.Fatalf("Recover %d: %v", recovers+1, err)
+			}
+			recovers++
+			if !strings.Contains(result.ExitStatus.Reason, "model endpoint failed") {
+				break
+			}
+		}
+		return result, recovers, failed, largest
+	}
+	t.Run("a lower trigger, above the floor", func(t *testing.T) {
+		const limit = 160000
+		s := openMailState(t, t.TempDir())
+		_, result := start(t, s, runtime.ContextCompactionPolicy(100000, 0.8), limit)
+		// The old trigger, 240,000, is over the real limit, and does not get out.
+		if again, recovers, failed, _ := recoverUnder(t, s, runtime.ContextCompactionPolicy(100000, 0.8), limit, 3, result); recovers != 3 || failed != 3 {
+			t.Fatalf("under the old policy: %d Recovers, %d failed, %+v", recovers, failed, again.ExitStatus)
+		} else {
+			result = again
+		}
+		lowered := runtime.ContextCompactionPolicy(58100, 0.8)
+		if err := lowered.Validate(tools.MaxToolResultBytes); err != nil {
+			t.Fatal(err)
+		}
+		result, recovers, failed, largest := recoverUnder(t, s, lowered, limit, 30, result)
+		if left := len(s.pendingFor(t, result.PID)); left != 0 {
+			t.Fatalf("%d left after %d Recovers, exit %+v", left, recovers, result.ExitStatus)
+		}
+		// Not at the next attempt: compaction comes after a handoff.
+		if recovers < 2 || failed == 0 {
+			t.Fatalf("%d Recovers and %d failed calls: the policy was to take effect after a failure", recovers, failed)
+		}
+		t.Logf("%d Recovers, %d failed, largest request %d, limit %d", recovers, failed, largest, limit)
+	})
+	t.Run("the window unset, below the floor", func(t *testing.T) {
+		const limit = 100000
+		s := openMailState(t, t.TempDir())
+		receiver, result := start(t, s, runtime.ContextCompactionPolicy(58100, 0.8), limit)
+		before := len(s.pendingFor(t, receiver.PID))
+		result, recovers, failed, largest := recoverUnder(t, s, runtime.CompactionPolicy{}, limit, 30, result)
+		if failed != 0 || recovers != 1 || largest > limit {
+			t.Fatalf("after the switch: %d Recovers, %d failed, largest %d", recovers, failed, largest)
+		}
+		if strings.Contains(result.ExitStatus.Reason, "model endpoint failed") {
+			t.Fatalf("exit = %+v", result.ExitStatus)
+		}
+		left := len(s.pendingFor(t, result.PID))
+		if left >= before {
+			t.Fatalf("%d of %d left: nothing drained", left, before)
+		}
+		t.Logf("1 Recover, none failed, largest request %d, limit %d; %d of %d left at exit %q", largest, limit, left, before, result.ExitStatus.Reason)
+	})
+	t.Run("the floor", func(t *testing.T) {
+		for _, policy := range []runtime.CompactionPolicy{runtime.ContextCompactionPolicy(40000, 0.8), runtime.ContextCompactionPolicy(58100, 0.5)} {
+			if err := policy.Validate(tools.MaxToolResultBytes); err == nil {
+				t.Errorf("a trigger of %d chars should be refused", policy.MaxChars)
+			}
+		}
+		if err := (runtime.CompactionPolicy{}).Validate(tools.MaxToolResultBytes); err != nil {
+			t.Errorf("the zero policy, a window unset: %v", err)
+		}
+	})
+}
