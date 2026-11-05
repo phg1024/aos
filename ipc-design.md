@@ -267,10 +267,10 @@ the bus alone, with no checkpoint to read.*
   - **Why compaction may still archive it:** the request has to fit the
     window. Step 4 makes this rare: one step takes in no more than compaction
     keeps live and at most 32 KiB (decision 8), so a batch is not archived in the
-    step it arrives. Mail can still be pushed out by later turns after a call that
-    failed (`TestMailArchivedAfterAFailedCall`). *This changed as step 4 was built: it
-    said at most 1 MiB could arrive in one step, which measured as a request no
-    small window can take.*
+    step it arrives. A batch counts bodies, and framing adds to them, so one that
+    renders far larger can still be (`TestFramingCanStillArchiveMailUnread`). *This
+    changed as step 4 was built: it said at most 1 MiB could arrive in one step, which
+    measured as a request no small window can take.*
 
 ### 2. Sender outcomes (B2c, B1c, B7)
 
@@ -828,12 +828,34 @@ them.**
   - 256 messages is far above B3/B4's working sets, and well below B8a's
     2,000. A model that has 256 unread messages is not reading its mail.
   - 1 MiB is 64 bodies at the cap.
-- **A full mailbox does not land in one request.** One step takes at most 32 KiB of
-  mail, at least one message, and no more than compaction keeps live (`KeepMessages`,
-  and half of the window's trigger): the rest stays pending for the next step. So a
-  full mailbox takes up to 64 steps, which is its cost. *This changed as step 4 was
-  built: with no batches, a full mailbox made a request of 1 MiB, every call to a
-  smaller window failed, nothing left the mailbox, and the process was stuck.*
+- **A full mailbox does not land in one request.** One step takes on at most 32 KiB of
+  mail, at least one message, and no more than compaction keeps live: one fewer than
+  `KeepMessages`, and half of its target. The rest stays pending for the next step.
+  *This changed as step 4 was built: with no batches, a full mailbox made a request of
+  1 MiB, every call to a smaller window failed, nothing left the mailbox, and the
+  process was stuck.* Batches cost three things:
+  - **Steps:** a full mailbox takes up to 64.
+  - **What the model knows when it decides.** Mail already waiting may not be in the
+    request. The step says so, in a runtime notice after the mail: how many, how many
+    bytes, that they arrive at the next steps, and that exiting now leaves them unread.
+    It is not mail, so no bound applies. The exit is not refused: that is the model's
+    call, and a budget may force it anyway. *Added after review of `e145edf`: without
+    it, a model could exit over mail it was never told of, which was a regression
+    from having it all in one request.*
+  - **Mid-size mail under the default policy comes one message a step.** That policy is
+    for an unknown window and holds 8,000 chars, down to 4,000, so half its target is
+    2,000 bytes, and two 12 KiB bodies never travel together. **I still think that is
+    right.** Sent together, compaction archives the first before any model reads it:
+    the model has an `archived unread:` line and a `read_memory` to make, which takes
+    the same step and leaves the mail unshown if it does not. One a step means each is
+    read as it arrives. A run with a known window has 32 KiB: two bodies at the cap.
+- **No new mail while the last batch has not reached a model.** A failed call shows
+  nothing, so the next one sends the same request, and does not grow it. Archived mail
+  does not hold this up: it has already left the request.
+- **Mail handed out before and not in the session is new to it,** whatever its
+  `Deliveries`, at any step. It belonged to a session that did not last. *Fixed after
+  review of `e145edf`: only a run's first step took such mail, so anything past one
+  batch stayed until the next Resume or Recover.*
 
 ### 9. Addressing policy (B10a)
 
@@ -2182,6 +2204,10 @@ outcome.
   (`TestACrashAfterTheCloseLeavesAStateTheNextRunHandles`, which simulates it with a panic in the
   new child's first call). A child left `ready` or `running` is not new: any crash leaves one,
   and nothing here reaps it.
+- **Through a real `aos run`,** checked by the book session on `e145edf`: a first worker exits 1
+  retryably, mail to it is held, the re-delegation closes it with `re-delegated as pid-000004`,
+  the dead letter is `unread`, closed, and the lead gets `undelivered:` after the new child's
+  result. A later send to the old PID is a `tool_error` naming "closed", and the lead goes on.
 - **Old records:** `redelegation_close: v1` on `run.started`, with
   `Engine.NoRedelegationClose`. Replay refuses a run with more than one agent process, so no
   replayed run reaches this code today, and the field is reproduced as recorded. A future
@@ -2288,8 +2314,9 @@ reports/ipc-step-4-e2e/run.sh <aos binary> <new state dir>
   escape as any tool's, and a memory segment holds a reference to it, not a copy.
 - **`list_artifacts`** lists what the caller may read: published artifacts under the three
   rules. A published type is an agent's words, so it goes through `framing.Inline`.
-- **Batches.** One step takes at most 32 KiB of mail, `KeepMessages` messages and half the
-  compaction trigger, and at least one message.
+- **Batches.** One step takes on at most 32 KiB of mail, one fewer than `KeepMessages`
+  messages and half of compaction's target, and at least one message, and nothing new
+  while the last batch has not reached a model. What it leaves is reported to the model.
 - **`bus_bounds: v1`** on `run.started`. A record without it replays with
   `Bus.NoBounds`, `AgentRuntime.NoBusBounds` and the old prompt.
 
@@ -2300,7 +2327,7 @@ Decisions 1, 7, 8 and 10 are changed in place, and each says so.
 | The text said | What was built | Why |
 |---|---|---|
 | The refusal says "publish it with publish_artifact and send the artifact_id" | It names `artifacts`, says an ID in a body grants nothing, and names `publish_artifact` only to a process that holds it | A model following the old text writes mail the receiver cannot read |
-| "at most 1 MiB of unread mail can arrive in one step" | At most 32 KiB, `KeepMessages` messages and half the trigger per step | Measured: that request failed every call to a smaller window, and the process never drained |
+| "at most 1 MiB of unread mail can arrive in one step" | Batches, as in decision 8, with a notice of what is left | Measured: that request failed every call to a smaller window, and the process never drained |
 | The cap "applies at the bus" and the bound to any send | The operator is held to the cap and not the bound, and `aos-tui` turns a line over the cap into a handle | Step 3's worst defect was losing an operator's text |
 | "reads one under the receiver's capabilities" | `read_artifact` is always available, like `read_memory` | The rules are the gate, and a handle is no use to a receiver that also needs the tool |
 | `published:*` | `published.*` | The store's prefix is `published.` |
@@ -2342,18 +2369,29 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
 
 | Mailbox | Window | Calls to drain | Largest history | Archived before a read |
 |---|---|---|---|---|
-| 64 bodies at the cap | 174,300 | 32 | 165,752 | 0 |
-| 256 messages of 4 KiB | 174,300 | 32 | 167,469 | 0 |
-| 300 of 4 KiB, after a handover | 174,300 | 38 | 167,469 | 0 |
-| 64 bodies at the cap, unknown window | none | 64 | 16,441 | 0 |
-| 256 of 100 bytes, unknown window | none | 22 | 2,519 | 0 |
+| 64 bodies at the cap | 174,300 | 32 | 166,779 | 0 |
+| 256 messages of 4 KiB | 174,300 | 32 | 168,498 | 0 |
+| 300 of 4 KiB, after a handover | 174,300 | 38 | 168,499 | 0 |
+| 64 bodies at the cap, unknown window | none | 64 | 16,647 | 0 |
+| 256 of 100 bytes, unknown window | none | 24 | 2,406 | 0 |
+| 256 of 350 bytes, unknown window | none | 52 | 6,744 | 0 |
 
 - **Without batches:** the first request holds the whole mailbox and every call fails
   (`no batches` in the mutation list), so nothing drains.
-- **The cost is steps.** A step budget of 24, the default, does not cover a 1 MiB mailbox at
-  32 KiB a step. The process exits on its budget with the rest unread, and with a restart
-  policy the chain closes, so its senders are told. In `aos-tui` each line has a fresh
-  allowance. A person's line behind a full mailbox waits its turn in the batches.
+- **The cost is steps, and what the model has seen when it decides.** A step budget of 24,
+  the default, does not cover a 1 MiB mailbox at 32 KiB a step. The process exits on its
+  budget with the rest unread, and with a restart policy the chain closes, so its senders
+  are told. In `aos-tui` each line has a fresh allowance. A person's line behind a full
+  mailbox waits its turn in the batches. A model may exit with mail waiting: it has been
+  told, and the rest become dead letters (`TestAStepThatHoldsMailBackSaysSo`).
+- **A failed call.** It takes on no more mail, whether the run goes on or exits and is
+  recovered from the checkpoint it saved (`TestAFailedCallDoesNotGrowTheRequest`). A call
+  failing on the request's size gets out if the request is over the compaction trigger: the
+  next attempts compact (`TestACallFailingOnSizeGetsOut`: 42 calls, 10 failed, all drained, on
+  a window 2,000 chars above the trigger). **Under the trigger it does not:** nothing shrinks
+  the request, each call fails the same way, and the mail is kept
+  (`TestACallFailingBelowTheTriggerStays`). A tool's output in that gap does the same, so the
+  trigger has to fit the real window, system prompt included.
 - **Over its bound after a handover:** the same batches, so it drains.
 - **The limit that remains: one body larger than the window.** A body over the cap can exist
   only from before the cap. It comes alone, every call fails, and the process exits
@@ -2409,8 +2447,12 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   `TestAReadOfADamagedArtifactIsAToolError`, `TestAFullMailboxDrainsOnAReturnedCall`,
   `TestTheBoundHoldsAcrossProcesses`, `TestAFullMailboxFitsTheWindow`,
   `TestABodyBeyondTheWindowStaysStuckAndKept`, `TestAnOldStateDirKeepsEveryMessage`,
-  `TestMailArchivedAfterAFailedCall`, `TestARefusedCallCanBeRepeatedOnceThingsChange`,
-  `TestWithoutContinueARefusalEndsTheSenderLikeAnyToolError`.
+  `TestFramingCanStillArchiveMailUnread`, `TestARefusedCallCanBeRepeatedOnceThingsChange`,
+  `TestWithoutContinueARefusalEndsTheSenderLikeAnyToolError`,
+  `TestAStepThatHoldsMailBackSaysSo`, `TestDeliveredMailDrainsThroughOneRun`,
+  `TestAFailedCallDoesNotGrowTheRequest`, `TestACallFailingOnSizeGetsOut`,
+  `TestACallFailingBelowTheTriggerStays`, `TestArchivedMailDoesNotHoldTheBatch`,
+  `TestNoBusBoundsTakesAllAtOnce`.
 - `agentflow`: `TestAVerifierGetsEvidenceThroughAWait`,
   `TestSystemPromptDescribesHandlesOnlyWhenOn`.
 - `replay`: `TestReplayOfARecordWithoutBusBounds`, `TestReplayOfHandles`.
@@ -2421,4 +2463,22 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
   through `read_artifact`; `TestIPCB13BoundCost` measures.
 - Two older tests set `NoBusBounds`, with what they expect unchanged:
   `TestArchivedMailIsNotShownUntilRead` and `TestAdoptionRequiresIdenticalMessages` need
-  several messages in one step, which batches now split.
+  several messages in one step, which batches now split. Re-checked after the review's fixes:
+  both still fail without it.
+
+### Fixed after review of `e145edf`
+
+The book session's review found two defects in the batches, both reproduced:
+
+| Defect | Measured | Now |
+|---|---|---|
+| Batches hid waiting mail from the model, which could exit over it. A regression from the batches: before them it was all in one request | Default policy, the model exits at its first call. 13 short messages: 12 in the request, 1 dead letter, no hint. 3 of 12 KiB: 1 in the request, 2 dead letters, no hint | The notice, in the step that held mail back and after the mail, so compaction cannot separate them. One place in the count is kept for it. The exit stands, and a `wait` is told too |
+| Mail handed out and not acknowledged, past one batch, was stranded for the rest of the run: `ReceiveBatch` skipped `Deliveries > 0` after the first step | 40 delivered, a Recover with `Rollback`, 40 calls: 12 of 40 reached a request. An old directory, 30 delivered, a Resume, 30 calls: 12 of 30 | A later step takes anything not in the session's `MailboxSeen`. `TestDeliveredMailDrainsThroughOneRun` drains through consecutive steps of one run: Resume, plain Recover, Rollback, an old directory. `Receive`, which a replay uses, is as it was |
+
+Checking the failing-call loop as asked found a third: each failed step took on another batch,
+so a failed call grew the next request. Now nothing new comes until the batch has reached a
+model. A count limit of 11, not 12, and half the target, not all of it, came with the notice,
+since the notice and framing have to fit in what compaction keeps.
+
+The book session also ran the close on re-delegation through a real `aos run`, which this
+section had said was not done: see [Should the engine close more?](#should-the-engine-close-more).

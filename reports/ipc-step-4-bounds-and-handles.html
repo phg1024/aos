@@ -22,11 +22,21 @@
     <ul>
       <li><span class="good">Every refusal, by every route, leaves the sender running</span> and tells it what it can do, naming only tools it holds.</li>
       <li><span class="good">A person's text is neither refused nor lost.</span> A full mailbox takes it anyway, and <code>aos-tui</code> turns a line over the cap into a handle.</li>
-      <li><span class="good">A full mailbox no longer lands in one request.</span> The contract's text would have made a process stuck for good on any window under 1 MiB; that was measured, and changed.</li>
+      <li><span class="good">A full mailbox no longer lands in one request.</span> The contract's text would have made a process stuck for good on any window under 1 MiB; that was measured, and changed. <span class="warn">So mail can be waiting when a model decides.</span> The step says so, and a model that exits anyway leaves it unread.</li>
       <li><span class="good">Old records replay as before,</span> gated by <code>bus_bounds</code>.</li>
     </ul>
     <p><b>What this does not close:</b> <span class="bad">one body larger than the model's window still fails every request.</span> Such a body can exist only from before the cap. <span class="warn">A verifier, being a sibling, gets evidence only if it parks and its lead attaches a handle.</span> Decision 10's one bus file is not built, and nothing bounds the number of mailboxes.</p>
   </div>
+
+  <h2>Fixed After Review of <code>e145edf</code></h2>
+  <table>
+    <tr><th>Defect</th><th>Measured by the review</th><th>Now</th></tr>
+    <tr><td>Batches hid waiting mail from the model, which could exit over it. <span class="bad">A regression from the batches</span></td><td>Default policy, exit at the first call. 13 short messages: 12 in the request, 1 dead letter, no hint. 3 of 12 KiB: 1 in the request, 2 dead letters, no hint</td><td class="good">A <code>runtime notice:</code> in that step, after the mail: how many, how many bytes, that they arrive at the next steps, that exiting now leaves them unread. It is not mail. The exit stands. <code>TestAStepThatHoldsMailBackSaysSo</code></td></tr>
+    <tr><td>Mail handed out and unacknowledged, past one batch, stranded for the rest of the run</td><td>40 delivered, Recover with <code>Rollback</code>, 40 calls: 12 of 40 reached a request. An old directory, 30 delivered, 30 calls: 12 of 30</td><td class="good">A later step takes anything not in <code>MailboxSeen</code>. <code>TestDeliveredMailDrainsThroughOneRun</code> drains in consecutive steps of one run: Resume, plain Recover, Rollback, an old directory</td></tr>
+    <tr><td>Found checking the failing-call loop: each failed step took on another batch, growing the next request</td><td>Three failures put 36 or more messages in history</td><td class="good">Nothing new until the batch has reached a model. <code>TestAFailedCallDoesNotGrowTheRequest</code>, both with the run going on and recovered from its checkpoint</td></tr>
+  </table>
+  <p><b>Can a call failing on size get out?</b> <span class="good">Over the compaction trigger, yes:</span> the next attempts compact (<code>TestACallFailingOnSizeGetsOut</code>: 42 calls, 10 failed, all drained, on a window 2,000 chars above the trigger). <span class="bad">Under the trigger, no:</span> nothing shrinks the request, it fails the same way each time, and the mail is kept (<code>TestACallFailingBelowTheTriggerStays</code>). A tool's output in that gap does the same, and a run's system prompt counts towards it, so the trigger has to fit the real window.</p>
+  <p><b>Why the default policy's limit falls below two 12 KiB bodies, and whether that is right.</b> That policy is for an unknown window: 8,000 chars, down to 4,000, and half of that is 2,000 bytes. <span class="good">I still think it is right.</span> Sent together, compaction archives the first before any model reads it, and the model has an <code>archived unread:</code> line and a <code>read_memory</code> to make, which takes the same step and leaves the mail unshown if it does not. A run with a known window takes 32 KiB. The two older tests still fail without <code>NoBusBounds</code> after these fixes, so they keep it.</p>
 
   <h2>1. The Eleven Questions</h2>
   <table>
@@ -40,7 +50,7 @@
     <tr><td>7</td><td>Gating <code>list_artifacts</code></td><td>Users: <code>workflows/two-agent-mini.json</code>, as a fallback in its prompt, and a count in <code>internal/tui/render</code>. <code>judge</code> reads the kernel. <code>aos inspect</code> reads the store, ungated. A process no longer lists its own checkpoints. <b>The verifier's route:</b> rule 3 does not cover it. It <code>wait</code>s, the lead gets its PID, attaches the handle, and re-delegates. A child reads a parent's artifact the same way. <span class="bad">A child that never parks has no route.</span> The rules were not widened</td><td><code>TestAVerifierGetsEvidenceThroughAWait</code>, which runs the whole route through the engine</td></tr>
     <tr><td>8</td><td>Old records</td><td><code>bus_bounds: v1</code>. Without it: no cap, no bound, no batches, ungated list, the old prompt. A resumed old state directory keeps every message; an over-cap body comes alone and whole, and new sends wait for the drain</td><td><code>TestReplayOfARecordWithoutBusBounds</code>, <code>TestAnOldStateDirKeepsEveryMessage</code>; your recordings below</td></tr>
     <tr><td>9</td><td>The bound under concurrency</td><td>The check is under the bus lock with the insert. Mail leaves only after a call returned with its body and a checkpoint, and a failed call moves nothing. A held mailbox fills and refuses, and the refusal says it may never read this. <b>The chapter's limit changes:</b> a chain nobody closes gives its senders a refusal once full, and nothing for mail already in</td><td><code>TestTheBoundHoldsAcrossProcesses</code>: 4 OS processes, 100 sends each, with and without a drain; <code>TestAFullMailboxDrainsOnAReturnedCall</code>; <code>TestAHeldMailboxFillsAndRefuses</code></td></tr>
-    <tr><td>10</td><td>Batch size</td><td class="bad">The doc's claim was unsafe. <span class="good">With batches it holds on the smallest window <code>Validate</code> admits,</span> at the cost of up to 64 steps. See section 2. <span class="bad">One body over the window is stuck:</span> kept, not lost, and it does not drain</td><td><code>TestAFullMailboxFitsTheWindow</code>, <code>TestABodyBeyondTheWindowStaysStuckAndKept</code></td></tr>
+    <tr><td>10</td><td>Batch size</td><td class="bad">The doc's claim was unsafe. <span class="good">With batches it holds on the smallest window <code>Validate</code> admits,</span> at the cost of up to 64 steps, and of mail waiting when a model decides, which it is told. See section 2. <span class="bad">One body over the window is stuck:</span> kept, not lost, and it does not drain</td><td><code>TestAFullMailboxFitsTheWindow</code>, <code>TestABodyBeyondTheWindowStaysStuckAndKept</code></td></tr>
     <tr><td>11</td><td>Costs</td><td>See section 3. <span class="warn">The bus is about 1 MiB per mailbox with mail, and nothing bounds the number of mailboxes. Dead-letter files grow for the life of the state directory.</span> So decision 10's bound is per mailbox, not a bound on the bus</td><td><code>TestIPCB13BoundCost</code></td></tr>
   </table>
 
@@ -49,16 +59,18 @@
   <table>
     <tr><th>Mailbox</th><th>Window</th><th>Calls to drain</th><th>Largest history</th><th>Archived before a read</th></tr>
     <tr><td class="bad">64 at the cap, as the contract read: all in one step</td><td>174,300</td><td class="bad">Never: every call fails</td><td class="bad">1,052,884</td><td>-</td></tr>
-    <tr><td>64 at the cap</td><td>174,300</td><td>32</td><td>165,752</td><td>0</td></tr>
-    <tr><td>256 of 4 KiB</td><td>174,300</td><td>32</td><td>167,469</td><td>0</td></tr>
-    <tr><td>300 of 4 KiB, after a handover</td><td>174,300</td><td>38</td><td>167,469</td><td>0</td></tr>
-    <tr><td>64 at the cap, unknown window</td><td>none</td><td>64</td><td>16,441</td><td>0</td></tr>
-    <tr><td>256 of 100 bytes, unknown window</td><td>none</td><td>22</td><td>2,519</td><td>0</td></tr>
+    <tr><td>64 at the cap</td><td>174,300</td><td>32</td><td>166,779</td><td>0</td></tr>
+    <tr><td>256 of 4 KiB</td><td>174,300</td><td>32</td><td>168,498</td><td>0</td></tr>
+    <tr><td>300 of 4 KiB, after a handover</td><td>174,300</td><td>38</td><td>168,499</td><td>0</td></tr>
+    <tr><td>64 at the cap, unknown window</td><td>none</td><td>64</td><td>16,647</td><td>0</td></tr>
+    <tr><td>256 of 100 bytes, unknown window</td><td>none</td><td>24</td><td>2,406</td><td>0</td></tr>
+    <tr><td>256 of 350 bytes, unknown window</td><td>none</td><td>52</td><td>6,744</td><td>0</td></tr>
   </table>
   <ul>
-    <li><b>The rule:</b> one step takes at most 32 KiB, <code>KeepMessages</code> messages and half the trigger, and at least one message. 32 KiB is less than a tool output because that window has 34 KiB above its trigger.</li>
+    <li><b>The rule:</b> one step takes on at most 32 KiB, one fewer than <code>KeepMessages</code> messages and half of compaction's target, and at least one message, and nothing new while the last batch has not reached a model. 32 KiB is less than a tool output because that window has 34 KiB above its trigger.</li>
     <li><span class="warn">The cost is steps.</span> The default budget of 24 does not cover 1 MiB. The process exits on its budget with the rest unread; with a restart policy the chain closes and its senders are told.</li>
-    <li><span class="warn">Framing adds to bodies:</span> a body of newlines renders to about 3 times its bytes, and the batch counts bodies.</li>
+    <li><span class="warn">And what the model has seen when it decides.</span> It may exit with mail waiting: it has been told, the exit stands, and the rest become dead letters. Under the default policy, mail over 2,000 bytes comes one message a step.</li>
+    <li><span class="warn">Framing adds to bodies:</span> a body of newlines renders to about 3 times its bytes, and the batch counts bodies, so such mail can still be archived before a read (<code>TestFramingCanStillArchiveMailUnread</code>).</li>
     <li><span class="warn">A higher ratio has less room above the trigger.</span> <code>Validate</code> checks hysteresis, not this room, which was already true of tool output.</li>
   </ul>
 
@@ -89,7 +101,7 @@
     <tr><td><code>published:*</code></td><td><code>published.*</code></td></tr>
     <tr><td>Not there</td><td><code>Metadata["continues"]</code> on a new root; refusals that may change do not count as repeats</td></tr>
   </table>
-  <p>Two older tests now set <code>NoBusBounds</code>, with what they expect unchanged: <code>TestArchivedMailIsNotShownUntilRead</code> and <code>TestAdoptionRequiresIdenticalMessages</code> need several messages in one step, which batches split. <code>TestMailArchivedAfterAFailedCall</code> shows the bounded path to the same notice.</p>
+  <p>Two older tests now set <code>NoBusBounds</code>, with what they expect unchanged: <code>TestArchivedMailIsNotShownUntilRead</code> and <code>TestAdoptionRequiresIdenticalMessages</code> need several messages in one step, which batches split. <code>TestFramingCanStillArchiveMailUnread</code> shows the bounded path to the same notice.</p>
 
   <h2>5. Not Covered</h2>
   <ul>
@@ -111,12 +123,14 @@ go build -buildvcs=false -o /tmp/aos ./cmd/aos
 reports/ipc-step-4-e2e/run.sh /tmp/aos /tmp/step4-state</pre>
   <table>
     <tr><th>Check</th><th>Result</th></tr>
-    <tr><td>Full package list, 14 packages</td><td class="good">3 runs: 14 of 14 pass each time; no orphaned helper before, between or after</td></tr>
+    <tr><td>Full package list, 14 packages, after the fixes</td><td class="good">3 runs: 14 of 14 pass each time; no orphaned helper before, between or after. <code>internal/runtime</code> once more after that one test's change</td></tr>
     <tr><td>Probes, <code>AOS_IPC_TRIALS=25</code></td><td class="good">B1, B2, B3, B4, B5, B6, B8, B10, B11, B12 and B13 pass. B4 over 25 trials: 0 lost, 0 duplicated, 0 corrupted, 0 out of order</td></tr>
     <tr><td>Eval's saved trials and a v0.1.4 record</td><td class="good">31/31, 8/8, 9/9 and 7/7 requests identical; each <code>result: identical</code></td></tr>
     <tr><td>Your three recordings, <code>ch6/</code></td><td class="good"><code>rec</code>: identical. <code>rec2</code>: refused, tampered <code>art-000026</code>. <code>rec3</code>: first divergence at call 29 (step 14, <code>pid-000002</code>). As you said</td></tr>
     <tr><td>52 mutations, each on a copy, each with its named test</td><td class="good">All 52 fail the named test. <code>24533d4</code> cannot compile the new tests, so these stand in for "fails on the old source". Two first passed through a timeout only, and the test now fails on the first message archived before a read</td></tr>
+    <tr><td>14 more mutations for the fixes after review</td><td class="good">All 14 fail their named test, among them the old skip back (<code>TestDeliveredMailDrainsThroughOneRun</code>), no note, a note that starts a turn, a failed call taking more, and a repeated note. <span class="warn">One passed at first:</span> <code>TestNoBusBoundsTakesAllAtOnce</code> used short mail that fit one batch, so I made it 40 KiB, and it now fails</td></tr>
     <tr><td>The bound checked outside the lock</td><td class="good">Caught at one trial by <code>TestTheBoundHoldsAcrossProcesses</code>. Unlike step 3's race, the gap here is a whole file read and the senders do not pause</td></tr>
+    <tr><td>Reviewed: the close through a real <code>aos run</code>, a new-format record with an oversize send, publish, pages, a denial and a list</td><td class="good">The book session's checks on <code>e145edf</code>: <code>aos replay</code> identical, 7 of 7 calls. Not repeated here</td></tr>
     <tr><td>End to end, <code>reports/ipc-step-4-e2e/run.sh</code>, through <code>aos run</code></td><td class="good">Exit 0. <code>ipc.rejected</code>: two <code>too_large</code> (<code>send</code> and <code>message_agent</code>, 1,048,576 bytes), one <code>mailbox_full</code>. One <code>capability.denied</code>, the stranger's read of the handle. 257 sent, 257 delivered, nothing left in any mailbox. The receiver read the 1 MiB handle, and the send after the drain was accepted</td></tr>
     <tr><td>Flakes</td><td>None seen in these runs. <code>TestTheBoundHoldsAcrossProcesses</code>'s draining case varies in how many get in (311 accepted once); its asserts are on the totals</td></tr>
   </table>

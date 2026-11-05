@@ -435,7 +435,7 @@ func TestUntrustedTextCannotForgeANotice(t *testing.T) {
 // compacting archives what a step takes in beyond the newest two turns. Since
 // step 4 a step takes no more than compaction keeps, so NoBusBounds is how this
 // gets mail archived in the step it arrives, as a session from before the bounds
-// or one of TestMailArchivedAfterAFailedCall's turns does.
+// or a body whose framing outgrows its batch does (TestFramingCanStillArchiveMailUnread).
 func (s mailState) compacting(backend runtime.Backend) *runtime.AgentRuntime {
 	agent := s.agent(backend)
 	agent.Compaction = runtime.CompactionPolicy{MaxMessages: 3, KeepMessages: 2}

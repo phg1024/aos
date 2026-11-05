@@ -451,36 +451,68 @@ func (b *Bus) Publish(from, topic, body string) (created []Message, skipped []st
 // out are included again, as a receiver starting from a checkpoint needs;
 // without it, only messages not yet delivered.
 func (b *Bus) Receive(pid string, redeliver bool) ([]Message, error) {
-	return b.ReceiveBatch(pid, redeliver, nil, Batch{})
+	out, _, err := b.handOut(pid, func(message Message) (bool, bool) {
+		return redeliver || message.Deliveries == 0, false
+	})
+	return out, err
 }
 
-// Batch limits what one ReceiveBatch hands out. A zero field means no limit.
+// Batch limits what one ReceiveBatch takes on. A zero field means no limit, and
+// Hold means nothing new at all: the receiver has not got through the last one.
 type Batch struct {
+	Messages int
+	Bytes    int
+	Hold     bool
+}
+
+// Waiting is what a ReceiveBatch left behind that the receiver does not hold.
+type Waiting struct {
 	Messages int
 	Bytes    int
 }
 
-// ReceiveBatch is Receive that stops at limit, counting messages not in seen, in
-// order, and always hands out at least one: the rest stay pending for the next
-// call, so no one step of a receiver takes a whole full mailbox into one request.
-// Messages in seen are ones the receiver already holds and drops, so they cost it
-// nothing.
-func (b *Bus) ReceiveBatch(pid string, redeliver bool, seen []string, limit Batch) ([]Message, error) {
+// ReceiveBatch is how a receiver that keeps a list of what it holds takes its
+// mail, a batch at a time, so no one step takes a whole full mailbox into one
+// request. A message in seen it already holds and drops, so it costs nothing and
+// comes only with redeliver, as Receive's does. Any other message is new to it,
+// even if it was handed out before to a process whose session did not last. Those
+// come in order up to limit, at least one unless limit holds, and the rest stay
+// and are reported.
+func (b *Bus) ReceiveBatch(pid string, redeliver bool, seen []string, limit Batch) ([]Message, Waiting, error) {
+	taken, count := 0, 0
+	full := limit.Hold
+	return b.handOut(pid, func(message Message) (bool, bool) {
+		if slices.Contains(seen, message.ID) {
+			return redeliver, false
+		}
+		size := messageBytes(message)
+		if count > 0 && ((limit.Bytes > 0 && taken+size > limit.Bytes) || (limit.Messages > 0 && count >= limit.Messages)) {
+			full = true
+		}
+		if full {
+			return false, true
+		}
+		taken += size
+		count++
+		return true, false
+	})
+}
+
+// handOut marks delivered what pick takes, in order, and logs it. pick also says
+// whether a message it leaves counts as waiting.
+func (b *Bus) handOut(pid string, pick func(Message) (take, waiting bool)) ([]Message, Waiting, error) {
 	var out []Message
+	var left Waiting
 	now := time.Now().UTC()
 	err := b.update(func(t *tx) error {
-		taken, count := 0, 0
 		for i, message := range t.mailboxes[pid] {
-			if message.Deliveries > 0 && !redeliver {
-				continue
+			take, waiting := pick(message)
+			if waiting {
+				left.Messages++
+				left.Bytes += messageBytes(message)
 			}
-			if !slices.Contains(seen, message.ID) {
-				size := messageBytes(message)
-				if count > 0 && ((limit.Bytes > 0 && taken+size > limit.Bytes) || (limit.Messages > 0 && count >= limit.Messages)) {
-					break
-				}
-				taken += size
-				count++
+			if !take {
+				continue
 			}
 			message.Deliveries++
 			message.DeliveredAt = &now
@@ -497,7 +529,7 @@ func (b *Bus) ReceiveBatch(pid string, redeliver bool, seen []string, limit Batc
 		}
 		b.record(pid, eventType, map[string]string{"id": message.ID, "from": message.From, "deliveries": strconv.Itoa(message.Deliveries)})
 	}
-	return out, err
+	return out, left, err
 }
 
 // Ack removes pid's messages with the given IDs: their receiver has

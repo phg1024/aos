@@ -278,32 +278,83 @@ func TestRedeliveryIgnoresTheCap(t *testing.T) {
 func TestReceiveBatchTakesWhatFitsInOrder(t *testing.T) {
 	f := newBoundsFixture(t)
 	f.fill(t, f.to, 5, 100)
-	first, err := f.bus.ReceiveBatch(f.to, false, nil, ipc.Batch{Bytes: 250})
-	if err != nil || len(first) != 2 {
-		t.Fatalf("first = %d, %v", len(first), err)
+	first, left, err := f.bus.ReceiveBatch(f.to, false, nil, ipc.Batch{Bytes: 250})
+	if err != nil || len(first) != 2 || left != (ipc.Waiting{Messages: 3, Bytes: 300}) {
+		t.Fatalf("first = %d, %+v, %v", len(first), left, err)
 	}
-	rest, err := f.bus.ReceiveBatch(f.to, false, nil, ipc.Batch{Bytes: 250})
-	if err != nil || len(rest) != 2 || rest[0].ID <= first[1].ID {
-		t.Fatalf("second = %+v, %v", rest, err)
+	held := []string{first[0].ID, first[1].ID}
+	rest, left, err := f.bus.ReceiveBatch(f.to, false, held, ipc.Batch{Bytes: 250})
+	if err != nil || len(rest) != 2 || rest[0].ID <= first[1].ID || left.Messages != 1 {
+		t.Fatalf("second = %+v, %+v, %v", rest, left, err)
 	}
+	held = append(held, rest[0].ID, rest[1].ID)
 	// What the receiver holds costs nothing, so it cannot starve what it does not.
-	again, err := f.bus.ReceiveBatch(f.to, true, []string{first[0].ID, first[1].ID, rest[0].ID, rest[1].ID}, ipc.Batch{Bytes: 150})
-	if err != nil || len(again) != 5 {
-		t.Fatalf("redelivered = %d, %v", len(again), err)
+	again, left, err := f.bus.ReceiveBatch(f.to, true, held, ipc.Batch{Bytes: 150})
+	if err != nil || len(again) != 5 || left.Messages != 0 {
+		t.Fatalf("redelivered = %d, %+v, %v", len(again), left, err)
+	}
+	// Without redeliver, what it holds does not come again.
+	if none, left, err := f.bus.ReceiveBatch(f.to, false, append(held, again[4].ID), ipc.Batch{}); err != nil || len(none) != 0 || left.Messages != 0 {
+		t.Fatalf("all held = %+v, %+v, %v", none, left, err)
 	}
 	// A message over the limit still comes, alone, so the mailbox always moves.
 	g := newBoundsFixture(t)
 	g.fill(t, g.to, 3, 1000)
-	if one, err := g.bus.ReceiveBatch(g.to, false, nil, ipc.Batch{Bytes: 10}); err != nil || len(one) != 1 {
-		t.Fatalf("over the limit = %d, %v", len(one), err)
+	one, left, err := g.bus.ReceiveBatch(g.to, false, nil, ipc.Batch{Bytes: 10})
+	if err != nil || len(one) != 1 || left != (ipc.Waiting{Messages: 2, Bytes: 2000}) {
+		t.Fatalf("over the limit = %d, %+v, %v", len(one), left, err)
 	}
-	if all, err := g.bus.ReceiveBatch(g.to, false, nil, ipc.Batch{}); err != nil || len(all) != 2 {
+	if all, _, err := g.bus.ReceiveBatch(g.to, false, []string{one[0].ID}, ipc.Batch{}); err != nil || len(all) != 2 {
 		t.Fatalf("no limit = %d, %v", len(all), err)
 	}
 	h := newBoundsFixture(t)
 	h.fill(t, h.to, 5, 1)
-	if some, err := h.bus.ReceiveBatch(h.to, false, nil, ipc.Batch{Messages: 3}); err != nil || len(some) != 3 {
-		t.Fatalf("by count = %d, %v", len(some), err)
+	if some, left, err := h.bus.ReceiveBatch(h.to, false, nil, ipc.Batch{Messages: 3}); err != nil || len(some) != 3 || left.Messages != 2 {
+		t.Fatalf("by count = %d, %+v, %v", len(some), left, err)
+	}
+}
+
+// Handed out before is not held now: a session that did not last took it, and this
+// one has never seen it. It comes at any step, in its turn.
+func TestReceiveBatchTakesDeliveredMailItDoesNotHold(t *testing.T) {
+	f := newBoundsFixture(t)
+	f.fill(t, f.to, 5, 1)
+	if _, err := f.bus.Receive(f.to, false); err != nil {
+		t.Fatal(err)
+	}
+	first, left, err := f.bus.ReceiveBatch(f.to, false, nil, ipc.Batch{Messages: 2})
+	if err != nil || len(first) != 2 || left.Messages != 3 || first[0].Deliveries != 2 {
+		t.Fatalf("first = %+v, %+v, %v", first, left, err)
+	}
+	rest, left, err := f.bus.ReceiveBatch(f.to, false, []string{first[0].ID, first[1].ID}, ipc.Batch{})
+	if err != nil || len(rest) != 3 || left.Messages != 0 {
+		t.Fatalf("rest = %+v, %+v, %v", rest, left, err)
+	}
+	// Receive itself, which replay uses, is as it was.
+	g := newBoundsFixture(t)
+	g.fill(t, g.to, 2, 1)
+	if _, err := g.bus.Receive(g.to, false); err != nil {
+		t.Fatal(err)
+	}
+	if none, err := g.bus.Receive(g.to, false); err != nil || len(none) != 0 {
+		t.Fatalf("Receive without redeliver = %+v, %v", none, err)
+	}
+	if all, err := g.bus.Receive(g.to, true); err != nil || len(all) != 2 {
+		t.Fatalf("Receive with redeliver = %+v, %v", all, err)
+	}
+}
+
+// Hold takes on nothing new, reports it, and still re-delivers what is held.
+func TestReceiveBatchHolds(t *testing.T) {
+	f := newBoundsFixture(t)
+	f.fill(t, f.to, 3, 10)
+	first, _, err := f.bus.ReceiveBatch(f.to, false, nil, ipc.Batch{Messages: 1})
+	if err != nil || len(first) != 1 {
+		t.Fatal(first, err)
+	}
+	got, left, err := f.bus.ReceiveBatch(f.to, true, []string{first[0].ID}, ipc.Batch{Hold: true})
+	if err != nil || len(got) != 1 || got[0].ID != first[0].ID || left != (ipc.Waiting{Messages: 2, Bytes: 20}) {
+		t.Fatalf("held = %+v, %+v, %v", got, left, err)
 	}
 }
 

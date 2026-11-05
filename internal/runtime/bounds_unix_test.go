@@ -925,6 +925,7 @@ func TestAFullMailboxFitsTheWindow(t *testing.T) {
 		{"300 after a handover", smallest, fits, 300, 4096},
 		{"unknown window, 64 at the cap", unknown, 1 << 30, 64, ipc.MaxBodyBytes},
 		{"unknown window, 256 small", unknown, 1 << 30, 256, 100},
+		{"unknown window, 256 of 350 bytes", unknown, 1 << 30, 256, 350},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			policy, window := c.policy, c.window
@@ -1097,34 +1098,26 @@ func writeMailboxes(t *testing.T, root string, mailboxes map[string][]ipc.Messag
 	}
 }
 
-// Batches stop a step archiving what it took in, and mail can still be archived
-// unread: a call that failed shows nothing, and later turns push it out. So the
-// notice and read_memory stay how it gets read.
-func TestMailArchivedAfterAFailedCall(t *testing.T) {
+// Batches count bodies, so framing can take a batch past what compaction keeps: a body
+// of newlines renders to about 3 times its bytes. Then mail is archived in the step it
+// arrives, and the notice and read_memory are how it gets read. TestArchivedMailIsNotShownUntilRead
+// has the rest of that path.
+func TestFramingCanStillArchiveMailUnread(t *testing.T) {
 	s := openMailState(t, t.TempDir())
 	worker, lead := s.spawn(t, "worker", "read_memory"), s.spawn(t, "lead")
-	first, err := s.bus.Send(lead.PID, worker.PID, "mail one")
+	first, err := s.bus.Send(lead.PID, worker.PID, strings.Repeat("\n", 1000))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var notes []string
-	backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
-		notes = append(notes, notesIn(request.History, "archived unread: "+first.ID)...)
-		if call <= 4 {
-			if _, err := s.bus.Send(lead.PID, worker.PID, fmt.Sprintf("more %d", call)); err != nil {
-				t.Error(err)
-			}
-			return runtime.GenerateResult{}, errors.New("connection reset")
-		}
-		return exitResult("done"), nil
-	}}
-	agent := s.agent(backend)
-	agent.Compaction = runtime.CompactionPolicy{MaxMessages: 3, KeepMessages: 2}
-	if _, err := agent.RunWithOptions(context.Background(), worker.PID, []runtime.Message{{Role: "user", Content: "work"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+	if _, err := s.bus.Send(lead.PID, worker.PID, strings.Repeat("\n", 1000)); err != nil {
 		t.Fatal(err)
 	}
-	if len(notes) == 0 {
-		t.Fatal("the first message should have been archived unread")
+	backend := play(exitResult("done"))
+	if _, err := s.agent(backend).Run(context.Background(), worker.PID, []runtime.Message{{Role: "user", Content: strings.Repeat("g", 3000)}}); err != nil {
+		t.Fatal(err)
+	}
+	if notes := notesIn(backend.histories[0], "archived unread: "+first.ID); len(notes) != 1 {
+		t.Fatalf("the first request: %.300s", historyContent(backend.histories[0]))
 	}
 	letters := s.events(t, ipc.DeadLetterEvent)
 	if !slices.ContainsFunc(letters, func(event kernel.Event) bool {
@@ -1209,4 +1202,396 @@ func TestARefusedCallCanBeRepeatedOnceThingsChange(t *testing.T) {
 			t.Fatalf("turn: %q", turn)
 		}
 	})
+}
+
+// Mail already in the mailbox when the model decides is not in its request if the
+// batch was full. It is told, so an exit over that mail is its own decision, which
+// stays its to make: the rest become dead letters, as they would for any exit.
+func TestAStepThatHoldsMailBackSaysSo(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		messages int
+		size     int
+		inFirst  int
+		note     string
+	}{
+		{"one over the count", 12, 20, 11, "1 more message is waiting in your mailbox, 20 bytes"},
+		{"mid-size bodies", 3, 12 * 1024, 1, "2 more messages are waiting in your mailbox, 24576 bytes"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := openMailState(t, t.TempDir())
+			receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+			for i := 0; i < c.messages; i++ {
+				if _, err := s.bus.Send(sender.PID, receiver.PID, strings.Repeat("y", c.size)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var first []runtime.Message
+			backend := &funcBackend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+				first = request.History
+				return exitResult("done"), nil
+			}}
+			if _, err := s.agent(backend).Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}); err != nil {
+				t.Fatal(err)
+			}
+			if got := notesIn(first, "message from "); len(got) != c.inFirst {
+				t.Fatalf("%d messages in the request, want %d", len(got), c.inFirst)
+			}
+			notes := notesIn(first, "runtime notice: ")
+			if len(notes) != 1 || !strings.Contains(notes[0], c.note) || !strings.Contains(notes[0], "If you exit now they go unread") {
+				t.Fatalf("notes = %q", notes)
+			}
+			// The notice sits after the mail, in the request with it.
+			if last := first[len(first)-1].Content; last != notes[0] {
+				t.Fatalf("the last entry = %.100s", last)
+			}
+			letters := s.events(t, ipc.DeadLetterEvent)
+			if len(letters) != c.messages-c.inFirst {
+				t.Fatalf("dead letters = %d", len(letters))
+			}
+			for _, letter := range letters {
+				if letter.Data["reason"] != ipc.ReasonUnread {
+					t.Fatalf("letter = %+v", letter.Data)
+				}
+			}
+		})
+	}
+	t.Run("no note when everything fits", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		for i := 0; i < 11; i++ {
+			s.bus.Send(sender.PID, receiver.PID, "short")
+		}
+		backend := play()
+		s.agent(backend).Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+		if notes := notesIn(backend.histories[0], "runtime notice: "); len(notes) != 0 {
+			t.Fatalf("notes = %q", notes)
+		}
+	})
+	t.Run("a wait is told too, and a resume goes on", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		for i := 0; i < 3; i++ {
+			s.bus.Send(sender.PID, receiver.PID, strings.Repeat("y", 12*1024))
+		}
+		waiting := play(runtime.GenerateResult{Action: runtime.GenerateAction{Type: "wait", Message: "later"}})
+		result, _ := s.agent(waiting).RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{})
+		if notes := notesIn(waiting.histories[0], "runtime notice: "); len(notes) != 1 {
+			t.Fatalf("notes = %q", notes)
+		}
+		resumed := play()
+		if _, err := s.agent(resumed).Resume(context.Background(), receiver.PID, result.CheckpointID, nil, runtime.RunOptions{}); err != nil && !errors.Is(err, runtime.ErrAgentBlocked) {
+			t.Fatal(err)
+		}
+		if got := notesIn(resumed.histories[0], "message from "); len(got) == 0 {
+			t.Fatalf("the resume took no mail: %+v", resumed.histories[0])
+		}
+	})
+}
+
+// countBodies is how many distinct numbered bodies have reached a request.
+func noteBodies(shown map[string]bool, history []runtime.Message) {
+	for _, body := range regexp.MustCompile(`BODY\d{3}`).FindAllString(historyContent(history), -1) {
+		shown[body] = true
+	}
+}
+
+// Mail handed out and not acknowledged, more than one batch of it, drains through
+// consecutive steps of one run: the old skip left it for the next Resume. Every way
+// a run can start on such a mailbox.
+func TestDeliveredMailDrainsThroughOneRun(t *testing.T) {
+	const count = 40
+	drain := func(t *testing.T, s mailState, start func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error)) {
+		t.Helper()
+		shown := map[string]bool{}
+		backend := &funcBackend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			noteBodies(shown, request.History)
+			if len(shown) == count {
+				return exitResult("read"), nil
+			}
+			return sayAction("reading"), nil
+		}}
+		agent := s.agent(backend)
+		agent.MaxSteps = 30
+		result, err := start(agent, runtime.RunOptions{ContinueOnToolError: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(shown) != count {
+			t.Fatalf("%d of %d bodies reached a request in %d calls", len(shown), count, backend.calls)
+		}
+		if backend.calls > 8 {
+			t.Fatalf("%d calls for %d messages", backend.calls, count)
+		}
+		if left := s.pendingFor(t, result.PID); len(left) != 0 {
+			t.Fatalf("%d left", len(left))
+		}
+	}
+	// handedOut has a process take the whole mailbox and die at its first call, with
+	// the session lost: the mail is delivered, and no checkpoint holds it.
+	handedOut := func(t *testing.T) (mailState, kernel.Process, string) {
+		t.Helper()
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		parked := s.park(t, receiver)
+		for i := 0; i < count; i++ {
+			if _, err := s.bus.Send(sender.PID, receiver.PID, fmt.Sprintf("BODY%03d", i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got, err := s.bus.Receive(receiver.PID, false); err != nil || len(got) != count {
+			t.Fatalf("receive = %d, %v", len(got), err)
+		}
+		return s, receiver, parked
+	}
+	t.Run("resume", func(t *testing.T) {
+		s, receiver, parked := handedOut(t)
+		drain(t, s, func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+			return agent.Resume(context.Background(), receiver.PID, parked, nil, options)
+		})
+	})
+	t.Run("plain recover", func(t *testing.T) {
+		s, receiver, parked := handedOut(t)
+		if _, err := s.kernel.Exit(receiver.PID, kernel.ExitStatus{Code: 1, Reason: "killed", Retryable: true, Checkpoint: parked}); err != nil {
+			t.Fatal(err)
+		}
+		drain(t, s, func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+			return agent.Recover(context.Background(), receiver.PID, parked, nil, options)
+		})
+	})
+	t.Run("rollback", func(t *testing.T) {
+		s, receiver, parked := handedOut(t)
+		s.mustExit(t, receiver.PID)
+		drain(t, s, func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+			options.Rollback = true
+			return agent.Recover(context.Background(), receiver.PID, parked, nil, options)
+		})
+	})
+	t.Run("an old state directory", func(t *testing.T) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		parked := s.park(t, receiver)
+		now := time.Now().UTC()
+		old := map[string][]ipc.Message{}
+		for i := 0; i < count; i++ {
+			old[receiver.PID] = append(old[receiver.PID], ipc.Message{ID: fmt.Sprintf("msg-%06d", i+1), From: sender.PID, To: receiver.PID, Body: fmt.Sprintf("BODY%03d", i), Timestamp: now, Deliveries: 1, DeliveredAt: &now})
+		}
+		writeMailboxes(t, s.root, old)
+		drain(t, s, func(agent *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
+			return agent.Resume(context.Background(), receiver.PID, parked, nil, options)
+		})
+	})
+}
+
+// A failed call shows nothing, so the next one sends what it sent: no more mail
+// comes until the batch has reached a model. That holds whether the run goes on after
+// the failure or exits and is recovered from the checkpoint it saved.
+func TestAFailedCallDoesNotGrowTheRequest(t *testing.T) {
+	const count = 40
+	setup := func(t *testing.T) (mailState, kernel.Process) {
+		s := openMailState(t, t.TempDir())
+		receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+		for i := 0; i < count; i++ {
+			if _, err := s.bus.Send(sender.PID, receiver.PID, fmt.Sprintf("BODY%03d", i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return s, receiver
+	}
+	bodies := func(history []runtime.Message) int {
+		return len(notesIn(history, "message from "))
+	}
+	t.Run("the run goes on", func(t *testing.T) {
+		s, receiver := setup(t)
+		var sizes []int
+		noted := 0
+		shown := map[string]bool{}
+		backend := &funcBackend{fn: func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			sizes = append(sizes, bodies(request.History))
+			if call <= 3 {
+				noted = len(notesIn(request.History, "runtime notice: "))
+				return runtime.GenerateResult{}, errors.New("connection reset")
+			}
+			noteBodies(shown, request.History)
+			if len(shown) == count {
+				return exitResult("read"), nil
+			}
+			return sayAction("reading"), nil
+		}}
+		agent := s.agent(backend)
+		agent.MaxSteps = 30
+		if _, err := agent.RunWithOptions(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}}, runtime.RunOptions{ContinueOnToolError: true}); err != nil {
+			t.Fatal(err)
+		}
+		if sizes[0] != 11 || sizes[1] != 11 || sizes[2] != 11 || sizes[3] != 11 {
+			t.Fatalf("mail in each request = %v", sizes)
+		}
+		if noted != 1 {
+			t.Fatalf("%d waiting notes after three failed calls", noted)
+		}
+		if len(shown) != count {
+			t.Fatalf("%d of %d after the failures", len(shown), count)
+		}
+	})
+	t.Run("recovered from its checkpoint", func(t *testing.T) {
+		s, receiver := setup(t)
+		var sizes []int
+		backend := &funcBackend{fn: func(_ int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			sizes = append(sizes, bodies(request.History))
+			return runtime.GenerateResult{}, errors.New("connection reset")
+		}}
+		agent := s.agent(backend)
+		agent.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+		result, err := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+		for i := 0; i < 3; i++ {
+			if err != nil || !result.ExitStatus.Retryable {
+				t.Fatalf("attempt %d = %+v, %v", i, result.ExitStatus, err)
+			}
+			result, err = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{})
+		}
+		for _, size := range sizes {
+			if size != sizes[0] {
+				t.Fatalf("mail in each request = %v", sizes)
+			}
+		}
+	})
+}
+
+// A call that fails on the request's size, above the compaction trigger: the next
+// attempts compact, and the process gets out and drains. Compaction is what shrinks
+// a request, and it runs in the step before the call, so it needs the trigger crossed.
+func TestACallFailingOnSizeGetsOut(t *testing.T) {
+	policy := runtime.ContextCompactionPolicy(58100, 0.8)
+	window := policy.MaxChars + 2000
+	s := openMailState(t, t.TempDir())
+	receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+	for i := 0; i < 64; i++ {
+		if _, err := s.bus.Send(sender.PID, receiver.PID, strings.Repeat("x", ipc.MaxBodyBytes)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	largest := 0
+	failures := 0
+	var live string
+	backend := windowed(window, &largest, func(int) runtime.GenerateResult {
+		if pending, _ := s.bus.Pending(); len(pending[live]) <= 3 {
+			return exitResult("read")
+		}
+		return sayAction("reading")
+	})
+	inner := backend.fn
+	backend.fn = func(call int, ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		live = request.Process.PID
+		result, err := inner(call, ctx, request)
+		if err != nil {
+			failures++
+		}
+		return result, err
+	}
+	agent := s.agent(backend)
+	agent.Compaction = policy
+	agent.MaxSteps = 500
+	agent.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+	result, err := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+	for i := 0; i < 200 && result.ExitStatus.Retryable; i++ {
+		result, err = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{})
+	}
+	if result.ExitStatus.Code != 0 {
+		t.Fatalf("exit = %+v, %v, after %d failures, %d calls", result.ExitStatus, err, failures, backend.calls)
+	}
+	if letters := s.events(t, ipc.DeadLetterEvent); len(letters) > 3 {
+		t.Fatalf("%d of 64 went unread: it did not drain", len(letters))
+	}
+	if failures == 0 {
+		t.Fatal("no call failed, so this tests nothing: shrink the window")
+	}
+	t.Logf("drained in %d calls, %d of them failed on size; largest request %d, window %d", backend.calls, failures, largest, window)
+}
+
+// The stated limit: a request over the real window while under the trigger never
+// compacts, so it fails the same way each time. Nothing is lost, and it does not grow.
+// A tool's output in that gap does the same. The trigger has to fit the window.
+func TestACallFailingBelowTheTriggerStays(t *testing.T) {
+	policy := runtime.ContextCompactionPolicy(58100, 0.8)
+	s := openMailState(t, t.TempDir())
+	receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+	for i := 0; i < 8; i++ {
+		if _, err := s.bus.Send(sender.PID, receiver.PID, strings.Repeat("x", ipc.MaxBodyBytes)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	largest := 0
+	agent := s.agent(windowed(10000, &largest, func(int) runtime.GenerateResult { return sayAction("reading") }))
+	agent.Compaction = policy
+	agent.BackendRetry = runtime.BackendRetryPolicy{Attempts: 1}
+	result, _ := agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+	first := largest
+	for i := 0; i < 3; i++ {
+		result, _ = agent.Recover(context.Background(), result.PID, result.CheckpointID, nil, runtime.RunOptions{})
+	}
+	if largest != first {
+		t.Fatalf("the request grew from %d to %d", first, largest)
+	}
+	if left := len(s.pendingFor(t, result.PID)); left != 8 {
+		t.Fatalf("%d of 8 kept", left)
+	}
+}
+
+// Under a record from before the bounds, a step takes all it is given and says nothing,
+// and mail handed out stays out until the next start, as it ran.
+func TestNoBusBoundsTakesAllAtOnce(t *testing.T) {
+	s := openMailState(t, t.TempDir())
+	receiver, sender := s.spawn(t, "receiver"), s.spawn(t, "sender")
+	// 40 KiB, over one batch under this policy.
+	for i := 0; i < 40; i++ {
+		s.bus.Send(sender.PID, receiver.PID, strings.Repeat("x", 1024))
+	}
+	backend := play()
+	agent := s.agent(backend)
+	agent.NoBusBounds = true
+	agent.Compaction = runtime.ContextCompactionPolicy(1<<20, 0.8)
+	agent.Run(context.Background(), receiver.PID, []runtime.Message{{Role: "user", Content: "go"}})
+	first := backend.histories[0]
+	if got := notesIn(first, "message from "); len(got) != 40 {
+		t.Fatalf("%d in the first request", len(got))
+	}
+	if notes := notesIn(first, "runtime notice: "); len(notes) != 0 {
+		t.Fatalf("notes = %q", notes)
+	}
+}
+
+// Mail archived before a read has been pushed out, not lost, and it must not stop the
+// rest: a receiver that has not read_memory'd one message still takes the next batch.
+func TestArchivedMailDoesNotHoldTheBatch(t *testing.T) {
+	s := openMailState(t, t.TempDir())
+	worker, lead := s.spawn(t, "worker"), s.spawn(t, "lead")
+	if _, err := s.bus.Send(lead.PID, worker.PID, strings.Repeat("\n", 1000)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.bus.Send(lead.PID, worker.PID, strings.Repeat("\n", 1000)); err != nil {
+		t.Fatal(err)
+	}
+	backend := &funcBackend{}
+	var later []runtime.Message
+	backend.fn = func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+		switch call {
+		case 1:
+			if len(notesIn(request.History, "archived unread: ")) != 1 {
+				t.Errorf("the first request: %.300s", historyContent(request.History))
+			}
+			if _, err := s.bus.Send(lead.PID, worker.PID, "the next one"); err != nil {
+				t.Error(err)
+			}
+			return sayAction("reading"), nil
+		case 2:
+			later = request.History
+		}
+		return exitResult("done"), nil
+	}
+	if _, err := s.agent(backend).Run(context.Background(), worker.PID, []runtime.Message{{Role: "user", Content: strings.Repeat("g", 3000)}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(historyContent(later), "the next one") {
+		t.Fatalf("the next message did not come:\n%.500s", historyContent(later))
+	}
 }

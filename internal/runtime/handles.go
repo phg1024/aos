@@ -10,6 +10,7 @@ import (
 
 	"aos/internal/artifact"
 	"aos/internal/capability"
+	"aos/internal/framing"
 	"aos/internal/ipc"
 	"aos/internal/kernel"
 	"aos/internal/tools"
@@ -24,24 +25,55 @@ var ErrArtifactNotReadable = errors.New("no artifact this process may read has t
 // the cap. It is less than a tool output because of what is left above the
 // compaction trigger when mail arrives: the smallest window
 // CompactionPolicy.Validate admits, at the default ratio of 0.8, has 34 KiB there
-// at EstimatedCharsPerToken. Bodies count, and framing adds to them.
+// at EstimatedCharsPerToken.
 const mailBatchBytes = 2 * ipc.MaxBodyBytes
 
-// mailBatch is what one step may take, at least one message: no more than
-// compaction would keep live, or it archives the mail before any model reads it,
-// and no more than fits above the trigger. The rest stays pending for the next
-// step. So a full mailbox cannot fail every request by landing in one, and it
-// takes one step per batch.
-func (r *AgentRuntime) mailBatch() ipc.Batch {
-	if r.NoBusBounds {
-		return ipc.Batch{}
-	}
+// mailBatch is what one step may take on, at least one message. It stays within
+// what compaction keeps live, or the mail would be archived before any model read
+// it: one place below KeepMessages leaves room for mailWaitingNote, and half of the
+// target leaves room for the framing around each body. Under the default policy,
+// for an unknown window, that is 2,000 bytes, so mail over it comes one message a
+// step. And no new mail comes while the last batch has not reached a model: a failed
+// call must not make the next request larger.
+func (r *AgentRuntime) mailBatch(session Session) ipc.Batch {
 	policy := r.compactionPolicy()
-	batch := ipc.Batch{Messages: policy.KeepMessages, Bytes: mailBatchBytes}
+	batch := ipc.Batch{Bytes: mailBatchBytes, Hold: slices.ContainsFunc(session.MailboxUnshown, func(mail UnshownMail) bool { return mail.Segment == "" })}
+	if policy.KeepMessages > 0 {
+		batch.Messages = max(policy.KeepMessages-1, 1)
+	}
 	if target := policy.targetChars(); target > 0 {
-		batch.Bytes = min(batch.Bytes, target)
+		batch.Bytes = min(batch.Bytes, target/2)
 	}
 	return batch
+}
+
+// takeMail is the step's mail. What a batch leaves behind is already in the mailbox
+// when the model decides, and would become dead letters if it exits, so the model is
+// told. The note is not mail, and it stays with the last turn when compaction cuts,
+// as a tool result does. A repeat of a line still in the history adds nothing, which
+// keeps a failing call's request the same.
+func (r *AgentRuntime) takeMail(pid string, session *Session, redeliver bool) ([]ipc.Message, []Message, error) {
+	if r.NoBusBounds {
+		messages, err := r.Bus.Receive(pid, redeliver)
+		return messages, nil, err
+	}
+	messages, waiting, err := r.Bus.ReceiveBatch(pid, redeliver, session.MailboxSeen, r.mailBatch(*session))
+	if err != nil || waiting.Messages == 0 {
+		return messages, nil, err
+	}
+	note := runtimeNote("tool", framing.RuntimeNotice, mailWaitingNote(waiting))
+	if slices.ContainsFunc(session.Messages, func(message Message) bool { return message.Content == note.Content }) {
+		return messages, nil, nil
+	}
+	return messages, []Message{note}, nil
+}
+
+func mailWaitingNote(waiting ipc.Waiting) string {
+	unit := "messages are"
+	if waiting.Messages == 1 {
+		unit = "message is"
+	}
+	return fmt.Sprintf("%s %d more %s waiting in your mailbox, %d bytes. A step takes in only so much mail, so they arrive at your next steps. If you exit now they go unread, and their senders are told.", framing.RuntimeNotice, waiting.Messages, unit, waiting.Bytes)
 }
 
 // readRights is what one process may read. A process may read a published
