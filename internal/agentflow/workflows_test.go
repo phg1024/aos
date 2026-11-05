@@ -22,6 +22,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 		"rasterizer-bunny.json":           "verifier",
 		"rasterizer-bunny-metal.json":     "verifier",
 		"rasterizer-bunny-metal-ipc.json": "verifier",
+		"rasterizer-bunny-cuda-ipc.json":  "verifier",
 		"pathtracer-bunny-metal.json":     "verifier",
 		"live-reviewed-merge.json":        "review_partner",
 	}
@@ -54,7 +55,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 // other agent can write where it writes, and it can write nothing where
 // the others work. With run confined, this holds for run as well.
 func TestRasterizerVerifiersAreIsolated(t *testing.T) {
-	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json", "rasterizer-bunny-metal-ipc.json", "pathtracer-bunny-metal.json"} {
+	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json", "rasterizer-bunny-metal-ipc.json", "rasterizer-bunny-cuda-ipc.json", "pathtracer-bunny-metal.json"} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
 		if err != nil {
 			t.Fatal(err)
@@ -177,5 +178,58 @@ func TestTheIPCMetalWorkflowWidensNothing(t *testing.T) {
 		if agent.Restart != nil || agent.MaxSteps == 0 || agent.MaxSteps > old.MaxSteps {
 			t.Errorf("%s: restart %+v, max steps %d, base %d", old.ID, agent.Restart, agent.MaxSteps, old.MaxSteps)
 		}
+	}
+}
+
+// The CUDA variant differs from the Metal one in its job: the same agents, tools and limits, a card
+// only for the roles that run GPU code, the toolchain read-only, and nothing about a machine.
+func TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds(t *testing.T) {
+	load := func(name string) (agentflow.WorkflowSpec, string) {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var spec agentflow.WorkflowSpec
+		if err := json.Unmarshal(raw, &spec); err != nil {
+			t.Fatal(err)
+		}
+		return spec, string(raw)
+	}
+	metal, _ := load("rasterizer-bunny-metal-ipc.json")
+	cuda, raw := load("rasterizer-bunny-cuda-ipc.json")
+	for _, absent := range []string{"/Users/", "/home/", "http://", "10.0.", ".local", "Metal", "metal", "GPU-"} {
+		if strings.Contains(raw, absent) {
+			t.Fatalf("the spec holds %q", absent)
+		}
+	}
+	gpu := []string{"__GPU_UUID__"}
+	wants := map[string][]string{"writer": gpu, "benchmarker": gpu, "verifier": gpu}
+	for _, old := range metal.Agents {
+		agent, ok := cuda.Agent(old.ID)
+		if !ok {
+			t.Fatalf("no %s", old.ID)
+		}
+		if !slices.Equal(agent.Capabilities.AllowGPU, wants[old.ID]) {
+			t.Errorf("%s allow_gpu = %v", old.ID, agent.Capabilities.AllowGPU)
+		}
+		if !slices.Equal(agent.Capabilities.Tools, old.Capabilities.Tools) || agent.Capabilities.AllowNetwork != old.Capabilities.AllowNetwork || agent.Capabilities.UnconfinedRun || agent.MaxSteps != old.MaxSteps || agent.Restart != nil {
+			t.Errorf("%s changed from the Metal variant: %+v", old.ID, agent.Capabilities)
+		}
+		if len(agent.Capabilities.WritePaths) != len(old.Capabilities.WritePaths) {
+			t.Errorf("%s write paths = %v", old.ID, agent.Capabilities.WritePaths)
+		}
+		toolchain := slices.IndexFunc(agent.Mounts, func(mount capability.Mount) bool { return mount.HostPath == "__CUDA_HOME__" })
+		if toolchain < 0 || !agent.Mounts[toolchain].ReadOnly {
+			t.Errorf("%s mounts = %+v", old.ID, agent.Mounts)
+		}
+		for _, write := range append(agent.Capabilities.WritePaths, agent.Delegable.WritePaths...) {
+			if strings.HasPrefix(write, "__CUDA_HOME__") || strings.HasPrefix(write, "__AOS_ROOT__") {
+				t.Errorf("%s can write %s", old.ID, write)
+			}
+		}
+	}
+	coordinator, _ := cuda.Agent("coordinator")
+	if !slices.Equal(coordinator.Delegable.AllowGPU, gpu) {
+		t.Fatalf("the coordinator cannot grant the card: %+v", coordinator.Delegable)
 	}
 }

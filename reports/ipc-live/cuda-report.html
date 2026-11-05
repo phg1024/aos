@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS allow_gpu and the CUDA Variant</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>allow_gpu and the CUDA Variant</h1>
+    <p><code>allow_gpu</code> lets a confined <code>run</code> on Linux reach named NVIDIA cards. <code>workflows/rasterizer-bunny-cuda-ipc.json</code> is the mail and handle design on CUDA. <b>No real kernel has run through it, and no real model has been near it.</b></p>
+    <ul>
+      <li><span class="good">Through aos's own helper on the target machine:</span> with the grant, <code>cuInit</code> returns 0 and <code>nvidia-smi -L</code> lists the card; without it, 304 and exit 255.</li>
+      <li><span class="good">A dry run through the real <code>aos run</code> there:</span> <code>nvcc</code> inside the sandbox from a read-only toolchain, a too-large refusal, a handle, a verifier's wait, a read to the end, a verdict. It allocated no GPU memory.</li>
+      <li><span class="bad">Before a live run:</span> an API key in the environment reaches every model-written command. See section 4.</li>
+    </ul>
+  </div>
+
+  <h2>1. allow_gpu</h2>
+  <p><b>The form:</b> <code>"allow_gpu": ["GPU-&lt;uuid&gt;"]</code>, in a capability set. Empty, the default, means no GPU, and there is no way to say every card. A child gets the cards it asks for that its parent can grant; Recover keeps them. The UUID is resolved at each <code>run</code> from the driver's own description of its cards. One not on the machine refuses the run, as an unconfinable command is refused.</p>
+  <table>
+    <tr><th>What a grant opens</th><th>Why</th></tr>
+    <tr><td><code>/dev/nvidiaN</code>, the named card's</td><td>The card</td></tr>
+    <tr><td><code>/dev/nvidiactl</code></td><td>The driver's control node, shared by every card</td></tr>
+    <tr><td><code>/dev/nvidia-uvm</code></td><td>Unified memory, shared by every card</td></tr>
+    <tr><td class="warn">All of <code>/proc</code>, writable</td><td><code>cuInit</code> returns 304 unless it can write <code>/proc/self/task/&lt;tid&gt;/comm</code>. Measured, and a <code>pthread_setname_np</code> shim did not get past it. Landlock grants by path, and a new thread's path is not known in advance. The user decided this. Against a test process of the same user, measured: writing <code>oom_score_adj</code> and <code>coredump_filter</code> became allowed; <code>comm</code>, <code>clear_refs</code>, and reading <code>environ</code> and <code>mem</code> stayed refused</td></tr>
+  </table>
+  <p>Left out: <code>nvidia-uvm-tools</code> (profilers), <code>nvidia-modeset</code> (display), <code>nvidia-caps</code> (MIG). <code>cuInit</code> and <code>nvidia-smi</code> work without them; a real kernel has not been run yet.</p>
+
+  <h2>2. What It Does Not Do</h2>
+  <ul>
+    <li><span class="bad">The rule stops at the device.</span> Landlock cannot isolate what a process does on the GPU, or between two users of a card. No budget meters GPU use.</li>
+    <li><span class="bad">Per card is enforced only for the card's own node.</span> On a machine with two cards, another card's <code>/dev/nvidiaN</code> stays closed, but <code>nvidiactl</code> and <code>nvidia-uvm</code> are shared, and Landlock grants a file, not an ioctl on it. A process can at least see that the other card exists. What more it can do through them <b>has not been measured</b>: this machine has one card, and the two-card machine is off limits for now. So do not treat this as protecting a second card's workload until it is. <code>CUDA_VISIBLE_DEVICES</code> is a convenience that the sandbox sets, and a process can change it.</li>
+    <li><b>macOS:</b> no confinement of the GPU exists, and every confined command reaches Metal with or without this. An <code>allow_gpu</code> entry there refuses the run, since it names an NVIDIA card that is not there, and its presence never implies Metal is held back. The profile does not change: <code>TestDevicesChangeNothingOnMacOS</code>.</li>
+    <li><b>Off by default:</b> a set without it marshals as before, and a policy without devices adds no rule. No marker is needed, as no old record can hold it.</li>
+  </ul>
+
+  <h2>3. The Workflow</h2>
+  <ul>
+    <li><b>Same design as the Metal variant,</b> with its biases: see <code>report.html</code>, section 4. <code>allow_gpu</code> on writer, benchmarker and verifier, which run GPU code. The coordinator only delegates it. A read-only <code>__CUDA_HOME__</code>, since a toolchain under home is not on the sandbox's read list.</li>
+    <li><b>No machine in it.</b> <code>__RUN_DIR__</code>, <code>__AOS_ROOT__</code>, <code>__CUDA_HOME__</code> and <code>__GPU_UUID__</code> are filled in at the start. <code>TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds</code> checks for addresses and home directories.</li>
+    <li><b>Differences that matter:</b> the CPU reference's binary and timings come from another machine, so the verifier rebuilds the baseline, and the benchmarker times a baseline here. Its old numbers are recorded, not compared.</li>
+    <li><b>The raw record</b> gains the card's memory and utilization before and after each trial, since others may use the card, and uses <code>/usr/bin/time -v</code>. It was 23,869 bytes in the dry run, without a real program's output.</li>
+  </ul>
+
+  <h2>4. Before a Live Run</h2>
+  <ul>
+    <li><span class="bad">The API key.</span> aos reads it only from its environment, and <code>run</code> inherits that environment, so a model-written <code>env</code> prints it. Measured: the command saw the variable. A mode 600 file does not change this, since the job has to export it for aos. The preflight needs no key. Not fixed here.</li>
+    <li><span class="warn">Signals.</span> A confined command on Linux can signal any process of the same user: <code>kill -0</code> against a process outside the sandbox was allowed. Landlock's signal scoping exists from ABI 6, and AOS does not use it. The job runs as a user who also runs other services. Not fixed here.</li>
+    <li><span class="warn">The placement is outside what the worker advertises.</span> That worker advertises no GPU to Ray. This job uses its card regardless, by the user's decision, for this test only, with the other service unloaded by its owner during the window.</li>
+  </ul>
+
+  <h2>5. Running It</h2>
+  <p>Scripts in <code>reports/ipc-live/cuda/</code>: <code>sync.sh</code> puts what a run needs on the machine, <code>submit.sh</code> submits and refuses without entrypoint resources, and <code>job.sh</code> is the one job. Everything about the cluster comes from the environment. <code>job.sh</code> finds the card's UUID at start and refuses unless exactly one matches. A kernel check runs first and fails fast, and the job ends under a time limit.</p>
+  <ul>
+    <li><b>Bounds:</b> step limits as in the Metal variant, a 60-minute advisory budget, and a job limit of 5,400 seconds by default, plus 60 before a hard kill. The preflight's own limit should be 300 seconds: the dry run took 7 seconds, and the 20 kernel runs and the check add to it, unmeasured.</li>
+    <li><b>What survives a killed job:</b> the state directory is written as it goes, on local disk, and <code>analyze.py</code> reads it. <code>job.ended</code> is written on any exit the script can catch: its absence, with the job not running, means a hard kill. Ray's status says the rest. Nothing resumes it.</li>
+    <li><b>When it ends:</b> the script kills anything of its own on the card and prints what is left there.</li>
+  </ul>
+
+  <h2>6. Evidence</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Package list, 16 packages</td><td class="good">3 runs: 16 of 16 pass each time, with no orphaned helper. <code>internal/runtime</code> about 200 s beside the others. The earlier <code>internal/lease</code> flake did not recur here, and is not fixed</td></tr>
+    <tr><td>Probes, 25 trials</td><td class="good">All pass; B4 lost 0, duplicated 0, corrupted 0, out of order 0</td></tr>
+    <tr><td>Old records</td><td class="good">31/31, 8/8, 9/9 and 7/7 identical. The book session's three: identical, refused, diverges at call 29, as before</td></tr>
+    <tr><td>On the target machine, through aos's helper</td><td class="good"><code>TestLandlockConfinesRun</code>, <code>TestAGPUGrantGrantsNothingElse</code> (state directory, an outside path, <code>/dev/dri/*</code>, <code>nvidia-uvm-tools</code>, <code>nvidia-modeset</code>, other processes' <code>environ</code>, network), and <code>TestGPUNeedsItsGrant</code> all pass. The test binary was removed afterwards</td></tr>
+    <tr><td>Mutations</td><td class="good">14 on this machine and 4 Linux ones on the target, built from mutated copies: no <code>/proc</code> grant, <code>/proc</code> for all, devices not granted, all of <code>/dev</code>. All fail. One passed at first, a test of <code>CUDA_VISIBLE_DEVICES</code>, and was tightened</td></tr>
+    <tr><td>Dry run through <code>aos run</code></td><td class="good">Exit 0, in a bare environment as the Ray service has. <code>cuInit</code> 0 in each role, <code>nvcc</code> and the baseline's <code>g++</code> built in the sandbox, the verifier's workspace read-only. 7 of the contract's situations exercised. Nothing of ours on the card</td></tr>
+  </table>
+
+  <h2>7. Not Done</h2>
+  <ul>
+    <li>A real CUDA kernel: it waits for the window. So <code>nvidia-uvm-tools</code> and the others being unneeded holds for <code>cuInit</code> and <code>nvidia-smi</code> only.</li>
+    <li>A second card, through the shared nodes.</li>
+    <li>The key and signal findings in section 4.</li>
+    <li>A full run through Ray: only one trivial job has been submitted, and it failed on my own quoting, after landing on the right node.</li>
+    <li>Any run with a real model.</li>
+  </ul>
+</body>
+</html>
