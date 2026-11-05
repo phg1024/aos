@@ -19,11 +19,19 @@ import (
 // binary re-executes itself with helperArg, restricts itself, then execs
 // the shell, which inherits the restriction.
 //
-// Limits: Landlock cannot deny a subtree inside a granted one, so a policy
-// whose read-only or hidden root lies inside a read or write root is
-// refused; it does not cover UDP, so without network a command can still
-// send UDP (DNS lookups included); and before ABI 4 network cannot be
-// confined at all, so a policy without network is refused there.
+// Landlock cannot deny a subtree inside a granted one, so a policy whose
+// read-only or hidden root lies inside a read or write root is refused. Before
+// ABI 4 it cannot confine network, so a policy without network is refused there.
+// It does not stop a connection to a Unix socket by path, nor UDP: the helper
+// also installs a seccomp filter, described in filter.go. A filter it cannot
+// install refuses the run.
+//
+// From ABI 6 a command cannot signal, or reach an abstract Unix socket of, a
+// process outside its own sandbox. Below ABI 6 signals stay open and the helper
+// says so on stderr, which reaches the tool result and the run record, as with
+// the other rights older kernels lack. A device grant is refused there: the
+// filter lets it make seqpacket sockets, and nothing would keep those from other
+// programs' abstract sockets.
 
 const (
 	helperArg = "__aos_sandbox_exec"
@@ -34,7 +42,12 @@ const (
 	sysLandlockRestrictSelf  = 446
 	createRulesetVersion     = 1
 	rulePathBeneath          = 1
+	prGetSeccomp             = 21
+	prSetSeccomp             = 22
+	seccompModeFilter        = 2
 	prSetNoNewPrivs          = 38
+	sysCloseRange            = 436
+	closeRangeCloexec        = 1 << 2
 	oPath                    = 0x200000 // O_PATH, missing from syscall on some arches
 
 	accessExecute    = 1 << 0
@@ -56,6 +69,10 @@ const (
 
 	accessNetBindTCP    = 1 << 0
 	accessNetConnectTCP = 1 << 1
+
+	scopeAbstractUnixSocket = 1 << 0
+	scopeSignal             = 1 << 1
+	scopeABI                = 6
 )
 
 var systemReadPaths = []string{"/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/etc", "/opt", "/proc", "/sys", "/dev", "/run"}
@@ -107,12 +124,24 @@ func Command(ctx context.Context, p Policy, dir, command string) (*exec.Cmd, err
 
 // check refuses what Landlock cannot express here.
 func check(p Policy) error {
-	version := abi()
+	if _, _, errno := syscall.Syscall(syscall.SYS_PRCTL, prGetSeccomp, 0, 0); errno != 0 {
+		return fmt.Errorf("%w: seccomp is not enabled in this kernel: %v", ErrUnavailable, errno)
+	}
+	if _, err := socketFilter(runtime.GOARCH, p); err != nil {
+		return err
+	}
+	return checkABI(abi(), p)
+}
+
+func checkABI(version int, p Policy) error {
 	if version < 1 {
 		return fmt.Errorf("%w: Landlock is not enabled in this kernel", ErrUnavailable)
 	}
 	if !p.Network && version < 4 {
 		return fmt.Errorf("%w: Landlock ABI %d cannot deny network (needs 4)", ErrUnavailable, version)
+	}
+	if len(p.Devices) > 0 && version < scopeABI {
+		return fmt.Errorf("%w: Landlock ABI %d cannot keep a device grant from other programs' abstract sockets (needs %d)", ErrUnavailable, version, scopeABI)
 	}
 	if p.Temp == "" {
 		return fmt.Errorf("%w: no scratch directory", ErrUnavailable)
@@ -149,6 +178,15 @@ func confineAndExec(args []string) int {
 		fmt.Fprintln(os.Stderr, "aos sandbox:", err)
 		return 126
 	}
+	if warning := scopeWarning(abi()); warning != "" {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+	// A socket aos was handed by whatever started it would carry straight past the
+	// filter. Only the command's own stdin, stdout and stderr go on.
+	if _, _, errno := syscall.Syscall(sysCloseRange, 3, ^uintptr(0), closeRangeCloexec); errno != 0 {
+		fmt.Fprintln(os.Stderr, "aos sandbox: close_range:", errno)
+		return 126
+	}
 	var env []string
 	for _, entry := range os.Environ() {
 		if len(entry) < len(policyEnv)+1 || entry[:len(policyEnv)+1] != policyEnv+"=" {
@@ -158,6 +196,32 @@ func confineAndExec(args []string) int {
 	err := syscall.Exec(args[0], args, env)
 	fmt.Fprintln(os.Stderr, "aos sandbox: exec:", err)
 	return 126
+}
+
+// scopeWarning is what a command is told when its kernel cannot keep it from
+// signalling other processes.
+func scopeWarning(version int) string {
+	if version >= scopeABI {
+		return ""
+	}
+	return fmt.Sprintf("aos sandbox: warning: Landlock ABI %d cannot scope signals (needs %d), so this command can signal this user's other processes", version, scopeABI)
+}
+
+// installSocketFilter must run on the thread that will exec, after no_new_privs.
+func installSocketFilter(p Policy) error {
+	program, err := socketFilter(runtime.GOARCH, p)
+	if err != nil {
+		return err
+	}
+	header := struct {
+		length uint16
+		filter *bpfInstruction
+	}{uint16(len(program)), &program[0]}
+	if _, _, errno := syscall.Syscall(syscall.SYS_PRCTL, prSetSeccomp, seccompModeFilter, uintptr(unsafe.Pointer(&header))); errno != 0 {
+		return fmt.Errorf("seccomp socket filter: %w", errno)
+	}
+	runtime.KeepAlive(program)
+	return nil
 }
 
 func restrict(p Policy) error {
@@ -176,7 +240,7 @@ func restrict(p Policy) error {
 		handled |= accessIoctlDev
 	}
 	readRights := uint64(accessExecute | accessReadFile | accessReadDir)
-	attr := make([]byte, 16)
+	attr := make([]byte, 24)
 	binary.LittleEndian.PutUint64(attr[0:], handled)
 	size := 8
 	if version >= 4 {
@@ -184,6 +248,10 @@ func restrict(p Policy) error {
 		if !p.Network {
 			binary.LittleEndian.PutUint64(attr[8:], accessNetBindTCP|accessNetConnectTCP)
 		}
+	}
+	if version >= scopeABI {
+		size = 24
+		binary.LittleEndian.PutUint64(attr[16:], scopeAbstractUnixSocket|scopeSignal)
 	}
 	fd, _, errno := syscall.Syscall(sysLandlockCreateRuleset, uintptr(unsafe.Pointer(&attr[0])), uintptr(size), 0)
 	if errno != 0 {
@@ -239,5 +307,5 @@ func restrict(p Policy) error {
 	if _, _, errno := syscall.Syscall(sysLandlockRestrictSelf, fd, 0, 0); errno != 0 {
 		return fmt.Errorf("landlock_restrict_self: %w", errno)
 	}
-	return nil
+	return installSocketFilter(p)
 }

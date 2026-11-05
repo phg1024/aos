@@ -97,9 +97,18 @@ func resolveGPUs(root string, uuids []string) ([]string, error) {
 	return devices, nil
 }
 
-// Environment is the command's environment: the caller's, with temporary
-// and cache directories moved into the scratch directory, since the usual
-// per-user ones are shared with other processes and not writable.
+// isModelKey reports whether an environment variable holds a model API key: the
+// names the inference code reads, and AOS_KEY_* for keys kept beside them. A model's
+// own commands must not have the key that pays for it. Nothing in a policy can name
+// these back in. A profile's api_key_env can be any name, so aos-tui removes those
+// from its own environment once it has read them.
+func isModelKey(name string) bool {
+	return name == "AOS_LLM_API_KEY" || name == "AOS_VLLM_API_KEY" || strings.HasPrefix(name, "AOS_KEY_")
+}
+
+// Environment is the command's environment: the caller's, without model API keys,
+// and with temporary and cache directories moved into the scratch directory, since
+// the usual per-user ones are shared with other processes and not writable.
 func (p Policy) Environment(base []string) []string {
 	overrides := map[string]string{
 		"TMPDIR":   p.Temp,
@@ -117,7 +126,7 @@ func (p Policy) Environment(base []string) []string {
 	var env []string
 	for _, entry := range base {
 		name, _, _ := strings.Cut(entry, "=")
-		if _, replaced := overrides[name]; !replaced {
+		if _, replaced := overrides[name]; !replaced && !isModelKey(name) {
 			env = append(env, entry)
 		}
 	}

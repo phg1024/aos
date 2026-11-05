@@ -62,3 +62,22 @@ func TestEnvironmentNamesVisibleGPUsOnlyWhenGranted(t *testing.T) {
 		t.Fatalf("granted = %v", granted)
 	}
 }
+
+// No policy can name a key back in: there is no field for it, and the temporary and
+// cache overrides are fixed.
+func TestEnvironmentRemovesModelKeys(t *testing.T) {
+	got := Policy{Temp: "/t", VisibleGPUs: []string{"GPU-a"}}.Environment([]string{
+		"AOS_LLM_API_KEY=a", "AOS_VLLM_API_KEY=b", "AOS_KEY_ANYTHING=c", "PATH=/bin", "AOS_LLM_MODEL=m",
+	})
+	joined := strings.Join(got, "\n")
+	for _, name := range []string{"AOS_LLM_API_KEY", "AOS_VLLM_API_KEY", "AOS_KEY_ANYTHING"} {
+		if strings.Contains(joined, name) {
+			t.Errorf("%s stayed:\n%s", name, joined)
+		}
+	}
+	for _, kept := range []string{"PATH=/bin", "AOS_LLM_MODEL=m", "TMPDIR=/t", "CUDA_VISIBLE_DEVICES=GPU-a"} {
+		if !slices.Contains(got, kept) {
+			t.Errorf("%s is gone:\n%s", kept, joined)
+		}
+	}
+}
