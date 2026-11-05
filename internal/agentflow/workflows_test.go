@@ -197,13 +197,14 @@ func TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds(t *testing.T) {
 	}
 	metal, _ := load("rasterizer-bunny-metal-ipc.json")
 	cuda, raw := load("rasterizer-bunny-cuda-ipc.json")
-	for _, absent := range []string{"/Users/", "/home/", "http://", "10.0.", ".local", "Metal", "metal", "GPU-"} {
+	for _, absent := range []string{"/Users/", "/home/", "http://", "10.0.", ".local", "Metal", "metal", "GPU-", "web_", "on the web", "allow_network", "unconfined_run"} {
 		if strings.Contains(raw, absent) {
 			t.Fatalf("the spec holds %q", absent)
 		}
 	}
 	gpu := []string{"__GPU_UUID__"}
 	wants := map[string][]string{"writer": gpu, "benchmarker": gpu, "verifier": gpu}
+	worst := 0
 	for _, old := range metal.Agents {
 		agent, ok := cuda.Agent(old.ID)
 		if !ok {
@@ -212,8 +213,18 @@ func TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds(t *testing.T) {
 		if !slices.Equal(agent.Capabilities.AllowGPU, wants[old.ID]) {
 			t.Errorf("%s allow_gpu = %v", old.ID, agent.Capabilities.AllowGPU)
 		}
-		if !slices.Equal(agent.Capabilities.Tools, old.Capabilities.Tools) || agent.Capabilities.AllowNetwork != old.Capabilities.AllowNetwork || agent.Capabilities.UnconfinedRun || agent.MaxSteps != old.MaxSteps || agent.Restart != nil {
+		offline := slices.DeleteFunc(slices.Clone(old.Capabilities.Tools), func(tool string) bool { return strings.HasPrefix(tool, "web_") })
+		if !slices.Equal(agent.Capabilities.Tools, offline) || agent.Restart != nil {
 			t.Errorf("%s changed from the Metal variant: %+v", old.ID, agent.Capabilities)
+		}
+		// A command with network here can reach what has no authentication on the LAN, and
+		// leave the sandbox that way. Nothing can pass it on either.
+		if agent.Capabilities.AllowNetwork || agent.Delegable.AllowNetwork || agent.Capabilities.UnconfinedRun || agent.Delegable.UnconfinedRun || len(agent.Capabilities.NetworkAllow) != 0 {
+			t.Errorf("%s can reach the network: %+v, delegable %+v", old.ID, agent.Capabilities, agent.Delegable)
+		}
+		worst += agent.MaxSteps
+		if old.ID != "coordinator" {
+			worst += agent.MaxSteps
 		}
 		if len(agent.Capabilities.WritePaths) != len(old.Capabilities.WritePaths) {
 			t.Errorf("%s write paths = %v", old.ID, agent.Capabilities.WritePaths)
@@ -227,6 +238,10 @@ func TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds(t *testing.T) {
 				t.Errorf("%s can write %s", old.ID, write)
 			}
 		}
+	}
+	// Two rounds of three phases and the coordinator, against about 200 calls.
+	if worst > 200 {
+		t.Errorf("the step limits sum to %d", worst)
 	}
 	coordinator, _ := cuda.Agent("coordinator")
 	if !slices.Equal(coordinator.Delegable.AllowGPU, gpu) {

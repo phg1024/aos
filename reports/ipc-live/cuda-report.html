@@ -22,7 +22,7 @@
     <ul>
       <li><span class="good">Through aos's own helper on the target machine:</span> with the grant, <code>cuInit</code> returns 0 and <code>nvidia-smi -L</code> lists the card; without it, 304 and exit 255.</li>
       <li><span class="good">A dry run through the real <code>aos run</code> there:</span> <code>nvcc</code> inside the sandbox from a read-only toolchain, a too-large refusal, a handle, a verifier's wait, a read to the end, a verdict. It allocated no GPU memory.</li>
-      <li><span class="bad">Before a live run:</span> an API key in the environment reaches every model-written command. See section 4.</li>
+      <li><span class="bad">Before a live run:</span> a confined command can reach the user's service manager, and an API key in the environment reaches every model-written command. See section 4.</li>
     </ul>
   </div>
 
@@ -50,11 +50,15 @@
     <li><b>Same design as the Metal variant,</b> with its biases: see <code>report.html</code>, section 4. <code>allow_gpu</code> on writer, benchmarker and verifier, which run GPU code. The coordinator only delegates it. A read-only <code>__CUDA_HOME__</code>, since a toolchain under home is not on the sandbox's read list.</li>
     <li><b>No machine in it.</b> <code>__RUN_DIR__</code>, <code>__AOS_ROOT__</code>, <code>__CUDA_HOME__</code> and <code>__GPU_UUID__</code> are filled in at the start. <code>TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds</code> checks for addresses and home directories.</li>
     <li><b>Differences that matter:</b> the CPU reference's binary and timings come from another machine, so the verifier rebuilds the baseline, and the benchmarker times a baseline here. Its old numbers are recorded, not compared.</li>
+    <li><b>No network, anywhere.</b> No agent or <code>delegable</code> holds <code>allow_network</code>, and the web tools are gone from the grants and the prompts, so nothing can be granted down: a child's set is cut to what its parent can grant. The test checks this. With network, a model-written command could reach the LAN, where the cluster's Jobs API has no authentication, and leave the sandbox that way. <span class="warn">The Metal variant inherited the writer's and coordinator's network from the original workflow.</span> It is left alone, since it is not scheduled and its prompts lean on the web, so that is not a one-line change.</li>
+    <li><b>Bias from that:</b> the old runs had web access, and this one does not, so a model here works from what it knows and from the sources on disk.</li>
+    <li><b>Sized for the window.</b> A first version and one optimization round, with the verifier running in the first round whatever the benchmark shows, and checking the raw record before it renders. Step limits: coordinator 30, writer 35, benchmarker 15, verifier 20, per process. Two rounds: 30 + 2 x (35 + 15 + 20) = <b>170 calls</b>. One repeated verifier and benchmarker makes 205. It is not a hard total: the job limit is. The assumption is about 25 seconds a call, from the book session's reading of this model family's earlier ledgers: means of 16.4, 19.8 and 29.1 s, median about 10 s, so 170 calls is about 71 minutes and 5,400 s holds about 216. A process that hits its limit is data.</li>
     <li><b>The raw record</b> gains the card's memory and utilization before and after each trial, since others may use the card, and uses <code>/usr/bin/time -v</code>. It was 23,869 bytes in the dry run, without a real program's output.</li>
   </ul>
 
   <h2>4. Before a Live Run</h2>
   <ul>
+    <li><span class="bad">Out of the sandbox through the user's service manager.</span> With network off, TCP is refused, to the cluster's Jobs API and to loopback alike. But Landlock does not cover connecting to a Unix socket by its path. Measured with the sandbox's rules on the target machine: <code>/run/user/&lt;uid&gt;/bus</code> and <code>systemd/private</code> connect, and <code>systemctl --user</code> answers, and reports the state of the Ray service. So <code>systemd-run --user</code> should start a command outside the sandbox. That was not tried, since it would really start one. Removing network does not close this, and no spec can. UDP also stays open, as <code>sandbox_linux.go</code> says.</li>
     <li><span class="bad">The API key.</span> aos reads it only from its environment, and <code>run</code> inherits that environment, so a model-written <code>env</code> prints it. Measured: the command saw the variable. A mode 600 file does not change this, since the job has to export it for aos. The preflight needs no key. Not fixed here.</li>
     <li><span class="warn">Signals.</span> A confined command on Linux can signal any process of the same user: <code>kill -0</code> against a process outside the sandbox was allowed. Landlock's signal scoping exists from ABI 6, and AOS does not use it. The job runs as a user who also runs other services. Not fixed here.</li>
     <li><span class="warn">The placement is outside what the worker advertises.</span> That worker advertises no GPU to Ray. This job uses its card regardless, by the user's decision, for this test only, with the other service unloaded by its owner during the window.</li>
@@ -63,7 +67,7 @@
   <h2>5. Running It</h2>
   <p>Scripts in <code>reports/ipc-live/cuda/</code>: <code>sync.sh</code> puts what a run needs on the machine, <code>submit.sh</code> submits and refuses without entrypoint resources, and <code>job.sh</code> is the one job. Everything about the cluster comes from the environment. <code>job.sh</code> finds the card's UUID at start and refuses unless exactly one matches. A kernel check runs first and fails fast, and the job ends under a time limit.</p>
   <ul>
-    <li><b>Bounds:</b> step limits as in the Metal variant, a 60-minute advisory budget, and a job limit of 5,400 seconds by default, plus 60 before a hard kill. The preflight's own limit should be 300 seconds: the dry run took 7 seconds, and the 20 kernel runs and the check add to it, unmeasured.</li>
+    <li><b>Bounds:</b> the step limits in section 3, a 60-minute advisory budget, and a job limit of 5,400 seconds by default, plus 60 before a hard kill. The preflight's own limit should be 300 seconds: the dry run took 7 seconds, and the 20 kernel runs and the check add to it, unmeasured.</li>
     <li><b>What survives a killed job:</b> the state directory is written as it goes, on local disk, and <code>analyze.py</code> reads it. <code>job.ended</code> is written on any exit the script can catch: its absence, with the job not running, means a hard kill. Ray's status says the rest. Nothing resumes it.</li>
     <li><b>When it ends:</b> the script kills anything of its own on the card and prints what is left there.</li>
   </ul>
@@ -83,7 +87,7 @@
   <ul>
     <li>A real CUDA kernel: it waits for the window. So <code>nvidia-uvm-tools</code> and the others being unneeded holds for <code>cuInit</code> and <code>nvidia-smi</code> only.</li>
     <li>A second card, through the shared nodes.</li>
-    <li>The key and signal findings in section 4.</li>
+    <li>The service manager, key and signal findings in section 4.</li>
     <li>A full run through Ray: only one trivial job has been submitted, and it failed on my own quoting, after landing on the right node.</li>
     <li>Any run with a real model.</li>
   </ul>
