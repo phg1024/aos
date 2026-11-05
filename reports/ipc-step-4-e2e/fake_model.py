@@ -59,6 +59,10 @@ def receiver():
     offset = "0"
     while True:
         text = yield tool("read_artifact", id=handle["id"], offset=offset)
+        # While mail keeps coming, compaction under the default policy archives a page before
+        # any call has it, and all the request holds is a reference: read it again.
+        if "read_artifact:map[" not in text:
+            continue
         match = re.search(r"next_offset:(\d+)", text[-200:])
         if not match:
             break
@@ -82,6 +86,11 @@ class Handler(BaseHTTPRequestHandler):
         messages = request["messages"]
         agent = re.search(r"Agent instructions:\n(\S+)", messages[0]["content"]).group(1)
         last = messages[-1]["content"]
+        # Mail and notes can come after a tool's result, so a reader looks for the result.
+        for message in reversed(messages):
+            if "read_artifact:map[" in str(message["content"]):
+                last = message["content"]
+                break
         script = scripts[agent]
         action = next(script) if agent not in started else script.send(last)
         started.add(agent)

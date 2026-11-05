@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS IPC Live: Metal Variant and Preflight</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>IPC Live: The Metal Variant and Its Preflight</h1>
+    <p><code>workflows/rasterizer-bunny-metal-ipc.json</code> is the Metal rasterizer workflow with mail and artifact handles, so that a live run can test Chapter 8's contract with a real model. <b>It has only been run with a scripted model, and it is not scheduled to run live.</b></p>
+    <ul>
+      <li><span class="good">Metal works inside the confined <code>run</code> on this Mac.</span> The spec's exact <code>clang++ ... -framework Metal</code> command built a small compute kernel, which ran on the GPU and returned correct results, for the writer, the benchmarker and the verifier, whose workspace stayed read-only.</li>
+      <li><span class="good">Through the real <code>aos run</code>:</span> a too-large refusal, a publish, a handle, a denied read, a verifier's wait, a mail, a resume, a read to the end, and a required verdict.</li>
+      <li><span class="warn">The preflight shows the machinery works. It says nothing about what a model does.</span> Its program is not a rasterizer, and its verdict is scripted.</li>
+    </ul>
+  </div>
+
+  <h2>1. The Mechanism</h2>
+  <p>The spec holds two placeholders, <code>__RUN_DIR__</code> and <code>__AOS_ROOT__</code>, as <code>terminal-bench.json</code> holds <code>__WORKDIR__</code>. <code>reports/ipc-live/render.py &lt;name&gt;</code> fills them into <code>reports/ipc-live/runs/&lt;name&gt;/workflow.json</code>. The spec format needed no change, and <code>run.sh</code> does this for a run, so no hand edit is needed.</p>
+  <ul>
+    <li><b>Isolation:</b> <code>render.py</code> refuses a run directory that exists. Workspace and verification are <code>runs/&lt;name&gt;/metal-workspace</code> and <code>runs/&lt;name&gt;/metal-verification</code>, and <code>runs/</code> is git-ignored.</li>
+    <li><b>What a run needs from <code>reports/rasterizer-bunny</code>,</b> read-only, and <span class="warn">not in git, so this run is not reproducible from a clean checkout:</span> <code>baseline/</code> with its binary, sources and headers, <code>baseline_benchmark.json</code>, <code>optimized_benchmark.json</code>, <code>final-summary.txt</code>, <code>scene-closeup.json</code>, <code>scene-side.json</code>, <code>scene-small.json</code>, and <code>assets/stanford-bunny.obj</code>. <code>render.py</code> checks they exist and copies nothing.</li>
+    <li><b>Grants:</b> <code>message_agent</code> for all four; <code>publish_artifact</code> for the coordinator and benchmarker; <code>list_artifacts</code> for the coordinator and verifier. <code>read_artifact</code> is always available. No path, network, skill or other tool is added: <code>TestTheIPCMetalWorkflowWidensNothing</code> compares it with the Metal workflow field by field.</li>
+  </ul>
+
+  <h2>2. Bounds</h2>
+  <table>
+    <tr><th>Setting</th><th>Value</th><th>Why</th></tr>
+    <tr><td>Rounds</td><td>A first version and at most two optimization rounds, stopping early under a 5% gain</td><td>The earlier run went 8 rounds</td></tr>
+    <tr><td>Step limits</td><td>Coordinator 120, writer 80, benchmarker 40, verifier 50, per process</td><td>Enough for the estimate below, with room for a failed round. At most 630 steps over three rounds, more with re-delegations</td></tr>
+    <tr><td>Restart policy</td><td>None</td><td>The base workflow has none. A child's step limit goes back to the coordinator, and re-delegating closes the old chain, a situation the run should exercise. A dropped endpoint is covered by 12 attempts per call</td></tr>
+    <tr><td>Time</td><td><code>--time-budget 60m</code>, advisory: agents see it and are told to finish</td><td>Not strict, so a run ends with a verdict rather than being cut off</td></tr>
+  </table>
+  <p><b>Model calls, reasoned and not measured:</b> writer about 25 to 40 in the first round and 15 to 25 in each later one; benchmarker 10 to 15 and verifier 12 to 20 each round; coordinator about 40 in all. That is about 190 to 300 calls for three rounds. No wall time is claimed: at L seconds a call, 300 calls is 300 L, so 60 minutes needs about 12 seconds a call, including commands.</p>
+
+  <h2>3. Environment</h2>
+  <ul>
+    <li><code>AOS_LLM_BASE_URL</code>, <code>AOS_LLM_MODEL</code>, and the key, as usual. No address is in the spec or here.</li>
+    <li><b><code>AOS_LLM_CONTEXT_WINDOW</code> must be set,</b> and <code>run.sh</code> refuses to start without it: otherwise the default policy applies, with no handoff and 2,000-byte mail batches. Use the model's real window. It has to be at least about 60,000, the floor below which <code>Validate</code> refuses at the default ratio of 0.8. A window of 128,000 to 200,000 is a sensible cap on a model with more: a very large one leaves compaction, and so archived mail, rarely exercised.</li>
+    <li><code>AOS_LLM_MAX_TOKENS</code> at least about 12,000: <code>publish_artifact</code> has no path form, so a model retypes the raw record, 20 to 29 KB, as output.</li>
+  </ul>
+
+  <h2>4. What the Prompts Do That Could Bias the Result</h2>
+  <ul>
+    <li><b>The record is kept out of the workspace.</b> In ordinary practice it would sit on disk, where the verifier could read it. The prompts keep it in <code>$TMPDIR</code>, and tell the verifier it is not on disk, so that the handle is needed at all.</li>
+    <li><b>Its size is designed.</b> 20 trials with the whole of <code>/usr/bin/time -l</code>: 20,285 bytes in the preflight, and 28,691 with the sandbox noise below. A model that records less may never pass 16 KiB, and nothing refuses.</li>
+    <li><b>"Get the whole record to the coordinator" invites an inline send,</b> which is what makes a refusal likely. The system prompt's tool line already says what <code>artifacts</code> is and that an ID in a body grants nothing, so a model may publish first, and <code>too_large</code> would then be not exercised.</li>
+    <li><b>The verifier's reading is required:</b> a record it could not read is a FAIL. So its read shows it can, not that it would choose to.</li>
+    <li><b>The route is hinted.</b> The coordinator is told a verifier may pause, that it can mail a paused process, and that delegating resumes it; and to put its own process_id in each goal, because nothing else tells a child its delegator's. No step-by-step sequence is given, and no refusal text is quoted.</li>
+    <li><b>A retyped record is not the record.</b> The verifier checks the JSON against the model's copy, and a transcription error or an invention would be checked against itself.</li>
+  </ul>
+
+  <h2>5. What Would Mislead in a Comparison With the Old Metal Run</h2>
+  <ul>
+    <li>It had no mail, handles or raw-record duty, ran at least 8 rounds with 10 allowed, and may have used another model and an older AOS with larger step limits. Its timings came from many more tries.</li>
+    <li>This variant adds work every round: 20 trials rather than 5, and a verifier reading a record. Fewer rounds means a slower best time for reasons unrelated to mail.</li>
+    <li>So a difference in speed says nothing about IPC, and neither does one in calls or tokens. Compare the contract's situations, not the rasterizer.</li>
+  </ul>
+
+  <h2>6. What the Preflight Found</h2>
+  <ul>
+    <li><span class="warn">Each Metal start under the sandbox prints three <code>sandbox_extension_issue_file failed</code> lines on stderr,</span> about the shader cache, and the kernel still runs. They add about 8 KB to a record that captures stderr, and a model may take them for a failure. Shaders compile at startup anyway, outside the timed region.</li>
+    <li><span class="warn">A child learns its delegator's PID only from its goal,</span> as nothing else tells it: decision 9's <code>parent</code> keyword is not built. And a delegator reads mail between delegations only, so a question needing an answer means a <code>wait</code>.</li>
+    <li><span class="warn"><code>$TMPDIR</code> is per process,</span> so a recovered benchmarker loses its record.</li>
+    <li><code>message_agent</code> leaves no <code>mailbox_message</code> send record, as a <code>send</code> does; <code>analyze.py</code> reads its tool result instead.</li>
+    <li><span class="bad">Found by <code>analyze.py</code>, not by this workflow:</span> under the default policy, while mail keeps coming, a tool's result is archived before any call has it. See section 7.</li>
+  </ul>
+
+  <h2>7. A Limit in the Batches, With a Reproduction</h2>
+  <p>Under the default policy, for an unknown window, a batch takes <code>KeepMessages - 1</code> messages and its note takes the last place, so nothing older stays live. A tool call's result, from the step before, is archived before any model call has it, for as long as full batches keep coming. All a model can do is read it again, and again. <code>reports/ipc-step-4-e2e/run.sh</code> shows this: its receiver calls <code>read_artifact</code> while 256 messages are waiting, and the next requests hold mail and no page.</p>
+  <p>It does not arise with <code>AOS_LLM_CONTEXT_WINDOW</code> set, which has no count limit and leaves room. Before batches the same result was archived too, once. Not changed here: it is reported to the review.</p>
+
+  <h2>8. Commands</h2>
+  <pre># The preflight: a fake model, no network beyond this machine, about a minute.
+go build -buildvcs=false -o /tmp/aos ./cmd/aos
+reports/ipc-live/preflight/run.sh /tmp/aos pf1
+
+# A state directory with nothing in it, to see "not exercised":
+mkdir /tmp/empty; python3 -I reports/ipc-live/analyze.py /tmp/empty
+
+# A live run, if one is ever scheduled. The endpoint and window come from the environment:
+AOS_LLM_CONTEXT_WINDOW=&lt;the model's window&gt; AOS_LLM_MAX_TOKENS=12000 reports/ipc-live/run.sh /tmp/aos live1 --time-budget 60m
+python3 -I reports/ipc-live/analyze.py reports/ipc-live/runs/live1/state</pre>
+
+  <h2>9. Not Done</h2>
+  <ul>
+    <li>No live run, and nothing against a real model.</li>
+    <li>The preflight's program is not a rasterizer, so no image comparison ran on Metal output. Its verifier did run the CPU baseline under the sandbox, and read the image's header.</li>
+    <li>The analyzer's classifications have only met scripted runs, and a model's actions may fall under "none of these".</li>
+  </ul>
+</body>
+</html>

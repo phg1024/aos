@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,12 +17,13 @@ import (
 // role must gate on it.
 func TestCheckedInWorkflowsValidate(t *testing.T) {
 	gated := map[string]string{
-		"rasterizer-team.json":           "verifier",
-		"rasterizer-optimized-tail.json": "verifier",
-		"rasterizer-bunny.json":          "verifier",
-		"rasterizer-bunny-metal.json":    "verifier",
-		"pathtracer-bunny-metal.json":    "verifier",
-		"live-reviewed-merge.json":       "review_partner",
+		"rasterizer-team.json":            "verifier",
+		"rasterizer-optimized-tail.json":  "verifier",
+		"rasterizer-bunny.json":           "verifier",
+		"rasterizer-bunny-metal.json":     "verifier",
+		"rasterizer-bunny-metal-ipc.json": "verifier",
+		"pathtracer-bunny-metal.json":     "verifier",
+		"live-reviewed-merge.json":        "review_partner",
 	}
 	paths, err := filepath.Glob(filepath.Join("..", "..", "workflows", "*.json"))
 	if err != nil || len(paths) == 0 {
@@ -52,7 +54,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 // other agent can write where it writes, and it can write nothing where
 // the others work. With run confined, this holds for run as well.
 func TestRasterizerVerifiersAreIsolated(t *testing.T) {
-	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json", "pathtracer-bunny-metal.json"} {
+	for _, name := range []string{"rasterizer-team.json", "rasterizer-optimized-tail.json", "rasterizer-bunny.json", "rasterizer-bunny-metal.json", "rasterizer-bunny-metal-ipc.json", "pathtracer-bunny-metal.json"} {
 		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
 		if err != nil {
 			t.Fatal(err)
@@ -97,6 +99,83 @@ func TestRasterizerVerifiersAreIsolated(t *testing.T) {
 	for _, note := range []string{"budget time=", "(strict: the run is stopped when it runs out)", "budget steps=", "budget warning"} {
 		if !strings.Contains(solver.SystemPrompt, note) {
 			t.Fatalf("the solver prompt does not describe %q", note)
+		}
+	}
+}
+
+// The mail variant of the Metal workflow differs from it in its mail tools, step limits and
+// prompts: no agent gains a file path, a network, a skill or another tool, and no address or
+// home directory is in the spec.
+func TestTheIPCMetalWorkflowWidensNothing(t *testing.T) {
+	load := func(name string) (agentflow.WorkflowSpec, string) {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var spec agentflow.WorkflowSpec
+		if err := json.Unmarshal(raw, &spec); err != nil {
+			t.Fatal(err)
+		}
+		return spec, string(raw)
+	}
+	base, _ := load("rasterizer-bunny-metal.json")
+	variant, raw := load("rasterizer-bunny-metal-ipc.json")
+	for _, absent := range []string{"/Users/", "http://", "127.0.0.1"} {
+		if strings.Contains(raw, absent) {
+			t.Fatalf("the spec holds %q", absent)
+		}
+	}
+	mapped := func(path string) string {
+		for _, pair := range [][2]string{
+			{"/Users/claw/Code/aos/reports/rasterizer-bunny-metal-verification", "__RUN_DIR__/metal-verification"},
+			{"/Users/claw/Code/aos/reports/rasterizer-bunny-metal", "__RUN_DIR__/metal-workspace"},
+			{"/Users/claw/Code/aos", "__AOS_ROOT__"},
+		} {
+			if rest, ok := strings.CutPrefix(path, pair[0]); ok {
+				return pair[1] + rest
+			}
+		}
+		return path
+	}
+	extra := map[string][]string{
+		"coordinator": {"message_agent", "publish_artifact", "list_artifacts"},
+		"writer":      {"message_agent"},
+		"benchmarker": {"message_agent", "publish_artifact"},
+		"verifier":    {"message_agent", "list_artifacts"},
+	}
+	if len(variant.Agents) != len(base.Agents) {
+		t.Fatalf("%d agents, want %d", len(variant.Agents), len(base.Agents))
+	}
+	for _, old := range base.Agents {
+		agent, ok := variant.Agent(old.ID)
+		if !ok {
+			t.Fatalf("no %s", old.ID)
+		}
+		want := append(append([]string(nil), old.Capabilities.Tools...), extra[old.ID]...)
+		if !slices.Equal(agent.Capabilities.Tools, want) {
+			t.Errorf("%s tools = %v, want %v", old.ID, agent.Capabilities.Tools, want)
+		}
+		if agent.Capabilities.AllowNetwork != old.Capabilities.AllowNetwork || agent.Capabilities.UnconfinedRun || old.Capabilities.UnconfinedRun {
+			t.Errorf("%s network or confinement changed", old.ID)
+		}
+		for name, paths := range map[string][2][]string{
+			"read":   {old.Capabilities.ReadPaths, agent.Capabilities.ReadPaths},
+			"write":  {old.Capabilities.WritePaths, agent.Capabilities.WritePaths},
+			"dwrite": {old.Delegable.WritePaths, agent.Delegable.WritePaths},
+		} {
+			var want []string
+			for _, path := range paths[0] {
+				want = append(want, mapped(path))
+			}
+			if !slices.Equal(want, paths[1]) {
+				t.Errorf("%s %s paths = %v, want %v", old.ID, name, paths[1], want)
+			}
+		}
+		if !slices.Equal(agent.Delegable.Tools, old.Delegable.Tools) || !slices.Equal(agent.Skills, old.Skills) || !slices.Equal(agent.AllowedAgents, old.AllowedAgents) {
+			t.Errorf("%s delegable tools, skills or allowed agents changed", old.ID)
+		}
+		if agent.Restart != nil || agent.MaxSteps == 0 || agent.MaxSteps > old.MaxSteps {
+			t.Errorf("%s: restart %+v, max steps %d, base %d", old.ID, agent.Restart, agent.MaxSteps, old.MaxSteps)
 		}
 	}
 }
