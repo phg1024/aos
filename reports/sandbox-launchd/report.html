@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>macOS Sandbox and launchd</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1000px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>macOS Sandbox and launchd</h1>
+    <p>The Linux work suggested that <code>launchctl submit</code> might be the macOS equivalent of the <code>systemd-run</code> escape. It is not: launchd refused it from inside the sandbox, while the same submit ran from outside. Two narrower things were open. One is closed for the <code>launchctl</code> tool, and neither is closed for a program that speaks launchd's protocol itself.</p>
+    <ul>
+      <li><span class="good">No escape found:</span> creating, starting, stopping, signalling or removing a job was refused.</li>
+      <li><span class="good">Closed:</span> a confined command can no longer run or copy <code>/bin/launchctl</code>.</li>
+      <li><span class="bad">Still open:</span> a program calling launchd directly disabled a service from inside the sandbox.</li>
+    </ul>
+  </div>
+
+  <h2>1. What launchd allowed</h2>
+  <p>macOS 27.0.1. Measured under the profile as it was at <code>dbea4ee</code>, with no network, against one job of my own holding a canary variable. Nothing else of the user's was touched. <a href="results.txt">Results</a>.</p>
+  <table>
+    <tr><th>From inside the sandbox</th><th>Result</th></tr>
+    <tr><td><code>submit</code>, <code>bootstrap</code>, <code>load</code></td><td class="good">Refused. No marker written. From outside, the same submit ran.</td></tr>
+    <tr><td><code>kill</code>, <code>kickstart</code>, <code>stop</code>, <code>bootout</code>, <code>remove</code>, <code>setenv</code></td><td class="good">Refused. The job's pid did not change.</td></tr>
+    <tr><td><code>print gui/&lt;uid&gt;/&lt;label&gt;</code></td><td class="bad">Answered, including the canary. An API key in a user agent's environment would be readable this way.</td></tr>
+    <tr><td><code>disable</code>, <code>enable</code></td><td class="bad">Succeeded. launchd stores this across reboots, so a command could turn off this user's login agents, or turn on one already disabled.</td></tr>
+  </table>
+
+  <h2>2. The fix</h2>
+  <p>The profile now ends with one rule, in <code>internal/sandbox/sandbox_darwin.go</code>, placed after the grants so that a policy naming <code>/bin</code> does not reopen it:</p>
+<pre>(deny process-exec file-read-data (literal "/bin/launchctl"))</pre>
+  <p>Denying the read stops a copy being made. A copy made outside and run outside was killed with exit 137, so that route looks closed anyway; the cause was not investigated.</p>
+
+  <h2>3. What it does not stop</h2>
+  <p>A small C program built outside and run confined, with the rule in place (<a href="direct.c">direct.c</a>):</p>
+  <table>
+    <tr><th>Direct call</th><th>Result</th></tr>
+    <tr><td>Disable my own label</td><td class="bad">Succeeded: the label showed <code>disabled</code> afterwards.</td></tr>
+    <tr><td>List services</td><td class="good">Refused, error 1. The same program listed 595 services from outside.</td></tr>
+    <tr><td>Print a service (<a href="directprint.c">directprint.c</a>)</td><td class="warn">Not established. One attempt, returned error 22, which may just mean my request was malformed.</td></tr>
+  </table>
+  <p>The program was built outside. Whether a confined command can build or script one was not tried. <code>cc</code> failed in the bare test profile with or without the rule, cause not investigated. Python and its <code>ctypes</code> are readable there.</p>
+
+  <h2>4. The option not taken</h2>
+  <p>Removing the task's bootstrap port before <code>sandbox-exec</code> (<a href="nobootstrap.c">nobootstrap.c</a>) stops the direct call too: it returned 32 and the label stayed <code>enabled</code>. It was not taken because of what it breaks, and because Go's standard library cannot make that call, so it would need cgo or a small C helper.</p>
+  <table>
+    <tr><th>Check</th><th>With the port</th><th>Without it</th></tr>
+    <tr><td>Direct disable</td><td class="bad">Succeeded</td><td class="good">Refused</td></tr>
+    <tr><td>Metal shader compile (<a href="metal.m">metal.m</a>)</td><td class="good">Compiled</td><td class="bad">Unable to reach <code>MTLCompilerService</code></td></tr>
+    <tr><td><code>id -un</code></td><td class="good">User name</td><td class="warn"><code>501</code>, no name lookup</td></tr>
+  </table>
+  <p>A device grant changes nothing in the macOS profile today, so limiting this to runs without Metal would be a new distinction. That is a decision for the user.</p>
+
+  <h2>5. Tests</h2>
+  <ul>
+    <li><code>TestLaunchctlIsOutOfReach</code> runs the real profile: print and submit refused, copy refused, no marker, for the plain policy, one that grants <code>/bin</code>, and one with network.</li>
+    <li>4 of 4 mutations fail it (<a href="mutation.txt">mutation.txt</a>): rule removed, execute only, read only, wrong path.</li>
+    <li><code>internal/sandbox</code>, <code>internal/tools</code>, <code>internal/capability</code> and <code>cmd/aos</code> pass on the Mac. <code>go test ./...</code> was not run, since it rewrites the probe results.</li>
+  </ul>
+
+  <h2>6. Left as it was</h2>
+  <ul>
+    <li><b>Left behind by this test:</b> launchd's disabled list now holds <code>aos.sandbox.own.59684 =&gt; enabled</code>. No job has that label. Removing the entry was not attempted.</li>
+    <li><b>Still open on macOS, not in this fix:</b> <code>allow_network</code> also opens Unix sockets, and an inherited socket survives into the command. See <a href="../sandbox-socket-key-signal-fix.html">the earlier report</a>, section 6.</li>
+    <li><b>Not probed:</b> <code>launchctl bootout gui/&lt;uid&gt;</code> and <code>reboot</code>, which could end the login session. They are behind the same rule, but a direct call was not tried.</li>
+  </ul>
+</body>
+</html>

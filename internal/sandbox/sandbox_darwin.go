@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const sandboxExec = "/usr/bin/sandbox-exec"
+const (
+	sandboxExec = "/usr/bin/sandbox-exec"
+	launchctl   = "/bin/launchctl"
+)
 
 // systemReadPaths are readable by every confined command: the OS, the
 // developer tools and the usual package prefixes. The home directory is
@@ -104,6 +107,13 @@ func Profile(p Policy) string {
 	writeRule(&b, "allow file-read* file-write*", append([]string{p.Temp}, p.Write...), "")
 	writeRule(&b, "deny file-write*", p.ReadOnly, "")
 	writeRule(&b, "deny file-read* file-write*", p.Hidden, "")
+	// launchd answers launchctl for a sandboxed caller, and this profile has no rule
+	// launchd consults for it: print shows other services' environments, and disable
+	// and enable persist across reboots. A copy cannot stand in for the binary, since
+	// macOS kills one. A program that speaks launchd's protocol itself still gets
+	// through; only taking away its bootstrap port stops that, which also stops the
+	// Metal compiler.
+	fmt.Fprintf(&b, "(deny process-exec file-read-data (literal %s))\n", quote(launchctl))
 	if p.Network {
 		b.WriteString("(allow network*)\n(allow system-socket)\n")
 	}

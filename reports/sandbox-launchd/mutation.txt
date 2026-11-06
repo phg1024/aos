@@ -1,0 +1,4 @@
+caught rule removed
+caught exec only, copy stays open
+caught read only, exec stays open
+caught wrong path

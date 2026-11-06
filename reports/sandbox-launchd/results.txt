@@ -1,0 +1,39 @@
+macOS 27.0.1 26A434
+--- before the rule (profile at dbea4ee), one job of my own holding a canary variable
+print canary: 1
+submit: exit 1
+kill TERM gui/501/aos.sandbox.own.59684: exit 1
+kickstart -k gui/501/aos.sandbox.own.59684: exit 1
+bootout gui/501/aos.sandbox.own.59684: exit 1
+setenv AOS_PROBE_SET x: exit 1
+disable: exit 0 -> "aos.sandbox.own.59684" => disabled
+--- after the rule
+print: sandbox-exec: execvp() of '/bin/launchctl' failed: Operation not permitted
+disable: sandbox-exec: execvp() of '/bin/launchctl' failed: Operation not permitted
+-> "aos.sandbox.own.59684" => enabled
+cp: cp: /bin/launchctl: Operation not permitted
+a copy made outside, run outside: exit 137
+--- after the rule, a program speaking launchd's protocol itself, built outside
+list: error 1
+disable own label: error 0
+-> "aos.sandbox.own.59684" => disabled
+print own job, canary lines: 0
+rc 0 error 22
+--- unaffected under the rule
+metal: device Apple M5 Max, compiled yes
+id: peihongguo
+--- no bootstrap port, then the profile
+print: Could not print domain: 141: Reentrancy avoided
+direct disable: rc 32
+-> "aos.sandbox.own.59684" => enabled
+metal: device Apple M5 Max, compiled Unable to reach MTLCompilerService. The process is unavailable because the compiler is no 
+id: 501
+--- earlier in the same session, same profile as "before the rule", output as read then
+control, submit from outside: exit 0, marker written, removed afterwards
+confined submit: exit 1, no marker
+confined stop: exit 1, "Not privileged to stop service."
+confined remove: exit 1, "Not privileged to remove service."
+confined bootstrap: "Bootstrap failed: 5: Input/output error"
+confined load: "Load failed: 5: Input/output error"
+own job pid unchanged across kill, kickstart, stop, bootout and remove
+direct.c, list, from outside: services 595

@@ -22,7 +22,7 @@
     <ul>
       <li><span class="good">Measured on the target machine:</span> the same command through the same helper form escaped before and is refused after. All 14 mutations of the controls fail a test. <code>cuInit</code>, <code>nvidia-smi</code> and <code>nvcc</code> still work under the filter, and one Ray dry job succeeded.</li>
       <li><span class="warn">Not yet measured:</span> a CUDA allocation or kernel under the filter. The first one is in the preflight, in the offload window.</li>
-      <li><span class="bad">Still open on macOS, not fixed here:</span> <code>launchctl print</code> answers a confined command, which suggests a similar route. See section 6.</li>
+      <li><span class="warn">macOS, corrected later:</span> this report guessed a similar route through <code>launchctl submit</code>. Measured afterwards, launchd refused it. What was open was narrower: see <a href="sandbox-launchd/report.html">the launchd report</a>.</li>
     </ul>
   </div>
 
@@ -108,6 +108,7 @@ exit 1</pre>
   <p>The architecture and x32 checks are caught only by interpreting the program in Go, since the real helper test has no 32-bit call. The probe above did make one, by <code>int 0x80</code>, and it was refused.</p>
 
   <h2>6. macOS, measured</h2>
+  <p class="warn">Superseded on <code>launchd</code>: the guess in this table was wrong. <a href="sandbox-launchd/report.html">The launchd report</a> has the measurements.</p>
   <p>Through the real <code>sandbox-exec</code> path, with nothing changed. Nothing here is fixed, except that keys go, since both platforms share <code>Policy.Environment</code>.</p>
   <table>
     <tr><th>Gap</th><th>macOS</th></tr>

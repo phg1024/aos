@@ -4,7 +4,9 @@ package sandbox_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -58,8 +60,33 @@ func TestWhatTheMacOSProfileRefuses(t *testing.T) {
 	cmd.ExtraFiles = []*os.File{inherited}
 	out, err := cmd.CombinedOutput()
 	t.Logf("inherited socket: %s %v", strings.TrimSpace(string(out)), err)
-	out2, err := r.shell(r.policy, "launchctl list | wc -l; launchctl print gui/$(id -u) | wc -l")
-	t.Logf("launchctl, read only: %s %v", out2, err)
+}
+
+// launchctl stays out of reach, even for a policy that grants its directory. The submit
+// would be refused by launchd regardless; the marker says nothing ran outside.
+func TestLaunchctlIsOutOfReach(t *testing.T) {
+	r := newConfined(t)
+	wide := r.policy
+	wide.Read = append(append([]string{}, r.policy.Read...), "/bin")
+	marker := filepath.Join(shortDir(t), "marker")
+	label := fmt.Sprintf("aos.sandbox.test.%d", os.Getpid())
+	t.Cleanup(func() { exec.Command("/bin/launchctl", "remove", label).Run() })
+	for _, p := range []sandbox.Policy{r.policy, wide, withNetworkMac(r.policy)} {
+		for _, command := range []string{
+			"/bin/launchctl print gui/$(id -u)",
+			"/bin/launchctl submit -l " + label + " -- /bin/sh -c 'id > " + marker + "; sleep 60'",
+		} {
+			if out, err := r.shell(p, command); err == nil || !strings.Contains(out, "Operation not permitted") {
+				t.Errorf("%q: %v %q", command, err, out)
+			}
+		}
+		if out, err := r.shell(p, "cp /bin/launchctl copy"); err == nil {
+			t.Errorf("launchctl could be copied: %q", out)
+		}
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("a submitted job ran outside the sandbox")
+	}
 }
 
 func withNetworkMac(p sandbox.Policy) sandbox.Policy { p.Network = true; return p }
