@@ -49,11 +49,21 @@ case "$*" in
   *) echo "| CUDA Version: 13.2 |" ;;
 esac
 STUB
-printf '#!/bin/bash\nwhile [[ $1 == --* ]]; do shift; done\nshift\nexec "$@"\n' > "$T/cuda/bin/timeout"
+# STUB_ALARM sends what it runs SIGTERM after that many seconds, standing in for the job's limit.
+cat > "$T/cuda/bin/timeout" <<'STUB'
+#!/bin/bash
+while [[ $1 == --* ]]; do shift; done
+shift
+[[ -z ${STUB_ALARM:-} ]] && exec "$@"
+"$@" &
+pid=$!
+(sleep "$STUB_ALARM"; kill -TERM "$pid" 2>/dev/null) &
+wait "$pid"
+STUB
 printf 'import time\ntime.sleep(5)\n' > "$T/root/bin/fake_model.py"
 printf 'pass\n' > "$T/root/bin/metal.py"
 printf 'pass\n' > "$T/root/bin/analyze.py"
-printf '#!/bin/bash\necho ran > "$AOS_IPC_ROOT/aos-ran"\n' > "$T/root/bin/aos"
+printf '#!/bin/bash\necho ran > "$AOS_IPC_ROOT/aos-ran"\nprintf "%%s" "${AOS_LLM_TIMEOUT_SECONDS-unset}" > "$AOS_IPC_ROOT/aos-timeout"\n' > "$T/root/bin/aos"
 chmod +x "$T/cuda/bin/"* "$T/root/bin/aos"
 
 failed=0
@@ -161,6 +171,78 @@ render_both_ways cuda made
 render_both_ways cuda absent
 render_both_ways metal made
 render_both_ways metal absent
+
+# submit.sh to the job's environment. This stands in for Ray: it runs the entrypoint on the machine's
+# terms, with nothing of the submitter's environment but what the entrypoint itself sets.
+mkdir -p "$T/home/aos-cuda"
+ln -s "$T/root" "$T/home/aos-ipc-live"
+ln -s "$T/cuda" "$T/home/aos-cuda/env"
+cp "$job" "$T/root/bin/job.sh"
+cat > "$T/ray" <<'STUB'
+#!/bin/bash
+echo called > "$STUB_RAY_MARK"
+while [[ $1 != -- ]]; do shift; done
+shift
+exec env -i HOME="$STUB_HOME" STUB_DEFAULT=pass STUB_CARD=pass STUB_ALARM="${STUB_ALARM:-}" "$@"
+STUB
+chmod +x "$T/ray"
+submit() {
+  STUB_HOME=$T/home STUB_RAY_MARK=$T/ray-called AOS_RAY=$T/ray AOS_RAY_ADDRESS=stub AOS_RAY_RESOURCES='{}' \
+    AOS_JOB_HOME=$T/home AOS_GPU_NAME="Test Card" zsh "$here/submit.sh" "id-$1" "$1" preflight 30 > "$T/out" 2>&1
+}
+submits_with() {
+  local title=$1 want=$2 name=submit$((n + 1)) bad=
+  shift 2
+  rm -f "$T/root/aos-timeout" "$T/ray-called"
+  env "$@" bash -c "$(declare -f submit); T='$T' here='$here'; submit $name" || bad="exit $?"
+  [[ $(cat "$T/root/aos-timeout" 2>/dev/null) == "$want" ]] || bad="$bad; aos saw $(cat "$T/root/aos-timeout" 2>/dev/null)"
+  outcome "submit.sh, $title: aos gets $want" "$bad"
+}
+refuses() {
+  local value=$1 name=submit$((n + 1)) bad=
+  rm -f "$T/root/aos-timeout" "$T/ray-called"
+  env AOS_LLM_TIMEOUT_SECONDS="$value" bash -c "$(declare -f submit); T='$T' here='$here'; submit $name" && bad="it submitted"
+  [[ -e $T/ray-called ]] && bad="$bad; Ray was called"
+  grep -qF "must be a whole number" "$T/out" || bad="$bad; no reason given"
+  outcome "submit.sh refuses $value, which is not a whole number of seconds" "$bad"
+}
+submits_with "with nothing set" 1200 -u AOS_LLM_TIMEOUT_SECONDS
+submits_with "with an empty value" 1200 AOS_LLM_TIMEOUT_SECONDS=
+submits_with "with a value chosen" 600 AOS_LLM_TIMEOUT_SECONDS=600
+for value in 2m 0 -5 1.5; do refuses "$value"; done
+
+# The same path with the real aos and an endpoint that never answers: what the run records and how it retries.
+(cd "$here/../../.." && go build -buildvcs=false -o "$T/aos-real" ./cmd/aos) || { echo "FAIL could not build aos"; exit 1; }
+cp "$T/aos-real" "$T/root/bin/aos"
+cp -R "$here/../../../skills" "$T/root/skills"
+cat > "$T/root/bin/fake_model.py" <<'STUB'
+import socket, sys, time
+listener = socket.socket()
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(("127.0.0.1", int(sys.argv[1])))
+listener.listen(16)
+held = []
+while True:
+    held.append(listener.accept())
+STUB
+rm -f "$T/ray-called"
+STUB_ALARM=6 AOS_LLM_TIMEOUT_SECONDS=1 submit realaos
+dir=$T/root/reports/ipc-live/runs/realaos
+bad=$(python3 -I - "$dir/state/kernel/events.json" <<'PY'
+import json, sys
+events = json.load(open(sys.argv[1]))
+started = [e for e in events if e["type"] == "run.started"]
+retries = [e["data"] for e in events if e["type"] == "backend.retry"]
+if not started or started[0]["data"].get("timeout") != "1s":
+    print("run.started says", started and started[0]["data"].get("timeout"))
+elif len(retries) < 2 or not all("Client.Timeout" in r["error"] for r in retries):
+    print("retries:", retries)
+elif [r["delay"] for r in retries[:2]] != ["1s", "2s"]:
+    print("delays:", retries)
+PY
+)
+[[ -n $bad ]] && sed 's/^/  run.log: /' "$dir/run.log" > "$T/out"
+outcome "the real aos records the value in run.started, and retries a timeout with backoff" "$bad"
 
 (( failed == 0 )) && echo "all $n passed"
 exit $failed

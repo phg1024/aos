@@ -27,3 +27,20 @@ func TestBackendRecordShowsEffectiveSampling(t *testing.T) {
 		t.Errorf("set values = %v", set)
 	}
 }
+
+// The run shows the client timeout it used, whatever became of the value. The value is seconds
+// with an "s" added, so 2m is two milliseconds, and what cannot be parsed is the default.
+func TestBackendRecordShowsTheTimeoutFromTheEnvironment(t *testing.T) {
+	t.Setenv("AOS_VLLM_TIMEOUT_SECONDS", "")
+	for value, want := range map[string]string{"1200": "20m0s", "": "2m0s", "2m": "2ms", "0": "2m0s", "soon": "2m0s"} {
+		t.Setenv("AOS_LLM_TIMEOUT_SECONDS", value)
+		if got := backendRecord(inference.LoadBackendConfig(120 * time.Second))["timeout"]; got != want {
+			t.Errorf("AOS_LLM_TIMEOUT_SECONDS=%q recorded %s, want %s", value, got, want)
+		}
+	}
+	t.Setenv("AOS_LLM_TIMEOUT_SECONDS", "1200")
+	t.Setenv("AOS_VLLM_TIMEOUT_SECONDS", "30")
+	if got := backendRecord(inference.LoadBackendConfig(120 * time.Second))["timeout"]; got != "20m0s" {
+		t.Errorf("the older variable won: %s", got)
+	}
+}
