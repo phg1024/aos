@@ -549,7 +549,7 @@ func (f rootFixture) readBack(t *testing.T, pid, id string) string {
 			if strings.HasPrefix(last, "tool_error") {
 				t.Fatalf("read_artifact %s: %s", id, last)
 			}
-			match := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:\d+ total_bytes:\d+\]$`).FindStringSubmatch(last)
+			match := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:\d+ source:typed total_bytes:\d+\]$`).FindStringSubmatch(last)
 			if match == nil {
 				t.Fatalf("not a page: %.200s", last)
 			}
