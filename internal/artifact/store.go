@@ -55,6 +55,7 @@ var reservedTypes = map[string]bool{
 	"mailbox_publish":      true,
 	"mailbox_subscription": true,
 	"delegate_result":      true,
+	"delegation_handles":   true,
 	"agent_run":            true,
 	"workflow_summary":     true,
 	"verification":         true,

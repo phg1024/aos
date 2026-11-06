@@ -131,6 +131,58 @@ func TestSystemPromptSaysHowToolsReadADuration(t *testing.T) {
 	}
 }
 
+func TestSystemPromptOffersHandlesAtADelegationOnlyWhenOn(t *testing.T) {
+	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", AllowedAgents: []string{"b"}, Capabilities: capability.Set{Tools: []string{"spawn_agent"}}}, {ID: "b"}}}
+	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}
+	prompt := on.systemPrompt()
+	for _, want := range []string{"spawn_agent(agent_id, goal, artifacts?) (", `A delegate action may also carry "artifacts"`, "a later delegation that starts a new process needs them attached again"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("lacks %q:\n%s", want, prompt)
+		}
+	}
+	for name, off := range map[string]PromptBackend{
+		"replaying":    {Workflow: spec, Agent: spec.Agents[0], NoDelegateHandles: true},
+		"no handles":   {Workflow: spec, Agent: spec.Agents[0], NoBusBounds: true},
+		"a frozen arm": {Workflow: spec, Agent: spec.Agents[0], Recall: runtime.RecallOff()},
+	} {
+		prompt := off.systemPrompt()
+		if strings.Contains(prompt, "artifacts?") || strings.Contains(prompt, "A delegate action may also") || !strings.Contains(prompt, "spawn_agent(agent_id, goal)") {
+			t.Fatalf("%s:\n%s", name, prompt)
+		}
+	}
+	// An agent that delegates to nobody is told nothing about it.
+	leaf := PromptBackend{Workflow: spec, Agent: spec.Agents[1]}
+	if strings.Contains(leaf.systemPrompt(), "A delegate action may also") {
+		t.Fatalf("leaf:\n%s", leaf.systemPrompt())
+	}
+}
+
+func TestSystemPromptDeclaresEvidenceToWhoItConcerns(t *testing.T) {
+	agents := []AgentSpec{{ID: "c", AllowedAgents: []string{"p", "v"}}, {ID: "p"}, {ID: "v"}}
+	declared := WorkflowSpec{Name: "w", EntryAgent: "c", Agents: agents, Verification: &VerificationSpec{Policy: "required", Verifier: "v", Evidence: []EvidenceSpec{{Publisher: "p", Type: "raw_record", FromFile: true}}}}
+	for agent, want := range map[int][]string{
+		2: {"The verdict rests on evidence: the latest artifact of type published.raw_record published by p.", "publish_artifact's path", "exit 0 is refused", "unverified", "use wait"},
+		1: {"The verdict rests on what you publish: publish your record as publish_artifact type raw_record.", "publish_artifact's path"},
+	} {
+		prompt := PromptBackend{Workflow: declared, Agent: agents[agent]}.systemPrompt()
+		for _, text := range want {
+			if !strings.Contains(prompt, text) {
+				t.Fatalf("%s lacks %q:\n%s", agents[agent].ID, text, prompt)
+			}
+		}
+	}
+	if prompt := (PromptBackend{Workflow: declared, Agent: agents[0]}).systemPrompt(); strings.Contains(prompt, "The verdict rests") {
+		t.Fatalf("coordinator:\n%s", prompt)
+	}
+	nothing := declared
+	nothing.Verification = &VerificationSpec{Policy: "required", Verifier: "v"}
+	for _, agent := range agents {
+		if prompt := (PromptBackend{Workflow: nothing, Agent: agent}).systemPrompt(); strings.Contains(prompt, "The verdict rests") {
+			t.Fatalf("%s, nothing declared:\n%s", agent.ID, prompt)
+		}
+	}
+}
+
 func TestSystemPromptDescribesHandlesOnlyWhenOn(t *testing.T) {
 	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"message_agent"}}}}}
 	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}

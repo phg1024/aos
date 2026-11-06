@@ -15,6 +15,10 @@ const (
 	VerdictFail    = "fail"
 	VerdictMissing = "missing"
 	VerdictStale   = "stale"
+	// VerdictUnverified means nobody judged the work on the evidence the workflow
+	// declared: the verifier did not read it, it was never published, or the
+	// verifier ended without a judgement. It says nothing about the work.
+	VerdictUnverified = "unverified"
 )
 
 // Verdict is a workflow's verification outcome as the engine read it from
@@ -30,6 +34,8 @@ type Verdict struct {
 	VerifierExit *kernel.ExitStatus          `json:"verifier_exit,omitempty"`
 	StaleAgent   string                      `json:"stale_agent,omitempty"`
 	StalePID     string                      `json:"stale_pid,omitempty"`
+	// Evidence is each declared record as it stood when the verdict was reached.
+	Evidence []EvidenceCheck `json:"evidence,omitempty"`
 }
 
 // judge derives the verdict for the workflow under root. Runs are ordered
@@ -37,6 +43,15 @@ type Verdict struct {
 // The entry agent is left out of the freshness check: its run spans the
 // whole workflow, so it always ends last.
 func (e *Engine) judge(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
+	verdict, err := e.judgeExits(spec, policy, rootPID, entryPID)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return e.withEvidence(spec, verdict)
+}
+
+// judgeExits is the verdict from the kernel's record of exits alone.
+func (e *Engine) judgeExits(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
 	verdict := Verdict{Policy: policy, Verifier: spec.Verification.Verifier}
 	runs, err := e.descendantExits(rootPID)
 	if err != nil {
@@ -135,6 +150,9 @@ func gateExit(root kernel.ExitStatus, policy workflow.VerificationPolicy, verdic
 		gated.Retryable = verdict.VerifierExit.Retryable
 	case VerdictStale:
 		// Running the verifier again may well pass.
+		gated.Retryable = true
+	case VerdictUnverified:
+		// Nobody judged the work, so running the verifier again is the remedy.
 		gated.Retryable = true
 	}
 	return gated

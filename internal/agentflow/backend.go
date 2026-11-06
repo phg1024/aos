@@ -60,6 +60,9 @@ type PromptBackend struct {
 	// NoDurationArgs leaves out how tools read a duration, for replaying a record
 	// made before tools.DurationArg.
 	NoDurationArgs bool
+	// NoDelegateHandles leaves handles at a delegation out of the prompt, for
+	// replaying a record made before them.
+	NoDelegateHandles bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -110,6 +113,9 @@ func (b PromptBackend) framed() bool { return !b.NoPeerFraming && !b.Recall.NoPr
 // handles says whether the prompt describes artifact handles. Frozen probe arms
 // (RecallOff) keep the prompts they were measured with.
 func (b PromptBackend) handles() bool { return !b.NoBusBounds && !b.Recall.NoPromptFraming }
+
+// offersDelegateHandles is whether the prompt offers handles at a delegation.
+func (b PromptBackend) offersDelegateHandles() bool { return b.handles() && !b.NoDelegateHandles }
 
 // describesDurations is whether the prompt says how tools read a duration arg. A
 // frozen probe arm's prompt stays as it was, as it does for framing.
@@ -601,6 +607,8 @@ func (b PromptBackend) systemPrompt() string {
 		builder.WriteString("- ")
 		if tool == "message_agent" && b.handles() {
 			builder.WriteString("message_agent(to, body, artifacts?) (artifacts: comma-separated IDs of artifacts you may read, which the receiver may then read; an ID in the body grants nothing)")
+		} else if tool == "spawn_agent" && b.offersDelegateHandles() {
+			builder.WriteString("spawn_agent(agent_id, goal, artifacts?) (artifacts: as on a delegate action)")
 		} else if tool == "publish_artifact" && !b.NoPublishSource {
 			builder.WriteString("publish_artifact(type, body | path) (body: text you type, stored as typed; path: a text file you may read, up to 1 MiB, stored byte for byte with its sha256; a reader is told which it was)")
 		} else {
@@ -630,6 +638,10 @@ func (b PromptBackend) systemPrompt() string {
 	}
 	builder.WriteString("\nAllowed agents:\n")
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
+	if len(b.Agent.AllowedAgents) > 0 && b.offersDelegateHandles() {
+		builder.WriteString("\n\nA delegate action may also carry \"artifacts\": comma-separated IDs of artifacts you may read, which that process may then read from its first step. An ID in the goal grants nothing. It goes to that process alone: a later delegation that starts a new process needs them attached again. If you attach one you may not read, the delegation does not start.")
+	}
+	builder.WriteString(evidencePrompt(b.Workflow, b.Agent.ID))
 	return builder.String()
 }
 
@@ -1002,7 +1014,7 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 		if agentID == "" {
 			return runtime.GenerateResult{}, false
 		}
-		result.Action.Delegate = &runtime.DelegateCall{AgentID: agentID, Goal: goal}
+		result.Action.Delegate = &runtime.DelegateCall{AgentID: agentID, Goal: goal, Artifacts: handleList(callData["artifacts"])}
 	case "send":
 		callData := mapValue(actionData, "send")
 		if len(callData) == 0 {
@@ -1125,6 +1137,22 @@ func value(data map[string]any, keys ...string) any {
 		}
 	}
 	return nil
+}
+
+// handleList takes artifact IDs as a comma-separated string or a list, as a model may
+// write them.
+func handleList(value any) string {
+	list, ok := value.([]any)
+	if !ok {
+		return scalarString(value)
+	}
+	var ids []string
+	for _, item := range list {
+		if id := scalarString(item); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return strings.Join(ids, ",")
 }
 
 func firstString(data map[string]any, keys ...string) string {

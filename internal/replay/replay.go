@@ -96,9 +96,12 @@ type Report struct {
 	LegacyPublishSource bool `json:"legacy_publish_source,omitempty"`
 	// LegacyDurationArgs means the record predates tools.DurationArg, and it replayed
 	// with the older prompt and acquire_lease's older reading of ttl.
-	LegacyDurationArgs bool              `json:"legacy_duration_args,omitempty"`
-	RecordedBuild      map[string]string `json:"recorded_build,omitempty"`
-	Divergence         *Divergence       `json:"divergence,omitempty"`
+	LegacyDurationArgs bool `json:"legacy_duration_args,omitempty"`
+	// LegacyDelegateHandles means the record predates handles at a delegation, and it
+	// replayed with the older prompt.
+	LegacyDelegateHandles bool              `json:"legacy_delegate_handles,omitempty"`
+	RecordedBuild         map[string]string `json:"recorded_build,omitempty"`
+	Divergence            *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -338,12 +341,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Leases:    leases,
 		Tools:     toolRuntime,
 		Factory: agentflow.StaticBackendFactory{
-			Completer:       backend,
-			Skills:          skills.NewRegistry(runSpec.Spec.SkillRoots),
-			NoPeerFraming:   started.Data[agentflow.PeerFramingField] == "",
-			NoBusBounds:     started.Data[agentflow.BusBoundsField] == "",
-			NoPublishSource: started.Data[agentflow.PublishSourceField] == "",
-			NoDurationArgs:  started.Data[agentflow.DurationArgsField] == "",
+			Completer:         backend,
+			Skills:            skills.NewRegistry(runSpec.Spec.SkillRoots),
+			NoPeerFraming:     started.Data[agentflow.PeerFramingField] == "",
+			NoBusBounds:       started.Data[agentflow.BusBoundsField] == "",
+			NoPublishSource:   started.Data[agentflow.PublishSourceField] == "",
+			NoDurationArgs:    started.Data[agentflow.DurationArgsField] == "",
+			NoDelegateHandles: started.Data[agentflow.DelegateHandlesField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -380,6 +384,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyPublishSource = engine.NoPublishSource
 	engine.NoDurationArgs = started.Data[agentflow.DurationArgsField] == ""
 	report.LegacyDurationArgs = engine.NoDurationArgs
+	engine.NoDelegateHandles = started.Data[agentflow.DelegateHandlesField] == ""
+	report.LegacyDelegateHandles = engine.NoDelegateHandles
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

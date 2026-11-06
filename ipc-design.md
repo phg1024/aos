@@ -738,7 +738,9 @@ capabilities. `list_artifacts` is gated to the same set.**
 - **Who may read whose artifacts.** A process may read an artifact if
   one of these holds:
   1. its own chain produced it;
-  2. it was attached to mail the chain received;
+  2. it was attached to mail the chain received, or to the delegation that
+     started or resumed the chain (see [Implemented: Handles at a delegation
+     and declared evidence](#implemented-handles-at-a-delegation-and-declared-evidence));
   3. a descendant of the chain published it.
 
   The parent pays for its children and answers for their work, so it may
@@ -2360,9 +2362,12 @@ Decisions 1, 7, 8 and 10 are changed in place, and each says so.
   `message_agent`, and re-delegates (`TestAVerifierGetsEvidenceThroughAWait`). A child
   reads a parent's artifact the same way. **A child that never parks has no route,** and
   neither has a verifier whose workflow does not script that. The rules were not widened.
+  (Since then a delegation can carry handles: see [Implemented: Handles at a Delegation and
+  Declared Evidence](#implemented-handles-at-a-delegation-and-declared-evidence).)
 - **Who used `list_artifacts`:** `workflows/two-agent-mini.json`, whose prompt uses it only as
   a fallback, and its count in `internal/tui/render`. The verdict (`judge`) reads the
-  kernel, not artifacts. `aos inspect` reads the store directly, ungated, as the operator.
+  kernel, not artifacts, unless the workflow declares evidence: then it also reads the
+  runtime's records of what was published and read, directly and not through this gate. `aos inspect` reads the store directly, ungated, as the operator.
   A process no longer lists its own checkpoints, or delegate results: both are runtime
   records.
 
@@ -2550,3 +2555,89 @@ checked outside the lock pass. It now has 12 senders for 6 places and catches th
 
 The book session also ran the close on re-delegation through a real `aos run`, which this
 section had said was not done: see [Should the engine close more?](#should-the-engine-close-more).
+
+## Implemented: Handles at a Delegation and Declared Evidence
+
+live3 showed two gaps in the contract. All three verifiers had their first read of the
+benchmarker's record denied, because a fresh process could not receive a handle when it was
+delegated: its PID is unknown until the delegation returns. And the verifier that was judged,
+pid-000009, read none of that record, exited 0, and the kernel recorded a pass. Only
+`analyze.py` caught it, afterwards.
+
+### Handles at a delegation
+
+A delegate action, and `spawn_agent`, take `artifacts`, as `message_agent` does. The check is the
+one mail has, `checkHandles`, run before the delegation starts, on the whole list: one handle the
+delegator cannot read refuses the delegation as a tool error the delegator reads and goes on from.
+Nothing starts and nothing is granted. The refusal is logged as `capability.denied` with
+`capability: read_artifact`, as mail's is.
+
+What was attached is a `delegation_handles` record, produced by the process delegated to, written
+before it takes a step. `readRightsOf` reads it as it reads a received message, so the right is
+that chain's and lasts as long as the chain. Delegating to a parked process attaches the same way.
+A new process of the same agent is another chain and gets nothing from an earlier one. The process
+is told what came attached in its first message.
+
+The wait-and-mail route is still there, and answers the case the delegator could not foresee.
+
+### A pass bound to declared evidence
+
+`verification.evidence` declares a publisher, a published type and whether it must come from a
+file. It resolves, when checked, to the latest match under the run's root. The artifact ID is not
+known when the workflow is written, and the type is exact, because the runtime cannot judge what a
+name means: live3's record was `published.text`. So the publisher's prompt names the type. A record
+under another name is `not_published` for this check, which fails safe.
+
+Status of a declared record, from the verifier's chain: `read`, `partial`, `unread`,
+`not_published` or `not_from_file`. `read` means pages that join from the start to a last page, the
+rule `analyze.py`'s `read_whole` already had. A test runs the engine and `analyze.py` on the same
+records, over every scenario below, and fails if they differ. `analyze.py` also prints `DISAGREE`
+and exits 3 if a future verdict and the records part. It can still call a kernel pass UNCLEAN for
+what the kernel does not judge: a file changed on disk after its publish, or a report naming an
+artifact it never read.
+
+**Both a refusal and a withheld verdict.** A refusal alone leaves a process at its step limit, and
+a newer record can arrive after an accepted exit, so neither case would be covered. A withheld
+verdict alone would let a model exit 0 and learn nothing while it could still act, which is
+pid-000009's path. So an exit 0 with evidence unmet is a tool error naming what is missing and what
+to do, and `judge` applies the same check to whatever exit it finds. A nonzero exit claims no pass,
+and is not refused.
+
+**`unverified`.** A pass with evidence unmet, or a verifier the runtime ended (step limit, abandoned,
+crash), is `unverified`: nobody judged the work on the evidence. It must not read as pass, and it
+must not read as "the candidate is wrong", so it is a new status rather than `fail` or `missing`,
+which means no verifier ran. Its reason says so. Under `required` the workflow exits 1 and retryable,
+as `stale` does. Staleness comes first, since the verifier has to run again anyway.
+
+**A verifier's own failure stands.** A verifier that exits 1 with the record unread stays `fail`. Its
+judgement may rest on something else, and treating it as unverified would let a later verifier shop
+for a pass. So the verifier's prompt says a record it cannot read is no reason to exit 1, and to
+`wait` instead. A model can still ignore that; the result is a false fail, not a false pass.
+
+### Compatibility
+
+A workflow that declares nothing gets no check, no exit hook and no `evidence` key in its verdict. A
+frozen probe arm keeps its prompt byte for byte, under the golden test. A record without
+`delegate_handles` in `run.started` replays with the older prompt.
+
+**Replay does not cover a run that uses these.** Replay takes single-agent runs, and a verifier cannot
+be the entry agent, so every run that declares evidence, and every run that delegates, is refused with
+`ErrNotReplayable`, which a test pins. What stands in for it: a second judgement from a run's records
+must give the same verdict byte for byte, in every scenario.
+
+### Tests
+
+`internal/agentflow/evidence_test.go`: a pass with everything read, pages out of order, an older
+record, another verifier's read, a re-delegated chain, a recovery's chain, a partial read, the last
+page alone, a record never published, a typed record, step limits with and without the read, a wait
+route, a handle at a parked process, a verifier's own failure, a newer record after an accepted exit,
+stale work, pid-000009's path; attachments beyond the delegator's authority through both routes; the
+spec's validation; and declaring nothing. Evidence: `reports/ipc-live/evidence-report.html`.
+
+### Not covered
+
+Only the scripted model has run this. Whether a real model attaches the handle or publishes under the
+declared type is unknown. The evidence is bound to bytes read, not understood: a model can read a
+record and misreport it. `aos-tui`'s progress line still reads a verifier's nonzero exit as FAIL while
+the run is going; the verdict is the record.
+

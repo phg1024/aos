@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -221,5 +222,70 @@ func TestTheHandlesGrantsReachOnlyWhatTheySay(t *testing.T) {
 	result, err := execute("benchmarker", "run", map[string]string{"command": "pwd; echo new > fresh.txt"})
 	if err != nil || !strings.Contains(result.Output["stdout"], filepath.Dir(record)) || result.Changes == nil || !slices.Contains(result.Changes.Created, "fresh.txt") {
 		t.Errorf("the benchmarker's run in its first mount: %v %+v %v", result.Output, result.Changes, err)
+	}
+}
+
+// live3 ran the handles workflow as it stands. The evidence workflow is its successor,
+// and what it changes is its declaration, some prompt text and its step budgets: no
+// process can reach anything it could not before.
+func TestTheEvidenceWorkflowDeclaresAndGrantsNothingNew(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", handlesWorkflow))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != "d0ab28df10b3246ef14ccfdd2accb7fa2f0157229dea078d208fd39e2c13c706" {
+		t.Fatalf("the workflow live3 ran changed: %s", got)
+	}
+	load := func(name string) agentflow.WorkflowSpec {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var spec agentflow.WorkflowSpec
+		if err := json.Unmarshal(raw, &spec); err != nil {
+			t.Fatal(err)
+		}
+		return spec
+	}
+	old, spec := load(handlesWorkflow), load("rasterizer-bunny-cuda-evidence-ipc.json")
+	if err := spec.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Verification.Evidence) != 1 || spec.Verification.Evidence[0] != (agentflow.EvidenceSpec{Publisher: "benchmarker", Type: "raw_record", FromFile: true}) {
+		t.Fatalf("evidence %+v", spec.Verification.Evidence)
+	}
+	if len(spec.Agents) != len(old.Agents) {
+		t.Fatalf("%d agents", len(spec.Agents))
+	}
+	for i, agent := range spec.Agents {
+		before := old.Agents[i]
+		for name, pair := range map[string][2]any{
+			"id":           {agent.ID, before.ID},
+			"capabilities": {agent.Capabilities, before.Capabilities},
+			"delegable":    {agent.Delegable, before.Delegable},
+			"mounts":       {agent.Mounts, before.Mounts},
+			"allowed":      {agent.AllowedAgents, before.AllowedAgents},
+		} {
+			if !reflect.DeepEqual(pair[0], pair[1]) {
+				t.Errorf("%s: %s changed: %+v, was %+v", agent.ID, name, pair[0], pair[1])
+			}
+		}
+	}
+	coordinator, _ := spec.Agent("coordinator")
+	for _, want := range []string{"attach that artifact whenever you delegate to the verifier", "needs it attached again", "may still pause with a wait"} {
+		if !strings.Contains(coordinator.SystemPrompt, want) {
+			t.Errorf("coordinator lacks %q", want)
+		}
+	}
+	if strings.Contains(coordinator.SystemPrompt, "you can mail a paused process") {
+		t.Error("the coordinator still leans on mailing a paused process")
+	}
+	verifier, _ := spec.Agent("verifier")
+	if strings.Contains(verifier.SystemPrompt, "a record you could not read, makes the overall result FAIL") || !strings.Contains(verifier.SystemPrompt, "no reason to exit 1") {
+		t.Error("the verifier is still told to fail what it could not read")
+	}
+	benchmarker, _ := spec.Agent("benchmarker")
+	if !strings.Contains(benchmarker.SystemPrompt, "type raw_record") {
+		t.Error("the benchmarker is not told the declared type")
 	}
 }

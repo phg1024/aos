@@ -3,8 +3,10 @@ package agentflow
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
+	"aos/internal/artifact"
 	"aos/internal/capability"
 	"aos/internal/runtime"
 	"aos/internal/supervisor"
@@ -33,6 +35,19 @@ type WorkflowSpec struct {
 type VerificationSpec struct {
 	Policy   string `json:"policy"`
 	Verifier string `json:"verifier,omitempty"`
+	// Evidence is what the verifier must have read for its exit 0 to be a pass.
+	Evidence []EvidenceSpec `json:"evidence,omitempty"`
+}
+
+// EvidenceSpec declares one record a verifier must read. Its artifact ID is not
+// known when the workflow is written, so it is the latest artifact of this type
+// from this agent at the time it is checked.
+type EvidenceSpec struct {
+	Publisher string `json:"publisher"`
+	Type      string `json:"type"`
+	// FromFile requires the record to be a file's bytes (publish_artifact's path)
+	// and not text a model typed.
+	FromFile bool `json:"from_file,omitempty"`
 }
 
 type AgentSpec struct {
@@ -151,6 +166,16 @@ func (s WorkflowSpec) validateVerification(agents map[string]bool) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrWorkflowSpecInvalid, err)
 	}
+	if s.Verification != nil && len(s.Verification.Evidence) > 0 {
+		if policy == workflow.VerificationNone {
+			return fmt.Errorf("%w: verification evidence needs a verification policy other than none", ErrWorkflowSpecInvalid)
+		}
+		for _, evidence := range s.Verification.Evidence {
+			if err := s.validateEvidence(evidence, agents); err != nil {
+				return err
+			}
+		}
+	}
 	if policy == workflow.VerificationNone {
 		return nil
 	}
@@ -187,6 +212,25 @@ func (s WorkflowSpec) reachable(from, target string) bool {
 		}
 	}
 	return false
+}
+
+func (s WorkflowSpec) validateEvidence(evidence EvidenceSpec, agents map[string]bool) error {
+	publisher, ok := s.Agent(evidence.Publisher)
+	switch {
+	case evidence.Publisher == "":
+		return fmt.Errorf("%w: verification evidence needs a publisher", ErrWorkflowSpecInvalid)
+	case !agents[evidence.Publisher] || !ok:
+		return fmt.Errorf("%w: evidence publisher %q is not an agent", ErrWorkflowSpecInvalid, evidence.Publisher)
+	case evidence.Publisher == s.Verification.Verifier:
+		return fmt.Errorf("%w: verifier %q cannot publish its own evidence", ErrWorkflowSpecInvalid, evidence.Publisher)
+	case strings.TrimSpace(evidence.Type) == "" || strings.HasPrefix(evidence.Type, artifact.PublishedPrefix):
+		return fmt.Errorf("%w: verification evidence needs a type, without %q", ErrWorkflowSpecInvalid, artifact.PublishedPrefix)
+	case !slices.Contains(publisher.Capabilities.Tools, "publish_artifact"):
+		return fmt.Errorf("%w: evidence publisher %q does not hold publish_artifact", ErrWorkflowSpecInvalid, evidence.Publisher)
+	case evidence.FromFile && !slices.Contains(publisher.Capabilities.Tools, "read_file"):
+		return fmt.Errorf("%w: evidence publisher %q publishes from a file, which needs read_file", ErrWorkflowSpecInvalid, evidence.Publisher)
+	}
+	return nil
 }
 
 // workChangingTools can alter the work a verifier checks.

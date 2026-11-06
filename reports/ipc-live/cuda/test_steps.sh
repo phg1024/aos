@@ -10,7 +10,7 @@ T=$(mktemp -d "$live/test-steps.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/workflows" "$T/reports"
 cp "$live/bin/job.sh" "$live/bin/render.py" "$T/bin/"
-cp "$live/workflows/rasterizer-bunny-cuda-handles-ipc.json" "$T/workflows/"
+cp "$live/workflows/rasterizer-bunny-cuda-evidence-ipc.json" "$T/workflows/"
 ln -s "$live/reports/rasterizer-bunny" "$T/reports/rasterizer-bunny"
 printf 'import time\ntime.sleep(5)\n' > "$T/bin/fake_model.py"
 printf 'pass\n' > "$T/bin/metal.py"

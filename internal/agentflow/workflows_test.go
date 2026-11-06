@@ -17,15 +17,16 @@ import (
 // role must gate on it.
 func TestCheckedInWorkflowsValidate(t *testing.T) {
 	gated := map[string]string{
-		"rasterizer-team.json":                   "verifier",
-		"rasterizer-optimized-tail.json":         "verifier",
-		"rasterizer-bunny.json":                  "verifier",
-		"rasterizer-bunny-metal.json":            "verifier",
-		"rasterizer-bunny-metal-ipc.json":        "verifier",
-		"rasterizer-bunny-cuda-ipc.json":         "verifier",
-		"rasterizer-bunny-cuda-handles-ipc.json": "verifier",
-		"pathtracer-bunny-metal.json":            "verifier",
-		"live-reviewed-merge.json":               "review_partner",
+		"rasterizer-team.json":                    "verifier",
+		"rasterizer-optimized-tail.json":          "verifier",
+		"rasterizer-bunny.json":                   "verifier",
+		"rasterizer-bunny-metal.json":             "verifier",
+		"rasterizer-bunny-metal-ipc.json":         "verifier",
+		"rasterizer-bunny-cuda-ipc.json":          "verifier",
+		"rasterizer-bunny-cuda-handles-ipc.json":  "verifier",
+		"rasterizer-bunny-cuda-evidence-ipc.json": "verifier",
+		"pathtracer-bunny-metal.json":             "verifier",
+		"live-reviewed-merge.json":                "review_partner",
 	}
 	paths, err := filepath.Glob(filepath.Join("..", "..", "workflows", "*.json"))
 	if err != nil || len(paths) == 0 {

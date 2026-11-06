@@ -258,6 +258,108 @@ class Evidence(unittest.TestCase):
         self.assertIn("in mail bodies to a verifier: 2", run(self.state([mail])).stdout)
 
 
+class Declared(unittest.TestCase):
+    """What analyze.py says when a workflow declares evidence. A Go test holds it to the kernel on real records."""
+    def state(self, verdict, reads=(), source="file", grant=False, other=None):
+        root = os.path.join(tempfile.mkdtemp(), "state")
+        self.addCleanup(shutil.rmtree, os.path.dirname(root))
+        for sub in ("artifacts/payloads", "kernel", "run"):
+            os.makedirs(os.path.join(root, sub))
+        payloads = {
+            "art-000001": ("run_spec", "pid-000001", {"spec": {"verification": {"evidence": [{"publisher": "bench", "type": "raw_record", "from_file": True}]}}}, {}),
+            "art-000002": ("published.raw_record", "pid-000002", {"body": "bytes"}, {"source": source}),
+        }
+        for n, output in enumerate(reads):
+            payloads[f"art-00001{n}"] = ("tool_result", "pid-000003", {"tool": "read_artifact", "output": dict(output, artifact_id="art-000002")}, {"tool": "read_artifact"})
+        if grant:
+            payloads["art-000020"] = ("delegation_handles", "pid-000003", {}, {"delegator": "pid-000004", "artifacts": "art-000002"})
+        if other:
+            payloads["art-000025"] = ("published.raw_record", other, {"body": "not the publisher's"}, {"source": "file"})
+        payloads["art-000030"] = ("verification", "pid-000001", verdict, {"verifier_pid": "pid-000003"})
+        index = {}
+        for artifact, (kind, producer, payload, metadata) in payloads.items():
+            with open(os.path.join(root, "artifacts", "payloads", artifact + ".json"), "w") as f:
+                json.dump(payload, f)
+            index[artifact] = {"id": artifact, "type": kind, "producer_pid": producer, "created_at": "2026-11-06T07:00:00Z", "metadata": metadata, "path": artifact + ".json"}
+        with open(os.path.join(root, "artifacts", "index.json"), "w") as f:
+            json.dump(index, f)
+        processes = [{"pid": "pid-000001"}, {"pid": "pid-000004", "parent_pid": "pid-000001", "metadata": {"agent_id": "coordinator"}},
+                     {"pid": "pid-000002", "parent_pid": "pid-000004", "metadata": {"agent_id": "bench"}}, {"pid": "pid-000003", "parent_pid": "pid-000004", "metadata": {"agent_id": "verifier"}},
+                     {"pid": "pid-000005", "parent_pid": "pid-000004", "metadata": {"agent_id": "writer"}}, {"pid": "pid-000006", "metadata": {"agent_id": "root"}},
+                     {"pid": "pid-000007", "parent_pid": "pid-000006", "metadata": {"agent_id": "bench"}}]
+        with open(os.path.join(root, "kernel", "processes.json"), "w") as f:
+            json.dump(processes, f)
+        with open(os.path.join(root, "kernel", "events.json"), "w") as f:
+            json.dump([{"id": "evt-000001", "type": "verification.exit_refused", "process_id": "pid-000003", "timestamp": "t", "data": {"unmet": "art-000002 was not read"}}], f)
+        return root
+
+    def verdict(self, status, check, **more):
+        return dict({"status": status, "reason": "why", "verifier_pid": "pid-000003",
+                     "evidence": [{"publisher": "bench", "type": "raw_record", "artifact_id": "art-000002", "status": check}]}, **more)
+
+    def test_a_kernel_pass_on_what_these_records_say_was_not_read_disagrees(self):
+        result = run(self.state(self.verdict("pass", "read")))
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("declared raw_record by bench: art-000002: unread", result.stdout)
+        self.assertIn("DISAGREE", result.stdout)
+
+    def test_a_verdict_that_says_pass_with_unread_evidence_disagrees(self):
+        result = run(self.state(self.verdict("pass", "unread")))
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("DISAGREE: the verdict is a pass", result.stdout)
+
+    def test_any_difference_from_the_verdict_disagrees(self):
+        result = run(self.state(self.verdict("unverified", "partial")))
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("DISAGREE: the verdict says", result.stdout)
+
+    def test_only_the_publisher_in_this_run_counts(self):
+        for other in ("pid-000005", "pid-000007"):
+            result = run(self.state(self.verdict("unverified", "unread"), other=other))
+            self.assertIn("declared raw_record by bench: art-000002: unread", result.stdout)
+            self.assertNotIn("DISAGREE", result.stdout)
+
+    def test_unverified_is_said_and_is_no_unclean_pass(self):
+        result = run(self.state(self.verdict("unverified", "unread")))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("UNVERIFIED: why", result.stdout)
+        self.assertNotIn("UNCLEAN", result.stdout)
+        self.assertIn("exits refused for evidence: 1", result.stdout)
+        self.assertIn("exercised 1      an exit 0 refused for unread evidence", result.stdout)
+        self.assertIn("exercised 1      a verdict withheld as unverified", result.stdout)
+
+    def test_a_handle_at_delegation_has_its_line_and_counts_apart_from_mail(self):
+        result = run(self.state(self.verdict("pass", "read"), reads=[{"offset": 0}], grant=True))
+        self.assertIn("art-000002 (published.raw_record) attached at delegation by coordinator (pid-000004) to verifier (pid-000003)", result.stdout)
+        self.assertIn("read 1 pages, to the end", result.stdout)
+        self.assertIn("exercised 1      a handle attached at a delegation", result.stdout)
+        self.assertIn("NOT EXERCISED    a handle attached to mail", result.stdout)
+        self.assertIn("of 26 exercised", result.stdout)
+        self.assertIn("of 4 of the delegation and evidence situations exercised", result.stdout)
+        self.assertIn("CLEAN", result.stdout)
+
+    def test_typed_when_a_file_is_declared(self):
+        result = run(self.state(self.verdict("unverified", "not_from_file"), reads=[{"offset": 0}], source=""))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("declared raw_record by bench: art-000002: not_from_file", result.stdout)
+        self.assertNotIn("DISAGREE", result.stdout)
+
+
+class Live3(unittest.TestCase):
+    """live3 declared nothing, so what is said of it must not move. Its state stays where it ran."""
+    STATE = os.path.join(os.path.dirname(ANALYZE), "runs", "live3", "state")
+
+    def test_live3_is_still_an_unclean_pass_on_the_same_count(self):
+        if not os.path.isdir(self.STATE):
+            self.skipTest("live3's state is not here")
+        result = run(self.STATE)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("UNCLEAN PASS: the judged verifier never read art-000172", result.stdout)
+        self.assertIn("7 of 26 exercised", result.stdout)
+        self.assertIn("0 of 4 of the delegation and evidence situations exercised", result.stdout)
+        self.assertNotIn("exits refused for evidence", result.stdout)
+
+
 class Live2(unittest.TestCase):
     """live2's real state, which stays where it ran and is not in git."""
     STATE = os.path.join(os.path.dirname(ANALYZE), "runs", "live2", "state")

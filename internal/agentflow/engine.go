@@ -42,6 +42,8 @@ type StaticBackendFactory struct {
 	NoPublishSource bool
 	// NoDurationArgs is PromptBackend.NoDurationArgs for every backend.
 	NoDurationArgs bool
+	// NoDelegateHandles is PromptBackend.NoDelegateHandles for every backend.
+	NoDelegateHandles bool
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -50,15 +52,16 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		return nil, err
 	}
 	return PromptBackend{
-		Completer:       f.Completer,
-		Workflow:        workflow,
-		Agent:           agent,
-		Skills:          loadedSkills,
-		Recall:          workflow.Recall,
-		NoPeerFraming:   f.NoPeerFraming,
-		NoBusBounds:     f.NoBusBounds,
-		NoPublishSource: f.NoPublishSource,
-		NoDurationArgs:  f.NoDurationArgs,
+		Completer:         f.Completer,
+		Workflow:          workflow,
+		Agent:             agent,
+		Skills:            loadedSkills,
+		Recall:            workflow.Recall,
+		NoPeerFraming:     f.NoPeerFraming,
+		NoBusBounds:       f.NoBusBounds,
+		NoPublishSource:   f.NoPublishSource,
+		NoDurationArgs:    f.NoDurationArgs,
+		NoDelegateHandles: f.NoDelegateHandles,
 	}, nil
 }
 
@@ -164,6 +167,11 @@ type Engine struct {
 	// NoDurationArgs is AgentRuntime.NoDurationArgs, for replaying a record made
 	// before tools.DurationArg. When it is off, run.started says so (duration_args).
 	NoDurationArgs bool
+	// NoDelegateHandles records a run with the prompt from before a delegation could
+	// carry handles, for replaying one. When it is off, run.started says so
+	// (delegate_handles). A delegation's handles need no switch of their own: replay
+	// takes single-agent runs only, which delegate to nobody.
+	NoDelegateHandles bool
 	// NoRedelegationClose leaves the old chain open when a delegator
 	// re-delegates. When it is off, run.started says so (redelegation_close).
 	NoRedelegationClose bool
@@ -359,7 +367,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		RootPID:    root.PID,
 		OutputPath: req.OutputPath,
 	}
-	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil, nil)
+	run, err := e.runAgent(ctx, spec, req, spec.EntryAgent, root.PID, nil, nil, nil)
 	if err != nil {
 		// Return what exists so callers can still report on the failed run.
 		summary.ExitStatus = kernel.ExitStatus{Code: 1, Reason: err.Error(), Retryable: false}
@@ -424,7 +432,7 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 // process record; a child's capabilities, delegable authority and mounts
 // are narrowed to what grantor may grant. The entry agent has no grantor:
 // the workflow spec and run request are the trust root.
-func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string, grantor *kernel.Process, replaces []string) (AgentRun, error) {
+func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agentID, parentPID string, grantor *kernel.Process, replaces, handles []string) (AgentRun, error) {
 	agent, ok := spec.Agent(agentID)
 	if !ok {
 		return AgentRun{}, fmt.Errorf("%w: %s", ErrUnknownAgent, agentID)
@@ -450,7 +458,11 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 		return AgentRun{}, err
 	}
 	e.emitKernelTrace(agent.ID, process.PID, "start", req.Goal, process.LastEventID)
-	initial := []runtime.Message{{Role: "user", Content: req.Goal}}
+	attached, err := e.grantHandles(process.PID, grantor, handles)
+	if err != nil {
+		return AgentRun{}, err
+	}
+	initial := []runtime.Message{{Role: "user", Content: req.Goal + attached}}
 	run, err := e.drive(spec, req, agent, process, parentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
 		// Only now: a new child that could not start has replaced nothing.
 		e.closeReplaced(agent.ID, replaces, process.PID)
@@ -459,9 +471,22 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	return e.supervise(ctx, spec, req, agent, parentPID, run, err)
 }
 
+// grantHandles records the handles a delegator attached, before the process delegated
+// to takes a step, and returns the note that tells it. A crash between the spawn and
+// this record leaves a process that never ran.
+func (e *Engine) grantHandles(pid string, delegator *kernel.Process, handles []string) (string, error) {
+	if delegator == nil || len(handles) == 0 {
+		return "", nil
+	}
+	if err := runtime.GrantHandles(e.Artifacts, pid, delegator.PID, handles); err != nil {
+		return "", err
+	}
+	return runtime.AttachedNote(e.Artifacts, handles)
+}
+
 // resumeAgent continues a child parked in a wait, from its blocked
 // checkpoint, with its delegator's answer.
-func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, answer string, delegator kernel.Process) (AgentRun, error) {
+func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequest, agent AgentSpec, process kernel.Process, answer string, delegator kernel.Process, handles []string) (AgentRun, error) {
 	checkpoints, err := e.latestCheckpoints()
 	if err != nil {
 		return AgentRun{}, err
@@ -470,8 +495,12 @@ func (e *Engine) resumeAgent(ctx context.Context, spec WorkflowSpec, req RunRequ
 	if checkpointID == "" {
 		return AgentRun{}, fmt.Errorf("parked agent %s (%s) has no checkpoint", agent.ID, process.PID)
 	}
+	attached, err := e.grantHandles(process.PID, &delegator, handles)
+	if err != nil {
+		return AgentRun{}, err
+	}
 	e.emitKernelTrace(agent.ID, process.PID, "resumed", answer, process.LastEventID)
-	reply := []runtime.Message{{Role: "user", Content: fmt.Sprintf("Answer from %s (%s), who delegated your task: %s", delegator.Metadata["agent_id"], delegator.PID, answer)}}
+	reply := []runtime.Message{{Role: "user", Content: fmt.Sprintf("Answer from %s (%s), who delegated your task: %s%s", delegator.Metadata["agent_id"], delegator.PID, answer, attached)}}
 	run, err := e.drive(spec, req, agent, process, process.ParentPID, func(agentRuntime *runtime.AgentRuntime, options runtime.RunOptions) (runtime.RunResult, error) {
 		return agentRuntime.Resume(ctx, process.PID, checkpointID, reply, options)
 	})
@@ -506,6 +535,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoPublishSource:  e.NoPublishSource,
 		NoDurationArgs:   e.NoDurationArgs,
 		NoSenderOutcomes: e.NoSenderOutcomes,
+		ExitCheck:        e.exitCheck(spec, agent),
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)
 		}),
@@ -629,7 +659,11 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if !contains(agent.AllowedAgents, call.AgentID) {
 			return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
 		}
-		e.emitTrace(agent.ID, parent.PID, "delegate", fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal)))
+		trace := fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal))
+		if call.Artifacts != "" {
+			trace += " artifacts=" + call.Artifacts
+		}
+		e.emitTrace(agent.ID, parent.PID, "delegate", trace)
 		children, err := e.Kernel.Children(parent.PID)
 		if err != nil {
 			return runtime.DelegateResult{}, err
@@ -655,16 +689,17 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if err != nil {
 			return runtime.DelegateResult{}, err
 		}
+		handles := runtime.SplitHandles(call.Artifacts)
 		var childRun AgentRun
 		if parked != nil {
 			childAgent, _ := spec.Agent(call.AgentID)
-			childRun, err = e.resumeAgent(ctx, spec, childReq, childAgent, *parked, call.Goal, grantor)
+			childRun, err = e.resumeAgent(ctx, spec, childReq, childAgent, *parked, call.Goal, grantor, handles)
 		} else {
 			var replaces []string
 			if replaces, err = e.replacedChains(spec, parent.PID, call.AgentID); err != nil {
 				return runtime.DelegateResult{}, err
 			}
-			childRun, err = e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor, replaces)
+			childRun, err = e.runAgent(ctx, spec, childReq, call.AgentID, parent.PID, &grantor, replaces, handles)
 		}
 		if err != nil {
 			return runtime.DelegateResult{}, err

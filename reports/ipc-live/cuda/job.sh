@@ -63,7 +63,7 @@ case $mode in
   *) echo "job: mode must be preflight, dry or live" >&2; exit 2 ;;
 esac
 
-workflow=$(python3 -I "$here/render.py" "$name" cuda-handles) || exit 5
+workflow=$(python3 -I "$here/render.py" "$name" cuda-evidence) || exit 5
 echo "job: $workflow"
 
 # The kernel check, before any model call: compile and run one small kernel. This outside

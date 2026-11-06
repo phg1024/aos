@@ -2,6 +2,7 @@ package agentflow_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -592,4 +593,46 @@ func TestPromptBackendListsToolSignatures(t *testing.T) {
 			t.Fatalf("expected system prompt to contain %q:\n%s", want, completer.systemPrompt)
 		}
 	}
+}
+
+// A model may write a delegate's handles as a string or a list. Both reach the runtime
+// as message_agent's do.
+func TestDelegateActionsCarryHandles(t *testing.T) {
+	for name, tc := range map[string]struct {
+		value any
+		want  string
+	}{
+		"a string": {"art-000001,art-000002", "art-000001,art-000002"},
+		"a list":   {[]any{"art-000001", "art-000002"}, "art-000001,art-000002"},
+		"nothing":  {nil, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			delegate := map[string]any{"agent_id": "v", "goal": "check"}
+			if tc.value != nil {
+				delegate["artifacts"] = tc.value
+			}
+			encoded, err := json.Marshal(map[string]any{"action": map[string]any{"type": "delegate", "delegate": delegate}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			backend := agentflow.PromptBackend{Completer: &textCompleter{text: string(encoded)}, Workflow: agentflow.WorkflowSpec{Name: "w", EntryAgent: "a"}, Agent: agentflow.AgentSpec{ID: "a"}}
+			result, err := backend.Generate(context.Background(), runtime.GenerateRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Action.Delegate == nil || result.Action.Delegate.Artifacts != tc.want {
+				t.Fatalf("delegate %+v", result.Action.Delegate)
+			}
+		})
+	}
+}
+
+type textCompleter struct{ text string }
+
+func (c *textCompleter) CompleteJSON(_ context.Context, _ string, _ string, target any) error {
+	return json.Unmarshal([]byte(c.text), target)
+}
+
+func (c *textCompleter) CompleteText(context.Context, string, string) (string, error) {
+	return c.text, nil
 }

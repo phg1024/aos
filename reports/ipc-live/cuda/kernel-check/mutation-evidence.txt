@@ -1,0 +1,64 @@
+Mutations for handles at a delegation and declared evidence: runtime, engine, prompts, spec, replay flag, analyze.py.
+First pass 51 of 60: 5 mutants did not build, and 4 were real gaps in the tests (a typed record with no file required; evidence on a verdict with no verifier; analyzer publisher and disagreement). Tests were added, the mutants fixed, and one mutation added (analyzer root).
+caught rights ignore a delegation grant
+caught rights granted to every chain
+caught attachment not checked
+caught only the first attachment checked
+caught no bounds still attaches
+caught grant goes to the delegator
+caught new process not granted
+caught parked process not granted
+caught delegate action ignores a refusal
+caught spawn_agent ignores a refusal
+caught a list of handles is lost
+caught backend drops the handles
+caught any process's read counts
+caught a read of anything counts
+caught the oldest record is judged
+caught any agent publishes
+caught a file is never required
+caught a page counts as a read
+caught a gap in the pages is no gap
+caught unread reported as partial
+caught a pass needs nothing read
+caught a step limit stays a fail
+caught a verifier's own failure is withheld
+caught declaring nothing still adds evidence
+caught the verdict drops its checks
+caught unverified reads as a judgement
+caught unverified not retryable
+caught no check at exit
+caught every agent's exit is checked
+caught a nonzero exit is checked
+caught a refused exit records no event
+caught a refusal does not say what to do
+caught the refusal is not seen as exit
+caught engine does not set the check
+caught prompt offers handles on a frozen arm
+caught prompt offers handles while replaying
+caught prompt tells a leaf
+caught prompt lacks the evidence
+caught evidence: policy none allowed
+caught evidence: verifier publishes
+caught evidence: publisher cannot publish
+caught evidence: file with no read_file
+caught record never says delegate_handles
+caught record always says delegate_handles
+caught replay ignores the record
+caught report never legacy
+caught analyzer: oldest record
+caught analyzer: any process's read
+caught analyzer: file not checked
+caught analyzer: a page is a read
+caught analyzer: no UNVERIFIED line
+caught new process not told
+caught spawn_agent drops the handles
+caught chain is the process alone
+caught any root publishes
+caught a file is always required
+caught no verifier run is judged on evidence
+caught evidence: not validated
+caught analyzer: any publisher
+caught analyzer: any root
+caught analyzer: disagreement unsaid
+61 of 61 caught

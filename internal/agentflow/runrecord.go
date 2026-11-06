@@ -74,6 +74,10 @@ const (
 	// without it fell back to the default for a bare number or an unreadable value.
 	DurationArgsField = "duration_args"
 	DurationArgsV1    = "v1"
+	// DelegateHandlesField is the run.started field that says the prompt offers handles
+	// at a delegation: DelegateHandlesV1. Records without it never offered them.
+	DelegateHandlesField = "delegate_handles"
+	DelegateHandlesV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -148,6 +152,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoDurationArgs {
 		data[DurationArgsField] = DurationArgsV1
+	}
+	if !e.NoDelegateHandles {
+		data[DelegateHandlesField] = DelegateHandlesV1
 	}
 	if !e.NoRedelegationClose {
 		data[RedelegationCloseField] = RedelegationCloseV1

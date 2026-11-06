@@ -107,24 +107,15 @@ func (r *AgentRuntime) readRightsOf(pid string, records []artifact.Artifact) (re
 		return readRights{}, err
 	}
 	byPID := make(map[string]kernel.Process, len(processes))
-	rights := readRights{chain: map[string]bool{}, parents: make(map[string]string, len(processes)), granted: map[string]bool{}}
+	rights := readRights{parents: make(map[string]string, len(processes)), granted: map[string]bool{}}
 	for _, process := range processes {
 		byPID[process.PID] = process
 		rights.parents[process.PID] = process.ParentPID
 	}
-	for current, hops := pid, 0; current != "" && hops < maxResumeChain && !rights.chain[current]; hops++ {
-		process, ok := byPID[current]
-		if !ok {
-			break
-		}
-		rights.chain[current] = true
-		current = process.Metadata["resumed_from"]
-		if current == "" {
-			current = process.Metadata[ContinuesMetadata]
-		}
-	}
+	rights.chain = Chain(byPID, pid)
 	for _, record := range records {
-		if record.Type == "mailbox_message" && record.Metadata["direction"] == "receive" && rights.chain[record.ProducerPID] {
+		received := record.Type == "mailbox_message" && record.Metadata["direction"] == "receive"
+		if (received || record.Type == DelegationHandlesArtifact) && rights.chain[record.ProducerPID] {
 			for _, id := range splitHandles(record.Metadata[handlesMetadata]) {
 				rights.granted[id] = true
 			}
@@ -133,10 +124,85 @@ func (r *AgentRuntime) readRightsOf(pid string, records []artifact.Artifact) (re
 	return rights, nil
 }
 
+// Chain is pid and the processes it continues, through recoveries and a new root's
+// take-over. Links past maxResumeChain count for nothing, which fails closed.
+func Chain(byPID map[string]kernel.Process, pid string) map[string]bool {
+	chain := map[string]bool{}
+	for current, hops := pid, 0; current != "" && hops < maxResumeChain && !chain[current]; hops++ {
+		process, ok := byPID[current]
+		if !ok {
+			break
+		}
+		chain[current] = true
+		current = process.Metadata["resumed_from"]
+		if current == "" {
+			current = process.Metadata[ContinuesMetadata]
+		}
+	}
+	return chain
+}
+
+// GrantHandles records what a delegator attached, for the process delegated to. The
+// runtime checked the delegator's right to each before the delegation started.
+func GrantHandles(store *artifact.Store, pid, delegator string, ids []string) error {
+	_, err := store.CreateJSON(DelegationHandlesArtifact, pid, map[string]any{"delegator": delegator, "artifacts": ids}, nil, map[string]string{
+		"delegator":     delegator,
+		handlesMetadata: strings.Join(ids, ","),
+	})
+	return err
+}
+
+// delegationHandles is what a delegation attaches, once the delegator's right to each
+// is checked: the same check as mail. Before bounds and handles there is nothing to attach.
+func (r *AgentRuntime) delegationHandles(process kernel.Process, tool, raw string) (string, error) {
+	if r.NoBusBounds {
+		return "", nil
+	}
+	ids := splitHandles(raw)
+	if err := r.checkHandles(process, tool, ids); err != nil {
+		return "", err
+	}
+	return strings.Join(ids, ","), nil
+}
+
+// AttachedNote tells a process delegated to what came attached, or "" for nothing.
+func AttachedNote(store *artifact.Store, ids []string) (string, error) {
+	if len(ids) == 0 {
+		return "", nil
+	}
+	records, err := store.List()
+	if err != nil {
+		return "", err
+	}
+	var lines []string
+	for _, id := range ids {
+		if at := slices.IndexFunc(records, func(record artifact.Artifact) bool { return record.ID == id }); at >= 0 {
+			from := "typed"
+			if PublishedFromFile(records[at]) {
+				from = "from a file"
+			}
+			lines = append(lines, fmt.Sprintf("%s (%s, %s)", id, records[at].Type, from))
+		}
+	}
+	return "\n\nAttached to this delegation, which you may read with read_artifact: " + strings.Join(lines, ", ") + ".", nil
+}
+
+// PublishedFromFile is whether a published artifact holds a file's bytes.
+func PublishedFromFile(record artifact.Artifact) bool {
+	return record.Metadata[sourceMetadata] == sourceFile
+}
+
+// SplitHandles parses a comma-separated list of artifact IDs, without repeats.
+func SplitHandles(raw string) []string { return splitHandles(raw) }
+
 // ContinuesMetadata names, on a new root that takes over an ended root's
 // conversation, the root it continues. It is not a recovery, so mail and
 // subscriptions do not follow it, only the right to read what the old root could.
 const ContinuesMetadata = "continues"
+
+// DelegationHandlesArtifact records handles attached at a delegation. Its producer
+// is the process delegated to, and its handlesMetadata what the delegator attached.
+const DelegationHandlesArtifact = "delegation_handles"
 
 // handlesMetadata holds, on a receive's mailbox_message record, the handles the
 // message carried. The runtime writes it from what it checked at the send.

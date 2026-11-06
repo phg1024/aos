@@ -71,7 +71,7 @@ n=0
 # The real render.py renders this. Only the flags come from the case.
 stub_workflow() {
   printf '{"text": "Build with exactly nvcc %s -I <dir>/include <dir>/src/*.cpp -o <dir>/rasterizer; and again nvcc %s -I <dir>/include"}\n' \
-    "$STUB_FLAGS" "$STUB_FLAGS" > "$T/root/workflows/rasterizer-bunny-cuda-handles-ipc.json"
+    "$STUB_FLAGS" "$STUB_FLAGS" > "$T/root/workflows/rasterizer-bunny-cuda-evidence-ipc.json"
 }
 # expect <case> <exit> <aos ran: yes|no> <text in results or ->
 run_case() {
@@ -125,7 +125,7 @@ launch() {
 }
 
 # The task as agents get it, through the real render.py and job.sh, for a new run and then the same name again.
-cp "$workflows/rasterizer-bunny-cuda-handles-ipc.json" "$workflows/rasterizer-bunny-cuda-ipc.json" "$workflows/rasterizer-bunny-metal-ipc.json" "$T/root/workflows/"
+cp "$workflows/rasterizer-bunny-cuda-evidence-ipc.json" "$workflows/rasterizer-bunny-cuda-handles-ipc.json" "$workflows/rasterizer-bunny-cuda-ipc.json" "$workflows/rasterizer-bunny-metal-ipc.json" "$T/root/workflows/"
 dir=$T/root/reports/ipc-live/runs/real
 export STUB_DEFAULT=fail STUB_CARD=pass
 rm -f "$T/root/aos-ran"
@@ -137,8 +137,8 @@ grep -q __GPU_UUID__ "$dir/workflow.json" && bad="$bad; the workflow was not fil
 grep -qF "workflow compiles with: -O2 -std=c++17 -arch=sm_86 (card)" "$dir/kernel-check/results.txt" || bad="$bad; the card's build does not decide"
 [[ $(sed -n 2p "$dir/job.ended") == exit=0 ]] || bad="$bad; job.ended lacks exit=0"
 [[ -d $dir/cuda-bench ]] || bad="$bad; no private directory"
-grep -q '"name": "rasterizer-bunny-cuda-handles-ipc"' "$dir/workflow.json" || bad="$bad; another workflow was rendered"
-outcome "the real workflow, a new run: renders the handles variant with its directory, and the card's build decides" "$bad"
+grep -q '"name": "rasterizer-bunny-cuda-evidence-ipc"' "$dir/workflow.json" || bad="$bad; another workflow was rendered"
+outcome "the real workflow, a new run: renders the evidence variant with its directory, and the card's build decides" "$bad"
 
 before=$(cat "$dir/workflow.json" "$dir/job.ended")
 bash -c 'exec -a "$0" sleep 30' "$dir/leftover" &
@@ -167,11 +167,13 @@ render_both_ways() {
   AOS_IPC_ROOT=$T/root AOS_CUDA_HOME=$T/cuda AOS_GPU_UUID=GPU-test python3 -I "$render" "$name" "$kind" > "$T/out" 2>&1 && bad="$bad; a reused run was allowed"
   [[ $(cat "$dir/workflow.json" 2>/dev/null) == "$first" ]] || bad="$bad; the reused run's workflow changed"
   grep -q Traceback "$T/out" && bad="$bad; refused with a traceback"
-  if [[ $kind == cuda-handles ]]; then [[ -d $dir/cuda-bench ]] || bad="$bad; no private directory"; else [[ -e $dir/cuda-bench ]] && bad="$bad; a private directory it does not use"; fi
+  if [[ $kind == cuda-handles || $kind == cuda-evidence ]]; then [[ -d $dir/cuda-bench ]] || bad="$bad; no private directory"; else [[ -e $dir/cuda-bench ]] && bad="$bad; a private directory it does not use"; fi
   outcome "render.py $kind, directory $made: a new run passes, a reused one is refused" "$bad"
 }
 render_both_ways cuda-handles made
 render_both_ways cuda-handles absent
+render_both_ways cuda-evidence made
+render_both_ways cuda-evidence absent
 render_both_ways cuda made
 render_both_ways cuda absent
 render_both_ways metal made

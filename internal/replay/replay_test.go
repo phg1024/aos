@@ -122,6 +122,10 @@ type options struct {
 	noPublishSource bool
 	// noDurationArgs records as AOS did before tools.DurationArg.
 	noDurationArgs bool
+	// noDelegateHandles records with the prompt from before handles at a delegation.
+	noDelegateHandles bool
+	// delegator gives the agent an agent it may delegate to, and never does.
+	delegator bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -216,19 +220,24 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	if opts.restart != "" {
 		restart = `"restart":` + opts.restart + `,`
 	}
-	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.",`+restart+`"max_steps":`+strconv.Itoa(maxSteps)+`,
+	allowed, helper := "", ""
+	if opts.delegator {
+		allowed, helper = `"allowed_agents":["helper"],`, `,{"id":"helper","system_prompt":"Help."}`
+	}
+	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.",`+allowed+restart+`"max_steps":`+strconv.Itoa(maxSteps)+`,
 		"mounts":[{"name":"workspace","host_path":"`+workspace+`"}],
-		"capabilities":{"tools":[`+mailTool+`"write_file","read_file","run","acquire_lease","release_lease"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}]}`), &spec); err != nil {
+		"capabilities":{"tools":[`+mailTool+`"write_file","read_file","run","acquire_lease","release_lease"],"read_paths":["`+workspace+`"],"write_paths":["`+workspace+`"],"unconfined_run":true}}`+helper+`]}`), &spec); err != nil {
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoDelegateHandles: opts.noDelegateHandles, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
 		NoPeerFraming: opts.noFraming,
 		NoBusBounds:   opts.noBounds,
 
 		NoRedelegationClose: opts.noRedelegationClose,
 		NoPublishSource:     opts.noPublishSource,
 		NoDurationArgs:      opts.noDurationArgs,
+		NoDelegateHandles:   opts.noDelegateHandles,
 		NoChainDelivery:     opts.noChain,
 		NoSenderOutcomes:    opts.noOutcomes,
 		Compaction:          opts.compaction,
@@ -1236,6 +1245,36 @@ func TestReplayOfAPublishByPath(t *testing.T) {
 	}
 	if report := replayed(t, stateDir, false); !report.Identical() {
 		t.Fatalf("with the file changed: %+v, %+v", report, report.Divergence)
+	}
+}
+
+// A record from before handles at a delegation replays with the prompt it ran with, and
+// a record since then with its own.
+func TestReplayOfARecordWithoutDelegateHandles(t *testing.T) {
+	script := func(string) []step { return []step{exit("done")} }
+	opts := options{budget: capability.Budget{Seconds: 600}, delegator: true, noDelegateHandles: true}
+	legacy := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if runStartedData(t, legacy)[agentflow.DelegateHandlesField] != "" {
+		t.Fatal("the legacy record should have no delegate_handles")
+	}
+	if recordHolds(t, legacy, "A delegate action may also carry") {
+		t.Fatal("the legacy record should have the older prompt")
+	}
+	report := replayed(t, legacy, false)
+	if !report.Identical() || !report.LegacyDelegateHandles {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+	opts.noDelegateHandles = false
+	current := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if got := runStartedData(t, current)[agentflow.DelegateHandlesField]; got != agentflow.DelegateHandlesV1 {
+		t.Fatalf("delegate_handles = %q", got)
+	}
+	if !recordHolds(t, current, "A delegate action may also carry") {
+		t.Fatal("the current record should have the new prompt")
+	}
+	report = replayed(t, current, false)
+	if !report.Identical() || report.LegacyDelegateHandles {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
 	}
 }
 

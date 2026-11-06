@@ -147,8 +147,8 @@ def done(reason, code=0):
     return {"type": "exit", "exit_status": {"code": code, "reason": reason, "retryable": False}}
 
 
-def delegate(agent, goal):
-    return {"type": "delegate", "delegate": {"agent_id": agent, "goal": goal}}
+def delegate(agent, goal, **more):
+    return {"type": "delegate", "delegate": {"agent_id": agent, "goal": goal, **more}}
 
 
 class Run:
@@ -156,6 +156,9 @@ class Run:
     kind = "metal"
     dry = False
     goal_record = ""
+    evidence = False
+    unread = False
+    attached = []
     workspace = "metal-workspace"
     verification = "metal-verification"
 
@@ -208,6 +211,26 @@ def coordinator_handles(me, workspace, verification):
     yield done("preflight finished")
 
 
+def coordinator_evidence(me, workspace, verification):
+    """The evidence workflow's path: the handle goes with the delegation, and no mail or wait is needed. With Run.unread
+    it plays live3's pid-000009 instead, whose delegation carried no handle."""
+    d = f"{workspace}/{Run.kind}"
+    yield delegate("writer", f"Write the program in {d}. Your coordinator's process_id is {me}.")
+    yield delegate("benchmarker", f"Build a copy of {d} and benchmark it. Your coordinator's process_id is {me}.")
+    yield tool("read_file", path=f"{bench_of(workspace)}/raw_record.txt")  # refused: only the benchmarker's
+    text = yield tool("list_artifacts")
+    published = dict(re.findall(r"(art-\d+)\s+published\.(\S+)", text))
+    record = next(a for a, kind in published.items() if kind == "raw_record")
+    yield tool("read_artifact", id=next(a for a, kind in published.items() if kind == "benchmark_json"))
+    goal = f"Verify {d} into {verification}."
+    if Run.unread:
+        yield delegate("verifier", f"{goal} The record is {record}.")
+    else:
+        yield delegate("verifier", goal, artifacts=",".join(published))
+    yield tool("write_file", path=f"{workspace}/final-summary.txt", content="preflight: a scripted run\n")
+    yield done("preflight finished")
+
+
 def benchmarker_handles(me, workspace, coordinator_pid):
     d = f"{workspace}/{Run.kind}"
     bench = bench_of(workspace)
@@ -219,7 +242,7 @@ def benchmarker_handles(me, workspace, coordinator_pid):
     text = yield run(f"head -c 20000 {record}")
     raw = text.split("stdout:", 1)[1] if "stdout:" in text else text
     yield tool("message_agent", to=coordinator_pid, body=raw)  # refused: too large
-    yield tool("publish_artifact", type="raw_timings", path=record)
+    yield tool("publish_artifact", type="raw_record" if Run.evidence else "raw_timings", path=record)
     yield tool("publish_artifact", type="benchmark_json", path=f"{bench}/cuda_benchmark.json")
     yield done("benchmarker finished: published the record and the JSON")
 
@@ -235,6 +258,29 @@ def verifier_handles(me, workspace, verification):
     text = yield tool("read_artifact", id=Run.goal_record)  # refused: no handle yet
     text = yield {"type": "wait", "message": "I need the benchmarker's raw per-trial record and the JSON."}
     handles = list(dict.fromkeys(re.findall(r"art-\d+", text)))
+    yield from verifier_work(d, verification, base, handles)
+
+
+def verifier_evidence(me, workspace, verification):
+    """A verifier told what came attached. Without a handle it plays live3's pid-000009: it is refused, tries to exit 0
+    with what it has, and is refused until its steps run out."""
+    d = f"{workspace}/{Run.kind}"
+    base = f"{Run.root}/reports/rasterizer-bunny"
+    bench = bench_of(workspace)
+    record = f"{bench}/raw_record.txt"
+    yield tool("read_file", path=record)  # refused: only the benchmarker's
+    yield run(f"cat {record}; ls {bench}; cat {workspace}/cuda_coordinator_log.txt; echo tried")  # refused, each
+    yield tool("list_artifacts")
+    if Run.attached:
+        yield from verifier_work(d, verification, base, Run.attached)
+        return
+    yield tool("read_artifact", id=Run.goal_record)  # refused: no handle
+    yield tool("write_file", path=f"{verification}/{Run.kind}_verification.txt", content="preflight: a scripted verdict, overall PASS, on a record not read.\n")
+    while True:
+        yield done("verifier finished: PASS, without the record")
+
+
+def verifier_work(d, verification, base, handles):
     for handle in handles:
         offset = "0"
         while True:
@@ -355,7 +401,8 @@ class Handler(BaseHTTPRequestHandler):
         if role == "coordinator" and script is None:
             m = re.search(r"Maintain a coordinator ledger at (\S+)/\w+_coordinator_log.txt", system)
             workspace = m.group(1)
-            play = coordinator_handles if Run.kind == "cuda" else coordinator
+            Run.evidence = "rasterizer-bunny-cuda-evidence-ipc" in everything
+            play = coordinator_evidence if Run.evidence else coordinator_handles if Run.kind == "cuda" else coordinator
             script = play(me, workspace, workspace.replace(Run.workspace, Run.verification))
             action = next(script)
         elif script is None or (role != "verifier" and role not in self.started_for or self.started_for.get(role) != me and role != "verifier"):
@@ -367,6 +414,12 @@ class Handler(BaseHTTPRequestHandler):
                 script = writer(me, workspace, pid.group(1))
             elif role == "benchmarker":
                 script = (benchmarker_handles if Run.kind == "cuda" else benchmarker)(me, workspace, pid.group(1))
+            elif Run.evidence:
+                found = re.search(r"Attached to this delegation[^\n]*", everything)
+                Run.attached = list(dict.fromkeys(re.findall(r"art-\d+", found.group(0)))) if found else []
+                record = re.search(r"art-\d+", goal)
+                Run.goal_record = record.group(0) if record else ""
+                script = verifier_evidence(me, workspace, verification)
             elif Run.kind == "cuda":
                 Run.goal_record = re.search(r"art-\d+", goal).group(0)
                 script = verifier_handles(me, workspace, verification)

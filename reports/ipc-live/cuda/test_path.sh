@@ -4,8 +4,11 @@
 # reference and analyze.py. Stubs: nvcc, whose "binary" is a script printing the program's line, and nvidia-smi inside the
 # job. The one real nvidia-smi call is the query for the card's UUID, as the sandbox's grant names it; a grant holds the device
 # files by path and opens none. So no CUDA context opens. It runs outside Ray, in a directory of its own, which it removes.
+# With unread as its argument it plays live3's pid-000009: no handle goes with the delegation, the verifier's read is refused, it
+# tries to exit 0, and the run must not pass.
 set -u
 : "${AOS_GPU_NAME:?}"
+path=${1:-clean}
 live=$HOME/aos-ipc-live
 uuid=$(nvidia-smi --query-gpu=uuid,name --format=csv,noheader | grep -F "$AOS_GPU_NAME" | cut -d, -f1)
 [[ $uuid == GPU-* ]] || { echo "no such card: $AOS_GPU_NAME"; exit 2; }
@@ -13,7 +16,8 @@ T=$(mktemp -d "$live/test-path.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/workflows" "$T/reports" "$T/cuda/bin"
 cp "$live/bin/aos" "$live/bin/job.sh" "$live/bin/render.py" "$live/bin/analyze.py" "$live/bin/fake_model.py" "$live/bin/metal.py" "$T/bin/"
-cp "$live/workflows/rasterizer-bunny-cuda-handles-ipc.json" "$T/workflows/"
+cp "$live/workflows/rasterizer-bunny-cuda-evidence-ipc.json" "$T/workflows/"
+[[ $path != unread ]] || sed -i 's/^    unread = False$/    unread = True/' "$T/bin/fake_model.py"
 ln -s "$live/reports/rasterizer-bunny" "$T/reports/rasterizer-bunny"
 ln -s "$live/skills" "$T/skills"
 cat > "$T/cuda/bin/nvcc" <<'STUB'
@@ -53,20 +57,29 @@ echo "job exit: $status"
 sed -n '/== Counts/,$p' "$T/job.out"
 failed=0
 need() { if grep -qF -- "$1" "$T/job.out"; then echo "ok   $1"; else echo "FAIL $1"; failed=1; fi; }
-need "CLEAN: the judged verifier read the latest record"
-need "exercised 1      a body refused as too large"
-need "exercised 1      the verifier pausing with a wait"
-for label in "an artifact published" "the verifier reading evidence to its end" "a read denied" "a handle attached to mail"; do
-  if grep -qE "^exercised [0-9]+ +$label" "$T/job.out"; then echo "ok   $label"; else echo "FAIL $label"; failed=1; fi
-done
-need "mail to a parked process: 1"
-if grep -qE 'read art-[0-9]+ \(published\.raw_timings\): [2-9] pages, to the end' "$T/job.out"; then echo "ok   the record took more than one page, read to the end"; else echo "FAIL the record's pages"; failed=1; fi
-if grep -q 'UNCLEAN' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
+if [[ $path == unread ]]; then
+  need "UNVERIFIED:"
+  need "declared raw_record by benchmarker: "
+  need "exercised 1      a body refused as too large"
+  if grep -qE '^exercised [0-9]+ +an exit 0 refused for unread evidence' "$T/job.out"; then echo "ok   an exit 0 refused"; else echo "FAIL an exit 0 refused"; failed=1; fi
+  need "a verdict withheld as unverified"
+  if grep -qE '^declared raw_record by benchmarker: art-[0-9]+: unread$' "$T/job.out"; then echo "ok   the record unread"; else echo "FAIL the record unread"; failed=1; fi
+  if [[ $status == 0 ]]; then echo "FAIL the job passed"; failed=1; else echo "ok   the job did not pass: exit $status"; fi
+else
+  need "CLEAN: the judged verifier read the latest record"
+  need "exits refused for evidence: 0"
+  need "exercised 1      a body refused as too large"
+  for label in "an artifact published" "the verifier reading evidence to its end" "a read denied" "a handle attached at a delegation"; do
+    if grep -qE "^exercised [0-9]+ +$label" "$T/job.out"; then echo "ok   $label"; else echo "FAIL $label"; failed=1; fi
+  done
+  if grep -qE 'attached at delegation by coordinator \(pid-[0-9]+\) to verifier \(pid-[0-9]+\).*: read [2-9] pages, to the end' "$T/job.out"; then echo "ok   the record took more than one page, read to the end"; else echo "FAIL the record's reading"; failed=1; fi
+  if grep -q 'UNCLEAN\|DISAGREE' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
+  if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi
+fi
 echo "record bytes: $(wc -c < "$dir/cuda-bench/raw_record.txt")"
 echo "verifier's report: $(cat "$dir/cuda-verification/cuda_verification.txt")"
 echo "planted in the source: $([[ -e $dir/cuda-workspace/cuda/should-be-refused ]] && echo yes || echo no)"
 echo "compute apps unchanged by this script: $([[ $(nvidia-smi --query-compute-apps=pid --format=csv,noheader | sort) == "$before" ]] && echo yes || echo no)"
 echo "job.ended: $(tr '\n' ' ' < "$dir/job.ended")"
-if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi
 (( failed == 0 )) && echo "all passed"
 exit $failed

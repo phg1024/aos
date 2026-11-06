@@ -319,6 +319,56 @@ def source_of(record):
     return "from a file" if record.get("metadata", {}).get("source") == "file" else "typed"
 
 
+def declared_evidence(state):
+    """What the workflow declares its verifier must read, from the run's own record. An older run declares nothing."""
+    for record in state.records("run_spec"):
+        spec = (state.payload(record["id"]) or {}).get("spec") or {}
+        return (spec.get("verification") or {}).get("evidence") or []
+    return []
+
+
+def root_of(state, pid):
+    seen = set()
+    while pid in state.processes and pid not in seen:
+        seen.add(pid)
+        parent = state.processes[pid].get("parent_pid")
+        if not parent:
+            return pid
+        pid = parent
+    return pid
+
+
+def evidence_checks(state, verifier):
+    """Each declared record as the verifier's chain left it: internal/agentflow/evidence.go computes the same from the
+    same records, and a Go test holds the two together. (type, publisher, artifact or None, status) for each."""
+    reads = artifact_reads(state).get(state.chain(verifier), {})
+    root = root_of(state, verifier)
+    checks = []
+    for declared in declared_evidence(state):
+        matching = [r for r in state.index.values() if r.get("type") == "published." + declared["type"]
+                    and state.agent(r["producer_pid"]) == declared["publisher"] and root_of(state, r["producer_pid"]) == root]
+        latest = max(matching, key=lambda r: int(r["id"].split("-")[1])) if matching else None
+        if latest is None:
+            status = "not_published"
+        elif declared.get("from_file") and latest.get("metadata", {}).get("source") != "file":
+            status = "not_from_file"
+        else:
+            rows = reads.get(latest["id"], [])
+            status = "unread" if not rows else "read" if read_whole(rows) else "partial"
+        checks.append((declared["type"], declared["publisher"], latest["id"] if latest else None, status))
+    return checks
+
+
+def delegation_handles(state):
+    """(time, handle, delegator, process delegated to) for each handle attached at a delegation."""
+    out = []
+    for record in state.records("delegation_handles"):
+        metadata = record.get("metadata", {})
+        for handle in filter(None, metadata.get("artifacts", "").split(",")):
+            out.append((record["created_at"], handle, metadata.get("delegator"), record["producer_pid"]))
+    return out
+
+
 def handles(state):
     section("Handles: each attached, by whom, to whom, and whether it was read")
     reads = artifact_reads(state)
@@ -330,13 +380,18 @@ def handles(state):
         finished = read_whole(later)
         said = f"read {len(later)} pages, {'to the end' if finished else 'NOT to the end'}, first at {later[0][0]}" if later else "never read by its receiver"
         print(f"{artifact} ({state.index.get(artifact, {}).get('type')}) from {state.label(sender)} to {state.label(to)} at {when}: {said}")
-    if not attached:
+    at_delegation = delegation_handles(state)
+    for when, artifact, delegator, to in at_delegation:
+        got = reads.get(state.chain(to), {}).get(artifact, [])
+        said = f"read {len(got)} pages, {'to the end' if read_whole(got) else 'NOT to the end'}, first at {min(r[0] for r in got)}" if got else "never read by its receiver"
+        print(f"{artifact} ({state.index.get(artifact, {}).get('type')}) attached at delegation by {state.label(delegator)} to {state.label(to)} at {when}: {said}")
+    if not attached and not at_delegation:
         print("no handle was attached in this run")
     for record in sorted(state.index.values(), key=lambda a: a["id"]):
         if record.get("type", "").startswith("published."):
             size = len(str((state.payload(record["id"]) or {}).get("body", "")))
             print(f"published: {record['id']} {record['type']} by {state.label(record['producer_pid'])}, {size} bytes, {source_of(record)}")
-    denied = [e for e in state.of_type("capability.denied") if e["data"].get("action") in ("read_artifact", "message_agent") and e["data"].get("capability") == "read_artifact"]
+    denied = [e for e in state.of_type("capability.denied") if e["data"].get("action") in ("read_artifact", "message_agent", "delegate", "spawn_agent") and e["data"].get("capability") == "read_artifact"]
     for event in denied:
         print(f"denied: {state.label(event['process_id'])} {event['data'].get('action')}: {event['data'].get('reason')}")
     if not denied:
@@ -442,20 +497,50 @@ def named_in_report(state):
     return named
 
 
+def declared_lines(state, verdict, judged):
+    """Lines for what the workflow declares, and whether they differ from what the verdict says. Returns the latter."""
+    refused = state.of_type("verification.exit_refused")
+    declared = declared_evidence(state)
+    if not declared:
+        return False
+    print(f"exits refused for evidence: {len(refused)}")
+    for event in refused:
+        print(f"    {state.label(event['process_id'])} at {event.get('timestamp')}: {str(event['data'].get('unmet'))[:160]}")
+    if not judged or not verdict.get("verifier_pid"):
+        print(f"no verifier run to check the declared evidence against")
+        return False
+    checks = evidence_checks(state, judged)
+    for kind, publisher, artifact, status in checks:
+        print(f"declared {kind} by {publisher}: {artifact or '-'}: {status}")
+    theirs = [(c.get("type"), c.get("publisher"), c.get("artifact_id"), c.get("status")) for c in verdict.get("evidence") or []]
+    if theirs != checks:
+        print(f"DISAGREE: the verdict says {theirs}, these records say {checks}")
+        return True
+    if verdict.get("status") == "pass" and any(c[3] != "read" for c in checks):
+        print("DISAGREE: the verdict is a pass, and a declared record was not read")
+        return True
+    return False
+
+
 def evidence(state):
-    """Whether the verdict rests on the evidence. Returns whether it is an unclean pass."""
+    """Whether the verdict rests on the evidence. Returns whether it is an unclean pass, or differs from these records."""
     section("Evidence behind the verdict")
     verdicts = state.records("verification")
     verdict = (state.payload(verdicts[-1]["id"]) or {}) if verdicts else {}
     judged = judged_verifier(state)
+    disagrees = declared_lines(state, verdict, judged)
+    if verdict.get("status") == "unverified":
+        print(f"UNVERIFIED: {str(verdict.get('reason'))[:200]}")
+        return disagrees
     if verdict.get("status") != "pass":
         print(f"verdict: {verdict.get('status') or 'none'}, so no pass to look behind (verifier {judged})")
-        return False
+        return disagrees
     chain = state.chain(judged)
     reads = artifact_reads(state).get(chain, {})
     print(f"verdict: pass, by {state.label(judged)}")
     reasons = []
-    record = latest_record(state)
+    declared = declared_evidence(state)
+    record = state.index.get(evidence_checks(state, judged)[0][2]) if declared else latest_record(state)
     if record is None:
         reasons.append("the benchmarker published no record")
     else:
@@ -670,6 +755,18 @@ def not_exercised(state, told_too_much, found):
     for name, count in situations:
         print(f"{'exercised ' + str(count) if count else 'NOT EXERCISED':<16} {name}")
     print(f"{sum(1 for _, count in situations if count)} of {len(situations)} exercised. NOT EXERCISED says nothing about the contract, either way.")
+    # Kept apart so the count above stays comparable with runs from before these existed.
+    refused_attachments = sum(1 for e in state.of_type("capability.denied") if e["data"].get("capability") == "read_artifact" and e["data"].get("action") in ("delegate", "spawn_agent"))
+    unverified = sum(1 for r in state.records("verification") if (state.payload(r["id"]) or {}).get("status") == "unverified")
+    declared = [
+        ("a handle attached at a delegation", len(delegation_handles(state))),
+        ("an attachment refused at a delegation", refused_attachments),
+        ("an exit 0 refused for unread evidence", len(state.of_type("verification.exit_refused"))),
+        ("a verdict withheld as unverified", unverified),
+    ]
+    for name, count in declared:
+        print(f"{'exercised ' + str(count) if count else 'NOT EXERCISED':<16} {name}")
+    print(f"{sum(1 for _, count in declared if count)} of {len(declared)} of the delegation and evidence situations exercised, counted apart from those above.")
 
 
 def main():

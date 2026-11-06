@@ -79,6 +79,9 @@ type ToolCall struct {
 type DelegateCall struct {
 	AgentID string `json:"agent_id"`
 	Goal    string `json:"goal"`
+	// Artifacts is a comma-separated list of handles, as message_agent's artifacts
+	// is, which the process delegated to may read from its first step.
+	Artifacts string `json:"artifacts,omitempty"`
 }
 
 type SendCall struct {
@@ -288,6 +291,10 @@ type AgentRuntime struct {
 	// for replaying a record made before it. Run, web_search and web_fetch need no
 	// such switch: a replay answers them from the record.
 	NoDurationArgs bool
+	// ExitCheck, when set, may refuse this process's exit 0: the error reaches the
+	// model as a tool error and the process goes on. A nonzero exit claims no pass, and
+	// is not checked.
+	ExitCheck func(kernel.Process) error
 	// KeepMailAtExit leaves a final exit's mail where it is, for a program that
 	// will move it on, as aos-tui does when a new root continues the
 	// conversation. The next Sweep takes whatever it did not move.
@@ -1238,6 +1245,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				}
 				break
 			}
+			if attached, err := r.delegationHandles(process, "delegate", result.Action.Delegate.Artifacts); err != nil {
+				if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "delegate", err, options); !continued {
+					return failed, failErr
+				}
+				break
+			} else {
+				result.Action.Delegate.Artifacts = attached
+			}
 			if r.DelegateHandler == nil {
 				exitStatus := kernel.ExitStatus{Code: 1, Reason: "delegate handler not configured", Retryable: false}
 				exitStatus.Checkpoint = lastCheckpoint()
@@ -1438,6 +1453,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 					break
 				}
 				return r.failMalformed(pid, lastCheckpoint())
+			}
+			if r.ExitCheck != nil && result.Action.ExitStatus.Code == 0 {
+				if err := r.ExitCheck(process); err != nil {
+					if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, "exit", err, options); !continued {
+						return failed, failErr
+					}
+					break
+				}
 			}
 			if options.ExitEndsTurn {
 				ended := *result.Action.ExitStatus
@@ -2442,9 +2465,14 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if agentID == "" {
 			return tools.Result{}, errors.New("spawn_agent requires agent_id")
 		}
+		attached, err := r.delegationHandles(process, call.Name, call.Args["artifacts"])
+		if err != nil {
+			return tools.Result{}, err
+		}
 		result, err := r.DelegateHandler(ctx, process, DelegateCall{
-			AgentID: agentID,
-			Goal:    call.Args["goal"],
+			AgentID:   agentID,
+			Goal:      call.Args["goal"],
+			Artifacts: attached,
 		}, session)
 		if err != nil {
 			return tools.Result{}, err
