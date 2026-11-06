@@ -1,0 +1,7 @@
+caught no exit trap
+caught gate ignored
+caught gate always default
+caught card not run
+caught dry runs the binary
+caught unknown flags accepted
+caught unreadable capability accepted

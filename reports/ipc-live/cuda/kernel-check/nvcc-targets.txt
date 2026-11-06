@@ -1,0 +1,18 @@
+Compile only, on the target machine, 2026-11-05 Pacific. Nothing ran on the card.
+nvcc: Cuda compilation tools, release 13.3, V13.3.73
+driver: 595.99.02, CUDA Version: 13.2
+card, from nvidia-smi compute_cap: NVIDIA GeForce RTX 3080, 8.6
+
+nvcc -O2 -std=c++17 --dryrun check.cu
+  __CUDA_ARCH__=750
+  --image3=kind=elf,sm=75
+  --image3=kind=ptx,sm=75
+nvcc -O2 -std=c++17 -arch=sm_86 --dryrun check.cu
+  __CUDA_ARCH__=860
+  --image3=kind=elf,sm=86
+  --image3=kind=ptx,sm=86
+
+nvcc -O2 -std=c++17 -ptx check.cu: .version 9.3, .target sm_75
+nvcc -O2 -std=c++17 -arch=sm_86 -ptx check.cu: .version 9.3, .target sm_86
+
+The new check.cu compiled with both sets of flags. Neither binary was run.

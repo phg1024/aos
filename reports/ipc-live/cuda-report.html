@@ -91,5 +91,42 @@
     <li>A full run through Ray: only one trivial job has been submitted, and it failed on my own quoting, after landing on the right node.</li>
     <li>Any run with a real model.</li>
   </ul>
+
+  <h2>8. The pf1 Preflight and the Kernel Check</h2>
+  <p>The first preflight stopped at the kernel check, outside the sandbox and before <code>aos</code> started: <code>kernel_ok=0</code>, exit 6, about 1.5 seconds. <span class="bad">The cause is not established.</span> The check did not look for an error after the launch, so a launch that failed would look exactly like this. The dry job skips running the check, so this was its first time on the card.</p>
+  <h3>What was measured, compile only</h3>
+  <table>
+    <tr><th></th><th>Device code embedded</th><th>Architecture macro</th></tr>
+    <tr><td><code>nvcc -O2 -std=c++17</code></td><td>Binary for <code>sm_75</code>, PTX for <code>sm_75</code></td><td>750</td></tr>
+    <tr><td><code>nvcc -O2 -std=c++17 -arch=sm_86</code></td><td>Binary for <code>sm_86</code>, PTX for <code>sm_86</code></td><td>860</td></tr>
+  </table>
+  <p>The card reports compute capability 8.6. <code>nvcc</code> is release 13.3 and writes PTX 9.3. The driver reports CUDA 13.2. <a href="cuda/kernel-check/nvcc-targets.txt">Output</a>.</p>
+  <p>So the default build does carry PTX, according to <code>nvcc --dryrun</code>, and the earlier lead that it had none does not hold as stated. On a 3080 it would have to be compiled by the driver when it loads. One candidate cause is that a 13.2 driver does not accept PTX 9.3. That is an inference, and nothing here has tested it.</p>
+  <h3>What the check does now</h3>
+  <ul>
+    <li><b>Names the failure:</b> it checks <code>cudaGetLastError</code> after the launch and <code>cudaDeviceSynchronize</code> after that, and prints the error's name. A wrong result prints the first wrong value, how many were wrong, and how many still hold a marker written before the launch, which separates a kernel that never ran from a wrong answer. It also prints the launch time.</li>
+    <li><b>Answers for both builds:</b> it compiles and runs the default and <code>-arch=sm_&lt;card&gt;</code>, taking the architecture from the card through <code>nvidia-smi</code>. Both always run. <code>kernel-check/results.txt</code> records both, with the toolkit, driver and PTX versions.</li>
+    <li><b>Decides on what agents use:</b> <code>job.sh</code> reads the flags from the rendered workflow, and only that build's result can stop the job. Flags that are neither form stop it too.</li>
+    <li><b><code>job.ended</code>:</b> the check used to exit before the trap was set, which was not deliberate and contradicted section 5. The trap is now set first, so every path after the argument checks writes it.</li>
+  </ul>
+  <h3>What compiles with what</h3>
+  <table>
+    <tr><th>Who</th><th>Compile line</th><th>If the kernel silently does nothing</th></tr>
+    <tr><td>Agents, by the task's "Build with exactly"</td><td><code>nvcc -O2 -std=c++17 ...</code>, the default</td><td class="bad">Nothing in the task tells them to check. Their steps could go on it.</td></tr>
+    <tr><td>Scripted preflight, <code>fake_model.py</code></td><td>The same line</td><td class="warn">Its kernel compares values, so it reports <code>kernel_ok=0</code>, but does not call <code>cudaGetLastError</code>. Unchanged.</td></tr>
+    <tr><td>The kernel check</td><td>Both</td><td class="good">Names it.</td></tr>
+  </table>
+  <h3>Proposed, not made</h3>
+  <p>Two lines in the workflow, which are the user's and Book Writer's call:</p>
+  <ul>
+    <li>Change "Build with exactly" to <code>nvcc -O2 -std=c++17 -arch=sm_86 ...</code> in the workflow and in <code>fake_model.py</code>. Agents would see the flag in their task, with no hidden environment variable. <code>job.sh</code> then decides on that build without further change.</li>
+    <li>Add to the task: "After every kernel launch, check <code>cudaGetLastError</code> and treat an error as a failure to report."</li>
+  </ul>
+  <p>The reason to decide before the window: with the task unchanged, a failing default stops the job, so the window answers the compile question but tests nothing under the sandbox. With the flag, the job goes on if the <code>sm_86</code> build passes, and the default's result is still recorded. Pinning would also avoid compiling at load time for agents' binaries. The sandbox gives no write access to <code>~/.nv</code>, so that compile might repeat at each start, which would land in the workload's numbers. That is unmeasured.</p>
+  <h3>Tests</h3>
+  <ul>
+    <li><code>cuda/test_job.sh</code> runs the real <code>job.sh</code> with a stub compiler, card and <code>aos</code>: 9 cases pass, and 7 of 7 <a href="cuda/kernel-check/mutation.txt">mutations</a> fail them.</li>
+    <li>The new <code>check.cu</code> compiled with both sets of flags on the target machine. <span class="warn">It has never run:</span> its first run is the next preflight, so its error paths are unproven until then.</li>
+  </ul>
 </body>
 </html>
