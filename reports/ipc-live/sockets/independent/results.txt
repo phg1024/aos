@@ -1,0 +1,313 @@
+
+######## control: no sandbox (count before 0)
+NoNewPrivs:	0
+Seccomp:	0
+Seccomp_filters:	0
+== inherited descriptors
+socket survives at fd 3
+== reaching the holder, a process of this user outside the sandbox
+pidfd_open                                   OPEN (5)
+pidfd_getfd its socket                       OPEN (6)
+pidfd_send_signal sig 0                      OPEN (0)
+pidfd_send_signal SIGUSR1                    OPEN (0)
+ptrace SEIZE                                 OPEN (0)
+process_vm_readv                             OPEN
+/proc/holder/environ                         OPEN b'AOS_KEY_HOLDER=d'
+/proc/holder/mem                             EIO
+/proc/holder/maps                            OPEN b'00400000-0042200'
+/proc/holder/fd listing                      OPEN 10
+/proc/holder/root/etc/hostname               OPEN <host>
+
+/proc/holder/cwd listing                     OPEN 4
+== signals at it (the holder counts arrivals)
+kill SIGUSR1                                 OPEN 
+tgkill SIGUSR1                               OPEN (0)
+rt_sigqueueinfo SIGUSR1                      OPEN (0)
+F_SETOWN then SIGIO write (see count)        OPEN 
+== own child
+child killed, status -15
+== sockets, by family and type
+socket unix stream                           OPEN (9)
+socket unix dgram                            OPEN (9)
+socket unix seqpacket                        OPEN (9)
+socket unix seqpacket|cloexec                OPEN (9)
+socket unix stream|cloexec                   OPEN (9)
+socket unix stream|nonblock                  OPEN (9)
+socket inet stream                           OPEN (9)
+socket inet dgram                            OPEN (9)
+socket inet6 dgram                           OPEN (9)
+socket netlink                               OPEN (9)
+socket packet                                EPERM
+socket vsock                                 OPEN (9)
+socket alg                                   OPEN (9)
+socket high word, unix stream                OPEN (9)
+socket high word, inet stream                OPEN (9)
+== reach, for whatever socket() allows
+seqpacket -> user bus                        EPROTOTYPE
+seqpacket -> systemd/private                 EPROTOTYPE
+seqpacket -> system bus                      EPROTOTYPE
+seqpacket -> outside stream                  EPROTOTYPE
+seqpacket -> outside seqpacket               OPEN 
+seqpacket -> outside abstract seqpacket      OPEN 
+seqpacket -> outside abstract stream         ECONNREFUSED
+stream -> user bus                           OPEN 
+== socketpair
+socketpair unix stream                       OPEN
+  repoint at bus by connect                  EISCONN
+socketpair unix dgram                        OPEN
+  repoint at bus by connect                  EPROTOTYPE
+socketpair unix seqpacket                    OPEN
+  repoint at bus by connect                  EPROTOTYPE
+socketpair inet                              ENOTSUP
+== others
+io_uring_setup                               OPEN (9)
+io_uring_enter                               ENOTSUP
+unshare user+mnt+net                         OPEN
+  socket afterwards                          OPEN
+  mount tmpfs afterwards                     EACCES
+io_uring_enter                               ENOTSUP
+read outside dummy key file                  OPEN dummy-not-a-key
+
+create in ~/.config/systemd/user             OPEN 
+list home                                    OPEN 74
+list ~/.ssh                                  OPEN 3
+create in /dev/shm                           OPEN 
+mkfifo in /tmp                               OPEN 
+read /proc/keys                              OPEN 13
+systemctl --user is-system-running: rc 1 degraded
+
+exit 0
+holder count after: 1
+
+######## plain: no network, no devices (count before 1)
+NoNewPrivs:	1
+Seccomp:	2
+Seccomp_filters:	1
+== inherited descriptors
+== reaching the holder, a process of this user outside the sandbox
+pidfd_open                                   OPEN (4)
+pidfd_getfd its socket                       EPERM
+pidfd_send_signal sig 0                      EPERM
+pidfd_send_signal SIGUSR1                    EPERM
+ptrace SEIZE                                 EPERM
+process_vm_readv                             EPERM
+/proc/holder/environ                         EACCES
+/proc/holder/mem                             EACCES
+/proc/holder/maps                            EACCES
+/proc/holder/fd listing                      OPEN 10
+/proc/holder/root/etc/hostname               EACCES
+/proc/holder/cwd listing                     EACCES
+== signals at it (the holder counts arrivals)
+kill SIGUSR1                                 EPERM
+tgkill SIGUSR1                               EPERM
+rt_sigqueueinfo SIGUSR1                      EPERM
+F_SETOWN then SIGIO write (see count)        OPEN 
+== own child
+child killed, status -15
+== sockets, by family and type
+socket unix stream                           EPERM
+socket unix dgram                            EPERM
+socket unix seqpacket                        EPERM
+socket unix seqpacket|cloexec                EPERM
+socket unix stream|cloexec                   EPERM
+socket unix stream|nonblock                  EPERM
+socket inet stream                           EPERM
+socket inet dgram                            EPERM
+socket inet6 dgram                           EPERM
+socket netlink                               EPERM
+socket packet                                EPERM
+socket vsock                                 EPERM
+socket alg                                   EPERM
+socket high word, unix stream                EPERM
+socket high word, inet stream                EPERM
+== reach, for whatever socket() allows
+seqpacket -> user bus                        EPERM
+seqpacket -> systemd/private                 EPERM
+seqpacket -> system bus                      EPERM
+seqpacket -> outside stream                  EPERM
+seqpacket -> outside seqpacket               EPERM
+seqpacket -> outside abstract seqpacket      EPERM
+seqpacket -> outside abstract stream         EPERM
+stream -> user bus                           EPERM
+== socketpair
+socketpair unix stream                       OPEN
+  repoint at bus by connect                  EISCONN
+socketpair unix dgram                        EPERM
+socketpair unix seqpacket                    OPEN
+  repoint at bus by connect                  EPROTOTYPE
+socketpair inet                              EPERM
+== others
+io_uring_setup                               EPERM
+io_uring_enter                               EPERM
+unshare user+mnt+net                         OPEN
+  socket afterwards                          EPERM
+  mount tmpfs afterwards                     EPERM
+io_uring_enter                               EPERM
+read outside dummy key file                  EACCES
+create in ~/.config/systemd/user             EACCES
+list home                                    EACCES
+list ~/.ssh                                  EACCES
+create in /dev/shm                           EACCES
+mkfifo in /tmp                               EACCES
+read /proc/keys                              OPEN 13
+systemctl --user is-system-running: rc 1 Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<us
+
+exit 0
+holder count after: 1
+
+######## network granted (count before 1)
+NoNewPrivs:	1
+Seccomp:	2
+Seccomp_filters:	1
+== inherited descriptors
+== reaching the holder, a process of this user outside the sandbox
+pidfd_open                                   OPEN (4)
+pidfd_getfd its socket                       EPERM
+pidfd_send_signal sig 0                      EPERM
+pidfd_send_signal SIGUSR1                    EPERM
+ptrace SEIZE                                 EPERM
+process_vm_readv                             EPERM
+/proc/holder/environ                         EACCES
+/proc/holder/mem                             EACCES
+/proc/holder/maps                            EACCES
+/proc/holder/fd listing                      OPEN 10
+/proc/holder/root/etc/hostname               EACCES
+/proc/holder/cwd listing                     EACCES
+== signals at it (the holder counts arrivals)
+kill SIGUSR1                                 EPERM
+tgkill SIGUSR1                               EPERM
+rt_sigqueueinfo SIGUSR1                      EPERM
+F_SETOWN then SIGIO write (see count)        OPEN 
+== own child
+child killed, status -15
+== sockets, by family and type
+socket unix stream                           EPERM
+socket unix dgram                            EPERM
+socket unix seqpacket                        EPERM
+socket unix seqpacket|cloexec                EPERM
+socket unix stream|cloexec                   EPERM
+socket unix stream|nonblock                  EPERM
+socket inet stream                           OPEN (7)
+socket inet dgram                            OPEN (7)
+socket inet6 dgram                           OPEN (7)
+socket netlink                               EPERM
+socket packet                                EPERM
+socket vsock                                 EPERM
+socket alg                                   EPERM
+socket high word, unix stream                EPERM
+socket high word, inet stream                OPEN (7)
+== reach, for whatever socket() allows
+seqpacket -> user bus                        EPERM
+seqpacket -> systemd/private                 EPERM
+seqpacket -> system bus                      EPERM
+seqpacket -> outside stream                  EPERM
+seqpacket -> outside seqpacket               EPERM
+seqpacket -> outside abstract seqpacket      EPERM
+seqpacket -> outside abstract stream         EPERM
+stream -> user bus                           EPERM
+== socketpair
+socketpair unix stream                       OPEN
+  repoint at bus by connect                  EISCONN
+socketpair unix dgram                        EPERM
+socketpair unix seqpacket                    OPEN
+  repoint at bus by connect                  EPROTOTYPE
+socketpair inet                              EPERM
+== others
+io_uring_setup                               EPERM
+io_uring_enter                               EPERM
+unshare user+mnt+net                         OPEN
+  socket afterwards                          EPERM
+  mount tmpfs afterwards                     EPERM
+io_uring_enter                               EPERM
+read outside dummy key file                  EACCES
+create in ~/.config/systemd/user             EACCES
+list home                                    EACCES
+list ~/.ssh                                  EACCES
+create in /dev/shm                           EACCES
+mkfifo in /tmp                               EACCES
+read /proc/keys                              OPEN 13
+systemctl --user is-system-running: rc 1 Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<us
+
+exit 0
+holder count after: 1
+
+######## gpu: 3080 granted, no network (count before 1)
+NoNewPrivs:	1
+Seccomp:	2
+Seccomp_filters:	1
+== inherited descriptors
+== reaching the holder, a process of this user outside the sandbox
+pidfd_open                                   OPEN (4)
+pidfd_getfd its socket                       EPERM
+pidfd_send_signal sig 0                      EPERM
+pidfd_send_signal SIGUSR1                    EPERM
+ptrace SEIZE                                 EPERM
+process_vm_readv                             EPERM
+/proc/holder/environ                         EACCES
+/proc/holder/mem                             EACCES
+/proc/holder/maps                            EACCES
+/proc/holder/fd listing                      OPEN 10
+/proc/holder/root/etc/hostname               EACCES
+/proc/holder/cwd listing                     EACCES
+== signals at it (the holder counts arrivals)
+kill SIGUSR1                                 EPERM
+tgkill SIGUSR1                               EPERM
+rt_sigqueueinfo SIGUSR1                      EPERM
+F_SETOWN then SIGIO write (see count)        OPEN 
+== own child
+child killed, status -15
+== sockets, by family and type
+socket unix stream                           EPERM
+socket unix dgram                            EPERM
+socket unix seqpacket                        OPEN (7)
+socket unix seqpacket|cloexec                OPEN (7)
+socket unix stream|cloexec                   EPERM
+socket unix stream|nonblock                  EPERM
+socket inet stream                           EPERM
+socket inet dgram                            EPERM
+socket inet6 dgram                           EPERM
+socket netlink                               EPERM
+socket packet                                EPERM
+socket vsock                                 EPERM
+socket alg                                   EPERM
+socket high word, unix stream                EPERM
+socket high word, inet stream                EPERM
+== reach, for whatever socket() allows
+seqpacket -> user bus                        EPROTOTYPE
+seqpacket -> systemd/private                 EPROTOTYPE
+seqpacket -> system bus                      EPROTOTYPE
+seqpacket -> outside stream                  EPROTOTYPE
+seqpacket -> outside seqpacket               OPEN 
+seqpacket -> outside abstract seqpacket      EPERM
+seqpacket -> outside abstract stream         ECONNREFUSED
+stream -> user bus                           EPERM
+== socketpair
+socketpair unix stream                       OPEN
+  repoint at bus by connect                  EISCONN
+socketpair unix dgram                        EPERM
+socketpair unix seqpacket                    OPEN
+  repoint at bus by connect                  EPROTOTYPE
+socketpair inet                              EPERM
+== others
+io_uring_setup                               EPERM
+io_uring_enter                               EPERM
+unshare user+mnt+net                         OPEN
+  socket afterwards                          EPERM
+  mount tmpfs afterwards                     EPERM
+io_uring_enter                               EPERM
+read outside dummy key file                  EACCES
+create in ~/.config/systemd/user             EACCES
+list home                                    EACCES
+list ~/.ssh                                  EACCES
+create in /dev/shm                           EACCES
+mkfifo in /tmp                               EACCES
+read /proc/keys                              OPEN 13
+systemctl --user is-system-running: rc 1 Failed to connect to user scope bus via local transport: Operation not permitted (consider using --machine=<us
+
+exit 0
+holder count after: 1
+
+holder count: after control 1 ; after all confined 1
+holder count after one outside SIGUSR1: 2
+left behind: []
+card: 53887, 216 MiB | 119977, 9162 MiB | 

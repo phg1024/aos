@@ -1,0 +1,32 @@
+## SIGIO, no sandbox rc 0 | count 0 -> 2
+sigio armed and written
+## SIGIO, confined rc 0 | count 2 -> 2
+sigio armed and written
+## SIGIO, no sandbox again rc 0 | count 2 -> 4
+sigio armed and written
+## /proc fd, no sandbox rc 0 | count 4 -> 4
+readlink /proc/holder/fd/N               OPEN <home>/aos-book-review/outside/llm-ke
+open /proc/holder/fd/N                   OPEN dummy-not-a-key
+
+## /proc fd, confined rc 0 | count 4 -> 4
+readlink /proc/holder/fd/N               EACCES
+open /proc/holder/fd/N                   EACCES
+---- tests
+--- PASS: TestSocketFilterDecides (0.00s)
+--- PASS: TestSocketFilterRefusesAForeignArchitecture (0.00s)
+--- PASS: TestSocketFilterRefusesAnUnknownArchitecture (0.00s)
+--- PASS: TestOlderKernelsAndTheScopes (0.00s)
+--- PASS: TestResolveGPUsGrantsTheNamedCardOnly (0.00s)
+--- PASS: TestResolveGPUsRefusesACardNotHere (0.00s)
+--- PASS: TestEnvironmentNamesVisibleGPUsOnlyWhenGranted (0.00s)
+--- PASS: TestEnvironmentRemovesModelKeys (0.00s)
+--- PASS: TestSocketsAreGrantedByPolicy (0.78s)
+--- PASS: TestTheServiceManagerIsOutOfReach (0.12s)
+--- PASS: TestAnInheritedSocketDoesNotSurvive (0.01s)
+--- PASS: TestARunWithoutItsFilterIsRefused (0.01s)
+--- PASS: TestKeysDoNotReachACommand (0.03s)
+--- PASS: TestSignalsStayInside (0.32s)
+--- PASS: TestLandlockConfinesRun (0.06s)
+--- PASS: TestAGPUGrantGrantsNothingElse (0.07s)
+--- SKIP: TestGPUNeedsItsGrant (0.00s)
+PASS

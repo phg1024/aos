@@ -130,11 +130,26 @@ exit 1</pre>
     <li><b><code>allow_network</code> sends UDP as well as TCP,</b> anywhere. Unchanged, and by grant.</li>
     <li><b>The filter on arm64 has never run.</b> Its numbers are checked only by the interpreter. One kernel, x86-64, was measured.</li>
     <li><b>Below ABI 6,</b> nothing ran on a real older kernel. Landlock ABI 9's Unix socket right (<a href="https://kernsec.org/pipermail/linux-security-module-archive/2026-March/056560.html">documentation patch</a>) would allow-list socket paths and is not used, since this machine cannot test it.</li>
-    <li><b>Same-user <code>ptrace</code> and <code>pidfd_getfd</code></b> are left to Landlock and were not separately probed. <code>/proc/$PPID/environ</code> being refused is the nearest test.</li>
+    <li><b>Same-user reach is now measured, in section 9.</b> <code>ptrace</code>, <code>pidfd_getfd</code> and the others were refused. Still open from that run: <code>/proc/&lt;pid&gt;/fd</code> can be listed, which shows descriptor numbers; <code>pidfd_open</code> succeeds, though each use tried was refused; <code>/proc/keys</code> is readable, 13 lines, and <code>keyctl</code> was not probed; a user, mount and network namespace can be created inside, where <code>socket</code> and <code>mount</code> stay refused.</li>
+    <li><b><code>aos run --input ... --output</code> with a procedural goal runs model-generated Python with no sandbox, and it inherits the keys</b> (<code>internal/app/assemble.go:164</code>). It is not on the workflow path. Not fixed: this needs the user's decision.</li>
     <li><b>macOS and <code>unconfined_run</code>:</b> sections 3 and 6.</li>
   </ul>
 
   <h2>8. What changes for the workflow and the live run</h2>
   <p>Nothing in <code>workflows/rasterizer-bunny-cuda-ipc.json</code>, <code>job.sh</code> or <code>submit.sh</code>, and the commands are the same. <code>aos</code> on the machine is now <code>ab0950b</code>. A key passed to <code>job.sh</code> still reaches <code>aos</code> and no longer reaches its commands. Its planned file is outside every mount in the workflow. Docs corrected: <code>README.md</code>, the header of <code>sandbox_linux.go</code>, and a note in <code>reports/ipc-live/cuda-report.html</code>. <code>ipc-design.md</code> makes no claim about Landlock and was left alone.</p>
+
+  <h2>9. Independent verification of <code>dbea4ee</code></h2>
+  <p>Book Writer built <code>aos</code> from a clean archive of <code>dbea4ee</code> and ran these probes on the target machine through the real helper, with no sandbox as the control. The target was a holder process it started, with Yama turned off for that process, so that a refusal comes from the sandbox. This session read the results and checked them against the claims below, but did not repeat the run. <a href="ipc-live/sockets/independent/results.txt">Results</a>, <a href="ipc-live/sockets/independent/results-focus.txt">focused results</a>. The host name and home path are replaced in these copies.</p>
+  <table>
+    <tr><th>Probe, under plain, network and GPU policies</th><th>No sandbox</th><th>Confined</th></tr>
+    <tr><td><code>pidfd_getfd</code>, <code>pidfd_send_signal</code>, <code>ptrace</code> SEIZE, <code>process_vm_readv</code></td><td class="bad">Open</td><td class="good">EPERM</td></tr>
+    <tr><td><code>kill</code>, <code>tgkill</code>, <code>rt_sigqueueinfo</code></td><td class="bad">Open</td><td class="good">EPERM</td></tr>
+    <tr><td><code>/proc/&lt;pid&gt;/</code> <code>environ</code>, <code>maps</code>, <code>root</code>, <code>cwd</code></td><td class="bad">Open</td><td class="good">EACCES</td></tr>
+    <tr><td>Readlink or open of <code>/proc/&lt;pid&gt;/fd/N</code></td><td class="bad">Open, and the file was read</td><td class="good">EACCES</td></tr>
+    <tr><td>SIGIO through <code>F_SETOWN</code>, counted at the holder</td><td class="bad">0 to 2, then 2 to 4</td><td class="good">2 to 2. The call returns success and the signal does not arrive.</td></tr>
+    <tr><td>Inherited socket</td><td class="bad">Survives</td><td class="good">Absent</td></tr>
+    <tr><td>Socket table, including a high word in the family argument</td><td>Open except packet</td><td class="good">Matches section 2</td></tr>
+  </table>
+  <p>The <code>internal/sandbox</code> test binary from the clean build passed on the machine, with <code>TestGPUNeedsItsGrant</code> skipped there. What stayed open is in section 7.</p>
 </body>
 </html>
