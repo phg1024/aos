@@ -69,9 +69,12 @@ else
   need "CLEAN: the judged verifier read the latest record"
   need "exits refused for evidence: 0"
   need "exercised 1      a body refused as too large"
-  for label in "an artifact published" "the verifier reading evidence to its end" "a read denied" "a handle attached at a delegation"; do
+  for label in "an artifact published" "the verifier reading evidence to its end" "a handle attached at a delegation"; do
     if grep -qE "^exercised [0-9]+ +$label" "$T/job.out"; then echo "ok   $label"; else echo "FAIL $label"; failed=1; fi
   done
+  # What live3's three verifiers all met: with the handle at the delegation, no read is refused and nobody waits.
+  need "NOT EXERCISED    a read denied"
+  need "NOT EXERCISED    the verifier pausing with a wait"
   if grep -qE 'attached at delegation by coordinator \(pid-[0-9]+\) to verifier \(pid-[0-9]+\).*: read [2-9] pages, to the end' "$T/job.out"; then echo "ok   the record took more than one page, read to the end"; else echo "FAIL the record's reading"; failed=1; fi
   if grep -q 'UNCLEAN\|DISAGREE' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
   if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi

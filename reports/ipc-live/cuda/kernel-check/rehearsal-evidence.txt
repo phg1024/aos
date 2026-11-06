@@ -1,0 +1,151 @@
+== clean path
+== Handles: each attached, by whom, to whom, and whether it was read
+art-000029 (published.raw_record) attached at delegation by coordinator (pid-000002) to verifier (pid-000005) at 2026-11-06T23:00:03.149400057Z: read 2 pages, to the end, first at 2026-11-06T23:00:03.279736192Z
+art-000032 (published.benchmark_json) attached at delegation by coordinator (pid-000002) to verifier (pid-000005) at 2026-11-06T23:00:03.149400057Z: read 1 pages, to the end, first at 2026-11-06T23:00:03.372373
+published: art-000029 published.raw_record by benchmarker (pid-000004), 70862 bytes, from a file
+published: art-000032 published.benchmark_json by benchmarker (pid-000004), 20 bytes, from a file
+no read was denied in this run
+
+== Verification: the verifier's reads before its exit, and the verdict
+== Evidence behind the verdict
+exits refused for evidence: 0
+declared raw_record by benchmarker: art-000029: read
+verdict: pass, by verifier (pid-000005)
+the record: art-000029 published.raw_record by benchmarker (pid-000004), from a file; the judged verifier read 2 pages of it
+    file ~/aos-ipc-live/test-path.PRUoEi/reports/ipc-live/runs/rehearsal/cuda-bench/raw_record.txt, sha256 2cda1647449922b9b1b754706327d1259ff1192044233eb2b7b6832e2139dbd7
+    on disk at the end: the same bytes
+    last changed by: art-000021 run 'for i in $(seq 1 50); do echo "trial $i: ~/aos-ipc-live/test-path.PRUoEi/reports/ipc-live/runs/rehearsal/cuda-be'
+CLEAN: the judged verifier read the latest record to its end, and the record is a file's bytes
+
+== Routes: attempts on another agent's private files, mail to parked processes, and numbers carried by hand
+== Contract situations
+exercised 1      a body refused as too large
+NOT EXERCISED    a full mailbox refused a send
+NOT EXERCISED    a handle attached to mail
+exercised 3      a handle read to its end
+NOT EXERCISED    a read denied
+exercised 2      the verifier reading evidence to its end
+NOT EXERCISED    the verifier pausing with a wait
+exercised 1      a question by mail to the coordinator
+NOT EXERCISED    mail forwarded along a chain
+NOT EXERCISED    mail held for a process not running
+NOT EXERCISED    a topic publish
+exercised 2      an artifact published
+NOT EXERCISED    a dead letter, unread
+NOT EXERCISED    a dead letter, not_shown
+NOT EXERCISED    a not_shown letter with a returned call on record
+NOT EXERCISED    a dead letter, archived
+NOT EXERCISED    a dead letter, rolled back
+NOT EXERCISED    an undelivered: notice in a request
+NOT EXERCISED    an archived unread: line in a request
+NOT EXERCISED    a waiting note in a request
+NOT EXERCISED    a model exiting with a waiting note in its request
+NOT EXERCISED    a chain closed by a re-delegation
+NOT EXERCISED    a backend retry
+NOT EXERCISED    compaction
+NOT EXERCISED    a handoff
+NOT EXERCISED    a body or tool output imitating a runtime line
+5 of 26 exercised. NOT EXERCISED says nothing about the contract, either way.
+exercised 2      a handle attached at a delegation
+NOT EXERCISED    an attachment refused at a delegation
+NOT EXERCISED    an exit 0 refused for unread evidence
+NOT EXERCISED    a verdict withheld as unverified
+1 of 4 of the delegation and evidence situations exercised, counted apart from those above.
+ok   CLEAN: the judged verifier read the latest record
+ok   exits refused for evidence: 0
+ok   exercised 1      a body refused as too large
+ok   an artifact published
+ok   the verifier reading evidence to its end
+ok   a handle attached at a delegation
+ok   NOT EXERCISED    a read denied
+ok   NOT EXERCISED    the verifier pausing with a wait
+ok   the record took more than one page, read to the end
+record bytes: 70862
+verifier's report: preflight: a scripted verdict, overall PASS. Read: art-000029, art-000032.
+planted in the source: no
+compute apps unchanged by this script: yes
+job.ended: 2026-11-06T23:00:05Z exit=0 
+all passed
+
+== unread path: pid-000009
+== Evidence behind the verdict
+exits refused for evidence: 29
+    verifier (pid-000005) at 2026-11-06T23:00:08.240806025Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.259919877Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.278870877Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.297938678Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.318237264Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.336991615Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.355026376Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.375259352Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.395684951Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.415991861Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.436125447Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.455181081Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.475162593Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.495109501Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.51418347Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.534780247Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.554832295Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.576735912Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.593642671Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.601406659Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.612534871Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.631277711Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.652312262Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.674845303Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.697231553Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.719080277Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.736560892Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.75158585Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+    verifier (pid-000005) at 2026-11-06T23:00:08.767063582Z: art-000029 (published.raw_record, the latest from benchmarker) was not read
+declared raw_record by benchmarker: art-000029: unread
+UNVERIFIED: verifier pid-000005 ended without a judgement (step limit exceeded). This says nothing about the work: verification is what is missing
+
+== Routes: attempts on another agent's private files, mail to parked processes, and numbers carried by hand
+== Contract situations
+exercised 1      a body refused as too large
+NOT EXERCISED    a full mailbox refused a send
+NOT EXERCISED    a handle attached to mail
+exercised 1      a handle read to its end
+exercised 1      a read denied
+NOT EXERCISED    the verifier reading evidence to its end
+NOT EXERCISED    the verifier pausing with a wait
+exercised 1      a question by mail to the coordinator
+NOT EXERCISED    mail forwarded along a chain
+NOT EXERCISED    mail held for a process not running
+NOT EXERCISED    a topic publish
+exercised 2      an artifact published
+NOT EXERCISED    a dead letter, unread
+NOT EXERCISED    a dead letter, not_shown
+NOT EXERCISED    a not_shown letter with a returned call on record
+NOT EXERCISED    a dead letter, archived
+NOT EXERCISED    a dead letter, rolled back
+NOT EXERCISED    an undelivered: notice in a request
+NOT EXERCISED    an archived unread: line in a request
+NOT EXERCISED    a waiting note in a request
+NOT EXERCISED    a model exiting with a waiting note in its request
+NOT EXERCISED    a chain closed by a re-delegation
+NOT EXERCISED    a backend retry
+NOT EXERCISED    compaction
+NOT EXERCISED    a handoff
+NOT EXERCISED    a body or tool output imitating a runtime line
+5 of 26 exercised. NOT EXERCISED says nothing about the contract, either way.
+NOT EXERCISED    a handle attached at a delegation
+NOT EXERCISED    an attachment refused at a delegation
+exercised 29     an exit 0 refused for unread evidence
+exercised 1      a verdict withheld as unverified
+2 of 4 of the delegation and evidence situations exercised, counted apart from those above.
+ok   UNVERIFIED:
+ok   declared raw_record by benchmarker: 
+ok   exercised 1      a body refused as too large
+ok   an exit 0 refused
+ok   a verdict withheld as unverified
+ok   the record unread
+ok   the job did not pass: exit 1
+record bytes: 70865
+verifier's report: preflight: a scripted verdict, overall PASS, on a record not read.
+planted in the source: no
+compute apps unchanged by this script: yes
+job.ended: 2026-11-06T23:00:09Z exit=1 
+all passed

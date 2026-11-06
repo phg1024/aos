@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Handles at Delegation and Declared Evidence</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Handles at a Delegation, and a Pass Bound to Its Evidence</h1>
+    <p>In live3 all three verifiers had their first read of the benchmarker's record denied, because a new process could not receive a handle. The verifier that was judged read none of the record and exited 0, and the kernel recorded a pass. Only <code>analyze.py</code> caught it, afterwards. This phase closes both gaps.</p>
+    <ul>
+      <li><span class="good">Scripted runs on the target machine, outside Ray, with no CUDA context:</span> the clean path passes with no read refused and no wait. live3's pid-000009 path, refused read then exit 0, comes out <code>unverified</code>, and the job exits 1.</li>
+      <li><span class="good">The kernel and <code>analyze.py</code> agree</span> on the same records in all 17 end-to-end scenarios, and a second judgement from those records matches the first byte for byte.</li>
+      <li><span class="warn">Not run:</span> any real model, and this binary and workflow on the card. Replay refuses these runs: see section 5.</li>
+    </ul>
+  </div>
+
+  <h2>1. Fix 1: a handle at a delegation</h2>
+  <p>A delegate action and <code>spawn_agent</code> take <code>artifacts</code>, a comma-separated list as on <code>message_agent</code>. A model may also write a list on a delegate action.</p>
+  <ul>
+    <li><b>No second rule.</b> The check is mail's <code>checkHandles</code>, on the whole list, before the delegation starts. One handle the delegator cannot read refuses the delegation as a tool error it reads and goes on from. Nothing starts and nothing is granted. The refusal is logged as <code>capability.denied</code>.</li>
+    <li><b>The record.</b> A <code>delegation_handles</code> artifact, produced by the process delegated to, before its first step. <code>readRightsOf</code> reads it as it reads a received message, so the right belongs to that chain. A new process of the same agent gets nothing from it.</li>
+    <li><b>Why a record and not process metadata.</b> Delegating to a parked process must attach too, and a process's metadata does not change after its spawn. One record covers both.</li>
+    <li><b>The model is told.</b> The first message names what came attached, and the prompt beside delegate says a new process needs it attached again. That was pid-000009's misreading.</li>
+  </ul>
+
+  <h2>2. Fix 2: a pass bound to declared evidence</h2>
+  <pre>"verification": {"policy": "required", "verifier": "verifier",
+  "evidence": [{"publisher": "benchmarker", "type": "raw_record", "from_file": true}]}</pre>
+  <p>It resolves when checked to the latest artifact of that exact type from that agent under the run's root, and the verifier's own chain must have read it from the start to its last page. The check reads the kernel's process table and the runtime's records of tool results, which no model writes. It lives in the engine, which needs no inference provider.</p>
+  <table>
+    <tr><th>Decision</th><th>Choice</th><th>Why</th></tr>
+    <tr><td>Refuse the exit, or withhold the verdict?</td><td><b>Both</b></td><td>A refusal is the only one a model can act on while it has steps. It cannot be the only guard: a process can run out of steps, and a newer record can arrive after an accepted exit. Both use one function.</td></tr>
+    <tr><td>Name of the outcome</td><td><code>unverified</code></td><td>Nobody judged the work on the evidence. <code>fail</code> reads as the candidate being wrong, and <code>missing</code> already means no verifier ran. Its reason says it says nothing about the work. Under <code>required</code> the workflow exits 1 and retryable, as <code>stale</code> does.</td></tr>
+    <tr><td>A verifier the runtime ended</td><td><code>unverified</code>, if evidence is declared</td><td>A step limit judged nothing, even with everything read. Without a declaration it stays <code>fail</code>, as now.</td></tr>
+    <tr><td>A verifier's own exit 1 with the record unread</td><td>Stays <code>fail</code></td><td>Its judgement may rest on something else, and treating it as unverified would let a later verifier shop for a pass. So the prompt says an unreadable record is no reason to exit 1. A model can still ignore that: the result is a false fail, not a false pass. That is pid-000006's case.</td></tr>
+    <tr><td>Exact type, not a pattern</td><td>Exact</td><td>The kernel cannot judge what a name means. live3's record was <code>published.text</code>, which <code>analyze.py</code>'s pattern only caught by falling back. A record under another name is <code>not_published</code>, which fails safe, and the publisher's prompt names the type.</td></tr>
+    <tr><td>Typed record, file required</td><td>Checked after resolving, not used to filter</td><td>Filtering would let an older file stand behind a newer typed record.</td></tr>
+  </table>
+  <p>Statuses of a declared record: <code>read</code>, <code>partial</code>, <code>unread</code>, <code>not_published</code>, <code>not_from_file</code>. <code>analyze.py</code> can still call a kernel pass UNCLEAN for what the kernel does not judge: a file changed on disk after its publish, or a report naming an artifact it never read.</p>
+
+  <h2>3. The workflow and analyze.py</h2>
+  <ul>
+    <li><b>New file:</b> <code>workflows/rasterizer-bunny-cuda-evidence-ipc.json</code>. The workflow live3 ran stays byte for byte (sha256 d0ab28df…), now pinned by a test, as live2's already was. A test also holds capabilities, delegable authority, mounts and allowed agents equal between the two: no process reaches anything new.</li>
+    <li><b>Changed in it:</b> the declaration; the coordinator attaches at delegation, with the wait route still available; the benchmarker publishes as <code>raw_record</code>; the verifier no longer exits 1 for a record it could not read; and the step budgets below.</li>
+    <li><code>job.sh</code> now renders the new workflow, so re-running the old one means an older commit.</li>
+    <li><b>The 26 situations count as before.</b> live2 stays 3 of 26 and live3 7 of 26, both pinned by tests. A separate block has a <b>new denominator of 4</b>: a handle attached at a delegation, an attachment refused at a delegation, an exit 0 refused for unread evidence, a verdict withheld as unverified. A refused attachment also counts in the existing "a read denied", as a refused mail attachment always has.</li>
+    <li><b>New lines:</b> <code>attached at delegation by …</code>, <code>declared &lt;type&gt; by &lt;publisher&gt;: &lt;artifact&gt;: &lt;status&gt;</code>, <code>exits refused for evidence: N</code>, <code>UNVERIFIED: …</code>, and <code>DISAGREE: …</code>, which exits 3, if a verdict and the records ever part.</li>
+  </ul>
+
+  <h2>4. The question-by-mail line</h2>
+  <p>Not changed. The limit to writer and benchmarker senders came with the Metal preflight, whose scripted writer asks a question by mail. A verifier's route was a wait, counted on its own line. Nothing in the contract separates them, so I find no reason to keep the limit. But widening it alone would not count msg-000001: that body holds no question mark, so the <code>"?"</code> test misses it too. Moving either changes a count the book may quote, so it is left for a decision.</p>
+
+  <h2>5. What ran</h2>
+  <table>
+    <tr><th>Check</th><th>Result</th></tr>
+    <tr><td>Before the fix</td><td>Behaviour tests failed as listed in <code>cuda/kernel-check/evidence-before-fix.txt</code>. Three guards passed before it, since they hold today: a nonzero exit, a non-verifier's exit, and declaring nothing. So did the replay refusal, and a test of a chain's rights that the mutations show is not idle. The prompt and replay-flag tests name new fields, so they could not build before it, and a few tests were added after that run; mutations stand in for those.</td></tr>
+    <tr><td>Package tests</td><td>Pass: <code>internal/tools</code>, <code>runtime</code>, <code>agentflow</code>, <code>replay</code>, <code>artifact</code>, <code>capability</code>, <code>inspect</code>, <code>cmd/aos</code>, <code>cmd/aos-tui</code>. <code>agentflow</code> and <code>replay</code> ran again after the last test changes. The frozen-arm golden test and the replay tests are unchanged and pass.</td></tr>
+    <tr><td>Script tests</td><td><code>test_analyze.py</code> and <code>test_job.sh</code> pass.</td></tr>
+    <tr><td>Mutations</td><td>61 of 61 caught (<code>cuda/kernel-check/mutation-evidence.txt</code>). A first pass caught 51 of 60: 5 mutants did not build, and 4 showed real gaps in the tests, which were added. The 51 were not rerun after those test additions.</td></tr>
+    <tr><td>On the machine, no CUDA context, outside Ray</td><td><code>test_steps.sh</code> passes. <code>test_path.sh</code> passes on the clean path: CLEAN, a 2-page read, no read refused, no wait. <code>test_path.sh unread</code> passes: 29 exits refused, <code>unverified</code>, job exit 1. Output in <code>cuda/kernel-check/rehearsal-evidence.txt</code>.</td></tr>
+    <tr><td><span class="warn">Replay of a run using both</span></td><td><b>Not possible as the code stands.</b> Replay takes single-agent runs, and a verifier cannot be the entry agent, so it refuses every such run, which a test pins. In its place: a second judgement from the records must match, in every scenario, and a single-agent delegator replays with its recorded prompt, old or new. Replaying multi-process runs is a separate piece of work.</td></tr>
+  </table>
+
+  <h2>6. What pf4 no longer covers</h2>
+  <p>pf4 ran an older binary and the old workflow on the card. It did not run this binary, the new workflow, a handle at a delegation, the exit check or the verdict's new branch. Off-window runs cover those with a stub compiler, not with the real compiler and kernel. <code>job.sh</code>'s compile check is the one real-compiler step that ran (<code>test_steps.sh</code>), and it stops before running. The sandbox code is unchanged and so are the grants, so the card path should hold, but that is reasoning, not a measurement. pf4's duration-fix gap from the last phase also still stands.</p>
+
+  <h2>7. Step budgets</h2>
+  <p>Set in the new workflow. They apply to no run until one is approved. Calls include rejected replies, so a count can pass the limit.</p>
+  <table>
+    <tr><th>Agent</th><th>live3 limit</th><th>live3 calls per process</th><th>New limit</th><th>Why</th></tr>
+    <tr><td>Verifier</td><td>26</td><td>26 (hit the limit, no record read), 14, 17</td><td>34</td><td>pid-000006 used all 26 without reading the record. A 258 KB record adds 4 reads, and every new process must read it all again, since nothing carries over. 4 steps are left for a larger record or a refused exit. The publish limit of 1 MiB would be 17 pages, which this does not cover.</td></tr>
+    <tr><td>Benchmarker</td><td>22</td><td>25 (hit the limit)</td><td>30</td><td>It hit the limit after publishing, and now has two publishes to make by name.</td></tr>
+    <tr><td>Writer</td><td>35</td><td>35 (hit the limit), 13, 36</td><td>40</td><td>It hit the limit in round 1 and came close in round 2.</td></tr>
+    <tr><td>Coordinator</td><td>45</td><td>31</td><td>45</td><td>It had room, and attaching saves it a mail and a re-delegation.</td></tr>
+  </table>
+  <p><span class="warn">Steps are not time.</span> live3 ended at 3535 s of a 60-minute budget, and pid-000009's requests showed 328 s left. Higher limits do not make the budget longer, and a longer run may need a longer window. That choice is the user's.</p>
+
+  <h2>8. Open</h2>
+  <ul>
+    <li>Whether a real model attaches the handle and publishes under the declared type. Only a live run can show it.</li>
+    <li>The evidence is bound to bytes read, not understood. A model can read a record and misreport it.</li>
+    <li>A verifier can still exit 1 over an unreadable record, against its prompt. That fail stands until the work changes.</li>
+    <li><code>aos-tui</code>'s progress line still shows a verifier's nonzero exit as FAIL during a run. The verdict is the record.</li>
+    <li>The question-by-mail line, in section 4.</li>
+    <li><code>web_search</code>, <code>web_fetch</code> and ttl still have no upper limit, from the last phase.</li>
+  </ul>
+</body>
+</html>
