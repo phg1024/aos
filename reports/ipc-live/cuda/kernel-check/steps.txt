@@ -1,0 +1,25 @@
+GPU 0: NVIDIA GeForce RTX 3080 (UUID: <uuid>)
+job: card 3080 GPU-<uuid>, 847 MiB free
+job: <home>/aos-ipc-live/test-steps.X/reports/ipc-live/runs/steps/workflow.json
+nvcc: Cuda compilation tools, release 13.3, V13.3.73
+driver: CUDA Version: 13.2
+card: sm_86
+workflow compiles with: -O2 -std=c++17 -arch=sm_86 (card)
+default ptx: .version 9.3, .target sm_75
+job: aos run exited 0
+job: on the card: 53887, /usr/lib/x86_64-linux-gnu/xestrata/engine/strata-image, 216 MiB
+job: on the card: 1117172, <home>/jarvis-speech/venv-fast/bin/python, 8800 MiB
+--- exit 0
+aos stub reached: yes
+workflow is JSON: yes
+placeholders left: 0
+check binaries: check-card check-default 
+run logs, which would mean a binary ran: 0
+job.ended: 2026-11-06T07:06:59Z exit=0 
+--- the same name again
+job: <home>/aos-ipc-live/test-steps.X/reports/ipc-live/runs/steps/workflow.json exists: this run name was used: nothing else ran
+--- exit 5
+aos stub reached: no
+job.ended unchanged: yes
+compute apps unchanged by this script: yes
+--- leftover: 0; runs: dry-sandbox-1 pf1 pf2 

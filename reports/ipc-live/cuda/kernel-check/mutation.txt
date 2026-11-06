@@ -1,7 +1,15 @@
-caught no exit trap
-caught gate ignored
-caught gate always default
-caught card not run
-caught dry runs the binary
-caught unknown flags accepted
-caught unreadable capability accepted
+caught no exit trap (11 failed, first: both pass, workflow default)
+caught gate ignored (4 failed, first: default fails, workflow default)
+caught gate always default (3 failed, first: default fails, workflow pinned)
+caught card not run (4 failed, first: both pass, workflow default)
+caught dry runs the binary (1 failed, first: dry compiles and runs neither)
+caught unknown flags accepted (1 failed, first: workflow flags are neither)
+caught unreadable capability accepted (1 failed, first: unreadable compute capability)
+caught render refuses any existing directory (the pf2 bug) (15 failed, first: both pass, workflow default)
+caught render overwrites a reused run (4 failed, first: render.py cuda, directory made)
+caught render does not create the directory (run.sh's path) (2 failed, first: render.py cuda, directory absent)
+caught render refuses an existing directory for Metal only (2 failed, first: render.py metal, directory made)
+caught job.sh's mkdir removed (1 failed, first: render fails)
+caught job.sh does not refuse before the trap (1 failed, first: the same name again)
+caught exit code not recorded (11 failed, first: both pass, workflow default)
+caught exit code read too late (7 failed, first: default fails, workflow default)

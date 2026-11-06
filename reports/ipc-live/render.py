@@ -2,8 +2,8 @@
 """Fill in a rasterizer IPC workflow for one run, with no hand edit.
 
 Usage: render.py <run name> [metal|cuda], from anywhere. Writes <root>/reports/ipc-live/runs/<name>/workflow.json
-and creates its directory, which must be new, so a run never meets an old run's results. The root is this
-checkout, or AOS_IPC_ROOT for a machine that holds only what a run needs. It checks the CPU reference the
+and creates its directory if need be. A directory that already holds a workflow.json is refused, so a run never
+meets an old run's results. The root is this checkout, or AOS_IPC_ROOT for a machine that holds only what a run needs. It checks the CPU reference the
 prompts name, which is not in git, and copies nothing. cuda also needs AOS_CUDA_HOME and AOS_GPU_UUID.
 """
 import json, os, sys
@@ -35,14 +35,18 @@ def main():
     with open(os.path.join(ROOT, "workflows", f"rasterizer-bunny-{kind}-ipc.json")) as f:
         text = f.read()
     run_dir = os.path.join(ROOT, "reports", "ipc-live", "runs", sys.argv[1])
-    os.makedirs(run_dir, exist_ok=False)
+    os.makedirs(run_dir, exist_ok=True)
     fills["__RUN_DIR__"] = run_dir
     # JSON-escaped, though none is expected to need it.
     for placeholder, value in fills.items():
         text = text.replace(placeholder, json.dumps(value)[1:-1])
     json.loads(text)
     out = os.path.join(run_dir, "workflow.json")
-    with open(out, "w") as f:
+    try:
+        f = open(out, "x")
+    except FileExistsError:
+        sys.exit(f"{out} exists: this run name was used")
+    with f:
         f.write(text)
     print(out)
 

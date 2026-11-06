@@ -15,8 +15,14 @@ here=$AOS_IPC_ROOT/bin
 run_dir=$AOS_IPC_ROOT/reports/ipc-live/runs/$name
 
 mkdir -p "$run_dir"
+# Before the trap: cleanup would kill what runs from that directory and overwrite its job.ended.
+if [[ -e $run_dir/workflow.json ]]; then
+  echo "job: $run_dir/workflow.json exists: this run name was used: nothing else ran" >&2
+  exit 5
+fi
 fake=
 cleanup() {
+  local status=$?
   [[ -n $fake ]] && kill "$fake" 2>/dev/null
   # Anything still on the card from this run's directory: the watchdog cannot restore past it.
   for pid in $(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null); do
@@ -27,7 +33,7 @@ cleanup() {
   done
   pkill -9 -f "$run_dir/" 2>/dev/null
   nvidia-smi --query-compute-apps=pid,name,used_memory --format=csv,noheader 2>/dev/null | sed 's/^/job: on the card: /'
-  date -u +%FT%TZ > "$run_dir/job.ended"
+  { date -u +%FT%TZ; echo "exit=$status"; } > "$run_dir/job.ended"
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT
