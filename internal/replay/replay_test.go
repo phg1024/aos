@@ -118,6 +118,8 @@ type options struct {
 	noBounds bool
 	// noRedelegationClose records without the redelegation_close field.
 	noRedelegationClose bool
+	// noPublishSource records as AOS did before publish_artifact took a path.
+	noPublishSource bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -218,11 +220,12 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
 		NoPeerFraming: opts.noFraming,
 		NoBusBounds:   opts.noBounds,
 
 		NoRedelegationClose: opts.noRedelegationClose,
+		NoPublishSource:     opts.noPublishSource,
 		NoChainDelivery:     opts.noChain,
 		NoSenderOutcomes:    opts.noOutcomes,
 		Compaction:          opts.compaction,
@@ -1175,6 +1178,88 @@ func TestReplayOfARecordWithoutRedelegationClose(t *testing.T) {
 	current := recordAt(t, newRoot(t), context.Background(), roundTripScript, opts)
 	if got := runStartedData(t, current)[agentflow.RedelegationCloseField]; got != agentflow.RedelegationCloseV1 {
 		t.Fatalf("redelegation_close = %q", got)
+	}
+	if report := replayed(t, current, false); !report.Identical() {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
+	}
+}
+
+// A publish by path takes its bytes from the record: the file is gone when it replays,
+// and has other contents when it replays again, and the refused one is refused the same.
+func TestReplayOfAPublishByPath(t *testing.T) {
+	root := newRoot(t)
+	outside := filepath.Join(root, "outside.txt")
+	if err := os.WriteFile(outside, []byte("not for this process"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var file string
+	stateDir, workspace := recordRunIn(t, root, context.Background(), func(ws string) []step {
+		file = filepath.Join(ws, "raw_record.txt")
+		return []step{
+			tool("write_file", map[string]any{"path": file, "content": "render_ms_best=2.64186\n"}),
+			tool("publish_artifact", map[string]any{"type": "raw", "path": file}),
+			tool("publish_artifact", map[string]any{"type": "raw", "path": outside}),
+			tool("publish_artifact", map[string]any{"type": "note", "body": "typed"}),
+			exit("published"),
+			exit("published"),
+		}
+	}, options{budget: capability.Budget{Seconds: 600}, mail: true, handles: true})
+	_ = workspace
+	store, err := artifact.New(filepath.Join(stateDir, "artifacts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var published []artifact.Artifact
+	for _, item := range items {
+		if strings.HasPrefix(item.Type, artifact.PublishedPrefix) {
+			published = append(published, item)
+		}
+	}
+	if len(published) != 2 {
+		t.Fatalf("published = %+v", published)
+	}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if report := replayed(t, stateDir, false); !report.Identical() {
+		t.Fatalf("with the file gone: %+v, %+v", report, report.Divergence)
+	}
+	if err := os.WriteFile(file, []byte("something else\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if report := replayed(t, stateDir, false); !report.Identical() {
+		t.Fatalf("with the file changed: %+v, %+v", report, report.Divergence)
+	}
+}
+
+// A record from before publish_artifact took a path replays as it ran: its prompts and
+// reads say nothing of a source. A body with no path is not refused there either.
+func TestReplayOfARecordWithoutPublishSource(t *testing.T) {
+	script := func(string) []step {
+		return []step{
+			tool("publish_artifact", map[string]any{"type": "report", "body": "typed"}),
+			tool("publish_artifact", map[string]any{"type": "empty"}),
+			tool("read_artifact", map[string]any{"id": "art-000002"}),
+			exit("checked"),
+			exit("checked"),
+		}
+	}
+	opts := options{budget: capability.Budget{Seconds: 600}, mail: true, handles: true, noPublishSource: true}
+	legacy := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if runStartedData(t, legacy)[agentflow.PublishSourceField] != "" {
+		t.Fatal("the legacy record should have no publish_source")
+	}
+	if report := replayed(t, legacy, false); !report.Identical() {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+	opts.noPublishSource = false
+	current := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if got := runStartedData(t, current)[agentflow.PublishSourceField]; got != agentflow.PublishSourceV1 {
+		t.Fatalf("publish_source = %q", got)
 	}
 	if report := replayed(t, current, false); !report.Identical() {
 		t.Fatalf("current report = %+v, %+v", report, report.Divergence)

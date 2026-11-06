@@ -64,6 +64,11 @@ const (
 const (
 	RedelegationCloseField = "redelegation_close"
 	RedelegationCloseV1    = "v1"
+	// PublishSourceField is the run.started field that says publish_artifact takes
+	// a path and read_artifact says where a body came from: PublishSourceV1. Records
+	// without it ran with typed bodies only, and readers were told nothing.
+	PublishSourceField = "publish_source"
+	PublishSourceV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -132,6 +137,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoBusBounds {
 		data[BusBoundsField] = BusBoundsV1
+	}
+	if !e.NoPublishSource {
+		data[PublishSourceField] = PublishSourceV1
 	}
 	if !e.NoRedelegationClose {
 		data[RedelegationCloseField] = RedelegationCloseV1

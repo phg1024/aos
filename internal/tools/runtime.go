@@ -90,8 +90,11 @@ type Runtime struct {
 	ScratchRoot string
 	// Recorded, when set, answers every permitted tool call instead of
 	// running it: aos replay's recorded tool results.
-	Recorded  func(ctx context.Context, req Request) (Result, error)
-	scratchMu sync.Mutex
+	Recorded func(ctx context.Context, req Request) (Result, error)
+	// RecordedSource, when set, answers ReadSource instead of reading the
+	// file: aos replay's recorded publication.
+	RecordedSource func(ctx context.Context, req Request) ([]byte, error)
+	scratchMu      sync.Mutex
 }
 
 // ErrRunUnconfined means run was refused: it cannot be confined here and

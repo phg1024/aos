@@ -54,6 +54,9 @@ type PromptBackend struct {
 	// NoBusBounds leaves read_artifact and message_agent's artifacts out of
 	// the prompt, for replaying a record made before them.
 	NoBusBounds bool
+	// NoPublishSource leaves publish_artifact's path out of the prompt, for
+	// replaying a record made before it.
+	NoPublishSource bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -589,6 +592,8 @@ func (b PromptBackend) systemPrompt() string {
 		builder.WriteString("- ")
 		if tool == "message_agent" && b.handles() {
 			builder.WriteString("message_agent(to, body, artifacts?) (artifacts: comma-separated IDs of artifacts you may read, which the receiver may then read; an ID in the body grants nothing)")
+		} else if tool == "publish_artifact" && !b.NoPublishSource {
+			builder.WriteString("publish_artifact(type, body | path) (body: text you type, stored as typed; path: a text file you may read, up to 1 MiB, stored byte for byte with its sha256; a reader is told which it was)")
 		} else {
 			builder.WriteString(toolSignature(tool))
 		}

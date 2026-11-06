@@ -90,9 +90,12 @@ type Report struct {
 	LegacySenderOutcomes bool `json:"legacy_sender_outcomes,omitempty"`
 	// LegacyBusBounds means the record predates the cap, the bound and handles,
 	// so the replay takes any size into any mailbox.
-	LegacyBusBounds bool              `json:"legacy_bus_bounds,omitempty"`
-	RecordedBuild   map[string]string `json:"recorded_build,omitempty"`
-	Divergence      *Divergence       `json:"divergence,omitempty"`
+	LegacyBusBounds bool `json:"legacy_bus_bounds,omitempty"`
+	// LegacyPublishSource means the record predates publish_artifact's path,
+	// and it replayed with typed bodies only.
+	LegacyPublishSource bool              `json:"legacy_publish_source,omitempty"`
+	RecordedBuild       map[string]string `json:"recorded_build,omitempty"`
+	Divergence          *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -323,6 +326,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	toolRuntime := tools.NewRuntime()
 	toolRuntime.Recorded = player.tool
+	toolRuntime.RecordedSource = player.source
 
 	engine := agentflow.Engine{
 		Kernel:    k,
@@ -331,10 +335,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Leases:    leases,
 		Tools:     toolRuntime,
 		Factory: agentflow.StaticBackendFactory{
-			Completer:     backend,
-			Skills:        skills.NewRegistry(runSpec.Spec.SkillRoots),
-			NoPeerFraming: started.Data[agentflow.PeerFramingField] == "",
-			NoBusBounds:   started.Data[agentflow.BusBoundsField] == "",
+			Completer:       backend,
+			Skills:          skills.NewRegistry(runSpec.Spec.SkillRoots),
+			NoPeerFraming:   started.Data[agentflow.PeerFramingField] == "",
+			NoBusBounds:     started.Data[agentflow.BusBoundsField] == "",
+			NoPublishSource: started.Data[agentflow.PublishSourceField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -367,6 +372,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// Replay refuses a run with more than one agent process, so no replayed run
 	// re-delegates; the field is reproduced as recorded.
 	engine.NoRedelegationClose = started.Data[agentflow.RedelegationCloseField] == ""
+	engine.NoPublishSource = started.Data[agentflow.PublishSourceField] == ""
+	report.LegacyPublishSource = engine.NoPublishSource
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call
@@ -619,6 +626,49 @@ func (p *player) tool(ctx context.Context, req tools.Request) (tools.Result, err
 	}
 	p.diverge(Divergence{Kind: "tool", PID: req.PID, Detail: fmt.Sprintf("the replay ran %s, but the record has %s at %s", req.Tool, what, id)})
 	return tools.Result{}, errDiverged
+}
+
+// source answers a publish by path with the bytes the original stored, at the
+// artifact the replayed publication will become, or with its recorded refusal. The
+// file need not be there any more.
+func (p *player) source(ctx context.Context, req tools.Request) ([]byte, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	id, err := p.store.NextID()
+	if err != nil {
+		return nil, err
+	}
+	recorded, ok := p.rec.artifacts[id]
+	if ok && recorded.ProducerPID == req.PID {
+		switch {
+		case strings.HasPrefix(recorded.Type, artifact.PublishedPrefix) && recorded.Metadata["source_path"] == strings.TrimSpace(req.Args["path"]):
+			raw, err := p.rec.payload(id)
+			if err != nil {
+				return nil, err
+			}
+			var payload struct {
+				Body string `json:"body"`
+			}
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				return nil, err
+			}
+			return []byte(payload.Body), nil
+		case recorded.Type == "tool_error" && recorded.Metadata["tool"] == req.Tool:
+			raw, err := p.rec.payload(id)
+			if err != nil {
+				return nil, err
+			}
+			var failure struct {
+				Error string `json:"error"`
+			}
+			if err := json.Unmarshal(raw, &failure); err != nil {
+				return nil, err
+			}
+			return nil, tools.RecordedError(failure.Error)
+		}
+	}
+	p.diverge(Divergence{Kind: "tool", PID: req.PID, Detail: fmt.Sprintf("the replay published %s from a file, but the record has no such publication at %s", req.Args["path"], id)})
+	return nil, errDiverged
 }
 
 // stepClock gives each step the reading its first model call recorded,

@@ -669,7 +669,7 @@ func TestReadArtifactPagesToTheEnd(t *testing.T) {
 	id := s.publishArtifact(t, owner.PID, want)
 	var got strings.Builder
 	pages := 0
-	pagePattern := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:(\d+) total_bytes:(\d+)\]$`)
+	pagePattern := regexp.MustCompile(`(?s)^read_artifact:map\[artifact_id:\S+ body:(.*?)(?: next_offset:(\d+))? offset:(\d+) source:typed total_bytes:(\d+)\]$`)
 	offset := "0"
 	backend := &funcBackend{}
 	backend.fn = func(call int, _ context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {

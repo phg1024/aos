@@ -88,6 +88,18 @@ func TestSpecCannotTurnTheFramingOff(t *testing.T) {
 	}
 }
 
+func TestSystemPromptOffersAPathOnlyWhenOn(t *testing.T) {
+	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"publish_artifact"}}}}}
+	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}
+	if prompt := on.systemPrompt(); !strings.Contains(prompt, "publish_artifact(type, body | path) (") {
+		t.Fatalf("on:\n%s", prompt)
+	}
+	off := PromptBackend{Workflow: spec, Agent: spec.Agents[0], NoPublishSource: true}
+	if prompt := off.systemPrompt(); strings.Contains(prompt, "| path") || !strings.Contains(prompt, "publish_artifact(type, body)\n") {
+		t.Fatalf("off:\n%s", prompt)
+	}
+}
+
 func TestSystemPromptDescribesHandlesOnlyWhenOn(t *testing.T) {
 	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"message_agent"}}}}}
 	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}

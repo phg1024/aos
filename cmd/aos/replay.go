@@ -72,6 +72,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacySenderOutcomes {
 		fmt.Fprintln(w, "  the record predates sender outcomes; replayed without them")
 	}
+	if report.LegacyPublishSource {
+		fmt.Fprintln(w, "  the record predates publish_artifact's path; replayed with typed bodies only")
+	}
 	if report.LegacyBusBounds {
 		fmt.Fprintln(w, "  the record predates the bus's bounds and handles; replayed without them")
 	}

@@ -281,6 +281,9 @@ type AgentRuntime struct {
 	// list_artifacts. It is for replaying a record made before them; the caller
 	// sets ipc.Bus.NoBounds with it.
 	NoBusBounds bool
+	// NoPublishSource turns off publish_artifact's path and what read_artifact says of
+	// a body's source, for replaying a record made before them.
+	NoPublishSource bool
 	// KeepMailAtExit leaves a final exit's mail where it is, for a program that
 	// will move it on, as aos-tui does when a new root continues the
 	// conversation. The next Sweep takes whatever it did not move.
@@ -2663,24 +2666,31 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 			r.logDenial(process.PID, call.Name, call.Name, "", "reserved artifact type "+requested)
 			return tools.Result{}, fmt.Errorf("%w: %s", artifact.ErrReservedType, requested)
 		}
-		body := call.Args["body"]
+		body, metadata, err := r.publicationBody(ctx, process, call)
+		if err != nil {
+			return tools.Result{}, err
+		}
 		// Agent publications live under their own prefix, so they can never
 		// pass for a checkpoint, verdict or other runtime record.
 		record, err := r.Artifacts.CreateJSON(artifact.PublishedPrefix+requested, process.PID, map[string]string{
 			"body": body,
-		}, nonEmpty(checkpointID), map[string]string{
-			"kind": "published",
-		})
+		}, nonEmpty(checkpointID), metadata)
 		if err != nil {
 			return tools.Result{}, err
+		}
+		output := map[string]string{
+			"artifact_id": record.ID,
+			"type":        record.Type,
+		}
+		for _, key := range []string{sourceMetadata, sourcePathMetadata, sourceSHA256Metadata} {
+			if value := metadata[key]; value != "" {
+				output[key] = value
+			}
 		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "published artifact",
-			Output: map[string]string{
-				"artifact_id": record.ID,
-				"type":        record.Type,
-			},
+			Output:  output,
 		}, nil
 	case "acquire_lease":
 		if r.Leases == nil {

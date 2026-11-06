@@ -2458,9 +2458,12 @@ the smallest window `Validate` admits at the default ratio (58,100 tokens, 174,3
 - **Archived mail nobody reads** holds its place in the mailbox. A receiver that ignores
   `archived unread:` can stay full until its chain ends. The refusal is right about that, and
   its senders are told at the chain's end.
-- **The sender's own turn holds what it wrote.** `publish_artifact` takes a `body`, so 10 MiB
-  costs a model 10 MiB of output, and its checkpoint grows by that (B6: 21 MB). There is no
-  path form.
+- **The sender's own turn holds what it wrote.** `publish_artifact` with a `body` costs a model
+  that much output, and its checkpoint grows by it (B6: 21 MB, for 10 MiB).
+  `publish_artifact(type, path)`, added after v0.1.5, stores a text file of at most 1 MiB byte
+  for byte with its sha256, under read_file's own check, and `read_artifact` says of every body
+  whether it was typed or came from a file. The runtime vouches for the bytes, not for how the
+  file came to hold them. Over the cap there is still only a `body`.
 - **Handle lists** count towards the cap, not separately.
 - **Rights are not revoked.** A chain that was attached a handle keeps it.
 - **An index entry from before hashing** has no `sha256` and is read unverified, as the store

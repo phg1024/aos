@@ -1,6 +1,9 @@
 package runtime
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -258,15 +261,76 @@ func (r *AgentRuntime) readArtifact(pid string, args map[string]string) (tools.R
 		}
 	}
 	output := map[string]string{
-		"artifact_id": id,
-		"offset":      strconv.Itoa(offset),
-		"total_bytes": strconv.Itoa(len(text)),
-		"body":        text[offset:end],
+		"artifact_id":  id,
+		"offset":       strconv.Itoa(offset),
+		"total_bytes":  strconv.Itoa(len(text)),
+		"body":         text[offset:end],
+		sourceMetadata: sourceTyped,
 	}
 	if end < len(text) {
 		output["next_offset"] = strconv.Itoa(end)
 	}
+	if r.NoPublishSource {
+		delete(output, sourceMetadata)
+	} else if at := slices.IndexFunc(records, func(record artifact.Artifact) bool { return record.ID == id }); records[at].Metadata[sourceMetadata] == sourceFile {
+		output[sourceMetadata] = sourceFile
+		output[sourcePathMetadata] = records[at].Metadata[sourcePathMetadata]
+		output[sourceSHA256Metadata] = records[at].Metadata[sourceSHA256Metadata]
+	}
 	return tools.Result{Tool: "read_artifact", Summary: "read artifact", Output: output}, nil
+}
+
+// What a published artifact's bytes came from, on its record and in what a reader
+// is told: the file named at the publish, as read then, or what the model typed. The
+// runtime vouches for the bytes, and not for how the file came to hold them.
+const (
+	sourceMetadata       = "source"
+	sourcePathMetadata   = "source_path"
+	sourceSHA256Metadata = "source_sha256"
+	sourceFile           = "file"
+	sourceTyped          = "typed"
+)
+
+// publicationBody is what a publish stores, and the record's metadata: the body the
+// model typed, or the bytes of a file it names. A file adds no authority: the
+// process must hold read_file and be able to read that path with it.
+func (r *AgentRuntime) publicationBody(ctx context.Context, process kernel.Process, call ToolCall) (string, map[string]string, error) {
+	metadata := map[string]string{"kind": "published"}
+	if r.NoPublishSource {
+		return call.Args["body"], metadata, nil
+	}
+	path := strings.TrimSpace(call.Args["path"])
+	body, typed := call.Args["body"]
+	switch {
+	case path == "" && !typed:
+		return "", nil, errors.New("publish_artifact requires body or path")
+	case path == "":
+		return body, metadata, nil
+	case body != "":
+		return "", nil, errors.New("publish_artifact takes body or path, not both")
+	}
+	if !(capability.Evaluator{}).ToolAllowed("read_file", process.CapabilitySet) {
+		r.logDenial(process.PID, call.Name, "read_file", path, "capability not granted")
+		return "", nil, fmt.Errorf("%w: publish_artifact path needs read_file", tools.ErrToolDenied)
+	}
+	content, err := r.Tools.ReadSource(ctx, tools.Request{
+		Tool:          call.Name,
+		Args:          call.Args,
+		CapabilitySet: process.CapabilitySet,
+		Mounts:        process.Mounts,
+		PID:           process.PID,
+	})
+	if errors.Is(err, tools.ErrPathDenied) {
+		r.logDenial(process.PID, call.Name, "read_file", path, tools.DenialReason(err))
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	sum := sha256.Sum256(content)
+	metadata[sourceMetadata] = sourceFile
+	metadata[sourcePathMetadata] = path
+	metadata[sourceSHA256Metadata] = hex.EncodeToString(sum[:])
+	return string(content), metadata, nil
 }
 
 // byteArg parses a numeric tool argument, with fallback when absent. A number too
