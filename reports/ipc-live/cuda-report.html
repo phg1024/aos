@@ -93,7 +93,7 @@
   </ul>
 
   <h2>8. The pf1 Preflight and the Kernel Check</h2>
-  <p>The first preflight stopped at the kernel check, outside the sandbox and before <code>aos</code> started: <code>kernel_ok=0</code>, exit 6, about 1.5 seconds. <span class="bad">The cause is not established.</span> The check did not look for an error after the launch, so a launch that failed would look exactly like this. The dry job skips running the check, so this was its first time on the card.</p>
+  <p>The first preflight stopped at the kernel check, outside the sandbox and before <code>aos</code> started: <code>kernel_ok=0</code>, exit 6, about 1.5 seconds. pf1 recorded no error name, because the check did not look for an error after the launch. <a href="#pf3">pf3</a> measured the likely cause: the default build fails on this driver with an unsupported PTX version. The dry job skips running the check, so this was its first time on the card.</p>
   <h3>What was measured, compile only</h3>
   <table>
     <tr><th></th><th>Device code embedded</th><th>Architecture macro</th></tr>
@@ -127,8 +127,14 @@
     <li><b>A second fault of the same change:</b> a refused reuse would still have run the trap, killing whatever ran from the old run's directory and overwriting its <code>job.ended</code>. <code>job.sh</code> now refuses a reuse before setting the trap, and a test holds a live process there to show it survives. If two jobs with one name start in the same instant, <code>render.py</code> stops the second, but that job's trap still runs.</li>
     <li><b><code>job.ended</code></b> now records the exit code on its second line. <code>kill -9</code> still leaves no file.</li>
   </ul>
+  <h3 id="pf3">The pf3 preflight</h3>
+  <p>pf3 exited 0, with the scripted model. The <code>sm_86</code> build gave <code>kernel_ok=1</code> in the check and inside the sandbox for all three agents. The default build gave <code>kernel_ok=0 step=launch error=cudaErrorUnsupportedPtxVersion (222)</code>. pf1 used the default build with the same toolchain and driver, so this is the likely cause of pf1, though pf1 itself did not record the error. No real model has run yet.</p>
+  <h3>analyze.py on a copied state directory</h3>
+  <p>pf3 found a fault in <code>analyze.py</code>: it opened the absolute paths in <code>artifacts/index.json</code>, so on a copy every payload came back empty and it still exited 0. It then reported 3 situations exercised rather than 7. It now reads <code>artifacts/payloads/&lt;id&gt;.json</code> under the directory it is given, as <code>internal/replay</code> does. A missing or unparsable payload stops it with an error naming the artifact. The store writes a payload before indexing it, so a killed run should not produce this. <code>job.sh</code> ignores the tool's status, so this cannot change a job's exit code.</p>
+  <p>On pf3, the output on this Mac and in the job's Ray log differ only in the state directory's path on the first line. <code>preflight/metal.py</code> has the same absolute paths, but off the machine it stops with an error, so it cannot mislead. It is unchanged.</p>
   <h3>Tests</h3>
   <ul>
+    <li><code>test_analyze.py</code> runs <code>analyze.py</code> on a state whose index names another machine's paths. 5 tests pass. 4 of them fail on the old code, and 3 fail if a missing payload is swallowed again.</li>
     <li><code>cuda/test_job.sh</code> runs the real <code>job.sh</code> and the real <code>render.py</code> in every case, with a stub compiler, card and <code>aos</code>: 16 cases pass, and 15 of 15 <a href="cuda/kernel-check/mutation.txt">mutations</a> fail them. Restoring the pf2 bug fails 15 of the 16.</li>
     <li><code>cuda/test_steps.sh</code> ran on the target machine with a <a href="cuda/kernel-check/steps.txt">clean environment and outside Ray</a>. Real: <code>job.sh</code>, <code>render.py</code>, the workflow, the CPU reference, <code>nvidia-smi</code>'s queries and <code>nvcc</code> for both builds. It passed through to the stub <code>aos</code>, no binary ran, and the list of compute apps was the same before and after. The same name then gave exit 5 and left <code>job.ended</code> unchanged.</li>
     <li><span class="warn">Still unrun:</span> the kernel check's binary on the card; the real scripted model, <code>aos</code> and sandbox with this <code>job.sh</code>; <code>metal.py</code> and <code>analyze.py</code> after this change; and, under Ray, the <code>compute_cap</code> query and the <code>sm_86</code> compile. Ray has run <code>job.sh</code> only as far as <code>render.py</code> in pf2, and to the default build's kernel check in pf1, with the older script.</li>

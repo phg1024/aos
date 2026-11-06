@@ -40,6 +40,7 @@ def load_lines(path):
 
 class State:
     def __init__(self, root):
+        self.root = root
         self.events = load_json(os.path.join(root, "kernel", "events.json"), [])
         processes = load_json(os.path.join(root, "kernel", "processes.json"), {})
         self.processes = {p["pid"]: p for p in (processes.values() if isinstance(processes, dict) else processes)}
@@ -70,7 +71,13 @@ class State:
         return f"{self.agent(pid)} ({pid})"
 
     def payload(self, artifact_id):
-        return load_json(self.index.get(artifact_id, {}).get("path", ""), None)
+        # The index holds the path on the machine that ran it, and this directory may be a copy.
+        path = os.path.join(self.root, "artifacts", "payloads", artifact_id + ".json")
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, ValueError) as error:
+            sys.exit(f"analyze: {artifact_id}: cannot read its payload: {error}")
 
     def records(self, *types):
         return sorted((a for a in self.index.values() if a.get("type") in types), key=lambda a: a["id"])
