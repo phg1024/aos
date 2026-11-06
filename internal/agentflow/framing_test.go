@@ -100,6 +100,37 @@ func TestSystemPromptOffersAPathOnlyWhenOn(t *testing.T) {
 	}
 }
 
+func TestSystemPromptSaysHowToolsReadADuration(t *testing.T) {
+	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"acquire_lease", "read_file", "run", "web_fetch", "web_search"}, MaxRunSeconds: 120}}}}
+	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}
+	prompt := on.systemPrompt()
+	for _, want := range []string{
+		"run(command, timeout?) (timeout: whole seconds, or a Go duration such as 5m; default 60s, longest 120s: a longer one is cut to that and the result says so)\n",
+		"web_search(query, timeout?) (timeout: whole seconds, or a Go duration such as 5m; default 30s)\n",
+		"web_fetch(url, offset?, timeout?) (timeout: whole seconds, or a Go duration such as 5m; default 60s)\n",
+		"acquire_lease(resource, ttl?) (ttl: whole seconds, or a Go duration such as 5m; default 10m)\n",
+		"read_file(path)\n",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("lacks %q:\n%s", want, prompt)
+		}
+	}
+	for name, off := range map[string]PromptBackend{
+		"replaying":    {Workflow: spec, Agent: spec.Agents[0], NoDurationArgs: true},
+		"a frozen arm": {Workflow: spec, Agent: spec.Agents[0], Recall: runtime.RecallOff()},
+	} {
+		prompt = off.systemPrompt()
+		for _, want := range []string{"run(command, timeout?)\n", "web_search(query, timeout?)\n", "web_fetch(url, offset?, timeout?)\n", "acquire_lease(resource, ttl?)\n"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("%s lacks %q:\n%s", name, want, prompt)
+			}
+		}
+		if strings.Contains(prompt, "whole seconds") {
+			t.Fatalf("%s:\n%s", name, prompt)
+		}
+	}
+}
+
 func TestSystemPromptDescribesHandlesOnlyWhenOn(t *testing.T) {
 	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", Capabilities: capability.Set{Tools: []string{"message_agent"}}}}}
 	on := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}

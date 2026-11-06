@@ -1,0 +1,41 @@
+Mutations for the duration fix: internal/tools/duration.go, the four call sites, prompt note, replay flag.
+Package tests before: all ok. First pass 32 of 37: three were self-consistent or a wrapping value the tests lacked, one mutant did not build.
+After tightening TestRunRefusesATimeoutItCannotRead and TestReplayOfARecordWithoutDurationArgs and fixing the mutant:
+caught bare number refused
+caught bare number read as nanoseconds
+caught bare number read as minutes
+caught garbage falls back
+caught zero and negative accepted
+caught only negative refused
+caught out of range falls back
+caught no trim
+caught error does not say the form
+caught run ignores the error
+caught run default changed
+caught clamp not reported
+caught clamp never applied
+caught clamped when equal
+caught timed-out error silent on the ask
+caught timed-out error always says the ask
+caught web_search ignores the error
+caught web_fetch ignores the error
+caught lease always legacy
+caught lease default changed
+caught record never says duration_args
+caught record always says duration_args
+caught replay ignores the record for prompts
+caught replay ignores the record for the ttl
+caught report never legacy
+caught prompt note on a frozen arm
+caught prompt note while replaying
+caught prompt note never
+caught prompt limit fixed
+caught prompt lacks web_search
+caught prompt lacks web_fetch
+caught prompt lacks lease
+caught overflow check dropped
+caught lease ignores the error
+caught replay loses the legacy ttl
+caught engine does not pass the flag
+caught factory does not pass the flag
+37 of 37 caught

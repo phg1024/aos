@@ -40,6 +40,8 @@ type StaticBackendFactory struct {
 	NoBusBounds bool
 	// NoPublishSource is PromptBackend.NoPublishSource for every backend.
 	NoPublishSource bool
+	// NoDurationArgs is PromptBackend.NoDurationArgs for every backend.
+	NoDurationArgs bool
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -56,6 +58,7 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		NoPeerFraming:   f.NoPeerFraming,
 		NoBusBounds:     f.NoBusBounds,
 		NoPublishSource: f.NoPublishSource,
+		NoDurationArgs:  f.NoDurationArgs,
 	}, nil
 }
 
@@ -158,6 +161,9 @@ type Engine struct {
 	// NoPublishSource is AgentRuntime.NoPublishSource, for replaying a record made
 	// before publish_artifact took a path.
 	NoPublishSource bool
+	// NoDurationArgs is AgentRuntime.NoDurationArgs, for replaying a record made
+	// before tools.DurationArg. When it is off, run.started says so (duration_args).
+	NoDurationArgs bool
 	// NoRedelegationClose leaves the old chain open when a delegator
 	// re-delegates. When it is off, run.started says so (redelegation_close).
 	NoRedelegationClose bool
@@ -498,6 +504,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoPeerFraming:    e.NoPeerFraming,
 		NoBusBounds:      e.NoBusBounds,
 		NoPublishSource:  e.NoPublishSource,
+		NoDurationArgs:   e.NoDurationArgs,
 		NoSenderOutcomes: e.NoSenderOutcomes,
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)

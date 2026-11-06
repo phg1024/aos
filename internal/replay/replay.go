@@ -93,9 +93,12 @@ type Report struct {
 	LegacyBusBounds bool `json:"legacy_bus_bounds,omitempty"`
 	// LegacyPublishSource means the record predates publish_artifact's path,
 	// and it replayed with typed bodies only.
-	LegacyPublishSource bool              `json:"legacy_publish_source,omitempty"`
-	RecordedBuild       map[string]string `json:"recorded_build,omitempty"`
-	Divergence          *Divergence       `json:"divergence,omitempty"`
+	LegacyPublishSource bool `json:"legacy_publish_source,omitempty"`
+	// LegacyDurationArgs means the record predates tools.DurationArg, and it replayed
+	// with the older prompt and acquire_lease's older reading of ttl.
+	LegacyDurationArgs bool              `json:"legacy_duration_args,omitempty"`
+	RecordedBuild      map[string]string `json:"recorded_build,omitempty"`
+	Divergence         *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -340,6 +343,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 			NoPeerFraming:   started.Data[agentflow.PeerFramingField] == "",
 			NoBusBounds:     started.Data[agentflow.BusBoundsField] == "",
 			NoPublishSource: started.Data[agentflow.PublishSourceField] == "",
+			NoDurationArgs:  started.Data[agentflow.DurationArgsField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -374,6 +378,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	engine.NoRedelegationClose = started.Data[agentflow.RedelegationCloseField] == ""
 	engine.NoPublishSource = started.Data[agentflow.PublishSourceField] == ""
 	report.LegacyPublishSource = engine.NoPublishSource
+	engine.NoDurationArgs = started.Data[agentflow.DurationArgsField] == ""
+	report.LegacyDurationArgs = engine.NoDurationArgs
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

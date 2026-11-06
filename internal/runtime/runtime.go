@@ -284,6 +284,10 @@ type AgentRuntime struct {
 	// NoPublishSource turns off publish_artifact's path and what read_artifact says of
 	// a body's source, for replaying a record made before them.
 	NoPublishSource bool
+	// NoDurationArgs reads acquire_lease's ttl as it was read before tools.DurationArg,
+	// for replaying a record made before it. Run, web_search and web_fetch need no
+	// such switch: a replay answers them from the record.
+	NoDurationArgs bool
 	// KeepMailAtExit leaves a final exit's mail where it is, for a program that
 	// will move it on, as aos-tui does when a new root continues the
 	// conversation. The next Sweep takes whatever it did not move.
@@ -2701,9 +2705,14 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 			return tools.Result{}, errors.New("acquire_lease requires resource")
 		}
 		ttl := 10 * time.Minute
-		if raw := strings.TrimSpace(call.Args["ttl"]); raw != "" {
-			if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+		if r.NoDurationArgs {
+			if parsed, err := time.ParseDuration(strings.TrimSpace(call.Args["ttl"])); err == nil && parsed > 0 {
 				ttl = parsed
+			}
+		} else {
+			var err error
+			if ttl, err = tools.DurationArg("acquire_lease ttl", call.Args["ttl"], ttl); err != nil {
+				return tools.Result{}, err
 			}
 		}
 		leaseRecord, err := r.Leases.Acquire(resource, process.PID, ttl)

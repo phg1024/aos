@@ -585,7 +585,7 @@ func TestPromptBackendListsToolSignatures(t *testing.T) {
 	}
 	for _, want := range []string{
 		"- edit_file(path, old_text, new_text, replace_all?)\n",
-		"- web_fetch(url, offset?, timeout?)\n",
+		"- web_fetch(url, offset?, timeout?) (timeout: ",
 		"- custom_tool\n",
 	} {
 		if !strings.Contains(completer.systemPrompt, want) {

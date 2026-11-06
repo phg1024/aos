@@ -120,6 +120,8 @@ type options struct {
 	noRedelegationClose bool
 	// noPublishSource records as AOS did before publish_artifact took a path.
 	noPublishSource bool
+	// noDurationArgs records as AOS did before tools.DurationArg.
+	noDurationArgs bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -220,12 +222,13 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
 		NoPeerFraming: opts.noFraming,
 		NoBusBounds:   opts.noBounds,
 
 		NoRedelegationClose: opts.noRedelegationClose,
 		NoPublishSource:     opts.noPublishSource,
+		NoDurationArgs:      opts.noDurationArgs,
 		NoChainDelivery:     opts.noChain,
 		NoSenderOutcomes:    opts.noOutcomes,
 		Compaction:          opts.compaction,
@@ -1233,6 +1236,67 @@ func TestReplayOfAPublishByPath(t *testing.T) {
 	}
 	if report := replayed(t, stateDir, false); !report.Identical() {
 		t.Fatalf("with the file changed: %+v, %+v", report, report.Divergence)
+	}
+}
+
+// recordHolds reports whether any file under dir contains text.
+func recordHolds(t *testing.T, dir, text string) bool {
+	t.Helper()
+	found := false
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		found = found || strings.Contains(string(data), text)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
+// A record from before tools.DurationArg replays as it ran: the older prompt, and a
+// bare or unreadable ttl took the default, with no tool error. Run's own timeout comes
+// from the record either way.
+func TestReplayOfARecordWithoutDurationArgs(t *testing.T) {
+	script := func(string) []step {
+		return []step{
+			tool("acquire_lease", map[string]any{"resource": "bare", "ttl": "300"}),
+			tool("acquire_lease", map[string]any{"resource": "words", "ttl": "soon"}),
+			tool("run", map[string]any{"command": "true", "timeout": "300"}),
+			exit("done"),
+		}
+	}
+	opts := options{budget: capability.Budget{Seconds: 600}, noDurationArgs: true}
+	legacy := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if runStartedData(t, legacy)[agentflow.DurationArgsField] != "" {
+		t.Fatal("the legacy record should have no duration_args")
+	}
+	// Recording and replay share this code, so an identical replay alone would not
+	// show that the old behaviour is the one being reproduced.
+	if recordHolds(t, legacy, "whole seconds") || !recordHolds(t, filepath.Join(legacy, "kernel"), `"words"`) {
+		t.Fatal("the legacy record should have the older prompt and the lease on words")
+	}
+	report := replayed(t, legacy, false)
+	if !report.Identical() || !report.LegacyDurationArgs {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+	opts.noDurationArgs = false
+	current := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if got := runStartedData(t, current)[agentflow.DurationArgsField]; got != agentflow.DurationArgsV1 {
+		t.Fatalf("duration_args = %q", got)
+	}
+	if !recordHolds(t, current, "whole seconds") || recordHolds(t, filepath.Join(current, "kernel"), `"words"`) {
+		t.Fatal("the current record should have the new prompt and no lease on words")
+	}
+	report = replayed(t, current, false)
+	if !report.Identical() || report.LegacyDurationArgs {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
 	}
 }
 

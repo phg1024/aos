@@ -57,6 +57,9 @@ type PromptBackend struct {
 	// NoPublishSource leaves publish_artifact's path out of the prompt, for
 	// replaying a record made before it.
 	NoPublishSource bool
+	// NoDurationArgs leaves out how tools read a duration, for replaying a record
+	// made before tools.DurationArg.
+	NoDurationArgs bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -107,6 +110,12 @@ func (b PromptBackend) framed() bool { return !b.NoPeerFraming && !b.Recall.NoPr
 // handles says whether the prompt describes artifact handles. Frozen probe arms
 // (RecallOff) keep the prompts they were measured with.
 func (b PromptBackend) handles() bool { return !b.NoBusBounds && !b.Recall.NoPromptFraming }
+
+// describesDurations is whether the prompt says how tools read a duration arg. A
+// frozen probe arm's prompt stays as it was, as it does for framing.
+func (b PromptBackend) describesDurations() bool {
+	return !b.NoDurationArgs && !b.Recall.NoPromptFraming
+}
 
 // promptContent is a history message as the prompt shows it. Turns the
 // agent did not write carry their number, so it can cite them as
@@ -596,6 +605,9 @@ func (b PromptBackend) systemPrompt() string {
 			builder.WriteString("publish_artifact(type, body | path) (body: text you type, stored as typed; path: a text file you may read, up to 1 MiB, stored byte for byte with its sha256; a reader is told which it was)")
 		} else {
 			builder.WriteString(toolSignature(tool))
+			if b.describesDurations() {
+				builder.WriteString(b.durationNote(tool))
+			}
 		}
 		builder.WriteString("\n")
 	}
@@ -643,6 +655,22 @@ var toolArgs = map[string]string{
 	"index_memory":     "index",
 	"acquire_lease":    "resource, ttl?",
 	"release_lease":    "resource",
+}
+
+// durationNote says how tool reads its duration arg, if it has one.
+func (b PromptBackend) durationNote(tool string) string {
+	const form = "whole seconds, or a Go duration such as 5m"
+	switch tool {
+	case "run":
+		return fmt.Sprintf(" (timeout: %s; default 60s, longest %ds: a longer one is cut to that and the result says so)", form, int(b.Agent.Capabilities.RunTimeoutBound().Seconds()))
+	case "web_search":
+		return " (timeout: " + form + "; default 30s)"
+	case "web_fetch":
+		return " (timeout: " + form + "; default 60s)"
+	case "acquire_lease":
+		return " (ttl: " + form + "; default 10m)"
+	}
+	return ""
 }
 
 func toolSignature(tool string) string {

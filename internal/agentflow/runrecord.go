@@ -69,6 +69,11 @@ const (
 	// without it ran with typed bodies only, and readers were told nothing.
 	PublishSourceField = "publish_source"
 	PublishSourceV1    = "v1"
+	// DurationArgsField is the run.started field that says tools read a duration arg
+	// through tools.DurationArg and the prompt describes it: DurationArgsV1. Records
+	// without it fell back to the default for a bare number or an unreadable value.
+	DurationArgsField = "duration_args"
+	DurationArgsV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -140,6 +145,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoPublishSource {
 		data[PublishSourceField] = PublishSourceV1
+	}
+	if !e.NoDurationArgs {
+		data[DurationArgsField] = DurationArgsV1
 	}
 	if !e.NoRedelegationClose {
 		data[RedelegationCloseField] = RedelegationCloseV1

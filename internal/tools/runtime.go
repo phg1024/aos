@@ -415,10 +415,11 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if command == "" {
 			return Result{}, errors.New("run requires command")
 		}
-		timeout := 60 * time.Second
-		if parsed, parseErr := time.ParseDuration(req.Args["timeout"]); parseErr == nil && parsed > 0 {
-			timeout = parsed
+		asked, err := DurationArg("run timeout", req.Args["timeout"], 60*time.Second)
+		if err != nil {
+			return Result{}, err
 		}
+		timeout := asked
 		bound := req.CapabilitySet.RunTimeoutBound()
 		clamped := timeout > bound
 		if clamped {
@@ -447,6 +448,9 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 				return Result{Tool: req.Tool, Changes: changes()}, fmt.Errorf("%w: %w", ErrToolCancelled, ctx.Err())
 			}
 			if cmdCtx.Err() != nil {
+				if clamped {
+					return Result{Tool: req.Tool, Changes: changes()}, fmt.Errorf("command execution timed out after %s, this process's limit (asked for %s)", timeout, asked)
+				}
 				return Result{Tool: req.Tool, Changes: changes()}, fmt.Errorf("command execution timed out after %s", timeout)
 			}
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -482,12 +486,9 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if !req.CapabilitySet.AllowNetwork {
 			return Result{}, fmt.Errorf("%w: web_search needs allow_network", ErrNetworkDenied)
 		}
-		timeoutStr := req.Args["timeout"]
-		timeout := 30 * time.Second
-		if timeoutStr != "" {
-			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
-				timeout = parsed
-			}
+		timeout, err := DurationArg("web_search timeout", req.Args["timeout"], 30*time.Second)
+		if err != nil {
+			return Result{}, err
 		}
 		searchURL := instantAnswerEndpoint + "?q=" + url.QueryEscape(query) + "&format=json&no_html=1"
 		client := &http.Client{
@@ -546,12 +547,9 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if !req.CapabilitySet.AllowNetwork {
 			return Result{}, fmt.Errorf("%w: web_fetch needs allow_network", ErrNetworkDenied)
 		}
-		timeoutStr := req.Args["timeout"]
-		timeout := 60 * time.Second
-		if timeoutStr != "" {
-			if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
-				timeout = parsed
-			}
+		timeout, err := DurationArg("web_fetch timeout", req.Args["timeout"], 60*time.Second)
+		if err != nil {
+			return Result{}, err
 		}
 		client := r.fetchClient(req.CapabilitySet, timeout)
 		resp, err := client.Get(targetURL)
