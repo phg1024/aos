@@ -112,20 +112,18 @@
   <h3>What compiles with what</h3>
   <table>
     <tr><th>Who</th><th>Compile line</th><th>If the kernel silently does nothing</th></tr>
-    <tr><td>Agents, by the task's "Build with exactly"</td><td><code>nvcc -O2 -std=c++17 ...</code>, the default</td><td class="bad">Nothing in the task tells them to check. Their steps could go on it.</td></tr>
-    <tr><td>Scripted preflight, <code>fake_model.py</code></td><td>The same line</td><td class="warn">Its kernel compares values, so it reports <code>kernel_ok=0</code>, but does not call <code>cudaGetLastError</code>. Unchanged.</td></tr>
-    <tr><td>The kernel check</td><td>Both</td><td class="good">Names it.</td></tr>
+    <tr><td>Agents, by the task's "Build with exactly"</td><td><code>nvcc -O2 -std=c++17 -arch=sm_86 ...</code></td><td class="good">All four are told: "After every kernel launch, check <code>cudaGetLastError</code> and treat an error as a failure to report."</td></tr>
+    <tr><td>Scripted preflight, <code>fake_model.py</code></td><td>The same line</td><td class="warn">Its kernel compares values, so it reports <code>kernel_ok=0</code>, but does not call <code>cudaGetLastError</code>. Its kernel is unchanged.</td></tr>
+    <tr><td>The kernel check</td><td>Both</td><td class="good">Names it. <code>job.sh</code> reads the flags from the workflow, so <code>sm_86</code> now decides whether the job goes on, and the default's result is still recorded.</td></tr>
   </table>
-  <h3>Proposed, not made</h3>
-  <p>Two lines in the workflow, which are the user's and Book Writer's call:</p>
-  <ul>
-    <li>Change "Build with exactly" to <code>nvcc -O2 -std=c++17 -arch=sm_86 ...</code> in the workflow and in <code>fake_model.py</code>. Agents would see the flag in their task, with no hidden environment variable. <code>job.sh</code> then decides on that build without further change.</li>
-    <li>Add to the task: "After every kernel launch, check <code>cudaGetLastError</code> and treat an error as a failure to report."</li>
-  </ul>
-  <p>The reason to decide before the window: with the task unchanged, a failing default stops the job, so the window answers the compile question but tests nothing under the sandbox. With the flag, the job goes on if the <code>sm_86</code> build passes, and the default's result is still recorded. Pinning would also avoid compiling at load time for agents' binaries. The sandbox gives no write access to <code>~/.nv</code>, so that compile might repeat at each start, which would land in the workload's numbers. That is unmeasured.</p>
+  <h3>The task change, after this check</h3>
+  <p>The user chose to change the task before pf2. The reason to decide before the window: with the task unchanged, a failing default would stop the job, so the window would answer the compile question but test nothing under the sandbox. Now the job goes on if the <code>sm_86</code> build passes. This does not establish what failed in pf1: if the <code>sm_86</code> build also fails, the job stops as before.</p>
+  <p>Pinning should also avoid compiling at load time for agents' binaries. The sandbox gives no write access to <code>~/.nv</code>, so that compile might otherwise repeat at each start, which would land in the workload's numbers. That is unmeasured.</p>
+  <p>The flag names this card. <code>job.sh</code> reads the card's compute capability and stops if the workflow's flags match neither that card nor the default, so moving to another card fails before any model call.</p>
   <h3>Tests</h3>
   <ul>
     <li><code>cuda/test_job.sh</code> runs the real <code>job.sh</code> with a stub compiler, card and <code>aos</code>: 9 cases pass, and 7 of 7 <a href="cuda/kernel-check/mutation.txt">mutations</a> fail them.</li>
+    <li><code>TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds</code> requires the flag and the launch check in every agent's text. Removing either from one agent fails it.</li>
     <li>The new <code>check.cu</code> compiled with both sets of flags on the target machine. <span class="warn">It has never run:</span> its first run is the next preflight, so its error paths are unproven until then.</li>
   </ul>
 </body>

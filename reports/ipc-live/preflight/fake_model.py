@@ -164,7 +164,7 @@ def execute(d):
 
 def build(d):
     if Run.kind == "cuda":
-        return f"nvcc -O2 -std=c++17 -I {d}/include {d}/src/*.cpp {d}/src/*.cu -o {d}/rasterizer"
+        return f"nvcc -O2 -std=c++17 -arch=sm_86 -I {d}/include {d}/src/*.cpp {d}/src/*.cu -o {d}/rasterizer"
     return f"clang++ -O2 -std=c++17 -fobjc-arc -I {d}/include {d}/src/*.cpp {d}/src/*.mm -framework Metal -framework Foundation -o {d}/rasterizer"
 
 

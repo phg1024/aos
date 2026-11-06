@@ -247,4 +247,13 @@ func TestTheIPCCudaWorkflowGrantsOnlyWhatItNeeds(t *testing.T) {
 	if !slices.Equal(coordinator.Delegable.AllowGPU, gpu) {
 		t.Fatalf("the coordinator cannot grant the card: %+v", coordinator.Delegable)
 	}
+	// The build job.sh checks first, and a launch failure is not left to look like a blank frame.
+	for _, agent := range cuda.Agents {
+		if !strings.Contains(agent.SystemPrompt, "nvcc -O2 -std=c++17 -arch=sm_86 -I <dir>") || !strings.Contains(agent.SystemPrompt, "check cudaGetLastError") {
+			t.Errorf("%s is not told the build or the launch check", agent.ID)
+		}
+	}
+	if strings.Contains(raw, "nvcc -O2 -std=c++17 -I") {
+		t.Error("a build line leaves out the card's architecture")
+	}
 }
