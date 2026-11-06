@@ -81,9 +81,25 @@
     <li>The worst-case step sum is 211, against the "about 200" the older workflow's test holds to. That test still applies to the older file only.</li>
   </ul>
 
-  <h2>6. Open</h2>
+  <h2>6. After pf4: reading a duration</h2>
+  <p>This build found that <code>run</code> took a bare number for its default: <code>"300"</code> meant 60 seconds, and all 51 timeouts the model asked for in live2 were bare numbers. The user chose to fix it before the live run, as commit 09db0be, which changes <code>bin/aos</code> and no other deployed file.</p>
+  <table>
+    <tr><th>Value</th><th>Before</th><th>Now</th></tr>
+    <tr><td>Whole number, <code>300</code></td><td>the default</td><td>that many seconds</td></tr>
+    <tr><td>Go duration, <code>5m</code></td><td>read</td><td>read</td></tr>
+    <tr><td>Unreadable, <code>soon</code>, <code>2.5</code>, <code>1e3</code></td><td>the default</td><td>a tool error the model reads; the command does not run</td></tr>
+    <tr><td>Zero or negative</td><td><code>run</code> and ttl: the default. Network tools: <code>0s</code> meant no timeout</td><td>a tool error</td></tr>
+    <tr><td>Over <code>run</code>'s limit, 600 s by default</td><td>a duration was cut and reported; a bare number never reached the limit</td><td>cut and reported by <code>timeout_clamped</code>, and a command stopped there says what it asked for</td></tr>
+    <tr><td>Too long to hold</td><td>the default</td><td>a tool error</td></tr>
+  </table>
+  <p><code>run</code>, <code>web_search</code>, <code>web_fetch</code> and <code>acquire_lease</code>'s <code>ttl</code> share one parser, and each takes a model's value. The network tools and <code>ttl</code> still have no upper limit, as before. The prompt now states the form, which changes what a live model reads beside each of those tools. A frozen probe arm keeps its prompt byte for byte, and a record without <code>duration_args</code> replays with the older prompt and ttl.</p>
+  <p>Tests: before the fix, 18 cases in <code>internal/tools</code> failed, listed in <code>cuda/kernel-check/duration-before-fix.txt</code>, and so did the lease test. <code>5m</code>, <code>1h</code> and the empty value already worked, so those guard against regression. The prompt and replay tests name fields this fix adds, so they could not build before it; mutations stand in for their failing first. Mutations: 37 of 37 caught, after two tests were tightened for the 5 a first pass missed. Package tests and the script tests pass.</p>
+  <p>On the machine, outside Ray, with no CUDA context: <code>test_steps.sh</code> passes and <code>test_path.sh</code> comes out CLEAN. A temporary copy with the scripted benchmarker asking for a bare <code>400</code> also comes out CLEAN, and its run recorded a timeout of 6m40s.</p>
+  <p><span class="warn">Not covered by pf4.</span> pf4 ran the build before this one, with timeouts written as durations, so it did not run this binary, a bare number on the card, the new prompt text or the new error. No file on the card's path changed apart from the binary, and the sandbox code is unchanged. pf4's 50 trials took about 15.5 seconds.</p>
+  <p><span class="warn">What a live run may now do differently.</span> A long command now gets the time the model asked for. In live2 the asked values ran from 30 to 900 seconds, so a command that hangs can hold a step for up to 10 minutes rather than 1, and a run that 60 seconds would have cut now finishes. An unreadable value costs the model a step. live2 had none.</p>
+
+  <h2>7. Open</h2>
   <ul>
-    <li><span class="warn"><code>run</code> ignores a bare-number timeout.</span> It parses a Go duration, so <code>"300"</code> falls back to 60 seconds without a word. All 51 timeouts the model asked for in live2 were bare numbers, and none of its runs was cut. Fifty trials are still likely to fit, but that is not measured. This is not changed here and is outside what was approved.</li>
     <li>The Landlock results are for this kernel. On an older ABI, a device grant is refused rather than weakened.</li>
     <li>Whether a model attaches the handle, reads past the first page or chooses a path over a body is unknown. Only a live run can show it, and with one route open, it cannot show a preference between routes.</li>
   </ul>
