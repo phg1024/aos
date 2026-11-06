@@ -10,7 +10,7 @@ T=$(mktemp -d "$live/test-steps.XXXXXX")
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/workflows" "$T/reports"
 cp "$live/bin/job.sh" "$live/bin/render.py" "$T/bin/"
-cp "$live/workflows/rasterizer-bunny-cuda-ipc.json" "$T/workflows/"
+cp "$live/workflows/rasterizer-bunny-cuda-handles-ipc.json" "$T/workflows/"
 ln -s "$live/reports/rasterizer-bunny" "$T/reports/rasterizer-bunny"
 printf 'import time\ntime.sleep(5)\n' > "$T/bin/fake_model.py"
 printf 'pass\n' > "$T/bin/metal.py"
@@ -29,6 +29,7 @@ dir=$T/reports/ipc-live/runs/steps
 echo "aos stub reached: $([[ -e $T/aos-ran ]] && echo yes || echo no)"
 echo "workflow is JSON: $(python3 -c 'import json, sys; json.load(open(sys.argv[1])); print("yes")' "$dir/workflow.json")"
 echo "placeholders left: $(grep -c '__[A-Z_]*__' "$dir/workflow.json")"
+echo "private directory made: $([[ -d $dir/cuda-bench ]] && echo yes || echo no)"
 echo "check binaries: $(cd "$dir/kernel-check" && ls -d check-* | tr '\n' ' ')"
 echo "run logs, which would mean a binary ran: $(cd "$dir/kernel-check" && ls run-*.log 2>/dev/null | wc -l)"
 echo "job.ended: $(tr '\n' ' ' < "$dir/job.ended")"

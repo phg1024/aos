@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -184,5 +185,96 @@ func TestGPUNeedsItsGrant(t *testing.T) {
 	}
 	if strings.Contains(without, "cuInit 0") || strings.Contains(without, "nvidia-smi exit 0") {
 		t.Errorf("without the grant:\n%s", without)
+	}
+}
+
+// The private directory of the handles workflow, as Landlock sees it: a sibling of what the
+// others are granted, since it cannot be carved out of a granted root. One process works in it,
+// and another, confined, is refused it by name, by listing and through /proc/<pid>/cwd, with and
+// without the device grant that opens /proc for writing. A read-only parent mount around a narrow
+// read grant, as the verifier has, passes check().
+func TestASiblingDirectoryIsOutOfReach(t *testing.T) {
+	if err := sandbox.Available(); err != nil {
+		t.Skip(err)
+	}
+	root := t.TempDir()
+	bench, workspace, verification, scratch := filepath.Join(root, "cuda-bench"), filepath.Join(root, "cuda-workspace"), filepath.Join(root, "cuda-verification"), filepath.Join(root, "scratch")
+	source := filepath.Join(workspace, "cuda")
+	for _, dir := range []string{bench, source, verification, scratch} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := filepath.Join(bench, "raw_record.txt")
+	if err := os.WriteFile(record, []byte("render_ms_best=2.6\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "main.cpp"), []byte("int main;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "ledger.txt"), []byte("ledger\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The benchmarker, alive with its working directory in the private directory.
+	producer := exec.Command("sleep", "60")
+	producer.Dir = bench
+	if err := producer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		producer.Process.Kill()
+		producer.Wait()
+	}()
+	pid := strconv.Itoa(producer.Process.Pid)
+	if out, err := exec.Command("cat", "/proc/"+pid+"/cwd/raw_record.txt").CombinedOutput(); err != nil {
+		t.Fatalf("unconfined, the link should reach it, or this test shows nothing: %q %v", out, err)
+	}
+	verifier := sandbox.Policy{Read: []string{source, verification}, Write: []string{verification}, ReadOnly: []string{source}, Temp: scratch}
+	devices := verifier
+	if out, err := exec.Command("sh", "-c", "test -e /dev/null").CombinedOutput(); err != nil {
+		t.Fatalf("%q %v", out, err)
+	}
+	devices.Devices = []string{"/dev/null"}
+	for name, policy := range map[string]sandbox.Policy{"no device": verifier, "device": devices} {
+		t.Run(name, func(t *testing.T) {
+			run := func(command string) (string, error) {
+				cmd, err := sandbox.Command(context.Background(), policy, verification, command)
+				if err != nil {
+					t.Fatalf("check refused the policy: %v", err)
+				}
+				out, err := cmd.CombinedOutput()
+				return string(out), err
+			}
+			if out, err := run("cat " + filepath.Join(source, "main.cpp") + " && echo ok > here.txt && cat here.txt"); err != nil || !strings.Contains(out, "int main") || !strings.Contains(out, "ok") {
+				t.Fatalf("what it is granted: %q %v", out, err)
+			}
+			for _, command := range []string{
+				"cat " + record,
+				"ls " + bench,
+				"cat /proc/" + pid + "/cwd/raw_record.txt",
+				"ls /proc/" + pid + "/cwd/",
+				"cat " + filepath.Join(workspace, "ledger.txt"),
+				"ls " + workspace,
+				"echo x > " + filepath.Join(bench, "planted"),
+				"echo x > " + filepath.Join(source, "planted"),
+			} {
+				out, err := run(command)
+				t.Logf("%s: %v: %s", command, err, strings.TrimSpace(out))
+				// The refusal names the path, so only what is in the files counts.
+				if err == nil || strings.Contains(out, "render_ms_best") || strings.Contains(out, "ledger\n") {
+					t.Errorf("%q was allowed: %q", command, out)
+				}
+			}
+		})
+	}
+	for _, planted := range []string{filepath.Join(bench, "planted"), filepath.Join(source, "planted")} {
+		if _, err := os.Stat(planted); err == nil {
+			t.Errorf("%s was written", planted)
+		}
+	}
+	// What Landlock cannot do stays refused: the private directory inside a granted root.
+	inside := sandbox.Policy{Read: []string{workspace}, Hidden: []string{source}, Temp: scratch}
+	if _, err := sandbox.Command(context.Background(), inside, workspace, "true"); !errors.Is(err, sandbox.ErrUnavailable) {
+		t.Fatalf("a subtree of a granted root must be refused: %v", err)
 	}
 }

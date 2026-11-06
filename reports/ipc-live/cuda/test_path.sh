@@ -1,0 +1,72 @@
+#!/bin/bash
+# The preflight's whole path on the machine, with nothing on the card. Usage, on the machine: AOS_GPU_NAME=<card> test_path.sh.
+# Real here: job.sh, render.py, the workflow, aos, its Landlock sandbox, the scripted model, g++, /usr/bin/time, the CPU
+# reference and analyze.py. Stubs: nvcc, whose "binary" is a script printing the program's line, and nvidia-smi inside the
+# job. The one real nvidia-smi call is the query for the card's UUID, as the sandbox's grant names it; a grant holds the device
+# files by path and opens none. So no CUDA context opens. It runs outside Ray, in a directory of its own, which it removes.
+set -u
+: "${AOS_GPU_NAME:?}"
+live=$HOME/aos-ipc-live
+uuid=$(nvidia-smi --query-gpu=uuid,name --format=csv,noheader | grep -F "$AOS_GPU_NAME" | cut -d, -f1)
+[[ $uuid == GPU-* ]] || { echo "no such card: $AOS_GPU_NAME"; exit 2; }
+T=$(mktemp -d "$live/test-path.XXXXXX")
+trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/bin" "$T/workflows" "$T/reports" "$T/cuda/bin"
+cp "$live/bin/aos" "$live/bin/job.sh" "$live/bin/render.py" "$live/bin/analyze.py" "$live/bin/fake_model.py" "$live/bin/metal.py" "$T/bin/"
+cp "$live/workflows/rasterizer-bunny-cuda-handles-ipc.json" "$T/workflows/"
+ln -s "$live/reports/rasterizer-bunny" "$T/reports/rasterizer-bunny"
+ln -s "$live/skills" "$T/skills"
+cat > "$T/cuda/bin/nvcc" <<'STUB'
+#!/bin/bash
+out=
+ptx=0
+while (( $# )); do
+  case $1 in
+    --version) echo "Cuda compilation tools, stub"; exit 0 ;;
+    -o) out=$2; shift ;;
+    -ptx) ptx=1 ;;
+  esac
+  shift
+done
+if (( ptx )); then printf '.version 9.3\n.target sm_75\n' > "$out"; exit 0; fi
+printf '#!/bin/bash\necho kernel_ok=1\necho render_ms_best=2.640 render_ms_avg=3.070 gpu_ms_best=2.310 threads_used=1\n' > "$out"
+chmod +x "$out"
+STUB
+cat > "$T/cuda/bin/nvidia-smi" <<STUB
+#!/bin/bash
+case "\$*" in
+  *uuid,name*) echo "$uuid, $AOS_GPU_NAME" ;;
+  *compute_cap*) echo "8.6" ;;
+  *memory.free*) echo "100 MiB" ;;
+  *query-compute-apps*) ;;
+  *query-gpu*) printf 'name, uuid, memory.used [MiB], memory.total [MiB], utilization.gpu [%%], temperature.gpu\nStub Card, $uuid, 225 MiB, 10240 MiB, 40 %%, 50\n' ;;
+  *) echo "| CUDA Version: 13.2 |" ;;
+esac
+STUB
+chmod +x "$T/cuda/bin/"*
+
+before=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader | sort)
+env -i HOME="$HOME" AOS_IPC_ROOT="$T" AOS_CUDA_HOME="$T/cuda" AOS_GPU_NAME="$AOS_GPU_NAME" AOS_FAKE_PORT=18958 /bin/bash "$T/bin/job.sh" rehearsal preflight 600 > "$T/job.out" 2>&1
+status=$?
+dir=$T/reports/ipc-live/runs/rehearsal
+echo "job exit: $status"
+sed -n '/== Counts/,$p' "$T/job.out"
+failed=0
+need() { if grep -qF -- "$1" "$T/job.out"; then echo "ok   $1"; else echo "FAIL $1"; failed=1; fi; }
+need "CLEAN: the judged verifier read the latest record"
+need "exercised 1      a body refused as too large"
+need "exercised 1      the verifier pausing with a wait"
+for label in "an artifact published" "the verifier reading evidence to its end" "a read denied" "a handle attached to mail"; do
+  if grep -qE "^exercised [0-9]+ +$label" "$T/job.out"; then echo "ok   $label"; else echo "FAIL $label"; failed=1; fi
+done
+need "mail to a parked process: 1"
+if grep -qE 'read art-[0-9]+ \(published\.raw_timings\): [2-9] pages, to the end' "$T/job.out"; then echo "ok   the record took more than one page, read to the end"; else echo "FAIL the record's pages"; failed=1; fi
+if grep -q 'UNCLEAN' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
+echo "record bytes: $(wc -c < "$dir/cuda-bench/raw_record.txt")"
+echo "verifier's report: $(cat "$dir/cuda-verification/cuda_verification.txt")"
+echo "planted in the source: $([[ -e $dir/cuda-workspace/cuda/should-be-refused ]] && echo yes || echo no)"
+echo "compute apps unchanged by this script: $([[ $(nvidia-smi --query-compute-apps=pid --format=csv,noheader | sort) == "$before" ]] && echo yes || echo no)"
+echo "job.ended: $(tr '\n' ' ' < "$dir/job.ended")"
+if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi
+(( failed == 0 )) && echo "all passed"
+exit $failed

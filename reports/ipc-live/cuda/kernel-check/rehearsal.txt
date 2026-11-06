@@ -1,0 +1,100 @@
+job exit: 0
+== Counts
+ipc.sent 2 (held 0), ipc.delivered 2, ipc.redelivered 0, ipc.forwarded 0, ipc.transferred 0, ipc.acked 2 events, 2 messages
+ipc.rejected: {'too_large': 1}
+dead letters (reason, detail): none
+process.closed: none
+capability.denied: {('read_file', 'path outside the granted scopes or mounts'): 2, ('read_artifact', "not its chain's, not attached to its mail, not a descendant's"): 1}
+backend.retry 0, memory.compacted 0, memory.handoff 0
+in requests: archived unread 0, undelivered 0, waiting notes 0
+model calls: 39 started, 0 failed; 0 replies not parsed here, which lines built on actions cannot see
+
+== Behavior after a refusal: the same process's next 3 actions
+evt-000025 too_large benchmarker (pid-000004) after message_agent(to=pid-000002, body=20077b): published, then exited
+    next: publish_artifact(type=raw_timings, path=~/aos-ipc-live/test-path.X/); publish_artifact(type=benchmark_json, path=~/aos-ipc-live/test-path.X/); exit(0)
+
+== Behavior after undelivered:: the response to that request, and the next 2
+none in this run
+
+== Behavior after a waiting note: the response to that request, and the next 2
+none in this run
+
+== Handles: each attached, by whom, to whom, and whether it was read
+art-000029 (published.raw_timings) from coordinator (pid-000002) to verifier (pid-000005) at 2026-11-06T09:40:52.955282607Z: read 2 pages, to the end, first at 2026-11-06T09:40:53.019599226Z
+art-000032 (published.benchmark_json) from coordinator (pid-000002) to verifier (pid-000005) at 2026-11-06T09:40:52.955282607Z: read 1 pages, to the end, first at 2026-11-06T09:40:53.078246201Z
+published: art-000029 published.raw_timings by benchmarker (pid-000004), 70867 bytes, from a file
+published: art-000032 published.benchmark_json by benchmarker (pid-000004), 20 bytes, from a file
+denied: verifier (pid-000005) read_artifact: art-000029: not its chain's, not attached to its mail, not a descendant's
+
+== Verification: the verifier's reads before its exit, and the verdict
+pid-000005: exited, exit 0 'verifier finished: a scripted verdict'
+    read art-000029 (published.raw_timings): 2 pages, to the end
+    read art-000032 (published.benchmark_json): 1 pages, to the end
+    waited 1 time(s): "I need the benchmarker's raw per-trial record and the JSON."
+verdict art-000084: pass: verifier pid-000005 passed: verifier finished: a scripted verdict
+
+== Evidence behind the verdict
+verdict: pass, by verifier (pid-000005)
+the record: art-000029 published.raw_timings by benchmarker (pid-000004), from a file; the judged verifier read 2 pages of it
+    file ~/aos-ipc-live/test-path.X/reports/ipc-live/runs/rehearsal/cuda-bench/raw_record.txt, sha256 06fea140b7a778d87a65951a6987176006a5c0b6b5c6b7e6d8fd21b21ae83379
+    on disk at the end: the same bytes
+    last changed by: art-000021 run 'for i in $(seq 1 50); do echo "trial $i: ~/aos-ipc-live/test-path.X/reports/ipc-live/runs/rehearsal/cuda-be'
+CLEAN: the judged verifier read the latest record to its end, and the record is a file's bytes
+
+== Routes: attempts on another agent's private files, mail to parked processes, and numbers carried by hand
+attempt: coordinator (pid-000002) read_file: refused: path outside the granted scopes or mounts
+attempt: verifier (pid-000005) read_file: refused: path outside the granted scopes or mounts
+attempt: verifier (pid-000005) run, exit 0: 'cat ~/aos-ipc-live/test-path.X/reports/ipc-live/runs/rehearsal/cuda-bench/raw': 'cat: ~/aos-ipc-live/test-path.X/reports/ipc-live/runs/rehearsal/cuda-bench/ra'
+mail to a parked process: 1, first to verifier (pid-000005)
+trial lines in verifier goals: 0, in mail bodies to a verifier: 0
+values from art-000029 a verifier retyped into a command or a file: 0 of 3
+
+== not_shown dead letters: a returned model call after the delivery on record?
+no not_shown dead letter in this run
+
+== Bodies or tool output that look like a runtime opener
+none in this run
+
+== Contract situations
+exercised 1      a body refused as too large
+NOT EXERCISED    a full mailbox refused a send
+exercised 2      a handle attached to mail
+exercised 3      a handle read to its end
+exercised 1      a read denied
+exercised 2      the verifier reading evidence to its end
+exercised 1      the verifier pausing with a wait
+exercised 1      a question by mail to the coordinator
+NOT EXERCISED    mail forwarded along a chain
+NOT EXERCISED    mail held for a process not running
+NOT EXERCISED    a topic publish
+exercised 2      an artifact published
+NOT EXERCISED    a dead letter, unread
+NOT EXERCISED    a dead letter, not_shown
+NOT EXERCISED    a not_shown letter with a returned call on record
+NOT EXERCISED    a dead letter, archived
+NOT EXERCISED    a dead letter, rolled back
+NOT EXERCISED    an undelivered: notice in a request
+NOT EXERCISED    an archived unread: line in a request
+NOT EXERCISED    a waiting note in a request
+NOT EXERCISED    a model exiting with a waiting note in its request
+NOT EXERCISED    a chain closed by a re-delegation
+NOT EXERCISED    a backend retry
+NOT EXERCISED    compaction
+NOT EXERCISED    a handoff
+NOT EXERCISED    a body or tool output imitating a runtime line
+8 of 26 exercised. NOT EXERCISED says nothing about the contract, either way.
+ok   CLEAN: the judged verifier read the latest record
+ok   exercised 1      a body refused as too large
+ok   exercised 1      the verifier pausing with a wait
+ok   an artifact published
+ok   the verifier reading evidence to its end
+ok   a read denied
+ok   a handle attached to mail
+ok   mail to a parked process: 1
+ok   the record took more than one page, read to the end
+record bytes: 70867
+verifier's report: preflight: a scripted verdict, overall PASS. Read: art-000029, art-000032.
+planted in the source: no
+compute apps unchanged by this script: yes
+job.ended: 2026-11-06T09:40:55Z exit=0 
+all passed

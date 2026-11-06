@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Tests analyze.py on a state directory that was copied off the machine that ran it. Usage: python3 test_analyze.py"""
-import json, os, shutil, subprocess, sys, tempfile, unittest
+"""Tests analyze.py on made-up state directories, and on live2's own state where it is here. Usage: python3 test_analyze.py"""
+import hashlib, json, os, shutil, subprocess, sys, tempfile, unittest
 
 ANALYZE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analyze.py")
 FOREIGN = "/home/elsewhere/aos-ipc-live/reports/ipc-live/runs/gone/state/artifacts/payloads"
@@ -43,7 +43,7 @@ class Copied(unittest.TestCase):
 
     def test_payloads_come_from_the_given_directory(self):
         result = run(self.state)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 3, result.stderr)
         self.assertIn("art-000002 (published.raw_timings) from writer (pid-000001) to verifier (pid-000002)", result.stdout)
         self.assertIn("published: art-000002 published.raw_timings by writer (pid-000001), 12 bytes", result.stdout)
         self.assertIn("verdict art-000004: pass: the numbers hold", result.stdout)
@@ -55,7 +55,7 @@ class Copied(unittest.TestCase):
         os.makedirs(os.path.dirname(moved))
         shutil.copytree(self.state, moved)
         here, there = run(self.state), run(moved)
-        self.assertEqual(here.returncode, 0, here.stderr)
+        self.assertEqual(here.returncode, 3, here.stderr)
         self.assertEqual(here.stdout.split("\n", 1)[1], there.stdout.split("\n", 1)[1])
 
     def test_a_path_that_exists_elsewhere_is_not_read(self):
@@ -82,6 +82,198 @@ class Copied(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("art-000004", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+
+RECORD = "render_ms_best=2.64186\n" * 4
+SHA = hashlib.sha256(RECORD.encode()).hexdigest()
+PATH = "/home/elsewhere/runs/gone/cuda-bench/raw_record.txt"
+PROCESSES = [
+    {"pid": "pid-000001", "metadata": {"agent_id": "coordinator"}},
+    {"pid": "pid-000002", "parent_pid": "pid-000001", "metadata": {"agent_id": "benchmarker"}},
+    {"pid": "pid-000003", "parent_pid": "pid-000001", "metadata": {"agent_id": "verifier"}},
+    {"pid": "pid-000004", "parent_pid": "pid-000001", "metadata": {"agent_id": "verifier"}},
+]
+
+
+def page(artifact, offset, next_offset=None, pid="pid-000004"):
+    output = {"artifact_id": artifact, "offset": str(offset), "total_bytes": "92", "body": "x"}
+    if next_offset:
+        output["next_offset"] = str(next_offset)
+    return ("tool_result", pid, {"tool": "read_artifact", "output": output}, {})
+
+
+FILE_META = {"kind": "published", "source": "file", "source_path": PATH, "source_sha256": SHA}
+RECORD_ART = ("published.raw_timings", "pid-000002", {"body": RECORD}, FILE_META)
+TYPED_ART = ("published.raw_timings", "pid-000002", {"body": RECORD}, {"kind": "published"})
+VERDICT = ("verification", "pid-000001", {"status": "pass", "reason": "held"}, {"verifier_pid": "pid-000004"})
+
+
+class Evidence(unittest.TestCase):
+    def state(self, records, report=None, on_disk=RECORD, calls=()):
+        """records: (type, producer, payload, metadata), numbered in order."""
+        run_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, run_dir)
+        root = os.path.join(run_dir, "state")
+        for sub in ("artifacts/payloads", "kernel", "run"):
+            os.makedirs(os.path.join(root, sub))
+        index = {}
+        for number, (kind, producer, payload, metadata) in enumerate(records, 1):
+            artifact = f"art-{number:06d}"
+            with open(os.path.join(root, "artifacts", "payloads", artifact + ".json"), "w") as f:
+                json.dump(payload, f)
+            index[artifact] = {"id": artifact, "type": kind, "producer_pid": producer, "metadata": metadata, "created_at": f"2026-11-06T07:{number:02d}:00Z"}
+        with open(os.path.join(root, "artifacts", "index.json"), "w") as f:
+            json.dump(index, f)
+        with open(os.path.join(root, "kernel", "processes.json"), "w") as f:
+            json.dump(PROCESSES, f)
+        with open(os.path.join(root, "kernel", "events.json"), "w") as f:
+            json.dump([], f)
+        with open(os.path.join(root, "run", "calls.jsonl"), "w") as f:
+            for call in calls:
+                f.write(json.dumps(call) + "\n")
+        if on_disk is not None:
+            os.makedirs(os.path.join(run_dir, "cuda-bench"))
+            with open(os.path.join(run_dir, "cuda-bench", "raw_record.txt"), "w") as f:
+                f.write(on_disk)
+        if report is not None:
+            os.makedirs(os.path.join(run_dir, "cuda-verification"))
+            with open(os.path.join(run_dir, "cuda-verification", "cuda_verification.txt"), "w") as f:
+                f.write(report)
+        return root
+
+    def unclean(self, records, text, **kw):
+        result = run(self.state(records, **kw))
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+        self.assertTrue([line for line in result.stdout.splitlines() if line.startswith("UNCLEAN PASS: ") and text in line], result.stdout)
+        self.assertNotIn("\nCLEAN:", result.stdout)
+
+    def test_a_whole_read_of_a_files_bytes_is_clean(self):
+        result = run(self.state([RECORD_ART, page("art-000001", 0, 60), page("art-000001", 60), VERDICT]))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("CLEAN: the judged verifier", result.stdout)
+        self.assertNotIn("UNCLEAN", result.stdout)
+        self.assertIn("on disk at the end: the same bytes", result.stdout)
+        self.assertIn("exercised 1      the verifier reading evidence to its end", result.stdout)
+
+    def test_never_read(self):
+        self.unclean([RECORD_ART, VERDICT], "the judged verifier never read art-000001")
+
+    def test_the_first_page_alone(self):
+        self.unclean([RECORD_ART, page("art-000001", 0, 60), VERDICT], "did not read art-000001 to its end")
+
+    def test_the_last_page_alone(self):
+        self.unclean([RECORD_ART, page("art-000001", 60), VERDICT], "did not read art-000001 to its end")
+
+    def test_a_gap_between_pages(self):
+        self.unclean([RECORD_ART, page("art-000001", 0, 30), page("art-000001", 60), VERDICT], "did not read art-000001 to its end")
+
+    def test_another_verifiers_read_does_not_count(self):
+        self.unclean([RECORD_ART, page("art-000001", 0, pid="pid-000003"), VERDICT], "the judged verifier never read art-000001")
+        result = run(self.state([RECORD_ART, page("art-000001", 0, pid="pid-000003"), VERDICT]))
+        self.assertIn("NOT EXERCISED    the verifier reading evidence to its end", result.stdout)
+
+    def test_a_typed_record(self):
+        self.unclean([TYPED_ART, page("art-000001", 0), VERDICT], "art-000001 is typed")
+
+    def test_the_older_record_does_not_count(self):
+        self.unclean([RECORD_ART, page("art-000001", 0), RECORD_ART, VERDICT], "the judged verifier never read art-000003")
+
+    def test_a_record_read_before_it_was_published(self):
+        records = [page("art-000002", 0), RECORD_ART, VERDICT]
+        self.unclean(records, "before it was published")
+
+    def test_no_record_at_all(self):
+        self.unclean([VERDICT], "the benchmarker published no record")
+
+    def test_a_file_typed_with_write_file(self):
+        written = ("tool_result", "pid-000002", {"tool": "write_file", "output": {"path": PATH}}, {})
+        self.unclean([written, RECORD_ART, page("art-000002", 0), VERDICT], "last written by write_file")
+
+    def test_a_file_a_command_made_is_named(self):
+        made = ("tool_result", "pid-000002", {"tool": "run", "output": {"command": "bash trials.sh"}, "changes": {"root": "/home/elsewhere/runs/gone/cuda-bench", "created": ["raw_record.txt"]}}, {})
+        result = run(self.state([made, RECORD_ART, page("art-000002", 0), VERDICT]))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("last changed by: art-000001 run 'bash trials.sh'", result.stdout)
+
+    def test_a_report_naming_what_was_not_read(self):
+        other = ("published.benchmark_json", "pid-000002", {"body": "{}"}, FILE_META)
+        self.unclean([other, RECORD_ART, page("art-000002", 0), VERDICT], "its report names art-000001, which it never read", report="Read art-000001 and art-000002.")
+
+    def test_a_file_changed_after_the_publish_is_said_and_not_judged(self):
+        result = run(self.state([RECORD_ART, page("art-000001", 0), VERDICT], on_disk="other"))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("CHANGED after the publish", result.stdout)
+
+    def test_a_copy_without_the_file_says_so(self):
+        result = run(self.state([RECORD_ART, page("art-000001", 0), VERDICT], on_disk=None))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("not in this copy", result.stdout)
+
+    def test_a_failed_verdict_is_no_pass_to_look_behind(self):
+        failed = ("verification", "pid-000001", {"status": "fail", "reason": "no"}, {"verifier_pid": "pid-000004"})
+        result = run(self.state([failed]))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("no pass to look behind", result.stdout)
+        self.assertNotIn("UNCLEAN", result.stdout)
+
+    def test_no_verdict(self):
+        result = run(self.state([RECORD_ART]))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("UNCLEAN", result.stdout)
+
+    def test_a_publish_and_a_topic_publish_are_counted_apart(self):
+        out = run(self.state([RECORD_ART])).stdout
+        self.assertIn("exercised 1      an artifact published", out)
+        self.assertIn("NOT EXERCISED    a topic publish", out)
+        out = run(self.state([("mailbox_publish", "pid-000001", [], {})])).stdout
+        self.assertIn("NOT EXERCISED    an artifact published", out)
+        self.assertIn("exercised 1      a topic publish", out)
+        self.assertIn("of 26 exercised", out)
+
+    def test_a_wait_comes_from_the_engines_record(self):
+        parked = ("agent_run", "pid-000004", {"question": "I need the record"}, {"status": "waiting"})
+        mail = ("tool_result", "pid-000001", {"tool": "message_agent", "output": {"to": "pid-000004", "body": "here", "artifacts": "art-000001"}}, {})
+        out = run(self.state([RECORD_ART, parked, mail])).stdout
+        self.assertIn("exercised 1      the verifier pausing with a wait", out)
+        self.assertIn("waited 1 time(s): 'I need the record'", out)
+        self.assertIn("mail to a parked process: 1", out)
+        self.assertIn("NOT EXERCISED    mail held for a process not running", out)
+
+    def test_a_reply_missing_its_closing_braces_is_still_an_action(self):
+        calls = [{"phase": "outcome", "time": "2026-11-06T07:00:00Z", "pid": "pid-000004", "response": '{"action":{"type":"tool","tool_call":{"name":"run","args":{"command":"echo 2.64186"}}'},
+                 {"phase": "outcome", "time": "2026-11-06T07:00:01Z", "pid": "pid-000004", "response": 'no json here'}]
+        out = run(self.state([RECORD_ART], calls=calls)).stdout
+        self.assertIn("1 replies not parsed here", out)
+        self.assertIn("a verifier retyped into a command or a file: 1 of 1", out)
+
+    def test_an_attempt_on_the_private_directory_is_listed(self):
+        tried = ("tool_result", "pid-000004", {"tool": "run", "output": {"command": "cat /x/cuda-bench/raw_record.txt", "exit_code": "1", "stderr": "Permission denied"}}, {})
+        own = ("tool_result", "pid-000002", {"tool": "run", "output": {"command": "cat /x/cuda-bench/raw_record.txt", "exit_code": "0"}}, {})
+        out = run(self.state([tried, own])).stdout
+        self.assertEqual(out.count("attempt: "), 1, out)
+        self.assertIn("attempt: verifier (pid-000004) run, exit 1", out)
+
+    def test_numbers_pasted_into_mail_are_counted(self):
+        mail = ("tool_result", "pid-000001", {"tool": "message_agent", "output": {"to": "pid-000004", "body": "render_ms_best=1 render_ms_best=2"}}, {})
+        self.assertIn("in mail bodies to a verifier: 2", run(self.state([mail])).stdout)
+
+
+class Live2(unittest.TestCase):
+    """live2's real state, which stays where it ran and is not in git."""
+    STATE = os.path.join(os.path.dirname(ANALYZE), "runs", "live2", "state")
+
+    def test_live2_is_an_unclean_pass(self):
+        if not os.path.isdir(self.STATE):
+            self.skipTest("live2's state is not here")
+        result = run(self.STATE)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("UNCLEAN PASS: the judged verifier never read art-000319", result.stdout)
+        self.assertIn("UNCLEAN PASS: art-000319 is typed", result.stdout)
+        self.assertIn("3 of 26 exercised", result.stdout)
+        self.assertIn("exercised 1      an artifact published", result.stdout)
+        self.assertIn("exercised 3      a chain closed by a re-delegation", result.stdout)
+        self.assertIn("exercised 1      a backend retry", result.stdout)
+        self.assertIn("3 replies not parsed", result.stdout)
 
 
 unittest.main()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Fill in a rasterizer IPC workflow for one run, with no hand edit.
 
-Usage: render.py <run name> [metal|cuda], from anywhere. Writes <root>/reports/ipc-live/runs/<name>/workflow.json
+Usage: render.py <run name> [metal|cuda|cuda-handles], from anywhere. Writes <root>/reports/ipc-live/runs/<name>/workflow.json
 and creates its directory if need be. A directory that already holds a workflow.json is refused, so a run never
 meets an old run's results. The root is this checkout, or AOS_IPC_ROOT for a machine that holds only what a run needs. It checks the CPU reference the
-prompts name, which is not in git, and copies nothing. cuda also needs AOS_CUDA_HOME and AOS_GPU_UUID.
+prompts name, which is not in git, and copies nothing. cuda and cuda-handles also need AOS_CUDA_HOME and AOS_GPU_UUID, and cuda-handles's private directory is made here, since a path that is missing when a command starts grants that command nothing.
 """
 import json, os, sys
 
@@ -21,10 +21,10 @@ def main():
     if len(sys.argv) not in (2, 3) or not sys.argv[1] or "/" in sys.argv[1]:
         sys.exit(__doc__)
     kind = sys.argv[2] if len(sys.argv) == 3 else "metal"
-    if kind not in ("metal", "cuda"):
+    if kind not in ("metal", "cuda", "cuda-handles"):
         sys.exit(__doc__)
     fills = {"__RUN_DIR__": None, "__AOS_ROOT__": ROOT}
-    if kind == "cuda":
+    if kind != "metal":
         for variable, placeholder in (("AOS_CUDA_HOME", "__CUDA_HOME__"), ("AOS_GPU_UUID", "__GPU_UUID__")):
             if not os.environ.get(variable):
                 sys.exit(f"{variable} is not set")
@@ -48,6 +48,8 @@ def main():
         sys.exit(f"{out} exists: this run name was used")
     with f:
         f.write(text)
+    if kind == "cuda-handles":
+        os.makedirs(os.path.join(run_dir, "cuda-bench"), exist_ok=True)
     print(out)
 
 

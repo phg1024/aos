@@ -1,0 +1,54 @@
+caught publish path needs no read_file
+caught publish path skips read_file's check
+caught a directory or FIFO accepted
+caught a blocking open waits on a FIFO
+caught binary accepted
+caught no size cap
+caught cap off by one
+caught hash of nothing
+caught body and path both allowed
+caught neither allowed
+caught a denied path is not logged
+caught no read_file denial not logged
+caught read_artifact says typed of everything
+caught read_artifact leaves out typed
+caught publish output leaves out the hash
+caught replay reads the file
+caught replay does not answer a recorded refusal
+caught run.started does not say
+caught a legacy record replays with sources
+caught a legacy record's prompt offers a path
+caught the prompt does not offer a path
+caught verifier granted the whole workspace
+caught verifier granted the private directory
+caught writer granted the private directory
+caught coordinator can read the private directory
+caught coordinator has no mount to grant
+caught coordinator cannot delegate the read
+caught benchmarker can write the workspace
+caught benchmarker's mount is not named workspace
+caught benchmarker runs unconfined
+caught 20 trials again
+caught the verifier's own trials dropped
+caught TMPDIR again
+caught step budget not raised
+caught live2's workflow edited
+caught render does not make the directory
+caught render makes it for every kind
+caught job.sh renders the older workflow
+caught the last page counts as a reading
+caught any verifier's read counts
+caught the label counts any verifier
+caught no exit status for an unclean pass
+caught a typed record passes
+caught write_file passes
+caught the oldest record counts
+caught a read before the publish passes
+caught the report's claims are not checked
+caught a publish counts only the topic kind again
+caught a wait comes from parsed actions
+caught missing braces are not repaired
+caught the producer's own commands count as attempts
+caught a changed file is not said
+caught provenance not named
+caught the mail count to a parked process is lost

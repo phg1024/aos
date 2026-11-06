@@ -1,0 +1,33 @@
+kernel 7.0.0-38-generic
+=== RUN   TestLandlockConfinesRun
+--- PASS: TestLandlockConfinesRun (0.07s)
+=== RUN   TestASiblingDirectoryIsOutOfReach
+=== RUN   TestASiblingDirectoryIsOutOfReach/no_device
+    sandbox_linux_test.go:262: cat ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/raw_record.txt: exit status 1: cat: ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/raw_record.txt: Permission denied
+    sandbox_linux_test.go:262: ls ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench: exit status 2: ls: cannot open directory '~/aos-ipc-live/landlock/tmp/T/001/cuda-bench': Permission denied
+    sandbox_linux_test.go:262: cat /proc/1148923/cwd/raw_record.txt: exit status 1: cat: /proc/1148923/cwd/raw_record.txt: Permission denied
+    sandbox_linux_test.go:262: ls /proc/1148923/cwd/: exit status 2: ls: cannot open file '/proc/1148923/cwd/': Permission denied
+    sandbox_linux_test.go:262: cat ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/ledger.txt: exit status 1: cat: ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/ledger.txt: Permission denied
+    sandbox_linux_test.go:262: ls ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace: exit status 2: ls: cannot open directory '~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace': Permission denied
+    sandbox_linux_test.go:262: echo x > ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/planted: exit status 2: /bin/sh: 1: cannot create ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/planted: Permission denied
+    sandbox_linux_test.go:262: echo x > ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/cuda/planted: exit status 2: /bin/sh: 1: cannot create ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/cuda/planted: Permission denied
+=== RUN   TestASiblingDirectoryIsOutOfReach/device
+    sandbox_linux_test.go:262: cat ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/raw_record.txt: exit status 1: cat: ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/raw_record.txt: Permission denied
+    sandbox_linux_test.go:262: ls ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench: exit status 2: ls: cannot open directory '~/aos-ipc-live/landlock/tmp/T/001/cuda-bench': Permission denied
+    sandbox_linux_test.go:262: cat /proc/1148923/cwd/raw_record.txt: exit status 1: cat: /proc/1148923/cwd/raw_record.txt: Permission denied
+    sandbox_linux_test.go:262: ls /proc/1148923/cwd/: exit status 2: ls: cannot open file '/proc/1148923/cwd/': Permission denied
+    sandbox_linux_test.go:262: cat ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/ledger.txt: exit status 1: cat: ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/ledger.txt: Permission denied
+    sandbox_linux_test.go:262: ls ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace: exit status 2: ls: cannot open directory '~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace': Permission denied
+    sandbox_linux_test.go:262: echo x > ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/planted: exit status 2: /bin/sh: 1: cannot create ~/aos-ipc-live/landlock/tmp/T/001/cuda-bench/planted: Permission denied
+    sandbox_linux_test.go:262: echo x > ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/cuda/planted: exit status 2: /bin/sh: 1: cannot create ~/aos-ipc-live/landlock/tmp/T/001/cuda-workspace/cuda/planted: Permission denied
+--- PASS: TestASiblingDirectoryIsOutOfReach (0.23s)
+    --- PASS: TestASiblingDirectoryIsOutOfReach/no_device (0.09s)
+    --- PASS: TestASiblingDirectoryIsOutOfReach/device (0.12s)
+PASS
+sandbox exit 0
+=== RUN   TestTheHandlesWorkflowKeepsTheRecordPrivate
+--- PASS: TestTheHandlesWorkflowKeepsTheRecordPrivate (0.00s)
+=== RUN   TestTheHandlesGrantsReachOnlyWhatTheySay
+--- PASS: TestTheHandlesGrantsReachOnlyWhatTheySay (0.33s)
+PASS
+agentflow exit 0

@@ -2,9 +2,13 @@
 """A scripted OpenAI-compatible endpoint for the ipc-live preflight: no real model.
 
 It tells the agents apart by their system prompts and plays each one's script, so the real
-aos run, sandbox, compiler and GPU do real work. It writes a tiny Metal program that is not a
+aos run, sandbox, compiler and GPU do real work. It writes a tiny program that is not a
 rasterizer: this checks the machinery, not the task. Its benchmarker tries the raw record inline
 and is refused, and its verifier asks for the record first and is refused, as a model may.
+
+On CUDA it takes the handles workflow's path: the benchmarker works in its private directory and
+publishes by path, the coordinator and verifier try that directory and are refused, the verifier
+waits, is mailed the handles, resumes, and reads a record of more than one page to its end.
 """
 import json, re, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -135,8 +139,8 @@ def tool(name, **args):
     return {"type": "tool", "tool_call": {"name": name, "args": args}}
 
 
-def run(command):
-    return tool("run", command=command)
+def run(command, **args):
+    return tool("run", command=command, **args)
 
 
 def done(reason, code=0):
@@ -151,21 +155,105 @@ class Run:
     root = ""
     kind = "metal"
     dry = False
+    goal_record = ""
     workspace = "metal-workspace"
     verification = "metal-verification"
 
 
-def execute(d):
+def execute_at(binary):
     """Running the program, or in a dry run, what needs no GPU memory: the card as the sandbox sees it."""
     if Run.dry:
         return """python3 -c "import ctypes; print('cuInit', ctypes.CDLL('libcuda.so.1').cuInit(0))"; nvidia-smi -L; echo render_ms_best=0 render_ms_avg=0 gpu_ms_best=0 threads_used=1"""
-    return f"{d}/rasterizer"
+    return binary
+
+
+def execute(d):
+    return execute_at(f"{d}/rasterizer")
 
 
 def build(d):
     if Run.kind == "cuda":
         return f"nvcc -O2 -std=c++17 -arch=sm_86 -I {d}/include {d}/src/*.cpp {d}/src/*.cu -o {d}/rasterizer"
     return f"clang++ -O2 -std=c++17 -fobjc-arc -I {d}/include {d}/src/*.cpp {d}/src/*.mm -framework Metal -framework Foundation -o {d}/rasterizer"
+
+
+def bench_of(workspace):
+    return workspace.replace(Run.workspace, f"{Run.kind}-bench")
+
+
+def timed(binary, trials, out):
+    """Each trial as the benchmarker's prompt asks: the command, its whole output and time -v, and the card before and after."""
+    card = "nvidia-smi --query-gpu=name,uuid,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv"
+    run_it = execute_at(binary).replace(chr(34), chr(92) + chr(34))
+    return (
+        f"for i in $(seq 1 {trials}); do echo \"trial $i: {binary} --benchmark 10 --threads 8\"; {card}; "
+        f"/usr/bin/time -v perl -e 'alarm 30; exec @ARGV' sh -c \"{run_it}\" 2>&1; echo \"exit $?\"; {card}; done > {out}; wc -c {out}"
+    )
+
+
+def coordinator_handles(me, workspace, verification):
+    d = f"{workspace}/{Run.kind}"
+    yield delegate("writer", f"Write the program in {d}. Your coordinator's process_id is {me}.")
+    yield delegate("benchmarker", f"Build a copy of {d} and benchmark it. Your coordinator's process_id is {me}.")
+    yield tool("read_file", path=f"{bench_of(workspace)}/raw_record.txt")  # refused: only the benchmarker's
+    text = yield tool("list_artifacts")
+    published = dict(re.findall(r"(art-\d+)\s+published\.(\S+)", text))
+    record = next(a for a, kind in published.items() if kind == "raw_timings")
+    yield tool("read_artifact", id=next(a for a, kind in published.items() if kind == "benchmark_json"))
+    text = yield delegate("verifier", f"Verify {d} into {verification}. The record is {record}.")
+    verifier = re.search(r"pid=(pid-\d+)", text).group(1)
+    yield tool("message_agent", to=verifier, body="The raw per-trial record and the JSON.", artifacts=",".join(published))
+    yield delegate("verifier", "It is in your mail.")
+    yield tool("write_file", path=f"{workspace}/final-summary.txt", content="preflight: a scripted run\n")
+    yield done("preflight finished")
+
+
+def benchmarker_handles(me, workspace, coordinator_pid):
+    d = f"{workspace}/{Run.kind}"
+    bench = bench_of(workspace)
+    copy = f"{bench}/build"
+    record = f"{bench}/raw_record.txt"
+    yield run(f"which perl python3 nvcc; pwd; cp -R {d} {copy} && {build(copy)} && echo built")
+    yield run(timed(f"{copy}/rasterizer", 50, record), timeout="400s")  # 100 nvidia-smi calls among them
+    yield tool("write_file", path=f"{bench}/cuda_benchmark.json", content='{"preflight": true}\n')
+    text = yield run(f"head -c 20000 {record}")
+    raw = text.split("stdout:", 1)[1] if "stdout:" in text else text
+    yield tool("message_agent", to=coordinator_pid, body=raw)  # refused: too large
+    yield tool("publish_artifact", type="raw_timings", path=record)
+    yield tool("publish_artifact", type="benchmark_json", path=f"{bench}/cuda_benchmark.json")
+    yield done("benchmarker finished: published the record and the JSON")
+
+
+def verifier_handles(me, workspace, verification):
+    d = f"{workspace}/{Run.kind}"
+    bench = bench_of(workspace)
+    base = f"{Run.root}/reports/rasterizer-bunny"
+    record = f"{bench}/raw_record.txt"
+    yield tool("read_file", path=record)  # refused: only the benchmarker's
+    yield run(f"cat {record}; ls {bench}; cat {workspace}/cuda_coordinator_log.txt; echo tried")  # refused, each
+    yield tool("list_artifacts")
+    text = yield tool("read_artifact", id=Run.goal_record)  # refused: no handle yet
+    text = yield {"type": "wait", "message": "I need the benchmarker's raw per-trial record and the JSON."}
+    handles = list(dict.fromkeys(re.findall(r"art-\d+", text)))
+    for handle in handles:
+        offset = "0"
+        while True:
+            text = yield tool("read_artifact", id=handle, offset=offset)
+            found = re.findall(r"next_offset:(\d+)", text)
+            if not found:
+                break
+            offset = found[-1]
+    copy = f"{verification}/build"
+    yield run(f"cp -R {d} {copy} && {build(copy)} && echo built")
+    binary = f"{verification}/baseline"
+    yield run(f"g++ -O2 -std=c++17 -pthread -I {base}/baseline/include {base}/baseline/src/*.cpp -o {binary} && echo built")
+    yield run(
+        f"{binary} --mesh {base}/assets/stanford-bunny.obj --scene-config {base}/scene-small.json --out {verification}/cpu.ppm"
+        f" && head -c 20 {verification}/cpu.ppm | head -2 && python3 -I -c 'print(open(\"{verification}/cpu.ppm\",\"rb\").read(2))'"
+    )
+    yield run(timed(f"{copy}/rasterizer", 5, f"{verification}/own_trials.txt") + f"; touch {d}/should-be-refused; echo touch=$?", timeout="120s")
+    yield tool("write_file", path=f"{verification}/{Run.kind}_verification.txt", content=f"preflight: a scripted verdict, overall PASS. Read: {', '.join(handles)}.\n")
+    yield done("verifier finished: a scripted verdict")
 
 
 def coordinator(me, workspace, verification):
@@ -267,18 +355,23 @@ class Handler(BaseHTTPRequestHandler):
         if role == "coordinator" and script is None:
             m = re.search(r"Maintain a coordinator ledger at (\S+)/\w+_coordinator_log.txt", system)
             workspace = m.group(1)
-            script = coordinator(me, workspace, workspace.replace(Run.workspace, Run.verification))
+            play = coordinator_handles if Run.kind == "cuda" else coordinator
+            script = play(me, workspace, workspace.replace(Run.workspace, Run.verification))
             action = next(script)
         elif script is None or (role != "verifier" and role not in self.started_for or self.started_for.get(role) != me and role != "verifier"):
             goal = re.search(r'"goal": "(.*?)"', everything).group(1)
             workspace = re.search(r"(\S+/" + Run.workspace + ")", goal).group(1)
             pid = re.search(r"process_id is (pid-\d+)", goal)
+            verification = workspace.replace(Run.workspace, Run.verification)
             if role == "writer":
                 script = writer(me, workspace, pid.group(1))
             elif role == "benchmarker":
-                script = benchmarker(me, workspace, pid.group(1))
+                script = (benchmarker_handles if Run.kind == "cuda" else benchmarker)(me, workspace, pid.group(1))
+            elif Run.kind == "cuda":
+                Run.goal_record = re.search(r"art-\d+", goal).group(0)
+                script = verifier_handles(me, workspace, verification)
             else:
-                script = verifier(me, workspace, workspace.replace(Run.workspace, Run.verification))
+                script = verifier(me, workspace, verification)
             action = next(script)
         else:
             # The newest turns, joined, so a mail and its notes are all seen.
