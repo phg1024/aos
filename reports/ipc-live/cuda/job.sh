@@ -163,8 +163,9 @@ if [[ $mode != live ]]; then
   fake=$!
   sleep 1
 fi
+# The budget the agents are told is the limit they run under, so the two cannot disagree.
 timeout --signal=TERM --kill-after=60 "$limit" "$here/aos" run --workflow "$workflow" --state-dir "$run_dir/state" \
-  --output "$run_dir/cuda-workspace/final-summary.txt" --report "$run_dir/report.html" --time-budget "${AOS_TIME_BUDGET:-60m}" \
+  --output "$run_dir/cuda-workspace/final-summary.txt" --report "$run_dir/report.html" --time-budget "${limit}s" \
   "Build and optimize a CUDA rasterizer for the Stanford bunny, against the CPU experiment." > "$run_dir/run.log" 2>&1
 status=$?
 echo "job: aos run exited $status"

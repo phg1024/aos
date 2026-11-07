@@ -1,0 +1,30 @@
+On the machine, outside Ray, with no CUDA context. job.sh 46899d12, test_path.sh 029eab7b, bin/aos 28a5377f.
+--- test_path.sh, clean
+job exit: 0
+ok   CLEAN: the judged verifier read the latest record
+ok   exits refused for evidence: 0
+ok   exercised 1      a body refused as too large
+ok   an artifact published
+ok   the verifier reading evidence to its end
+ok   a handle attached at a delegation
+ok   NOT EXERCISED    a read denied
+ok   NOT EXERCISED    the verifier pausing with a wait
+ok   the record took more than one page, read to the end
+ok   the job's limit is the run's budget: 600
+all passed
+--- test_path.sh unread
+job exit: 1
+exits refused for evidence: 29
+ok   UNVERIFIED:
+ok   declared raw_record by benchmarker: 
+ok   exercised 1      a body refused as too large
+ok   an exit 0 refused
+ok   a verdict withheld as unverified
+ok   the record unread
+ok   the job did not pass: exit 1
+ok   the job's limit is the run's budget: 600
+all passed
+--- test_steps.sh
+aos stub reached: no
+job.ended unchanged: yes
+compute apps unchanged by this script: yes

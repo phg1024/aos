@@ -1,0 +1,7 @@
+Each mutant applied to the source and test_job.sh run; 6 of 6 caught. Exit, number of failed checks, first failure.
+budget back to 60m: exit 1, 6 failed: job.sh with no limit given: aos was told 60m
+override back (${AOS_TIME_BUDGET:-${limit}s}): exit 1, 1 failed: job.sh with the old override set: aos was told 60m
+job.sh's default limit drifts to 3600: exit 1, 1 failed: job.sh with no limit given: aos was told 3600s
+submit.sh's default limit drifts to 3600: exit 1, 1 failed: submit.sh with no limit given: aos was told 3600s
+budget unit changed to minutes: exit 1, 6 failed: job.sh with no limit given: aos was told 5400m
+budget added to the evidence workflow: exit 1, 1 failed: the rendered evidence workflow carries no budget of its own

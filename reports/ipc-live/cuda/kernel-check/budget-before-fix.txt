@@ -1,0 +1,7 @@
+test_job.sh with the new checks and job.sh still at --time-budget ${AOS_TIME_BUDGET:-60m}:
+FAIL job.sh with no limit given: the budget and the limit are both 5400: ; aos was told 60m
+FAIL job.sh with a limit: the budget and the limit are both 900: ; aos was told 60m
+FAIL job.sh with the old override set: the budget and the limit are both 900: ; aos was told 60m
+FAIL submit.sh with no limit given: the budget and the limit are both 5400: ; aos was told 60m
+FAIL submit.sh with a limit: the budget and the limit are both 900: ; aos was told 60m
+FAIL the real aos records the timeout and the limit as an advisory budget in run.started, and retries a timeout with backoff: run.started budget: 3600 advisory

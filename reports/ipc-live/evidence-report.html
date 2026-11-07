@@ -96,5 +96,10 @@
     <li>The question-by-mail line, in section 4.</li>
     <li><code>web_search</code>, <code>web_fetch</code> and ttl still have no upper limit, from the last phase.</li>
   </ul>
+
+  <h2>9. The time budget</h2>
+  <p>After this report, the user chose to raise the advisory time budget to match the job's limit, and confirmed it here. The value was set by <code>--time-budget</code> in <code>cuda/job.sh</code>, not in the workflow or the binary. live3's <code>run.started</code> read 3600 from its default of 60 minutes. <code>job.sh</code> now passes <code>"${limit}s"</code>, so the budget is the limit the job runs under, and the <code>AOS_TIME_BUDGET</code> override, which <code>submit.sh</code> never passed on, is gone. <code>bin/aos</code> and the workflows did not change. A run of the default length records 5400; a run given a shorter limit records that limit.</p>
+  <p><code>test_job.sh</code> now checks that both agree with the default and with a chosen limit, through <code>job.sh</code> and <code>submit.sh</code>, that the rendered workflow carries no budget of its own, and that the real aos records the limit in <code>run.started</code> as advisory. <code>test_path.sh</code> checks the same on the machine. All 34 cases of <code>test_job.sh</code> pass, and 6 of 6 mutations are caught (<code>cuda/kernel-check/budget-before-fix.txt</code>, <code>mutation-budget.txt</code>, <code>rehearsal-budget.txt</code>).</p>
+  <p><span class="warn">No margin is left.</span> live3 had 1800 s between its budget and its limit. Now the budget's end is the job's SIGTERM. Agents are warned once, with under a tenth left, 540 s of 5400. The exits are recorded and the analysis still runs, but a verifier that has not finished leaves no verdict. No run has tested this on the card.</p>
 </body>
 </html>

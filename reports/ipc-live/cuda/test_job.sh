@@ -53,6 +53,7 @@ STUB
 cat > "$T/cuda/bin/timeout" <<'STUB'
 #!/bin/bash
 while [[ $1 == --* ]]; do shift; done
+printf '%s' "$1" > "$AOS_IPC_ROOT/job-limit"
 shift
 [[ -z ${STUB_ALARM:-} ]] && exec "$@"
 "$@" &
@@ -63,7 +64,7 @@ STUB
 printf 'import time\ntime.sleep(5)\n' > "$T/root/bin/fake_model.py"
 printf 'pass\n' > "$T/root/bin/metal.py"
 printf 'pass\n' > "$T/root/bin/analyze.py"
-printf '#!/bin/bash\necho ran > "$AOS_IPC_ROOT/aos-ran"\nprintf "%%s" "${AOS_LLM_TIMEOUT_SECONDS-unset}" > "$AOS_IPC_ROOT/aos-timeout"\n' > "$T/root/bin/aos"
+printf '#!/bin/bash\necho ran > "$AOS_IPC_ROOT/aos-ran"\nprintf "%%s" "${AOS_LLM_TIMEOUT_SECONDS-unset}" > "$AOS_IPC_ROOT/aos-timeout"\nprintf "%%s\\n" "$@" > "$AOS_IPC_ROOT/aos-args"\n' > "$T/root/bin/aos"
 chmod +x "$T/cuda/bin/"* "$T/root/bin/aos"
 
 failed=0
@@ -218,6 +219,45 @@ submits_with "with an empty value" 1200 AOS_LLM_TIMEOUT_SECONDS=
 submits_with "with a value chosen" 600 AOS_LLM_TIMEOUT_SECONDS=600
 for value in 2m 0 -5 1.5; do refuses "$value"; done
 
+# The time budget the agents are told and the limit the job runs under. $1 names the case; what follows runs the job.
+budget_is() {
+  local title=$1 want=$2 bad= got
+  shift 2
+  rm -f "$T/root/aos-args" "$T/root/job-limit"
+  "$@" > "$T/out" 2>&1 || bad="exit $?"
+  got=$(sed -n '/^--time-budget$/{n;p;}' "$T/root/aos-args" 2>/dev/null)
+  [[ $got == "${want}s" ]] || bad="$bad; aos was told $got"
+  [[ $(cat "$T/root/job-limit" 2>/dev/null) == "$want" ]] || bad="$bad; the job's limit was $(cat "$T/root/job-limit" 2>/dev/null)"
+  outcome "$title: the budget and the limit are both $want" "$bad"
+}
+job_env() { env AOS_IPC_ROOT="$T/root" AOS_CUDA_HOME="$T/cuda" AOS_GPU_NAME="Test Card" AOS_FAKE_PORT=1 "$@"; }
+submit_args() {
+  env STUB_HOME="$T/home" STUB_RAY_MARK="$T/ray-called" AOS_RAY="$T/ray" AOS_RAY_ADDRESS=stub AOS_RAY_RESOURCES='{}' \
+    AOS_JOB_HOME="$T/home" AOS_GPU_NAME="Test Card" zsh "$here/submit.sh" "$@"
+}
+budget_is "job.sh with no limit given" 5400 job_env bash "$job" budget-default preflight
+budget_is "job.sh with a limit" 900 job_env bash "$job" budget-limit preflight 900
+budget_is "job.sh with the old override set" 900 job_env AOS_TIME_BUDGET=60m bash "$job" budget-override preflight 900
+budget_is "submit.sh with no limit given" 5400 submit_args id-budget-submit budget-submit preflight
+budget_is "submit.sh with a limit" 900 submit_args id-budget-submit-limit budget-submit-limit preflight 900
+
+# The workflow must not carry a tighter budget of its own: the rendered file is what the run reads.
+bad=$(python3 -I - "$T/root/reports/ipc-live/runs/budget-submit/workflow.json" <<'PY'
+import json, sys
+def walk(value, path):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "budget":
+                print(f"{path}.{key}={item}")
+            walk(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            walk(item, f"{path}[{i}]")
+walk(json.load(open(sys.argv[1])), "workflow")
+PY
+) || bad="the rendered workflow was not read"
+outcome "the rendered evidence workflow carries no budget of its own" "$bad"
+
 # The same path with the real aos and an endpoint that never answers: what the run records and how it retries.
 (cd "$here/../../.." && go build -buildvcs=false -o "$T/aos-real" ./cmd/aos) || { echo "FAIL could not build aos"; exit 1; }
 cp "$T/aos-real" "$T/root/bin/aos"
@@ -242,6 +282,8 @@ started = [e for e in events if e["type"] == "run.started"]
 retries = [e["data"] for e in events if e["type"] == "backend.retry"]
 if not started or started[0]["data"].get("timeout") != "1s":
     print("run.started says", started and started[0]["data"].get("timeout"))
+elif started[0]["data"].get("budget_seconds") != "30" or started[0]["data"].get("budget_time") != "advisory":
+    print("run.started budget:", started[0]["data"].get("budget_seconds"), started[0]["data"].get("budget_time"))
 elif len(retries) < 2 or not all("Client.Timeout" in r["error"] for r in retries):
     print("retries:", retries)
 elif [r["delay"] for r in retries[:2]] != ["1s", "2s"]:
@@ -249,7 +291,7 @@ elif [r["delay"] for r in retries[:2]] != ["1s", "2s"]:
 PY
 )
 [[ -n $bad ]] && sed 's/^/  run.log: /' "$dir/run.log" > "$T/out"
-outcome "the real aos records the value in run.started, and retries a timeout with backoff" "$bad"
+outcome "the real aos records the timeout and the limit as an advisory budget in run.started, and retries a timeout with backoff" "$bad"
 
 (( failed == 0 )) && echo "all $n passed"
 exit $failed

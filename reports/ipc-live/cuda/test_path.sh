@@ -79,6 +79,8 @@ else
   if grep -q 'UNCLEAN\|DISAGREE' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
   if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi
 fi
+budget=$(python3 -I -c 'import json, sys; print(next(e["data"].get("budget_seconds") for e in json.load(open(sys.argv[1])) if e["type"] == "run.started"))' "$dir/state/kernel/events.json")
+if [[ $budget == 600 ]]; then echo "ok   the job's limit is the run's budget: 600"; else echo "FAIL the run's budget is $budget, the job's limit 600"; failed=1; fi
 echo "record bytes: $(wc -c < "$dir/cuda-bench/raw_record.txt")"
 echo "verifier's report: $(cat "$dir/cuda-verification/cuda_verification.txt")"
 echo "planted in the source: $([[ -e $dir/cuda-workspace/cuda/should-be-refused ]] && echo yes || echo no)"
