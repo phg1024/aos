@@ -470,32 +470,55 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 	if err != nil {
 		return runtime.GenerateResult{}, err
 	}
-	if parsed, ok := parseGenerateResult(raw); ok {
-		return parsed, nil
-	}
-
 	// Ask for a correction inside the same conversation, so the server can
 	// resume from the transcript it just read instead of starting over.
-	repaired, err := completer.CompleteMessages(runtime.AsRepair(ctx), append(append([]runtime.Message(nil), messages...),
-		runtime.Message{Role: "assistant", Content: raw},
-		runtime.Message{Role: "user", Content: repairInstruction},
-	))
+	result, _, err := resolveReply(raw, func() (string, error) {
+		return completer.CompleteMessages(runtime.AsRepair(ctx), append(append([]runtime.Message(nil), messages...),
+			runtime.Message{Role: "assistant", Content: raw},
+			runtime.Message{Role: "user", Content: repairInstruction},
+		))
+	})
+	return result, err
+}
+
+// The sources resolveReply names for the action it returns.
+const (
+	SourceReply           = "reply"
+	SourceRepair          = "repair"
+	SourceFallbackMessage = "fallbackMessage"
+	SourceFallbackRepair  = "fallbackMessage (repair)"
+	SourceNotesAsMessage  = "notesAsMessage"
+	SourceUnrepairable    = "unrepairable"
+)
+
+// errUnrepairable is a reply no rung of the ladder could read, even after
+// a repair.
+var errUnrepairable = errors.New("unable to repair malformed action JSON")
+
+// resolveReply is the tolerance ladder over one step's reply: the reply
+// itself, then a repair the step asks for, then fallbackMessage on either,
+// then notesAsMessage. It names the rung that gave the action.
+func resolveReply(raw string, repair func() (string, error)) (runtime.GenerateResult, string, error) {
+	if parsed, ok := parseGenerateResult(raw); ok {
+		return parsed, SourceReply, nil
+	}
+	repaired, err := repair()
 	if err != nil {
-		return runtime.GenerateResult{}, err
+		return runtime.GenerateResult{}, "", err
 	}
 	if parsed, ok := parseGenerateResult(repaired); ok {
-		return parsed, nil
+		return parsed, SourceRepair, nil
 	}
 	if message, ok := fallbackMessage(raw); ok {
-		return message, nil
+		return message, SourceFallbackMessage, nil
 	}
 	if message, ok := fallbackMessage(repaired); ok {
-		return message, nil
+		return message, SourceFallbackRepair, nil
 	}
 	if message, ok := notesAsMessage(repaired, raw); ok {
-		return message, nil
+		return message, SourceNotesAsMessage, nil
 	}
-	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
+	return runtime.GenerateResult{}, SourceUnrepairable, errUnrepairable
 }
 
 const repairInstruction = "Your previous reply was not a valid AOS action. Reply again with exactly one action JSON object " +
@@ -508,27 +531,10 @@ func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawComplet
 	if err != nil {
 		return runtime.GenerateResult{}, err
 	}
-	if parsed, ok := parseGenerateResult(raw); ok {
-		return parsed, nil
-	}
-
-	repaired, err := completer.CompleteText(runtime.AsRepair(ctx), repairSystemPrompt(), repairUserPrompt(systemPrompt, userPrompt, raw))
-	if err != nil {
-		return runtime.GenerateResult{}, err
-	}
-	if parsed, ok := parseGenerateResult(repaired); ok {
-		return parsed, nil
-	}
-	if message, ok := fallbackMessage(raw); ok {
-		return message, nil
-	}
-	if message, ok := fallbackMessage(repaired); ok {
-		return message, nil
-	}
-	if message, ok := notesAsMessage(repaired, raw); ok {
-		return message, nil
-	}
-	return runtime.GenerateResult{}, errors.New("unable to repair malformed action JSON")
+	result, _, err := resolveReply(raw, func() (string, error) {
+		return completer.CompleteText(runtime.AsRepair(ctx), repairSystemPrompt(), repairUserPrompt(systemPrompt, userPrompt, raw))
+	})
+	return result, err
 }
 
 func (b PromptBackend) systemPrompt() string {
@@ -888,17 +894,30 @@ func notesAsMessage(raws ...string) (runtime.GenerateResult, bool) {
 }
 
 func parseAction(raw string) (runtime.GenerateResult, bool) {
-	raw = repairLooseJSONObject(extractTrailingJSONObject(raw))
+	result, _, ok := parseActionShape(repairLooseJSONObject(extractTrailingJSONObject(raw)))
+	return result, ok
+}
 
+// The shapes parseActionShape reads, in the order it tries them.
+const (
+	ShapeNested  = "nested"
+	ShapeGeneric = "generic"
+	ShapeFlat    = "flat"
+	ShapeLegacy  = "legacy"
+)
+
+// parseActionShape reads an action from one JSON object and names the
+// shape that read it.
+func parseActionShape(raw string) (runtime.GenerateResult, string, bool) {
 	var nested runtime.GenerateResult
 	if err := json.Unmarshal([]byte(raw), &nested); err == nil && actionUsable(nested.Action) {
-		return nested, true
+		return nested, ShapeNested, true
 	}
 
 	var generic map[string]any
 	if err := json.Unmarshal([]byte(raw), &generic); err == nil {
 		if normalized, ok := normalizeGenericAction(generic); ok {
-			return normalized, true
+			return normalized, ShapeGeneric, true
 		}
 	}
 
@@ -926,7 +945,7 @@ func parseAction(raw string) (runtime.GenerateResult, bool) {
 				Subscribe:  flat.Subscribe,
 				ExitStatus: exitStatusFor(flat.Type, flat.Code, flat.Reason, flat.Retryable),
 			},
-		}, true
+		}, ShapeFlat, true
 	}
 
 	var legacy struct {
@@ -941,9 +960,9 @@ func parseAction(raw string) (runtime.GenerateResult, bool) {
 				Type:       legacy.Action,
 				ExitStatus: exitStatusFor(legacy.Action, legacy.Code, legacy.Reason, legacy.Retryable),
 			},
-		}, true
+		}, ShapeLegacy, true
 	}
-	return runtime.GenerateResult{}, false
+	return runtime.GenerateResult{}, "", false
 }
 
 func repairLooseJSONObject(input string) string {
