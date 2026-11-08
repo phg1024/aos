@@ -333,7 +333,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 			// The first request carries the sampling as sent; a later cap from
 			// a token budget is applied the same way on top of it.
 			config.BaseURL, config.Model, config.Stream = first.Backend, first.Params.Model, first.Params.Stream
-			config.Sampling = inference.Sampling{Temperature: first.Params.Temperature, TopP: first.Params.TopP, MaxTokens: first.Params.MaxTokens, ThinkingBudget: first.Params.ReasoningBudgetTokens}
+			config.Sampling = inference.Sampling{Temperature: first.Params.TemperatureSent(), TopP: first.Params.TopP, MaxTokens: first.Params.MaxTokens, ThinkingBudget: first.Params.ReasoningBudgetTokens}
 		}
 		backend = inference.NewVLLMBackend(config)
 	}

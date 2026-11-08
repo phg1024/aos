@@ -522,3 +522,94 @@ func TestLoadProfilesGivesAnAnthropicProfileItsBaseURL(t *testing.T) {
 		t.Fatal("a vllm profile without base_url should be refused")
 	}
 }
+
+// The recorded params are the sent body's fields other than its messages,
+// for each wire format: no field the request did not carry, and none it
+// carried left out. An outcome records no params.
+func TestRecordedParamsAreWhatWasSent(t *testing.T) {
+	for _, name := range []string{"AOS_LLM_API_KEY", "AOS_VLLM_API_KEY", "ANTHROPIC_API_KEY"} {
+		t.Setenv(name, "")
+	}
+	var mu sync.Mutex
+	var bodies []map[string]json.RawMessage
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]json.RawMessage
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		bodies = append(bodies, body)
+		mu.Unlock()
+		if r.URL.Path == "/v1/messages" {
+			json.NewEncoder(w).Encode(map[string]any{"model": "claude-sonnet-5-5", "content": []any{textBlock("ok")}, "stop_reason": "end_turn"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": "ok"}}}})
+	}))
+	defer srv.Close()
+	cases := []struct {
+		name    string
+		backend inference.Backend
+	}{
+		{"chat completions, temperature 0", inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: srv.URL, Model: "m"})},
+		{"chat completions, sampling set", inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: srv.URL, Model: "m", Stream: true,
+			Sampling: inference.Sampling{Temperature: 0.6, TopP: 0.95, MaxTokens: 512, ThinkingBudget: 256}})},
+		{"anthropic", inference.NewAnthropicBackend(inference.AnthropicConfig{BaseURL: srv.URL, Model: "claude-sonnet-5-5", MaxTokens: 4000})},
+		{"anthropic, streamed", inference.NewAnthropicBackend(inference.AnthropicConfig{BaseURL: srv.URL, Model: "claude-haiku-5-5", Stream: true})},
+	}
+	for i, c := range cases {
+		path := filepath.Join(t.TempDir(), runlog.Dir, runlog.CallsFile)
+		log, _ := runlog.Open(path)
+		c.backend.SetCallLog(log)
+		ctx := runtime.WithCallInfo(context.Background(), runtime.CallInfo{PID: "pid-1"})
+		_, _ = c.backend.CompleteText(ctx, "system", "user")
+		lines, _ := os.ReadFile(path)
+		var start, outcome map[string]json.RawMessage
+		parts := strings.Split(strings.TrimSpace(string(lines)), "\n")
+		json.Unmarshal([]byte(parts[0]), &start)
+		json.Unmarshal([]byte(parts[len(parts)-1]), &outcome)
+		var recorded map[string]json.RawMessage
+		json.Unmarshal(start["params"], &recorded)
+		delete(recorded, "api")
+		sent := map[string]json.RawMessage{}
+		for key, value := range bodies[i] {
+			if key != "messages" && key != "system" {
+				sent[key] = value
+			}
+		}
+		got, _ := json.Marshal(recorded)
+		want, _ := json.Marshal(sent)
+		if string(got) != string(want) {
+			t.Fatalf("%s: recorded params %s, sent %s", c.name, got, want)
+		}
+		if _, ok := outcome["params"]; ok {
+			t.Fatalf("%s: the outcome records params: %s", c.name, outcome["params"])
+		}
+	}
+}
+
+// Ledgers written before temperature was recorded only when sent still
+// rebuild byte for byte: a chat call with its temperature, and an
+// Anthropic call that recorded a temperature it never sent.
+func TestRecordsFromBeforeTheParamsFixRebuild(t *testing.T) {
+	chat := `{"seq":1,"phase":"start","pid":"pid-1","backend":"http://x","model":"m","prompt_tokens":0,"cached_tokens":0,"completion_tokens":0,"latency_ms":0,` +
+		`"params":{"model":"m","temperature":0.6,"max_tokens":512},"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}],"request_sha256":""}`
+	anthropic := `{"seq":1,"phase":"start","pid":"pid-1","backend":"http://x","model":"claude-sonnet-5-5","prompt_tokens":0,"cached_tokens":0,"completion_tokens":0,"latency_ms":0,` +
+		`"params":{"api":"anthropic-messages","model":"claude-sonnet-5-5","temperature":0,"max_tokens":4000,"thinking":{"type":"adaptive","display":"summarized"},"cache_control":{"type":"ephemeral"},"fallbacks":"default"},` +
+		`"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}],"request_sha256":""}`
+	for _, c := range []struct{ line, want string }{
+		{chat, `{"model":"m","messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}],"temperature":0.6,"max_tokens":512}`},
+		{anthropic, `{"model":"claude-sonnet-5-5","max_tokens":4000,"system":"s","messages":[{"role":"user","content":"u"}],"thinking":{"type":"adaptive","display":"summarized"},"cache_control":{"type":"ephemeral"},"fallbacks":"default"}`},
+	} {
+		var record inference.CallRecord
+		if err := json.Unmarshal([]byte(c.line), &record); err != nil {
+			t.Fatal(err)
+		}
+		body, err := inference.RebuildRequestBody(record.Params, record.Messages)
+		if err != nil || string(body) != c.want {
+			t.Fatalf("rebuilt %s, want %s (err %v)", body, c.want, err)
+		}
+	}
+	var outcome inference.CallRecord
+	if err := json.Unmarshal([]byte(`{"seq":2,"phase":"outcome","start":1,"params":{"model":"","temperature":0},"request_sha256":""}`), &outcome); err != nil || outcome.Start != 1 {
+		t.Fatalf("an old outcome line: %+v, %v", outcome, err)
+	}
+}

@@ -16,13 +16,17 @@ import (
 // ChatMessage is one message of a chat request as sent and as recorded.
 type ChatMessage = chatMessage
 
-// RequestParams are a request's fields other than its messages.
+// RequestParams are a request's fields other than its messages, as sent:
+// a field the request did not carry is not recorded.
 type RequestParams struct {
 	// API is the wire format: empty for chat completions, APIAnthropicMessages
 	// for the Anthropic Messages API. A record's body is rebuilt in it.
-	API                   string         `json:"api,omitempty"`
-	Model                 string         `json:"model"`
-	Temperature           float64        `json:"temperature"`
+	API   string `json:"api,omitempty"`
+	Model string `json:"model"`
+	// Temperature is set on every chat-completions call, which always
+	// sends it, and nil on an Anthropic call, which never does. Records
+	// from before it was a pointer hold it either way.
+	Temperature           *float64       `json:"temperature,omitempty"`
 	TopP                  float64        `json:"top_p,omitempty"`
 	MaxTokens             int            `json:"max_tokens,omitempty"`
 	ReasoningBudgetTokens int            `json:"reasoning_budget_tokens,omitempty"`
@@ -84,8 +88,10 @@ type CallRecord struct {
 	Response            string `json:"response,omitempty"`
 	// Reasoning is the model's thinking where the server returns it apart
 	// from the reply (Anthropic thinking blocks). It is never parsed.
-	Reasoning     string        `json:"reasoning,omitempty"`
-	Params        RequestParams `json:"params"`
+	Reasoning string `json:"reasoning,omitempty"`
+	// Params are on a start, or a one-line record from before the split; an
+	// outcome carries none.
+	Params        RequestParams `json:"params,omitzero"`
 	Base          int           `json:"base,omitempty"`
 	Messages      []ChatMessage `json:"messages,omitempty"`
 	RequestSHA256 string        `json:"request_sha256"`
@@ -139,6 +145,15 @@ func RequestMessages(records []CallRecord, i int) []ChatMessage {
 	return messages
 }
 
+// TemperatureSent is the temperature a chat-completions body carries: the
+// recorded one, or 0, which that body sends when none is set.
+func (p RequestParams) TemperatureSent() float64 {
+	if p.Temperature == nil {
+		return 0
+	}
+	return *p.Temperature
+}
+
 // RebuildRequestBody reproduces the exact body of a call from its params and
 // its full message list (its base chain's messages plus its own), in the
 // wire format params.API names.
@@ -149,7 +164,7 @@ func RebuildRequestBody(params RequestParams, messages []ChatMessage) ([]byte, e
 	return json.Marshal(chatCompletionRequest{
 		Model:                 params.Model,
 		Messages:              messages,
-		Temperature:           params.Temperature,
+		Temperature:           params.TemperatureSent(),
 		TopP:                  params.TopP,
 		MaxTokens:             params.MaxTokens,
 		ReasoningBudgetTokens: params.ReasoningBudgetTokens,
@@ -195,7 +210,7 @@ func requestHash(payload any) (string, error) {
 }
 
 func paramsOf(payload chatCompletionRequest) RequestParams {
-	return RequestParams{Model: payload.Model, Temperature: payload.Temperature, TopP: payload.TopP, MaxTokens: payload.MaxTokens, ReasoningBudgetTokens: payload.ReasoningBudgetTokens, Stream: payload.Stream, StreamOptions: payload.StreamOptions}
+	return RequestParams{Model: payload.Model, Temperature: &payload.Temperature, TopP: payload.TopP, MaxTokens: payload.MaxTokens, ReasoningBudgetTokens: payload.ReasoningBudgetTokens, Stream: payload.Stream, StreamOptions: payload.StreamOptions}
 }
 
 // recordStart writes the call's start line before the request is sent.
