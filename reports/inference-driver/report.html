@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inference Driver Probes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>The Inference Driver at v0.1.6: Seven Probes</h1>
+    <p>Seven scripted probes, D1 to D7, measure the model client as it stands at <code>v0.1.6</code> (<code>8d5ff6e</code>), for Chapter 9. They check how it reads a reply, how it retries, what each provider kind sends, whether an agent can name its own model, how much of the prompt cache live6 reused, and how <code>max_tokens</code> is capped. Every probe runs against a fake server or the local records of live6. None calls a real model. Each probe logs what it ran and what it saw. The probes only measure, so a defect shows up as a finding, not as a failed test.</p>
+    <ul>
+      <li><span class="bad">Streaming changes the action.</span> When the reasoning holds an action and the content does not, <code>aos-tui</code> runs the reasoning's action, while <code>aos run</code> asks for a repair (D1).</li>
+      <li><span class="bad">Retries do not tell errors apart.</span> A hung server, a 503 and a 404 each get 12 attempts with 607 s of waits (D2).</li>
+      <li><span class="warn">Four of 18 replies are misread.</span> An example quoted after the real action wins over it, and JSON inside a <code>&lt;think&gt;</code> block wins over prose (D3).</li>
+      <li><span class="warn">One kind is real.</span> <code>vllm</code>, <code>ollama</code>, <code>openai-compatible</code> and even <code>anthropic</code> all build the same chat-completions client (D4). A workflow cannot give an agent its own model, and the field is dropped without a word (D5).</li>
+      <li><span class="good">The prompt is append-only.</span> 195 of 196 later calls in live6 extend the previous one, and the server reported 94.4% of prompt tokens as cached (D6).</li>
+    </ul>
+  </div>
+
+  <h2>How to run them</h2>
+  <pre>go test -tags inferencedriver -count=1 -v ./bench/inference/</pre>
+  <p>The probes are in <code>bench/inference/driver_test.go</code>, kept out of <code>go test ./...</code> by their build tag, as <code>bench/ipc</code> is. The full output of the run behind this page is <code>probe-output.txt</code>, next to it, with the test server's address replaced. D6 needs <code>reports/ipc-live/runs/live6</code>, which is gitignored, and is skipped without it.</p>
+  <p>One rule for this page and for the book: <code>config.go</code>'s default base URL, for the <code>vllm</code> and <code>openai-compatible</code> kinds, is a machine's hostname. Do not print it. The probes report only that it is a hostname.</p>
+
+  <h2>D1. Streaming and not: the same reply, two actions</h2>
+  <p>The fake server sends the same reply both ways: an action in the reasoning field, and some content. Streamed, it arrives as <code>reasoning_content</code> and <code>content</code> deltas, read with <code>OnStreamEvent</code> set as <code>aos-tui</code> sets it. Not streamed, it arrives as one message, which is how <code>aos run</code> reads it. The reasoning is <code>{"action":{"type":"exit","code":0,"reason":"from reasoning"}}</code> each time. The repair call is answered with a message, "from repair".</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Content</th><th><code>aos run</code> (not streamed)</th><th><code>aos-tui</code> (streamed)</th></tr>
+    <tr><td>a valid action</td><td>message "from content", 1 call</td><td>message "from content", 1 call</td></tr>
+    <tr><td>prose, no braces</td><td>message "from repair", 2 calls</td><td class="bad">exit 0 "from reasoning", 1 call</td></tr>
+    <tr><td>one brace short</td><td>message "from content", 1 call</td><td>message "from content", 1 call</td></tr>
+    <tr><td>empty</td><td>message "from repair", 2 calls</td><td class="bad">exit 0 "from reasoning", 1 call</td></tr>
+    <tr><td>a valid action, with prose and braces in the reasoning</td><td>message "from content", 1 call</td><td>message "from content", 1 call</td></tr>
+  </table>
+  </div>
+  <p><b>Why.</b> When streaming, <code>vllm.go</code> writes every reasoning delta into the text it returns, ahead of the content, with no separator. Without streaming it reads only <code>message.content</code>, so the reasoning is dropped. The parser then takes the last complete JSON object in the text. Where the content holds a valid action, both modes agree. Where the content holds no braces, the streamed text's only object is the one in the reasoning, and the agent runs it. In the probe that is an exit 0 the model never committed to.</p>
+
+  <h2>D2. Retries: one in the driver, 12 in the runtime, for any error</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Endpoint</th><th>Driver alone</th><th>Through the runtime</th></tr>
+    <tr><td>hung (client timeout 50 ms)</td><td>1 request, <code>context deadline exceeded</code></td><td>12 requests, 11 waits totalling 10 min 7 s, exit 1, retryable</td></tr>
+    <tr><td>503</td><td>1 request, <code>vllm request failed: 503</code></td><td>12 requests, the same waits, exit 1, retryable</td></tr>
+    <tr><td>404</td><td>1 request, <code>vllm request failed: 404</code></td><td>12 requests, the same waits, exit 1, retryable</td></tr>
+  </table>
+  </div>
+  <ul>
+    <li><b>The driver.</b> <code>NewBackendFromConfig</code> never sets <code>MaxRetries</code>, so <code>max(1, 0)</code> gives one attempt per call. The driver's own loop, which would retry timeouts, 5xx and bad bodies, never repeats.</li>
+    <li><b>The runtime.</b> <code>BackendRetryPolicy</code> defaults to 12 attempts, waiting 1 s and doubling up to 2 min. The waits are 1, 2, 4, 8, 16, 32 and 64 s, then four of 120 s, which add up to 607 s. That matches <code>cuda-report.html</code>'s 12 attempts and 607 s, and live1's ten minutes.</li>
+    <li><b>The test clock.</b> The probe runs a one-agent workflow through <code>agentflow.Engine</code>, with <code>Sleep</code> recording each wait instead of sleeping, so the 607 s cost 3 s of wall time.</li>
+    <li><b>Wall time on a real hang.</b> Each attempt also lasts up to the HTTP timeout. So a hung server costs 607 s plus 12 times the timeout: about 4.2 hours (15,007 s) at the 1200 s that the live runs used.</li>
+    <li><b>Errors are not told apart.</b> The runtime retries any error alike. A 404, or a 400 for a prompt over the limit, gets the same 12 attempts as an outage, and the exit is marked retryable.</li>
+  </ul>
+
+  <h2>D3. The tolerance ladder</h2>
+  <p>Each reply goes through <code>PromptBackend.Generate</code> over a scripted transcript completer, which is the path <code>aos run</code> and <code>aos-tui</code> take. The repair call gets the reply's second line where there is one, and the first again where there is not. "Correct" means the action the reply's author meant.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Input class</th><th>Action taken</th><th>Correct?</th><th>Repair call</th></tr>
+    <tr><td>clean nested action</td><td>message "hi"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>trailing JSON after prose</td><td>exit 0 "done"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>bare keys</td><td>message "hi"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>half-quoted keys</td><td>message "hi"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>trailing commas</td><td>message "hi"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>generic shape (tool name beside args)</td><td>tool read_file {path: a.txt}</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>flat shape (no action wrapper)</td><td>message "hi"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>flat shape the generic stage refuses (delegate without an agent)</td><td>delegate to "" goal "build it"</td><td class="bad">no: an unusable action</td><td>no</td></tr>
+    <tr><td>legacy shape (action is a string)</td><td>exit 0 "done"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>in-transcript repair</td><td>message "repaired"</td><td class="good">yes</td><td>yes, with the raw reply as the assistant turn</td></tr>
+    <tr><td>fallbackMessage (prose twice)</td><td>message, the first prose</td><td class="good">yes</td><td>yes</td></tr>
+    <tr><td>notesAsMessage (empty message twice)</td><td>message, the notes</td><td class="good">yes</td><td>yes</td></tr>
+    <tr><td>unrepairable</td><td>error: unable to repair</td><td class="good">yes (nothing to read)</td><td>yes</td></tr>
+    <tr><td>example quoted after the real action</td><td>message "example"</td><td class="bad">no: the example wins</td><td>no</td></tr>
+    <tr><td>one brace short (live6 call 28's shape)</td><td>delegate to writer</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td>two braces short (args left open)</td><td>error: unable to repair</td><td class="warn">no action</td><td>yes</td></tr>
+    <tr><td><code>&lt;think&gt;</code> JSON, then a real action</td><td>message "real"</td><td class="good">yes</td><td>no</td></tr>
+    <tr><td><code>&lt;think&gt;</code> JSON, then prose</td><td>exit 0 "thinking"</td><td class="bad">no: the thought wins</td><td>no</td></tr>
+  </table>
+  </div>
+  <ul>
+    <li><b>Last complete object wins.</b> <code>extractTrailingJSONObject</code> takes the last suffix that is complete JSON. So an example quoted after the action replaces it, and an object short of its outer brace gives up its inner action. live6's call 28 was the lucky second kind.</li>
+    <li><b>Prose around JSON.</b> When no suffix is complete JSON, <code>repairLooseJSONObject</code> takes everything from the first brace to the last one. That is how JSON inside a <code>&lt;think&gt;</code> block, followed by prose, becomes the action. It is the same text D1's streamed reply produces.</li>
+    <li><b>The flat and legacy stages.</b> For well-formed input they are never reached, because the generic stage reads those shapes first. The flat stage is reached only when the generic stage refuses a shape. It then returns an action without checking that it is usable, so the in-transcript repair is skipped. The runtime then treats the delegate as malformed, at <code>runtime.go</code> line 1260.</li>
+  </ul>
+
+  <h2>D4. Provider kinds</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>AOS_LLM_BACKEND</th><th>Default base URL</th><th>Default model</th><th>Default key</th><th>Body sent for the same call</th></tr>
+    <tr><td><code>vllm</code></td><td>a hostname (not printed)</td><td><code>Qwen/Qwen3.5-27B</code></td><td>a placeholder, sent as a Bearer token</td><td rowspan="4"><code>POST /v1/chat/completions</code>, byte-identical in all four:<br><code>{"model":"probe","messages":[{"role":"system",…},{"role":"user",…}],"temperature":0}</code></td></tr>
+    <tr><td><code>ollama</code></td><td>localhost</td><td><code>qwen3.6:35b-a3b-mtp-q4_K_M</code></td><td>none, so no Authorization header</td></tr>
+    <tr><td><code>openai-compatible</code></td><td>a hostname (not printed)</td><td><code>Qwen/Qwen3.5-27B</code></td><td>a placeholder</td></tr>
+    <tr><td><code>anthropic</code></td><td>a hostname (not printed)</td><td><code>Qwen/Qwen3.5-27B</code></td><td>a placeholder</td></tr>
+  </table>
+  </div>
+  <ul>
+    <li><b>Only defaults differ.</b> <code>NewBackendFromConfig</code> ignores <code>Kind</code>. The kinds differ only in their defaults, plus the Authorization header that a key brings.</li>
+    <li><b>Any other name passes through.</b> <code>normalizeBackendKind</code> keeps an unknown name such as <code>anthropic</code> as it is. It is then sent as the same client to <code>/v1/chat/completions</code>.</li>
+    <li><b>An Anthropic-only server.</b> One that answers only <code>/v1/messages</code> returns <code>404 Not Found</code>, and through the runtime that gets 12 attempts, as D2 shows.</li>
+  </ul>
+
+  <h2>D5. A model per agent</h2>
+  <p>The probe gives a workflow a top-level <code>model</code>, and gives its agent <code>model</code>, <code>profile</code> and <code>backend</code>. It decodes the workflow with <code>json.Unmarshal</code>, as <code>aos run</code> does, and the decode succeeds. <code>Validate</code> passes, and after a round trip none of the three fields is left. A decoder with <code>DisallowUnknownFields</code> would refuse it with <code>unknown field "model"</code>, but <code>aos run</code> does not use one. <code>StaticBackendFactory.BackendFor</code> hands every agent the one completer. So a workflow cannot give an agent its own model, and a workflow that tries is not told.</p>
+
+  <h2>D6. Prompt-cache reuse in live6</h2>
+  <p>This probe reads live6's local call ledger. It rebuilds each call's full message list from its base chain, and compares it with the same process's previous non-repair call. The cached-token counts are what the model server reported, not something AOS measured.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>What</th><th>live6</th></tr>
+    <tr><td>Calls with an outcome</td><td>203, 3 of them repairs, and 7 first calls of a process</td></tr>
+    <tr><td>Prompt tokens, cached</td><td>8,531,139, of which 8,051,138 cached (94.4%)</td></tr>
+    <tr><td>Cached share of each call's prompt</td><td>0%: 5 calls; 1–49%: 5; 50–89%: 29; 90–98%: 130; 99–100%: 34</td></tr>
+    <tr><td>Later calls that strictly extend the previous one</td><td>195 of 196</td></tr>
+    <tr><td>On those, cached over the previous call's prompt</td><td>p10 0.999, median 1.000, p90 1.000. Two coordinator calls had nothing cached, after previous prompts of 15,207 and 17,321 tokens. The records do not say why.</td></tr>
+    <tr><td>The one that did not extend</td><td>a coordinator call with 7,994 of 7,999 prompt tokens cached</td></tr>
+  </table>
+  </div>
+  <p>The cached share of a whole prompt is lower than the reuse figure because each call adds the new turn and the previous reply, which were never cached. AOS's append-only transcript (<code>PromptMessages</code>) does what it was built for: almost every call's prompt starts with the previous call's prompt, byte for byte.</p>
+
+  <h2>D7. max_tokens and the token budget</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Configured max_tokens</th><th>Budget left</th><th>Sent</th></tr>
+    <tr><td>12,000</td><td>500</td><td>500</td></tr>
+    <tr><td>12,000</td><td>20,000</td><td>12,000</td></tr>
+    <tr><td>not set</td><td>500</td><td>500</td></tr>
+    <tr><td>12,000</td><td>no budget</td><td>12,000</td></tr>
+  </table>
+  </div>
+  <p><code>complete()</code> in <code>vllm.go</code> lowers <code>max_tokens</code> to <code>CallInfo.MaxTokens</code>. <code>runtime.go</code> sets that to <code>tokens.Left</code>, the budget left in prompt plus completion tokens. It does not subtract the prompt the call is about to send, so a call near the end of the budget can still overrun it by its prompt. With no budget and no configured value, the code sends no <code>max_tokens</code> and the server's default applies (read from the code, not probed).</p>
+
+  <h2>Premises against the code</h2>
+  <ul>
+    <li><b>D1:</b> confirmed. Streaming puts the reasoning in the text the parser reads. Without streaming, only <code>message.content</code> is read.</li>
+    <li><b>D2:</b> confirmed, 1 attempt by the driver and 12 by the runtime, with 607 s of waits. Not in the premise: the runtime retries a 404 the same way.</li>
+    <li><b>D3:</b> mostly confirmed. The flat and legacy stages are not stages for well-formed input, because the generic stage reads those shapes first. The flat stage is reached only for a shape the generic stage refuses, and then it returns an unusable action.</li>
+    <li><b>D4:</b> confirmed for the bodies. The headers differ too: the <code>ollama</code> kind sends no Authorization header.</li>
+    <li><b>D5:</b> confirmed. A spec cannot name a model per agent, and the field is dropped silently, not refused.</li>
+    <li><b>D7:</b> confirmed. The cap is the whole budget left, not what is left after the prompt.</li>
+  </ul>
+</body>
+</html>
