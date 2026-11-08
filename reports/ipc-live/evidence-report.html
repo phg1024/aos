@@ -101,5 +101,32 @@
   <p>After this report, the user chose to raise the advisory time budget to match the job's limit, and confirmed it here. The value was set by <code>--time-budget</code> in <code>cuda/job.sh</code>, not in the workflow or the binary. live3's <code>run.started</code> read 3600 from its default of 60 minutes. <code>job.sh</code> now passes <code>"${limit}s"</code>, so the budget is the limit the job runs under, and the <code>AOS_TIME_BUDGET</code> override, which <code>submit.sh</code> never passed on, is gone. <code>bin/aos</code> and the workflows did not change. A run of the default length records 5400; a run given a shorter limit records that limit.</p>
   <p><code>test_job.sh</code> now checks that both agree with the default and with a chosen limit, through <code>job.sh</code> and <code>submit.sh</code>, that the rendered workflow carries no budget of its own, and that the real aos records the limit in <code>run.started</code> as advisory. <code>test_path.sh</code> checks the same on the machine. All 34 cases of <code>test_job.sh</code> pass, and 6 of 6 mutations are caught (<code>cuda/kernel-check/budget-before-fix.txt</code>, <code>mutation-budget.txt</code>, <code>rehearsal-budget.txt</code>).</p>
   <p><span class="warn">No margin is left.</span> live3 had 1800 s between its budget and its limit. Now the budget's end is the job's SIGTERM. Agents are warned once, with under a tenth left, 540 s of 5400. The exits are recorded and the analysis still runs, but a verifier that has not finished leaves no verdict. No run has tested this on the card.</p>
+
+  <h2>10. live4: a delegation's artifacts dropped unsaid</h2>
+  <p>live4's coordinator wrote <code>"artifacts"</code> beside <code>"delegate"</code>, at the action level, twice: seq 186 for a new verifier, <code>{"action":{"type":"delegate","artifacts":"art-000167","notes":…,"delegate":{"agent_id":"verifier",…}}}</code>, and seq 504, resuming the parked one, with <code>"artifacts":"art-000465"</code> after the delegate. The parser read artifacts only inside <code>"delegate"</code>. Nothing was attached, nothing was refused, and the coordinator was told nothing, while its goals said "the attached raw_record". At seq 470 it left the field out. The handle reached the verifier only by mail, at seq 520. analyze.py counted 0 of the 4 delegation and evidence situations (<code>cuda/kernel-check/attach-before-fix.txt</code>).</p>
+  <table>
+    <tr><th>Change</th><th>What it does</th></tr>
+    <tr><td>Read wherever written</td><td>For a delegate, <code>artifacts</code> inside it or at the action level. For <code>spawn_agent</code> and <code>message_agent</code>, in args, beside args, or at the action level. This holds on the struct path, the generic path, after prose and in repaired JSON. The runtime moves it into the call.</td></tr>
+    <tr><td>Refuse, never drop</td><td>Two places that differ are a tool error, and nothing starts. So is <code>artifacts</code> on any action that attaches nothing, a <code>send</code> included.</td></tr>
+    <tr><td>Tell the delegator</td><td><code>delegate_result … attached=art-…</code>, or <code>attached=none</code>, for a new process and a resumed one. <code>spawn_agent</code>'s output carries <code>attached</code>. A resumed process is granted what the resuming delegation attached.</td></tr>
+    <tr><td>Prompt</td><td>The schema and a valid example show <code>artifacts</code> inside <code>"delegate"</code>, and one sentence says where it goes and to check <code>attached=</code>. Frozen arms, leaves and older records keep their prompts.</td></tr>
+    <tr><td>Record and replay</td><td>run.started has <code>delegate_attach: v1</code>. A record without it replays as it ran, and a test pins both, with the record's contents checked.</td></tr>
+    <tr><td>analyze.py</td><td><code>NOT GRANTED</code> lines and "an attachment in a delegate reply not granted: N", from the replies themselves. live4: 2 (seq 186 and 504). live2, live3 and pf4: 0. Every other line of live4's output is unchanged.</td></tr>
+    <tr><td>Scripted preflight</td><td><code>fake_model.py</code>'s coordinator now attaches at the action level by default, as live4's did, and logs what <code>delegate_result</code> said. <code>test_path.sh inner</code> keeps pf5's placement. <code>test_path.sh</code> checks the coordinator was told, and checks the new count is 0.</td></tr>
+  </table>
+  <p>Tests:</p>
+  <ul>
+    <li>Go: 12 placements end to end, each checked through the grant, the verifier's first message and the delegator's word; refusal of two lists that differ; a send and an exit refused; a resume granted and told; the legacy engine; the prompt; the legacy replay; the placement unit table.</li>
+    <li>Package tests pass: <code>agentflow</code>, <code>runtime</code>, <code>replay</code>, <code>cmd/aos</code>, <code>inspect</code>, <code>tui/render</code>, <code>cmd/aos-tui</code>, <code>artifact</code>, <code>capability</code>, <code>tools</code>, <code>framing</code>.</li>
+    <li>Scripts: <code>test_analyze.py</code> (41) and <code>test_job.sh</code> (34) pass.</li>
+    <li>Mutations: 32 of 33 caught; the survivor is equivalent. The first pass caught 26 and showed 5 real gaps, which tests now cover (<code>cuda/kernel-check/mutation-attach.txt</code>).</li>
+  </ul>
+  <p><span class="warn">Not covered:</span></p>
+  <ul>
+    <li>Nothing was deployed, and <code>test_path.sh</code> has not run on the machine with the new scripted coordinator.</li>
+    <li>No real model has seen the new prompt.</li>
+    <li>Refusing <code>artifacts</code> on an exit or a message could cost a model a step it did not expect.</li>
+    <li>The word to the delegator comes when the delegated process ends or waits, not before it starts. The process itself is told at its first step.</li>
+  </ul>
 </body>
 </html>

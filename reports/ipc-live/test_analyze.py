@@ -260,7 +260,7 @@ class Evidence(unittest.TestCase):
 
 class Declared(unittest.TestCase):
     """What analyze.py says when a workflow declares evidence. A Go test holds it to the kernel on real records."""
-    def state(self, verdict, reads=(), source="file", grant=False, other=None):
+    def state(self, verdict, reads=(), source="file", grant=False, other=None, replies=()):
         root = os.path.join(tempfile.mkdtemp(), "state")
         self.addCleanup(shutil.rmtree, os.path.dirname(root))
         for sub in ("artifacts/payloads", "kernel", "run"):
@@ -291,6 +291,10 @@ class Declared(unittest.TestCase):
             json.dump(processes, f)
         with open(os.path.join(root, "kernel", "events.json"), "w") as f:
             json.dump([{"id": "evt-000001", "type": "verification.exit_refused", "process_id": "pid-000003", "timestamp": "t", "data": {"unmet": "art-000002 was not read"}}], f)
+        with open(os.path.join(root, "run", "calls.jsonl"), "w") as f:
+            for seq, reply in enumerate(replies, 1):
+                action, pid, when = reply if isinstance(reply, tuple) else (reply, "pid-000004", "2026-11-06T06:59:00Z")
+                f.write(json.dumps({"seq": seq, "phase": "outcome", "time": when, "pid": pid, "response": json.dumps({"action": action})}) + "\n")
         return root
 
     def verdict(self, status, check, **more):
@@ -338,6 +342,43 @@ class Declared(unittest.TestCase):
         self.assertIn("of 4 of the delegation and evidence situations exercised", result.stdout)
         self.assertIn("CLEAN", result.stdout)
 
+    def test_an_attachment_in_a_reply_that_nothing_granted_has_its_line(self):
+        delegate = {"agent_id": "verifier", "goal": "check the attached record"}
+        for name, action in {
+            "at the action level": {"type": "delegate", "artifacts": "art-000002", "delegate": delegate},
+            "as a list": {"type": "delegate", "artifacts": ["art-000002"], "delegate": delegate},
+            "inside the delegate": {"type": "delegate", "delegate": dict(delegate, artifacts="art-000002")},
+            "in spawn_agent's args": {"type": "tool", "tool_call": {"name": "spawn_agent", "args": dict(delegate, artifacts="art-000002")}},
+            "beside spawn_agent's args": {"type": "tool", "tool_call": {"name": "spawn_agent", "args": delegate, "artifacts": "art-000002"}},
+        }.items():
+            with self.subTest(name):
+                result = run(self.state(self.verdict("unverified", "unread"), replies=[action]))
+                self.assertIn("NOT GRANTED: coordinator (pid-000004) at 2026-11-06T06:59:00Z (seq 1) attached art-000002", result.stdout)
+                self.assertIn("an attachment in a delegate reply not granted: 1", result.stdout)
+                granted = run(self.state(self.verdict("pass", "read"), reads=[{"offset": 0}], grant=True, replies=[action]))
+                self.assertNotIn("NOT GRANTED", granted.stdout)
+                self.assertIn("an attachment in a delegate reply not granted: 0", granted.stdout)
+
+    def test_a_reply_that_attached_nothing_is_not_counted(self):
+        replies = [{"type": "delegate", "delegate": {"agent_id": "verifier", "goal": "it is attached"}},
+                   {"type": "tool", "tool_call": {"name": "message_agent", "args": {"to": "pid-000003", "body": "b", "artifacts": "art-000002"}}}]
+        result = run(self.state(self.verdict("unverified", "unread"), replies=replies))
+        self.assertNotIn("NOT GRANTED", result.stdout)
+        self.assertIn("an attachment in a delegate reply not granted: 0", result.stdout)
+
+    def test_a_grant_matches_only_its_delegators_later_reply(self):
+        action = {"type": "delegate", "artifacts": "art-000002", "delegate": {"agent_id": "verifier", "goal": "g"}}
+        for name, reply in {"another delegator": (action, "pid-000005", "2026-11-06T06:59:00Z"), "after the grant": (action, "pid-000004", "2026-11-06T07:01:00Z")}.items():
+            with self.subTest(name):
+                result = run(self.state(self.verdict("pass", "read"), reads=[{"offset": 0}], grant=True, replies=[reply]))
+                self.assertIn("an attachment in a delegate reply not granted: 1", result.stdout)
+
+    def test_one_grant_matches_one_reply(self):
+        action = {"type": "delegate", "artifacts": "art-000002", "delegate": {"agent_id": "verifier", "goal": "g"}}
+        result = run(self.state(self.verdict("pass", "read"), reads=[{"offset": 0}], grant=True, replies=[action, action]))
+        self.assertIn("(seq 2) attached art-000002", result.stdout)
+        self.assertIn("an attachment in a delegate reply not granted: 1", result.stdout)
+
     def test_typed_when_a_file_is_declared(self):
         result = run(self.state(self.verdict("unverified", "not_from_file"), reads=[{"offset": 0}], source=""))
         self.assertEqual(result.returncode, 0, result.stdout)
@@ -358,6 +399,23 @@ class Live3(unittest.TestCase):
         self.assertIn("7 of 26 exercised", result.stdout)
         self.assertIn("0 of 4 of the delegation and evidence situations exercised", result.stdout)
         self.assertNotIn("exits refused for evidence", result.stdout)
+        self.assertIn("an attachment in a delegate reply not granted: 0", result.stdout)
+
+
+class Live4(unittest.TestCase):
+    """live4's coordinator put a delegation's artifacts at the action level twice, and both were dropped unsaid."""
+    STATE = os.path.join(os.path.dirname(ANALYZE), "runs", "live4", "state")
+
+    def test_live4s_two_dropped_attachments_are_named(self):
+        if not os.path.isdir(self.STATE):
+            self.skipTest("live4's state is not here")
+        result = run(self.STATE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NOT GRANTED: coordinator (pid-000002) at 2026-11-07T06:40:02.884842391Z (seq 186) attached art-000167 in the action of its reply", result.stdout)
+        self.assertIn("(seq 504) attached art-000465 in the action of its reply", result.stdout)
+        self.assertIn("an attachment in a delegate reply not granted: 2", result.stdout)
+        self.assertIn("8 of 26 exercised", result.stdout)
+        self.assertIn("0 of 4 of the delegation and evidence situations exercised", result.stdout)
 
 
 class Live2(unittest.TestCase):

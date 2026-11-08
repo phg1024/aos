@@ -157,6 +157,40 @@ func TestSystemPromptOffersHandlesAtADelegationOnlyWhenOn(t *testing.T) {
 	}
 }
 
+// live4's coordinator put artifacts at the action level, as the paragraph alone reads.
+// The schema and an example now show them inside the delegate.
+func TestSystemPromptShowsWhereADelegationsArtifactsGo(t *testing.T) {
+	spec := WorkflowSpec{Name: "w", EntryAgent: "a", Agents: []AgentSpec{{ID: "a", AllowedAgents: []string{"b"}}, {ID: "b"}}}
+	const (
+		schema  = `"delegate":{"agent_id":"...","goal":"...","artifacts":"..."},`
+		before  = `"delegate":{"agent_id":"...","goal":"..."},`
+		example = `{"action":{"type":"delegate","delegate":{"agent_id":"writer","goal":"Summarize the attached record","artifacts":"art-000012"}}}` + "\n"
+		where   = `Put "artifacts" inside "delegate", beside agent_id and goal`
+		told    = "attached=none when nothing was"
+	)
+	prompt := PromptBackend{Workflow: spec, Agent: spec.Agents[0]}.systemPrompt()
+	for _, want := range []string{schema, example, where, told} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("lacks %q:\n%s", want, prompt)
+		}
+	}
+	for name, off := range map[string]PromptBackend{
+		"replaying from before":         {Workflow: spec, Agent: spec.Agents[0], NoDelegateAttach: true},
+		"replaying from before handles": {Workflow: spec, Agent: spec.Agents[0], NoDelegateHandles: true},
+		"a frozen arm":                  {Workflow: spec, Agent: spec.Agents[0], Recall: runtime.RecallOff()},
+		"a leaf":                        {Workflow: spec, Agent: spec.Agents[1]},
+	} {
+		prompt := off.systemPrompt()
+		if !strings.Contains(prompt, before) || strings.Contains(prompt, schema) || strings.Contains(prompt, example) || strings.Contains(prompt, where) {
+			t.Fatalf("%s:\n%s", name, prompt)
+		}
+	}
+	// From before: the paragraph stays as it was.
+	if prompt := (PromptBackend{Workflow: spec, Agent: spec.Agents[0], NoDelegateAttach: true}).systemPrompt(); !strings.Contains(prompt, "the delegation does not start.") {
+		t.Fatalf("replaying from before:\n%s", prompt)
+	}
+}
+
 func TestSystemPromptDeclaresEvidenceToWhoItConcerns(t *testing.T) {
 	agents := []AgentSpec{{ID: "c", AllowedAgents: []string{"p", "v"}}, {ID: "p"}, {ID: "v"}}
 	declared := WorkflowSpec{Name: "w", EntryAgent: "c", Agents: agents, Verification: &VerificationSpec{Policy: "required", Verifier: "v", Evidence: []EvidenceSpec{{Publisher: "p", Type: "raw_record", FromFile: true}}}}

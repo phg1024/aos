@@ -124,6 +124,8 @@ type options struct {
 	noDurationArgs bool
 	// noDelegateHandles records with the prompt from before handles at a delegation.
 	noDelegateHandles bool
+	// noDelegateAttach records as AOS did before delegate_attach.
+	noDelegateAttach bool
 	// delegator gives the agent an agent it may delegate to, and never does.
 	delegator bool
 }
@@ -230,7 +232,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoDelegateHandles: opts.noDelegateHandles, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoDelegateHandles: opts.noDelegateHandles, NoDelegateAttach: opts.noDelegateAttach, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
 		NoPeerFraming: opts.noFraming,
 		NoBusBounds:   opts.noBounds,
 
@@ -238,6 +240,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		NoPublishSource:     opts.noPublishSource,
 		NoDurationArgs:      opts.noDurationArgs,
 		NoDelegateHandles:   opts.noDelegateHandles,
+		NoDelegateAttach:    opts.noDelegateAttach,
 		NoChainDelivery:     opts.noChain,
 		NoSenderOutcomes:    opts.noOutcomes,
 		Compaction:          opts.compaction,
@@ -1274,6 +1277,39 @@ func TestReplayOfARecordWithoutDelegateHandles(t *testing.T) {
 	}
 	report = replayed(t, current, false)
 	if !report.Identical() || report.LegacyDelegateHandles {
+		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
+	}
+}
+
+// Before delegate_attach, artifacts at the action level were dropped unread, so an exit
+// carrying them ended the run. Now it is refused, and the next exit ends it. Each
+// replays as it ran, and the record says which it was.
+func TestReplayOfARecordWithoutDelegateAttach(t *testing.T) {
+	stray := step{action: map[string]any{"type": "exit", "artifacts": "art-000001", "exit_status": map[string]any{"code": 0, "reason": "done"}}}
+	script := func(string) []step { return []step{stray, exit("done")} }
+	const refused = "only a delegate, spawn_agent and message_agent attach artifacts"
+	opts := options{budget: capability.Budget{Seconds: 600}, noDelegateAttach: true}
+	legacy := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if runStartedData(t, legacy)[agentflow.DelegateAttachField] != "" {
+		t.Fatal("the legacy record should have no delegate_attach")
+	}
+	if recordHolds(t, legacy, refused) {
+		t.Fatal("the legacy record should not have refused the exit")
+	}
+	report := replayed(t, legacy, false)
+	if !report.Identical() || !report.LegacyDelegateAttach {
+		t.Fatalf("legacy report = %+v, %+v", report, report.Divergence)
+	}
+	opts.noDelegateAttach = false
+	current := recordAt(t, newRoot(t), context.Background(), script, opts)
+	if got := runStartedData(t, current)[agentflow.DelegateAttachField]; got != agentflow.DelegateAttachV1 {
+		t.Fatalf("delegate_attach = %q", got)
+	}
+	if !recordHolds(t, current, refused) {
+		t.Fatal("the current record should have refused the exit")
+	}
+	report = replayed(t, current, false)
+	if !report.Identical() || report.LegacyDelegateAttach {
 		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
 	}
 }

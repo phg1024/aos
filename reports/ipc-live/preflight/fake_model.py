@@ -158,6 +158,7 @@ class Run:
     goal_record = ""
     evidence = False
     unread = False
+    inner = False
     attached = []
     workspace = "metal-workspace"
     verification = "metal-verification"
@@ -212,8 +213,9 @@ def coordinator_handles(me, workspace, verification):
 
 
 def coordinator_evidence(me, workspace, verification):
-    """The evidence workflow's path: the handle goes with the delegation, and no mail or wait is needed. With Run.unread
-    it plays live3's pid-000009 instead, whose delegation carried no handle."""
+    """The evidence workflow's path: the handle goes with the delegation, and no mail or wait is needed. It puts the handles
+    at the action level, as live4's coordinator wrote them, unless Run.inner. With Run.unread it plays live3's pid-000009
+    instead, whose delegation carried no handle. It logs what the delegate_result said was attached."""
     d = f"{workspace}/{Run.kind}"
     yield delegate("writer", f"Write the program in {d}. Your coordinator's process_id is {me}.")
     yield delegate("benchmarker", f"Build a copy of {d} and benchmark it. Your coordinator's process_id is {me}.")
@@ -224,9 +226,13 @@ def coordinator_evidence(me, workspace, verification):
     yield tool("read_artifact", id=next(a for a, kind in published.items() if kind == "benchmark_json"))
     goal = f"Verify {d} into {verification}."
     if Run.unread:
-        yield delegate("verifier", f"{goal} The record is {record}.")
+        text = yield delegate("verifier", f"{goal} The record is {record}.")
+    elif Run.inner:
+        text = yield delegate("verifier", goal, artifacts=",".join(published))
     else:
-        yield delegate("verifier", goal, artifacts=",".join(published))
+        text = yield {**delegate("verifier", goal), "artifacts": ",".join(published)}
+    told = re.findall(r"delegate_result agent=verifier pid=\S+ attached=(\S+)", text or "")
+    print(f"coordinator told: attached={told[-1] if told else '(nothing)'}", file=sys.stderr, flush=True)
     yield tool("write_file", path=f"{workspace}/final-summary.txt", content="preflight: a scripted run\n")
     yield done("preflight finished")
 

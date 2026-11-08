@@ -2641,3 +2641,35 @@ declared type is unknown. The evidence is bound to bytes read, not understood: a
 record and misreport it. `aos-tui`'s progress line still reads a verifier's nonzero exit as FAIL while
 the run is going; the verdict is the record.
 
+
+### Fixed after live4: where a delegation's artifacts go
+
+live4's coordinator put a delegation's `"artifacts"` beside `"delegate"`, at the action level,
+twice (seq 186 and seq 504, a new verifier and a parked one resumed). The parser read them only
+inside `"delegate"`, so nothing was attached or refused, and the coordinator was told nothing. Its
+goals said "the attached raw_record". The prompt's schema showed no artifacts, and the paragraph
+alone reads naturally as the action level.
+
+- **Read wherever written.** For a delegate, `artifacts` counts inside `"delegate"` or at the action
+  level. For `spawn_agent` and `message_agent` it counts in args, beside args in `tool_call`, or at
+  the action level. The runtime moves it into the call (`placeArtifacts`). This holds on every parse
+  path: the action struct, the generic reader (a list, a flat delegate, no envelope), prose before
+  the JSON, and repaired loose JSON.
+- **Never dropped unsaid.**
+  - Two places that differ are refused as a tool error, and nothing starts. The runtime does not
+    pick one.
+  - `artifacts` on any other action, a `send` included, is refused the same way, so a send never
+    goes out without the handles it named.
+- **The delegator is told.** `delegate_result` carries `attached=<ids>`, or `attached=none`, for a
+  new process and for a resumed one. `spawn_agent`'s output carries `attached`. The resumed process
+  is granted what the resuming delegation attached, as before.
+- **The prompt.** The schema and a valid example show `artifacts` inside `"delegate"`. A sentence
+  says where it goes and to check `attached=`.
+- **Compatibility.** run.started's `delegate_attach: v1` marks this. A record without it replays as
+  it ran: artifacts read in one place only, and nothing told.
+- **analyze.py.** A delegate or `spawn_agent` reply that named artifacts anywhere, and that no
+  `delegation_handles` record grants, prints as `NOT GRANTED`, counted as "an attachment in a
+  delegate reply not granted". It reads the replies itself. live4 shows 2.
+
+Not covered: no real model has run this. The scripted preflight now attaches at the action level by
+default, with `test_path.sh inner` for the old placement, but it has not run on the machine.

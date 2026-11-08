@@ -99,9 +99,12 @@ type Report struct {
 	LegacyDurationArgs bool `json:"legacy_duration_args,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
-	LegacyDelegateHandles bool              `json:"legacy_delegate_handles,omitempty"`
-	RecordedBuild         map[string]string `json:"recorded_build,omitempty"`
-	Divergence            *Divergence       `json:"divergence,omitempty"`
+	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
+	// LegacyDelegateAttach means the record predates delegate_attach, and it replayed
+	// reading a reply's artifacts in one place only.
+	LegacyDelegateAttach bool              `json:"legacy_delegate_attach,omitempty"`
+	RecordedBuild        map[string]string `json:"recorded_build,omitempty"`
+	Divergence           *Divergence       `json:"divergence,omitempty"`
 }
 
 // Identical reports whether the replay found no divergence.
@@ -348,6 +351,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 			NoPublishSource:   started.Data[agentflow.PublishSourceField] == "",
 			NoDurationArgs:    started.Data[agentflow.DurationArgsField] == "",
 			NoDelegateHandles: started.Data[agentflow.DelegateHandlesField] == "",
+			NoDelegateAttach:  started.Data[agentflow.DelegateAttachField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -386,6 +390,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyDurationArgs = engine.NoDurationArgs
 	engine.NoDelegateHandles = started.Data[agentflow.DelegateHandlesField] == ""
 	report.LegacyDelegateHandles = engine.NoDelegateHandles
+	// Before delegate_attach a reply's artifacts were read in one place only.
+	engine.NoDelegateAttach = started.Data[agentflow.DelegateAttachField] == ""
+	report.LegacyDelegateAttach = engine.NoDelegateAttach
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

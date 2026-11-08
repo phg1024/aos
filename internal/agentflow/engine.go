@@ -44,6 +44,8 @@ type StaticBackendFactory struct {
 	NoDurationArgs bool
 	// NoDelegateHandles is PromptBackend.NoDelegateHandles for every backend.
 	NoDelegateHandles bool
+	// NoDelegateAttach is PromptBackend.NoDelegateAttach for every backend.
+	NoDelegateAttach bool
 }
 
 func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec) (runtime.Backend, error) {
@@ -62,6 +64,7 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		NoPublishSource:   f.NoPublishSource,
 		NoDurationArgs:    f.NoDurationArgs,
 		NoDelegateHandles: f.NoDelegateHandles,
+		NoDelegateAttach:  f.NoDelegateAttach,
 	}, nil
 }
 
@@ -172,6 +175,10 @@ type Engine struct {
 	// (delegate_handles). A delegation's handles need no switch of their own: replay
 	// takes single-agent runs only, which delegate to nobody.
 	NoDelegateHandles bool
+	// NoDelegateAttach is AgentRuntime.NoDelegateAttach, and leaves out the word to a
+	// delegator on what its delegation attached. When it is off, run.started says so
+	// (delegate_attach).
+	NoDelegateAttach bool
 	// NoRedelegationClose leaves the old chain open when a delegator
 	// re-delegates. When it is off, run.started says so (redelegation_close).
 	NoRedelegationClose bool
@@ -471,6 +478,19 @@ func (e *Engine) runAgent(ctx context.Context, spec WorkflowSpec, req RunRequest
 	return e.supervise(ctx, spec, req, agent, parentPID, run, err)
 }
 
+// attachedWord tells a delegator what its delegation attached, so one that meant to
+// attach and did not can see it: live4's coordinator wrote "the attached raw_record"
+// twice over a delegation that attached nothing. A frozen arm keeps its prompts.
+func (e *Engine) attachedWord(spec WorkflowSpec, handles []string) string {
+	if e.NoDelegateAttach || e.NoBusBounds || e.NoDelegateHandles || spec.Recall.NoPromptFraming {
+		return ""
+	}
+	if len(handles) == 0 {
+		return "none"
+	}
+	return strings.Join(handles, ",")
+}
+
 // grantHandles records the handles a delegator attached, before the process delegated
 // to takes a step, and returns the note that tells it. A crash between the spawn and
 // this record leaves a process that never ran.
@@ -532,6 +552,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoLeaseFencing:   e.NoLeaseFencing,
 		NoPeerFraming:    e.NoPeerFraming,
 		NoBusBounds:      e.NoBusBounds,
+		NoDelegateAttach: e.NoDelegateAttach,
 		NoPublishSource:  e.NoPublishSource,
 		NoDurationArgs:   e.NoDurationArgs,
 		NoSenderOutcomes: e.NoSenderOutcomes,
@@ -717,6 +738,7 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			CheckpointID: childRun.CheckpointID,
 			Status:       childRun.Status,
 			Question:     childRun.Question,
+			Attached:     e.attachedWord(spec, handles),
 		}, nil
 	}
 }

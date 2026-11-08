@@ -5,7 +5,8 @@
 # job. The one real nvidia-smi call is the query for the card's UUID, as the sandbox's grant names it; a grant holds the device
 # files by path and opens none. So no CUDA context opens. It runs outside Ray, in a directory of its own, which it removes.
 # With unread as its argument it plays live3's pid-000009: no handle goes with the delegation, the verifier's read is refused, it
-# tries to exit 0, and the run must not pass.
+# tries to exit 0, and the run must not pass. The clean path attaches at the action level, beside the delegate, as live4's
+# coordinator did; with inner as its argument it attaches inside the delegate, as pf5 did.
 set -u
 : "${AOS_GPU_NAME:?}"
 path=${1:-clean}
@@ -18,6 +19,7 @@ mkdir -p "$T/bin" "$T/workflows" "$T/reports" "$T/cuda/bin"
 cp "$live/bin/aos" "$live/bin/job.sh" "$live/bin/render.py" "$live/bin/analyze.py" "$live/bin/fake_model.py" "$live/bin/metal.py" "$T/bin/"
 cp "$live/workflows/rasterizer-bunny-cuda-evidence-ipc.json" "$T/workflows/"
 [[ $path != unread ]] || sed -i 's/^    unread = False$/    unread = True/' "$T/bin/fake_model.py"
+[[ $path != inner ]] || sed -i 's/^    inner = False$/    inner = True/' "$T/bin/fake_model.py"
 ln -s "$live/reports/rasterizer-bunny" "$T/reports/rasterizer-bunny"
 ln -s "$live/skills" "$T/skills"
 cat > "$T/cuda/bin/nvcc" <<'STUB'
@@ -65,6 +67,7 @@ if [[ $path == unread ]]; then
   need "a verdict withheld as unverified"
   if grep -qE '^declared raw_record by benchmarker: art-[0-9]+: unread$' "$T/job.out"; then echo "ok   the record unread"; else echo "FAIL the record unread"; failed=1; fi
   if [[ $status == 0 ]]; then echo "FAIL the job passed"; failed=1; else echo "ok   the job did not pass: exit $status"; fi
+  if grep -q '^coordinator told: attached=none$' "$dir/fake-model.log"; then echo "ok   the coordinator was told none was attached"; else echo "FAIL the coordinator was not told none was attached"; failed=1; fi
 else
   need "CLEAN: the judged verifier read the latest record"
   need "exits refused for evidence: 0"
@@ -77,6 +80,9 @@ else
   need "NOT EXERCISED    the verifier pausing with a wait"
   if grep -qE 'attached at delegation by coordinator \(pid-[0-9]+\) to verifier \(pid-[0-9]+\).*: read [2-9] pages, to the end' "$T/job.out"; then echo "ok   the record took more than one page, read to the end"; else echo "FAIL the record's reading"; failed=1; fi
   if grep -q 'UNCLEAN\|DISAGREE' "$T/job.out"; then echo "FAIL an unclean pass"; failed=1; fi
+  # The default puts the handles at the action level, as live4's coordinator did; inner puts them inside the delegate.
+  if grep -qE '^coordinator told: attached=art-[0-9]+' "$dir/fake-model.log"; then echo "ok   the coordinator was told what was attached ($path)"; else echo "FAIL the coordinator was not told what was attached ($path)"; failed=1; fi
+  need "an attachment in a delegate reply not granted: 0"
   if [[ $status != 0 ]]; then sed 's/^/job: /' "$T/job.out" | tail -30; tail -5 "$dir/run.log"; cat "$dir/fake-model.log" | tail -20; failed=1; fi
 fi
 budget=$(python3 -I -c 'import json, sys; print(next(e["data"].get("budget_seconds") for e in json.load(open(sys.argv[1])) if e["type"] == "run.started"))' "$dir/state/kernel/events.json")

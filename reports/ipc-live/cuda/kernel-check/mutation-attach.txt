@@ -1,0 +1,40 @@
+Each mutant applied to the source, then the new Go tests (agentflow, runtime, replay) or test_analyze.py run.
+A first pass caught 26 of 33: one mutant did not build and was rewritten; five showed real gaps (the generic parse of artifacts
+beside args and on a send, message_agent at the action level, and analyze.py's delegator and time match), which tests now cover.
+Second pass, after those tests:
+caught   nested parse drops action-level artifacts: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (7.60s); --- FAIL: TestArtifactsInTwoPlacesThatDifferAreRefused (0.39s)
+caught   generic parse drops action-level artifacts: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (6.98s); --- FAIL: TestReplayOfARecordWithoutDelegateAttach (0.90s)
+SURVIVED generic parse keeps action-level beside an inline call: 
+caught   nested parse drops artifacts beside a tool_call's args: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (7.25s)
+caught   generic parse drops artifacts beside args: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (7.15s)
+caught   send drops its artifacts: --- FAIL: TestArtifactsOnAnActionThatAttachesNothingAreRefused (0.44s)
+caught   runtime never places: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (7.91s); --- FAIL: TestArtifactsInTwoPlacesThatDifferAreRefused (0.37s)
+caught   runtime always places, legacy too: --- FAIL: TestNoDelegateAttachReadsArtifactsInOnePlace (0.57s); --- FAIL: TestReplayOfARecordWithoutDelegateAttach (0.35s)
+caught   a conflict picks the inner list: --- FAIL: TestArtifactsInTwoPlacesThatDifferAreRefused (0.36s); --- FAIL: TestPlaceArtifacts (0.00s)
+caught   order matters in a comparison: --- FAIL: TestPlaceArtifacts (0.00s)
+caught   artifacts on an action that attaches nothing are ignored: --- FAIL: TestArtifactsOnAnActionThatAttachesNothingAreRefused (0.41s); --- FAIL: TestPlaceArtifacts (0.00s)
+caught   message_agent attaches nothing: --- FAIL: TestPlaceArtifacts (0.00s)
+caught   a refusal does not stop the action: --- FAIL: TestArtifactsInTwoPlacesThatDifferAreRefused (0.30s); --- FAIL: TestArtifactsOnAnActionThatAttachesNothingAreRefused (0.43s)
+caught   a moved list is not written back to the delegate: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (6.76s); --- FAIL: TestTheDelegatorIsToldWhatWasAttached (0.62s)
+caught   a moved list is not written back to args: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (6.67s); --- FAIL: TestPlaceArtifacts (0.00s)
+caught   the delegator is never told: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (6.25s); --- FAIL: TestTheDelegatorIsToldWhatWasAttached (0.55s)
+caught   none attached is not said: --- FAIL: TestTheDelegatorIsToldWhatWasAttached (0.56s)
+caught   a legacy run is told too: --- FAIL: TestNoDelegateAttachReadsArtifactsInOnePlace (0.48s)
+caught   a waiting result is not told: --- FAIL: TestTheDelegatorIsToldWhatWasAttached (0.57s)
+caught   spawn_agent's output is not told: --- FAIL: TestADelegationsArtifactsCountWhereverTheReplyPutThem (6.53s)
+caught   a resumed process is not granted: --- FAIL: TestTheDelegatorIsToldWhatWasAttached (0.65s)
+caught   run.started lacks delegate_attach: --- FAIL: TestReplayOfARecordWithoutDelegateAttach (1.01s)
+caught   replay does not pin legacy: --- FAIL: TestReplayOfARecordWithoutDelegateAttach (0.63s)
+caught   the schema shows no artifacts: --- FAIL: TestSystemPromptShowsWhereADelegationsArtifactsGo (0.00s)
+caught   no example with artifacts: --- FAIL: TestSystemPromptShowsWhereADelegationsArtifactsGo (0.00s)
+caught   the prompt says nothing of where: --- FAIL: TestSystemPromptShowsWhereADelegationsArtifactsGo (0.00s)
+caught   a leaf is shown the new schema: --- FAIL: TestSystemPromptShowsWhereADelegationsArtifactsGo (0.00s)
+caught   analyze ignores the action level: FAIL: test_a_grant_matches_only_its_delegators_later_reply (__main__.Declared) [another delegator]; FAIL: test_a_grant_matches_only_its_delegators_later_reply (
+caught   analyze ignores spawn_agent beside args: FAIL: test_an_attachment_in_a_reply_that_nothing_granted_has_its_line (__main__.Declared) [inside the delegate]; FAIL: test_an_attachment_in_a_reply_that_nothin
+caught   analyze ignores spawn_agent: FAIL: test_an_attachment_in_a_reply_that_nothing_granted_has_its_line (__main__.Declared) [in spawn_agent's args]; FAIL: test_an_attachment_in_a_reply_that_noth
+caught   analyze reuses a grant: FAIL: test_one_grant_matches_one_reply (__main__.Declared)
+caught   analyze takes any delegator's grant: FAIL: test_a_grant_matches_only_its_delegators_later_reply (__main__.Declared) [another delegator]
+caught   analyze takes a grant made before the reply: FAIL: test_a_grant_matches_only_its_delegators_later_reply (__main__.Declared) [after the grant]
+32 of 33 caught
+The survivor is equivalent: a delegate written inline reads the action's own artifacts as its call's, so the two lists always agree.
+The flat-struct parse path cannot yield a usable delegate the generic path did not already read, so it was left unchanged.

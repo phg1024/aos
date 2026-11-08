@@ -369,6 +369,49 @@ def delegation_handles(state):
     return out
 
 
+def id_list(value):
+    """Artifact IDs as a reply wrote them: a comma-separated string or a list."""
+    items = value if isinstance(value, list) else str(value or "").split(",")
+    return sorted({str(item).strip() for item in items if str(item).strip()})
+
+
+def reply_attachments(state):
+    """(time, pid, seq, ids, where) for each delegate or spawn_agent reply that names artifacts
+    anywhere, read from the replies themselves, not from what the runtime made of them."""
+    out = []
+    for call in state.outcomes:
+        if call.get("error"):
+            continue
+        action = parse_action(call.get("response", ""))
+        call_data = action.get("delegate") if action.get("type") == "delegate" else None
+        if action.get("type") == "tool" and (action.get("tool_call") or {}).get("name") == "spawn_agent":
+            call_data = action["tool_call"]
+        elif action.get("type") != "delegate":
+            continue
+        places = {"the action": action.get("artifacts")}
+        if isinstance(call_data, dict):
+            places["the call"] = call_data.get("artifacts")
+            places["the args"] = (call_data.get("args") or {}).get("artifacts") if isinstance(call_data.get("args"), dict) else None
+        named = {where: id_list(value) for where, value in places.items() if id_list(value)}
+        if named:
+            ids = sorted({i for got in named.values() for i in got})
+            out.append((call["time"], call.get("pid", ""), call.get("seq"), ids, ", ".join(named)))
+    return out
+
+
+def not_granted(state):
+    """Replies that attached what no delegation_handles record grants. Each record matches one reply."""
+    records = sorted(((r["created_at"], r["metadata"].get("delegator"), id_list(r["metadata"].get("artifacts", ""))) for r in state.records("delegation_handles")))
+    used, out = set(), []
+    for when, pid, seq, ids, where in reply_attachments(state):
+        match = next((i for i, (at, delegator, granted) in enumerate(records) if i not in used and at >= when and delegator == pid and granted == ids), None)
+        if match is None:
+            out.append((when, pid, seq, ids, where))
+        else:
+            used.add(match)
+    return out
+
+
 def handles(state):
     section("Handles: each attached, by whom, to whom, and whether it was read")
     reads = artifact_reads(state)
@@ -387,6 +430,9 @@ def handles(state):
         print(f"{artifact} ({state.index.get(artifact, {}).get('type')}) attached at delegation by {state.label(delegator)} to {state.label(to)} at {when}: {said}")
     if not attached and not at_delegation:
         print("no handle was attached in this run")
+    for when, pid, seq, ids, where in not_granted(state):
+        print(f"NOT GRANTED: {state.label(pid)} at {when} (seq {seq}) attached {','.join(ids)} in {where} of its reply, and no delegation_handles record grants it."
+              " If the delegation was refused, its next request has the tool_error.")
     for record in sorted(state.index.values(), key=lambda a: a["id"]):
         if record.get("type", "").startswith("published."):
             size = len(str((state.payload(record["id"]) or {}).get("body", "")))
@@ -767,6 +813,8 @@ def not_exercised(state, told_too_much, found):
     for name, count in declared:
         print(f"{'exercised ' + str(count) if count else 'NOT EXERCISED':<16} {name}")
     print(f"{sum(1 for _, count in declared if count)} of {len(declared)} of the delegation and evidence situations exercised, counted apart from those above.")
+    # A defect, not a situation: a reply that attached what was never granted.
+    print(f"an attachment in a delegate reply not granted: {len(not_granted(state))}")
 
 
 def main():

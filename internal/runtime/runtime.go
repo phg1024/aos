@@ -74,6 +74,9 @@ type Message struct {
 type ToolCall struct {
 	Name string            `json:"name"`
 	Args map[string]string `json:"args,omitempty"`
+	// Artifacts is what a reply put beside args rather than in them. The runtime
+	// moves it into args for spawn_agent and message_agent and refuses it elsewhere.
+	Artifacts string `json:"artifacts,omitempty"`
 }
 
 type DelegateCall struct {
@@ -87,6 +90,8 @@ type DelegateCall struct {
 type SendCall struct {
 	To   string `json:"to"`
 	Body string `json:"body"`
+	// Artifacts is kept only so that a send naming any is refused, not sent without them.
+	Artifacts string `json:"artifacts,omitempty"`
 }
 
 type PublishCall struct {
@@ -119,6 +124,9 @@ type GenerateAction struct {
 	Publish    *PublishCall       `json:"publish,omitempty"`
 	Subscribe  *SubscribeCall     `json:"subscribe,omitempty"`
 	ExitStatus *kernel.ExitStatus `json:"exit_status,omitempty"`
+	// Artifacts is what a reply put at the action level, beside its call. For a
+	// delegate it means what the delegate's own artifacts does; see placeArtifacts.
+	Artifacts string `json:"artifacts,omitempty"`
 }
 
 type GenerateResult struct {
@@ -284,6 +292,10 @@ type AgentRuntime struct {
 	// list_artifacts. It is for replaying a record made before them; the caller
 	// sets ipc.Bus.NoBounds with it.
 	NoBusBounds bool
+	// NoDelegateAttach reads artifacts only where they were read before delegate_attach:
+	// one put at the action level, beside a tool_call's args or on a send is dropped
+	// unread, as it was. It is for replaying a record made before it.
+	NoDelegateAttach bool
 	// NoPublishSource turns off publish_artifact's path and what read_artifact says of
 	// a body's source, for replaying a record made before them.
 	NoPublishSource bool
@@ -433,6 +445,9 @@ type DelegateResult struct {
 	// exiting; Question is what it asked. Empty means it exited.
 	Status   string `json:"status,omitempty"`
 	Question string `json:"question,omitempty"`
+	// Attached is what the delegation attached for that process, comma-separated,
+	// or "none". Empty means the delegator is not told: before delegate_attach.
+	Attached string `json:"attached,omitempty"`
 }
 
 // DelegateWaiting marks a delegated child parked in a wait: blocked with
@@ -1008,14 +1023,25 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return handoffDone()
 			}
 		}
+		var misplaced error
+		if r.NoDelegateAttach || r.NoBusBounds {
+			dropPlacedArtifacts(&result.Action)
+		} else {
+			misplaced = placeArtifacts(&result.Action)
+		}
 		// Record what the agent decided before acting, so later steps see their
 		// own notes and actions, not only tool results.
 		if record := actionRecord(result.Action); record != "" {
 			session.Messages = append(session.Messages, Message{Role: "assistant", Content: record})
 		}
 
-		switch result.Action.Type {
-		case "message":
+		switch {
+		case misplaced != nil:
+			// Refused before anything ran: a misplaced handle is never dropped unsaid.
+			if continued, failed, failErr := r.refuseAction(pid, lastCheckpoint(), &session, actionName(result.Action), misplaced, options); !continued {
+				return failed, failErr
+			}
+		case result.Action.Type == "message":
 			if options.OnAssistantMessage != nil {
 				options.OnAssistantMessage(result.Action.Message)
 			}
@@ -1038,7 +1064,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			// note, agents told to "return X in a message, then exit" kept
 			// resending the message until their step limit.
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MessageRecorded, messageRecordedNote))
-		case "tool":
+		case result.Action.Type == "tool":
 			if result.Action.ToolCall == nil || result.Action.ToolCall.Name == "" {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -1230,7 +1256,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			if !useful {
 				session.Messages = append(session.Messages, runtimeNote("tool", framing.ToolNotice, fmt.Sprintf("tool_notice name=%s useful=false reason=%s try_different_strategy=true", toolResult.Tool, reason)))
 			}
-		case "delegate":
+		case result.Action.Type == "delegate":
 			if result.Action.Delegate == nil || result.Action.Delegate.AgentID == "" {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -1284,17 +1310,18 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			session.DelegateArtifactIDs = append(session.DelegateArtifactIDs, delegateArtifact.ID)
 			if delegateResult.Status == DelegateWaiting {
 				session.Messages = append(session.Messages, runtimeNote("tool", framing.DelegateResult, fmt.Sprintf(
-					"delegate_result agent=%s pid=%s status=waiting question=%q checkpoint=%s note=%q",
-					delegateResult.AgentID, delegateResult.PID, delegateResult.Question, delegateResult.CheckpointID,
+					"delegate_result agent=%s pid=%s%s status=waiting question=%q checkpoint=%s note=%q",
+					delegateResult.AgentID, delegateResult.PID, attachedField(delegateResult), delegateResult.Question, delegateResult.CheckpointID,
 					"The agent paused to ask you this and has not exited. Answer by delegating to "+delegateResult.AgentID+
 						" again with your answer as the goal: that resumes the same process. If you exit without answering, it is closed as abandoned.",
 				)))
 				break
 			}
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.DelegateResult, fmt.Sprintf(
-				"delegate_result agent=%s pid=%s exit_code=%d exit_reason=%q exit_retryable=%t summary=%s result_artifact=%s checkpoint=%s",
+				"delegate_result agent=%s pid=%s%s exit_code=%d exit_reason=%q exit_retryable=%t summary=%s result_artifact=%s checkpoint=%s",
 				delegateResult.AgentID,
 				delegateResult.PID,
+				attachedField(delegateResult),
 				delegateResult.ExitStatus.Code,
 				delegateResult.ExitStatus.Reason,
 				delegateResult.ExitStatus.Retryable,
@@ -1302,7 +1329,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				delegateResult.ResultID,
 				delegateResult.CheckpointID,
 			)))
-		case "send":
+		case result.Action.Type == "send":
 			if result.Action.Send == nil || result.Action.Send.To == "" {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -1348,7 +1375,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				note += " held=true (" + ipc.HeldMeaning + ")"
 			}
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSent, note))
-		case "publish":
+		case result.Action.Type == "publish":
 			if result.Action.Publish == nil || result.Action.Publish.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -1393,7 +1420,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				note += fmt.Sprintf(" skipped=%s (mailbox full: they did not get this)", strings.Join(skipped, ","))
 			}
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailPublished, note))
-		case "subscribe":
+		case result.Action.Type == "subscribe":
 			if result.Action.Subscribe == nil || result.Action.Subscribe.Topic == "" {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -1428,7 +1455,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			}
 			session.MailboxArtifactIDs = append(session.MailboxArtifactIDs, artifactRecord.ID)
 			session.Messages = append(session.Messages, runtimeNote("tool", framing.MailSubscribed, "subscribe:topic="+result.Action.Subscribe.Topic))
-		case "wait":
+		case result.Action.Type == "wait":
 			// A question asked while waiting is the agent's reply to the user.
 			if result.Action.Message != "" {
 				if options.OnAssistantMessage != nil {
@@ -1445,7 +1472,7 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				return RunResult{}, err
 			}
 			return RunResult{PID: pid, CheckpointID: checkpointID, Session: session, Blocked: true}, ErrAgentBlocked
-		case "exit":
+		case result.Action.Type == "exit":
 			if result.Action.ExitStatus == nil {
 				if continued, err := handleMalformed(); err != nil {
 					return RunResult{}, err
@@ -2477,16 +2504,20 @@ func (r *AgentRuntime) executeRuntimeTool(ctx context.Context, process kernel.Pr
 		if err != nil {
 			return tools.Result{}, err
 		}
+		output := map[string]string{
+			"agent_id":      result.AgentID,
+			"pid":           result.PID,
+			"summary":       result.Summary,
+			"result_id":     result.ResultID,
+			"checkpoint_id": result.CheckpointID,
+		}
+		if result.Attached != "" {
+			output["attached"] = result.Attached
+		}
 		return tools.Result{
 			Tool:    call.Name,
 			Summary: "spawned agent",
-			Output: map[string]string{
-				"agent_id":      result.AgentID,
-				"pid":           result.PID,
-				"summary":       result.Summary,
-				"result_id":     result.ResultID,
-				"checkpoint_id": result.CheckpointID,
-			},
+			Output:  output,
 		}, nil
 	case "message_agent":
 		if r.Bus == nil {

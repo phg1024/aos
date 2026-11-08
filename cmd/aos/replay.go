@@ -81,6 +81,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacyDelegateHandles {
 		fmt.Fprintln(w, "  the record predates handles at a delegation; replayed with its prompt")
 	}
+	if report.LegacyDelegateAttach {
+		fmt.Fprintln(w, "  the record predates reading artifacts at the action level; replayed reading them in one place")
+	}
 	if report.LegacyBusBounds {
 		fmt.Fprintln(w, "  the record predates the bus's bounds and handles; replayed without them")
 	}

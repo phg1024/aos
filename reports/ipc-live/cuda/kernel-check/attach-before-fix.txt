@@ -1,0 +1,22 @@
+live4 (aos-raster-ipc-20261107T061104Z), before the fix. The coordinator's delegate replies, from state/run/calls.jsonl; goals and bodies cut.
+The runtime of 8718ad8 read artifacts only inside the delegate. 186 and 504 put them at the action level: nothing was attached, refused or said.
+470 left them out. The handle reached the verifier only by mail, at 520.
+
+seq 186 (coordinator pid-000002, 2026-11-07T06:40:02.884842391Z):
+  {"action":{"type":"delegate","artifacts":"art-000167","notes":"Delegate verifier round 1: compare CUDA vs CPU baseline across all scenes, check thread cap, write verification files. Attach raw_record art-000167 (verifier must read to end).","delegate":{"agent_id":"verifier","goal":"ROUND 1 VERIFY. Your coordinator pid is pid-000002; mail me if truly ambiguous. Yo…"}}}
+seq 470 (coordinator pid-000002, 2026-11-07T07:19:40.072992744Z):
+  {"action":{"type":"delegate","notes":"Delegate final verifier on round3 final state. Attach raw_record art-000465 (verifier must read to end). This is the closing verify; no writer/benchmarker after it.","delegate":{"agent_id":"verifier","goal":"FINAL VERIFY (round 3, closing run). Coordinator pid pid-000002; mail me if truly …"}}}
+seq 504 (coordinator pid-000002, 2026-11-07T07:22:28.589065929Z):
+  {"action":{"type":"delegate","notes":"Root cause: my prior verifier delegate omitted the artifacts field, so art-000465 was never attached (I CAN read it: file-backed, 88761 bytes). Resume the waiting verifier WITH artifacts=art-000465 so it can cross-check and finish the closing run.","delegate":{"agent_id":"verifier","goal":"RESUME and finish the closing verify. I have now attached the raw_record artifact …"},"artifacts":"art-000465"}
+seq 520 (coordinator pid-000002, 2026-11-07T07:24:20.463861323Z):
+  {"action":{"type":"tool","notes":"Verifier says delegate artifacts field did not grant read; it needs message_agent artifacts param. I CAN read art-000465, so send it via message_agent(to=pid-000009, artifacts=art-000465).","tool_call":{"name":"message_agent","args":{"to":"pid-000009","body":"Attaching the raw_record now via the message artifacts paramet…","artifacts":"art-000465"}}}}
+
+analyze.py before the fix (live4):
+8 of 26 exercised. NOT EXERCISED says nothing about the contract, either way.
+NOT EXERCISED    a handle attached at a delegation
+0 of 4 of the delegation and evidence situations exercised, counted apart from those above.
+
+analyze.py with the new line (live4):
+NOT GRANTED: coordinator (pid-000002) at 2026-11-07T06:40:02.884842391Z (seq 186) attached art-000167 in the action of its reply, and no delegation_handles record grants it. If the delegation was refu
+NOT GRANTED: coordinator (pid-000002) at 2026-11-07T07:22:28.589065929Z (seq 504) attached art-000465 in the action of its reply, and no delegation_handles record grants it. If the delegation was refu
+an attachment in a delegate reply not granted: 2

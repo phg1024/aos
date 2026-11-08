@@ -63,6 +63,9 @@ type PromptBackend struct {
 	// NoDelegateHandles leaves handles at a delegation out of the prompt, for
 	// replaying a record made before them.
 	NoDelegateHandles bool
+	// NoDelegateAttach leaves out where a delegation's artifacts go and what the
+	// delegator is told, for replaying a record made before delegate_attach.
+	NoDelegateAttach bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -113,6 +116,11 @@ func (b PromptBackend) framed() bool { return !b.NoPeerFraming && !b.Recall.NoPr
 // handles says whether the prompt describes artifact handles. Frozen probe arms
 // (RecallOff) keep the prompts they were measured with.
 func (b PromptBackend) handles() bool { return !b.NoBusBounds && !b.Recall.NoPromptFraming }
+
+// delegatesWithHandles is whether this agent delegates and is offered handles to attach.
+func (b PromptBackend) delegatesWithHandles() bool {
+	return len(b.Agent.AllowedAgents) > 0 && b.offersDelegateHandles() && !b.NoDelegateAttach
+}
 
 // offersDelegateHandles is whether the prompt offers handles at a delegation.
 func (b PromptBackend) offersDelegateHandles() bool { return b.handles() && !b.NoDelegateHandles }
@@ -531,7 +539,11 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("\"notes\":\"...\",")
 	builder.WriteString("\"message\":\"...\",")
 	builder.WriteString("\"tool_call\":{\"name\":\"...\",\"args\":{\"key\":\"value\"}},")
-	builder.WriteString("\"delegate\":{\"agent_id\":\"...\",\"goal\":\"...\"},")
+	if b.delegatesWithHandles() {
+		builder.WriteString("\"delegate\":{\"agent_id\":\"...\",\"goal\":\"...\",\"artifacts\":\"...\"},")
+	} else {
+		builder.WriteString("\"delegate\":{\"agent_id\":\"...\",\"goal\":\"...\"},")
+	}
 	builder.WriteString("\"send\":{\"to\":\"...\",\"body\":\"...\"},")
 	builder.WriteString("\"publish\":{\"topic\":\"...\",\"body\":\"...\"},")
 	builder.WriteString("\"subscribe\":{\"topic\":\"...\"},")
@@ -583,6 +595,9 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString("Do not wrap JSON in markdown.\n\n")
 	builder.WriteString("Valid examples:\n")
 	builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Draft the final summary\"}}}\n")
+	if b.delegatesWithHandles() {
+		builder.WriteString("{\"action\":{\"type\":\"delegate\",\"delegate\":{\"agent_id\":\"writer\",\"goal\":\"Summarize the attached record\",\"artifacts\":\"art-000012\"}}}\n")
+	}
 	builder.WriteString("{\"action\":{\"type\":\"tool\",\"tool_call\":{\"name\":\"find_files\",\"args\":{\"root\":\"/workspace\",\"pattern\":\"vllm\"}}}}\n")
 	builder.WriteString("{\"action\":{\"type\":\"tool\",\"notes\":\"Plan: read note.txt, then summarize it into summary.txt. Done: nothing yet. Next: read note.txt.\",\"tool_call\":{\"name\":\"read_file\",\"args\":{\"path\":\"/workspace/note.txt\"}}}}\n")
 	builder.WriteString("{\"action\":{\"type\":\"exit\",\"exit_status\":{\"code\":0,\"reason\":\"task complete\",\"retryable\":false}}}\n\n")
@@ -640,6 +655,9 @@ func (b PromptBackend) systemPrompt() string {
 	builder.WriteString(strings.Join(sortedStrings(b.Agent.AllowedAgents), ", "))
 	if len(b.Agent.AllowedAgents) > 0 && b.offersDelegateHandles() {
 		builder.WriteString("\n\nA delegate action may also carry \"artifacts\": comma-separated IDs of artifacts you may read, which that process may then read from its first step. An ID in the goal grants nothing. It goes to that process alone: a later delegation that starts a new process needs them attached again. If you attach one you may not read, the delegation does not start.")
+		if !b.NoDelegateAttach {
+			builder.WriteString(" Put \"artifacts\" inside \"delegate\", beside agent_id and goal, as in the example above. The delegate_result says what was attached, attached=none when nothing was: check it before relying on an attachment.")
+		}
 	}
 	builder.WriteString(evidencePrompt(b.Workflow, b.Agent.ID))
 	return builder.String()
@@ -986,6 +1004,9 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 			Notes: firstString(actionData, "notes"),
 		},
 	}
+	// Artifacts at the action level, kept for the runtime to place or refuse. A call
+	// read from the action itself takes them as its own instead, below.
+	result.Action.Artifacts = handleList(actionData["artifacts"])
 
 	switch result.Action.Type {
 	case "message":
@@ -994,6 +1015,7 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 		callData := mapValue(actionData, "tool_call", "tool", "call")
 		if len(callData) == 0 {
 			callData = actionData
+			result.Action.Artifacts = ""
 		}
 		name := firstString(callData, "name", "tool", "tool_name")
 		args := stringMap(value(callData, "args", "arguments", "tool_args"))
@@ -1004,10 +1026,15 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 			return runtime.GenerateResult{}, false
 		}
 		result.Action.ToolCall = &runtime.ToolCall{Name: name, Args: args}
+		if value(callData, "args", "arguments", "tool_args") != nil {
+			// Beside args, not in them; without args, implicitToolArgs took them as one.
+			result.Action.ToolCall.Artifacts = handleList(callData["artifacts"])
+		}
 	case "delegate":
 		callData := mapValue(actionData, "delegate")
 		if len(callData) == 0 {
 			callData = actionData
+			result.Action.Artifacts = ""
 		}
 		agentID := firstString(callData, "agent_id", "agent", "to")
 		goal := firstString(callData, "goal", "task", "message")
@@ -1019,13 +1046,14 @@ func normalizeGenericAction(data map[string]any) (runtime.GenerateResult, bool) 
 		callData := mapValue(actionData, "send")
 		if len(callData) == 0 {
 			callData = actionData
+			result.Action.Artifacts = ""
 		}
 		to := firstString(callData, "to", "agent_id", "recipient")
 		body := firstString(callData, "body", "message", "content", "text")
 		if to == "" {
 			return runtime.GenerateResult{}, false
 		}
-		result.Action.Send = &runtime.SendCall{To: to, Body: body}
+		result.Action.Send = &runtime.SendCall{To: to, Body: body, Artifacts: handleList(callData["artifacts"])}
 	case "publish":
 		callData := mapValue(actionData, "publish")
 		if len(callData) == 0 {

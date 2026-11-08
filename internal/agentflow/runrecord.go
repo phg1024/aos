@@ -78,6 +78,11 @@ const (
 	// at a delegation: DelegateHandlesV1. Records without it never offered them.
 	DelegateHandlesField = "delegate_handles"
 	DelegateHandlesV1    = "v1"
+	// DelegateAttachField is the run.started field that says a reply's artifacts were
+	// read wherever it put them, misplaced ones refused, and a delegator told what its
+	// delegation attached: DelegateAttachV1.
+	DelegateAttachField = "delegate_attach"
+	DelegateAttachV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -155,6 +160,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoDelegateHandles {
 		data[DelegateHandlesField] = DelegateHandlesV1
+	}
+	if !e.NoDelegateAttach {
+		data[DelegateAttachField] = DelegateAttachV1
 	}
 	if !e.NoRedelegationClose {
 		data[RedelegationCloseField] = RedelegationCloseV1

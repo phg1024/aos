@@ -1,6 +1,7 @@
 package agentflow
 
 import (
+	"aos/internal/runtime"
 	"aos/internal/workflow"
 )
 
@@ -13,3 +14,6 @@ func (e *Engine) Judge(spec WorkflowSpec, policy workflow.VerificationPolicy, ro
 func (e *Engine) EvidenceChecks(spec WorkflowSpec, verifierPID string) ([]EvidenceCheck, error) {
 	return e.evidenceChecks(spec, verifierPID)
 }
+
+// ParseReply exposes parseGenerateResult, so a test can script what a model wrote.
+func ParseReply(raw string) (runtime.GenerateResult, bool) { return parseGenerateResult(raw) }

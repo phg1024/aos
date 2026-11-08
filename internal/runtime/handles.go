@@ -195,6 +195,117 @@ func PublishedFromFile(record artifact.Artifact) bool {
 // SplitHandles parses a comma-separated list of artifact IDs, without repeats.
 func SplitHandles(raw string) []string { return splitHandles(raw) }
 
+// ErrMisplacedArtifacts refuses an action whose artifacts the runtime will not
+// guess at: given in two places that differ, or on an action that attaches nothing.
+var ErrMisplacedArtifacts = errors.New("artifacts not attached")
+
+// attaches names the actions that carry artifacts: a delegate, spawn_agent and message_agent.
+func attaches(action GenerateAction) bool {
+	if action.Type == "delegate" {
+		return true
+	}
+	return action.Type == "tool" && action.ToolCall != nil && (action.ToolCall.Name == "spawn_agent" || action.ToolCall.Name == "message_agent")
+}
+
+// placeArtifacts puts what a reply attached where the action reads it: inside the
+// delegate, or in spawn_agent's or message_agent's args. A reply may also put
+// artifacts at the action level, or beside a tool_call's args, and means the same.
+// Places that differ are refused, not one picked, and so is any artifacts on an
+// action that attaches nothing. live4's coordinator put them at the action level
+// twice, and nothing was attached or said.
+func placeArtifacts(action *GenerateAction) error {
+	outer := []string{action.Artifacts}
+	if action.ToolCall != nil {
+		outer = append(outer, action.ToolCall.Artifacts)
+	}
+	if action.Send != nil {
+		outer = append(outer, action.Send.Artifacts)
+	}
+	if !attaches(*action) {
+		for _, raw := range outer {
+			if len(splitHandles(raw)) > 0 {
+				return fmt.Errorf("%w: only a delegate, spawn_agent and message_agent attach artifacts, and this %s did not run; to send handles by mail, use message_agent's artifacts", ErrMisplacedArtifacts, actionName(*action))
+			}
+		}
+		return nil
+	}
+	if action.Type == "delegate" && action.Delegate == nil {
+		return nil // malformed, and refused as that
+	}
+	inner := ""
+	if action.Type == "delegate" {
+		inner = action.Delegate.Artifacts
+	} else {
+		inner = action.ToolCall.Args["artifacts"]
+	}
+	chosen, moved := splitHandles(inner), false
+	for _, raw := range outer {
+		ids := splitHandles(raw)
+		if len(ids) == 0 {
+			continue
+		}
+		if len(chosen) > 0 && !sameHandles(chosen, ids) {
+			return fmt.Errorf("%w: two lists that differ, %s and %s, so this %s did not run; give artifacts once, inside %s", ErrMisplacedArtifacts,
+				strings.Join(chosen, ","), strings.Join(ids, ","), actionName(*action), innerPlace(*action))
+		}
+		if len(chosen) == 0 {
+			chosen, moved = ids, true
+		}
+	}
+	dropPlacedArtifacts(action)
+	if !moved {
+		return nil
+	}
+	if action.Type == "delegate" {
+		action.Delegate.Artifacts = strings.Join(chosen, ",")
+		return nil
+	}
+	if action.ToolCall.Args == nil {
+		action.ToolCall.Args = map[string]string{}
+	}
+	action.ToolCall.Args["artifacts"] = strings.Join(chosen, ",")
+	return nil
+}
+
+// dropPlacedArtifacts clears the places outside the call, as a reply was read before
+// delegate_attach.
+func dropPlacedArtifacts(action *GenerateAction) {
+	action.Artifacts = ""
+	if action.ToolCall != nil {
+		action.ToolCall.Artifacts = ""
+	}
+	if action.Send != nil {
+		action.Send.Artifacts = ""
+	}
+}
+
+func sameHandles(a, b []string) bool {
+	return len(a) == len(b) && !slices.ContainsFunc(a, func(id string) bool { return !slices.Contains(b, id) })
+}
+
+// actionName is a tool's name, or the action's type.
+func actionName(action GenerateAction) string {
+	if action.Type == "tool" && action.ToolCall != nil && action.ToolCall.Name != "" {
+		return action.ToolCall.Name
+	}
+	return action.Type
+}
+
+func innerPlace(action GenerateAction) string {
+	if action.Type == "delegate" {
+		return `"delegate"`
+	}
+	return action.ToolCall.Name + `'s args`
+}
+
+// attachedField is a delegate_result's word on what the delegation attached.
+func attachedField(result DelegateResult) string {
+	if result.Attached == "" {
+		return ""
+	}
+	return " attached=" + result.Attached
+}
+
 // ContinuesMetadata names, on a new root that takes over an ended root's
 // conversation, the root it continues. It is not a recovery, so mail and
 // subscriptions do not follow it, only the right to read what the old root could.
