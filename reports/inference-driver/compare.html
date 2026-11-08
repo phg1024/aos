@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strata and Sonnet Compared</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Strata and Sonnet 5.5 on One Workflow</h1>
+    <p>The same workflow (<code>live-reviewed-merge</code>), the same inputs and the same flags, through two model profiles. Each trial ran once on a fresh state directory with a 250,000-token budget and a strict 15-minute time budget, and passed only on review_partner's verdict. Every figure here is read from the trials' call ledgers and results; cached and cache-write tokens are what the servers reported. Dollars are the Anthropic calls' cost at $2 input, $10 output, $0.20 cache reads and $2.50 cache writes per million tokens.</p>
+  </div>
+
+  <h2>Outcomes</h2>
+  <div class="scroll"><table>
+    <tr><th>Arm</th><th>Inputs</th><th>Trials</th><th>Verdicts</th><th>Pass rate</th><th>All trials passed (pass^k)</th><th>HTML intact</th><th>Dollars</th></tr>
+    <tr><td>sonnet</td><td>contradictory</td><td>3</td><td>pass 3</td><td>100%</td><td>yes</td><td>1 of 3</td><td>$0.5019</td></tr>
+    <tr><td>sonnet</td><td>good</td><td>3</td><td>fail 1, pass 2</td><td>67%</td><td>no</td><td>1 of 3</td><td>$0.4263</td></tr>
+    <tr><td>strata</td><td>contradictory</td><td>3</td><td>pass 3</td><td>100%</td><td>yes</td><td>3 of 3</td><td>n/a</td></tr>
+    <tr><td>strata</td><td>good</td><td>3</td><td>pass 3</td><td>100%</td><td>yes</td><td>3 of 3</td><td>n/a</td></tr>
+  </table></div>
+
+  <h2>Calls and tokens</h2>
+  <div class="scroll"><table>
+    <tr><th>Arm</th><th>Inputs</th><th>Calls (repairs)</th><th>Steps per agent</th><th>Prompt tokens</th><th>Completion</th><th>Cache read</th><th>Cache write</th><th>Latency p50 / p90</th><th>Errors, retries</th><th>Fallbacks</th></tr>
+    <tr><td>sonnet</td><td>contradictory</td><td>55 (0)</td><td>delivery_lead 16, file_writer 6, merger 15, review_partner 18</td><td>313400</td><td>23632</td><td>225149 (71.8%)</td><td>88031 (28.1%)</td><td>8.6 s / 10.4 s</td><td>0, 0</td><td>0</td></tr>
+    <tr><td>sonnet</td><td>good</td><td>55 (1)</td><td>delivery_lead 15, file_writer 6, merger 15, review_partner 18</td><td>285089</td><td>18898</td><td>206650 (72.5%)</td><td>78219 (27.4%)</td><td>2.7 s / 5.8 s</td><td>0, 0</td><td>0</td></tr>
+    <tr><td>strata</td><td>contradictory</td><td>55 (0)</td><td>delivery_lead 19, file_writer 9, merger 15, review_partner 12</td><td>240599</td><td>22490</td><td>139069 (57.8%)</td><td>0 (0.0%)</td><td>5.2 s / 18.1 s</td><td>0, 0</td><td>0</td></tr>
+    <tr><td>strata</td><td>good</td><td>61 (0)</td><td>delivery_lead 18, file_writer 9, merger 16, review_partner 18</td><td>233995</td><td>17963</td><td>142192 (60.8%)</td><td>0 (0.0%)</td><td>4.8 s / 11.8 s</td><td>0, 0</td><td>0</td></tr>
+  </table></div>
+
+  <h2>How the replies were read</h2>
+  <p>Each step's reply read the way the step read it (<code>agentflow.ReadReply</code> and <code>ResolveRecordedReply</code>), so the rungs are the D3 probe's: how the object was found (as sent, the trailing object after prose, or the loose repair), the shape that read it (nested, generic, flat, legacy), or a later rung (a repair, fallbackMessage, notesAsMessage, unrepairable). A misread is an action a person reading the reply would not have taken from it: a later object taken over the first, an action from inside a <code>&lt;think&gt;</code> block, or an incomplete action from the flat stage.</p>
+  <div class="scroll"><table>
+    <tr><th>Arm</th><th>Inputs</th><th>Rungs</th><th>Misreads</th><th>Delegate artifacts</th><th>Reasoning recorded (chars)</th><th>Completion tokens not in the reply (est.)</th></tr>
+    <tr><td>sonnet</td><td>contradictory</td><td>as sent / nested 54, trailing object / nested 1</td><td>0</td><td>inside delegate 3, none 9</td><td>2019</td><td>9735</td></tr>
+    <tr><td>sonnet</td><td>good</td><td>as sent / nested 53, repair 1</td><td>0</td><td>inside delegate 1, none 9</td><td>2279</td><td>7726</td></tr>
+    <tr><td>strata</td><td>contradictory</td><td>as sent / generic 1, as sent / nested 51, trailing object / generic 3</td><td>0</td><td>inside delegate 3, none 9</td><td>0</td><td>8215</td></tr>
+    <tr><td>strata</td><td>good</td><td>as sent / nested 57, trailing object / generic 4</td><td>0</td><td>inside delegate 3, none 9</td><td>0</td><td>4972</td></tr>
+  </table></div>
+  <p>Reasoning recorded is the thinking a server returned apart from the reply and the ledger kept: the Anthropic driver records it. The chat-completions driver, not streaming, reads only the reply, so a reasoning model's thinking there is dropped; the last column estimates what was dropped, at four characters a token.</p>
+
+  <h2>The HTML's way to the file</h2>
+  <p>merger returns the HTML in a message action, delivery_lead hands it to file_writer in a goal, and file_writer writes it. Intact means file_writer wrote exactly the bytes merger sent and the file holds exactly what was written.</p>
+  <div class="scroll"><table>
+    <tr><th>Trial</th><th>Verdict</th><th>merger sent HTML</th><th>In file_writer's goal</th><th>Written = sent</th><th>File = written</th><th>Difference</th></tr>
+    <tr><td>sonnet/contradictory/trial-1</td><td>pass</td><td>yes</td><td>yes</td><td>no</td><td>yes</td><td>differs at byte 1990 (1990 vs 1991 bytes)</td></tr>
+    <tr><td>sonnet/contradictory/trial-2</td><td>pass</td><td>yes</td><td>yes</td><td>no</td><td>yes</td><td>differs at byte 1999 (1999 vs 2000 bytes)</td></tr>
+    <tr><td>sonnet/contradictory/trial-3</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>sonnet/good/trial-1</td><td>pass</td><td>yes</td><td>yes</td><td>no</td><td>yes</td><td>differs at byte 1865 (1865 vs 1866 bytes)</td></tr>
+    <tr><td>sonnet/good/trial-2</td><td>fail</td><td>yes</td><td>yes</td><td>no</td><td>yes</td><td>differs at byte 1630 (1630 vs 1631 bytes)</td></tr>
+    <tr><td>sonnet/good/trial-3</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-1</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-2</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-3</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/good/trial-1</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/good/trial-2</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+    <tr><td>strata/good/trial-3</td><td>pass</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td></td></tr>
+  </table></div>
+
+  <h2>Trials</h2>
+  <div class="scroll"><table>
+    <tr><th>Trial</th><th>Profile</th><th>Model</th><th>Started (UTC)</th><th>Exit</th><th>Verdict</th><th>Calls</th><th>Dollars</th><th>Misread calls</th></tr>
+    <tr><td>sonnet/contradictory/trial-1</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T20:56:56Z</td><td>0</td><td>pass</td><td>18</td><td>$0.1618</td><td></td></tr>
+    <tr><td>sonnet/contradictory/trial-2</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T20:59:06Z</td><td>0</td><td>pass</td><td>18</td><td>$0.1658</td><td></td></tr>
+    <tr><td>sonnet/contradictory/trial-3</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T21:01:16Z</td><td>0</td><td>pass</td><td>19</td><td>$0.1742</td><td></td></tr>
+    <tr><td>sonnet/good/trial-1</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T20:55:55Z</td><td>0</td><td>pass</td><td>18</td><td>$0.1339</td><td></td></tr>
+    <tr><td>sonnet/good/trial-2</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T20:58:03Z</td><td>1</td><td>fail</td><td>18</td><td>$0.1434</td><td></td></tr>
+    <tr><td>sonnet/good/trial-3</td><td>claude</td><td>claude-sonnet-5-5</td><td>2026-11-08T21:00:15Z</td><td>0</td><td>pass</td><td>19</td><td>$0.1490</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-1</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T20:57:59Z</td><td>0</td><td>pass</td><td>20</td><td>$0.0000</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-2</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T21:02:38Z</td><td>0</td><td>pass</td><td>17</td><td>$0.0000</td><td></td></tr>
+    <tr><td>strata/contradictory/trial-3</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T21:06:50Z</td><td>0</td><td>pass</td><td>18</td><td>$0.0000</td><td></td></tr>
+    <tr><td>strata/good/trial-1</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T20:55:55Z</td><td>0</td><td>pass</td><td>20</td><td>$0.0000</td><td></td></tr>
+    <tr><td>strata/good/trial-2</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T21:00:37Z</td><td>0</td><td>pass</td><td>20</td><td>$0.0000</td><td></td></tr>
+    <tr><td>strata/good/trial-3</td><td>strata-phg</td><td>qwen3.8-flash-next-nvfp4-nvfp4</td><td>2026-11-08T21:04:49Z</td><td>0</td><td>pass</td><td>21</td><td>$0.0000</td><td></td></tr>
+  </table></div>
+</body>
+</html>
