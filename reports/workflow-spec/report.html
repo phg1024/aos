@@ -114,5 +114,30 @@
     <li><b><code>internal/workflow</code>'s engine</b> (S8), off agentflow's path. Refuse an empty plan under <code>required</code>, and the same object as worker and verifier. Return an error when <code>required</code> ends unapproved. Or mark the package demo-only and move the policy vocabulary out of it, so agentflow does not import a harness it does not run.</li>
   </ol>
   <p>Already refused, and worth keeping in the chapter as the model of a checked edge: a verifier that is not an agent, or not reachable; a verifier that is the entry agent; an edge that grants more tools, paths, mounts or delegable authority than the parent holds; evidence types under the reserved prefix; and evidence from a publisher without <code>publish_artifact</code>, or without <code>read_file</code> for <code>from_file</code>.</p>
+
+  <h2>After the spec contract</h2>
+  <p>Items 1 to 7 and 9 of the proposal are now in place. Item 8 is a preflight that <code>aos run</code> runs before anything is spawned, not a rule of <code>Validate</code>. <code>probe-output-after-contract.txt</code> is the S1–S10 run at the contract commit, plus two new rows, S6c and S10c. Those rows read specs through the strict decoder, which <code>v0.1.7</code> does not have, so they live in <code>bench/spec/contract_test.go</code>, which is left out of a run there. <code>probe-output.txt</code> is unchanged. Rerun at <code>v0.1.7</code>, today's probe file differs from it on one S8 line, which now prints the result's attempts too.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>#</th><th>At v0.1.7</th><th>Now</th></tr>
+    <tr><td>S1</td><td>Accepted; recursed to 31 processes</td><td>Refused: "delegation cycle a -&gt; a: a cycle needs max_delegation_depth (1 to 100) …". Nothing is spawned.</td></tr>
+    <tr><td>S2</td><td>Accepted; 61 processes without a budget, and with a step limit of 1; 21 with a token budget</td><td>The same refusal. With <code>max_delegation_depth</code> set, the spec validates. <code>Engine.Run</code> then refuses it without a token budget or a strict time budget, and with one it stops at the depth. A unit test shows 4 processes with max_delegation_depth 3 (depths 0 to 3), the fourth delegation refused, and its delegator told.</td></tr>
+    <tr><td>S3</td><td>Unreachable agent accepted; <code>allowed_agents</code> without <code>spawn_agent</code> accepted</td><td>Both refused, the first listing what is reachable and how: "reachable: a, a -&gt; b".</td></tr>
+    <tr><td>S4</td><td><code>-5</code>, <code>0</code> and <code>1e9</code> accepted; <code>-5</code> and <code>0</code> meant 24</td><td><code>-5</code> and <code>1e9</code> are refused by <code>Validate</code>. An explicit <code>0</code> is refused when the spec is decoded (S6c), because the decoder sees the key. A spec built in Go code still uses 0 for the default.</td></tr>
+    <tr><td>S5</td><td>An unreachable agent with <code>run</code> and writable <code>/</code> accepted</td><td>Refused as unreachable. The entry agent may still hold that authority: the spec is the trust root.</td></tr>
+    <tr><td>S6</td><td>Every typo dropped silently; <code>"verifcation"</code> turned a failed workflow into exit 0</td><td>Each one is refused at decode with its path and the nearest name (S6c). The <code>json.Unmarshal</code> rows read as before, because the probe decodes leniently on purpose; <code>aos run</code> no longer does.</td></tr>
+    <tr><td>S7</td><td>No per-agent model; fields dropped</td><td>The fields are refused: "per-agent models are not supported yet". The feature is still not built.</td></tr>
+    <tr><td>S8</td><td>Empty plan, self-verification and an unapproved <code>required</code> all returned no error</td><td>All three are errors: <code>ErrEmptyPlan</code>, <code>ErrSelfVerification</code> (before anything runs), and <code>ErrNotApproved</code> with the summary so far.</td></tr>
+    <tr><td>S9</td><td>A worker as its own verifier passed; evidence from a publisher that never runs was accepted</td><td>Both refused. The probe's shared agent list has two agents nobody reaches, so every S9 spec is now also refused as unreachable; the verifier and evidence reasons follow in the same error. A verifier that is reachable but never delegated still validates and ends <code>missing</code> at run time, which is correct.</td></tr>
+    <tr><td>S10</td><td>All 14 validate; six name another machine's paths</td><td>All 14 decode strictly and validate (S10c), with no change to any workflow. The six are refused by the <code>aos run</code> preflight here, which names each path. Their paths are left as written.</td></tr>
+  </table>
+  </div>
+  <p><b>Rules changed from the proposal.</b></p>
+  <ul>
+    <li><b>A verifier that can change the work</b> is defined by write scope, not by its tools alone. The rasterizer verifiers hold <code>write_file</code> and <code>run</code> for their own <code>-verification</code> directory, and refusing those tools outright would have broken nine checked-in workflows. The rule as implemented is stated in the error and in the README.</li>
+    <li><b>A cycle</b> needs <code>max_delegation_depth</code> in the spec, and also a budget at run time. A depth limit alone bounds nesting, not how many processes each level starts. The budget can be the run's (<code>--token-budget</code>, or <code>--time-budget</code> with <code>--strict-time-budget</code>) or one on the entry agent's capabilities.</li>
+    <li><b>An explicit <code>"max_steps": 0</code></b> is refused at decode rather than in <code>Validate</code>, since only the decoder can tell 0 from absent.</li>
+    <li><b><code>internal/workflow</code></b> was fixed rather than marked demo-only. The three fixes were small, and its two callers (<code>aos-demo</code>, <code>aos-demo-live</code>) already treat an error as a failed run. agentflow still imports only its policy vocabulary.</li>
+  </ul>
 </body>
 </html>

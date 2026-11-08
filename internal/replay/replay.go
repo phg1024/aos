@@ -104,6 +104,9 @@ type Report struct {
 	// LegacyReplyCap means the record predates reply_cap, and its replies were
 	// capped at the budget left, prompt included, as they were then.
 	LegacyReplyCap bool `json:"legacy_reply_cap,omitempty"`
+	// LegacySpecContract means the record predates the spec contract, and its
+	// spec was checked with the rules it ran under.
+	LegacySpecContract bool `json:"legacy_spec_contract,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
 	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
@@ -415,6 +418,10 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyReplyChecks = engine.NoReplyChecks
 	engine.NoReplyCap = started.Data[agentflow.ReplyCapField] == ""
 	report.LegacyReplyCap = engine.NoReplyCap
+	// A spec run before the spec contract is checked with the rules it ran
+	// under.
+	engine.NoSpecContract = started.Data[agentflow.SpecContractField] == ""
+	report.LegacySpecContract = engine.NoSpecContract
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

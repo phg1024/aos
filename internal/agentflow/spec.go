@@ -27,6 +27,12 @@ type WorkflowSpec struct {
 	// Recall switches the memory-recall aids for every agent of the
 	// workflow, e.g. {"no_agent_index": true}. Absent turns them all on.
 	Recall runtime.RecallPolicy `json:"recall,omitzero"`
+	// MaxDelegationDepth bounds how deep delegations nest: the entry agent
+	// is at depth 0, and an agent it delegates to at 1. The engine refuses a
+	// delegation that would start a process deeper than this, and the
+	// delegator is told so in its delegate_result. Zero means no limit,
+	// which the spec contract allows only without a delegation cycle.
+	MaxDelegationDepth int `json:"max_delegation_depth,omitempty"`
 }
 
 // VerificationSpec names the agent whose recorded kernel exit is the
@@ -69,7 +75,19 @@ type AgentSpec struct {
 	Restart *supervisor.RestartPolicy `json:"restart,omitempty"`
 }
 
+// Validate checks the spec against the spec contract: the rules below, then
+// validateContract's. A spec that passes can be run; budgets, which come
+// from the run, are checked when it runs (Engine.Run).
 func (s WorkflowSpec) Validate() error {
+	if err := s.ValidateWithoutContract(); err != nil {
+		return err
+	}
+	return s.validateContract()
+}
+
+// ValidateWithoutContract checks the spec as AOS did before the spec
+// contract (run.started spec_contract), for replaying a record made then.
+func (s WorkflowSpec) ValidateWithoutContract() error {
 	if s.Name == "" || s.EntryAgent == "" || len(s.Agents) == 0 {
 		return ErrWorkflowSpecInvalid
 	}

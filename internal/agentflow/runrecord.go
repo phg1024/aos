@@ -94,6 +94,12 @@ const (
 	// (ReplyCapV1). Records without it capped the reply at the budget left.
 	ReplyCapField = "reply_cap"
 	ReplyCapV1    = "v1"
+	// SpecContractField is the run.started field that says the spec was checked
+	// against the spec contract (WorkflowSpec.Validate, and a cycle's budget at
+	// Engine.Run): SpecContractV1. Records without it were checked with the
+	// rules before it, and a replay checks them so.
+	SpecContractField = "spec_contract"
+	SpecContractV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -183,6 +189,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoReplyCap {
 		data[ReplyCapField] = ReplyCapV1
+	}
+	if !e.NoSpecContract {
+		data[SpecContractField] = SpecContractV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -693,9 +692,9 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 	if err != nil {
 		fail(err)
 	}
-	var spec agentflow.WorkflowSpec
-	if err := json.Unmarshal(bytes, &spec); err != nil {
-		fail(err)
+	spec, err := agentflow.DecodeWorkflowSpec(bytes)
+	if err != nil {
+		fail(fmt.Errorf("%s: %w", workflowPath, err))
 	}
 	spec.SkillRoots = append(defaultSkillRoots(workdir), normalizeSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...)
 	if len(skillDirs) > 0 {

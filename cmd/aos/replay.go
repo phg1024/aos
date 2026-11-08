@@ -90,6 +90,9 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacyReplyChecks {
 		fmt.Fprintln(w, "  the record predates the reply checks; replies read as they were then")
 	}
+	if report.LegacySpecContract {
+		fmt.Fprintln(w, "  the record predates the spec contract; its spec checked with the rules it ran under")
+	}
 	if report.LegacyReplyCap {
 		fmt.Fprintln(w, "  the record predates the reply cap; replies capped at the budget left, prompt included")
 	}

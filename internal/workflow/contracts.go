@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -53,6 +54,18 @@ const (
 )
 
 var ErrInvalidVerificationPolicy = errors.New("invalid verification policy")
+
+// ErrEmptyPlan is a plan without contracts: nothing to do, and under a
+// verifier nothing to verify, which would read as success.
+var ErrEmptyPlan = errors.New("the plan has no contracts")
+
+// ErrSelfVerification is an engine whose worker is its verifier: it would
+// approve its own output.
+var ErrSelfVerification = errors.New("the worker cannot be its own verifier")
+
+// ErrNotApproved is a contract that ended unapproved under
+// VerificationRequired.
+var ErrNotApproved = errors.New("verification required and not approved")
 
 // ParseVerificationPolicy parses a policy name. An empty value yields "".
 func ParseVerificationPolicy(value string) (VerificationPolicy, error) {
@@ -121,8 +134,27 @@ func (e *Engine) verificationPolicy() (VerificationPolicy, error) {
 		return "", fmt.Errorf("%w: verifier configured but policy is %q", ErrInvalidVerificationPolicy, policy)
 	case policy != VerificationNone && e.Verifier == nil:
 		return "", fmt.Errorf("%w: policy %q needs a verifier", ErrInvalidVerificationPolicy, policy)
+	case sameObject(e.Worker, e.Verifier):
+		return "", ErrSelfVerification
 	}
 	return policy, nil
+}
+
+// sameObject reports whether worker and verifier are one value: the same
+// pointer, or equal values of one comparable type.
+func sameObject(worker Worker, verifier Verifier) bool {
+	if worker == nil || verifier == nil {
+		return false
+	}
+	w, v := reflect.ValueOf(worker), reflect.ValueOf(verifier)
+	if w.Type() != v.Type() {
+		return false
+	}
+	switch w.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func, reflect.Slice, reflect.UnsafePointer:
+		return w.Pointer() == v.Pointer()
+	}
+	return w.Type().Comparable() && w.Interface() == v.Interface()
 }
 
 func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, error) {
@@ -155,6 +187,10 @@ func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, erro
 	if err != nil {
 		return Summary{}, err
 	}
+	if len(plan.Contracts) == 0 {
+		_, _ = e.Kernel.Exit(plannerProcess.PID, kernel.ExitStatus{Code: 1, Reason: ErrEmptyPlan.Error(), Retryable: false})
+		return Summary{PlanArtifactID: planArtifact.ID}, fmt.Errorf("%w: goal %q", ErrEmptyPlan, goal)
+	}
 	if _, err := e.Kernel.Exit(plannerProcess.PID, kernel.ExitStatus{Code: 0, Reason: "planned", Retryable: false}); err != nil {
 		return Summary{}, err
 	}
@@ -166,6 +202,11 @@ func (e *Engine) Run(ctx context.Context, parentPID, goal string) (Summary, erro
 			return Summary{}, err
 		}
 		summary.Results = append(summary.Results, result)
+		if policy == VerificationRequired && !result.Approved {
+			// The summary so far, with this result, and the error: the
+			// contracts after it are not run.
+			return summary, fmt.Errorf("%w: contract %s after %d attempt(s): %s", ErrNotApproved, contract.ID, result.Attempts, result.FinalVerification.Reason)
+		}
 	}
 
 	return summary, nil

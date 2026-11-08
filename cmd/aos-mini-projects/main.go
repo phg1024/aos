@@ -138,9 +138,9 @@ func runProject(ctx context.Context, backend agentflow.JSONCompleter, reportRoot
 	if err != nil {
 		return nil, err
 	}
-	var spec agentflow.WorkflowSpec
-	if err := json.Unmarshal(specBytes, &spec); err != nil {
-		return nil, err
+	spec, err := agentflow.DecodeWorkflowSpec(specBytes)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", project.Workflow, err)
 	}
 
 	k, err := kernel.New(filepath.Join(stateRoot, "kernel"))

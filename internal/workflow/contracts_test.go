@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"aos/internal/artifact"
@@ -208,6 +209,8 @@ func TestWorkflowEngineWithoutVerifierAcceptsFirstOutput(t *testing.T) {
 	}
 }
 
+// A rejection under required is an error, ErrNotApproved, with the summary
+// so far.
 func TestWorkflowEngineRequiredPolicyReportsRejection(t *testing.T) {
 	_, _, parentPID, engine := newTestEngine(t)
 	verifier := &rejectingVerifier{}
@@ -215,8 +218,8 @@ func TestWorkflowEngineRequiredPolicyReportsRejection(t *testing.T) {
 	engine.Verification = workflow.VerificationRequired
 
 	summary, err := engine.Run(context.Background(), parentPID, "write a note")
-	if err != nil {
-		t.Fatalf("run workflow: %v", err)
+	if !errors.Is(err, workflow.ErrNotApproved) || !strings.Contains(err.Error(), "never good enough") || len(summary.Results) != 1 {
+		t.Fatalf("run workflow: %v, %d results", err, len(summary.Results))
 	}
 	result := summary.Results[0]
 	if result.Accepted || result.Approved || result.Attempts != 3 || verifier.calls != 3 {
@@ -309,4 +312,39 @@ func TestParseVerificationPolicy(t *testing.T) {
 	if _, err := workflow.ParseVerificationPolicy("always"); !errors.Is(err, workflow.ErrInvalidVerificationPolicy) {
 		t.Fatalf("expected invalid policy error, got %v", err)
 	}
+}
+
+// An empty plan is refused under any policy, and so is a worker that is its
+// own verifier.
+func TestWorkflowEngineRefusesAnEmptyPlanAndSelfVerification(t *testing.T) {
+	_, _, parentPID, engine := newTestEngine(t)
+	engine.Planner = emptyPlanner{}
+	engine.Verifier = &rejectingVerifier{}
+	engine.Verification = workflow.VerificationRequired
+	if _, err := engine.Run(context.Background(), parentPID, "nothing"); !errors.Is(err, workflow.ErrEmptyPlan) {
+		t.Fatalf("empty plan: %v", err)
+	}
+	_, _, parentPID, engine = newTestEngine(t)
+	self := &selfChecker{}
+	engine.Worker, engine.Verifier = self, self
+	engine.Verification = workflow.VerificationRequired
+	if _, err := engine.Run(context.Background(), parentPID, "grade yourself"); !errors.Is(err, workflow.ErrSelfVerification) || self.calls != 0 {
+		t.Fatalf("self-verification: %v (%d calls)", err, self.calls)
+	}
+}
+
+type emptyPlanner struct{}
+
+func (emptyPlanner) Plan(context.Context, string) (workflow.Plan, error) { return workflow.Plan{}, nil }
+
+type selfChecker struct{ calls int }
+
+func (s *selfChecker) Execute(context.Context, workflow.TaskContract, int) (workflow.WorkerOutput, error) {
+	s.calls++
+	return workflow.WorkerOutput{Summary: "done"}, nil
+}
+
+func (s *selfChecker) Verify(context.Context, workflow.TaskContract, workflow.WorkerOutput) (workflow.Verification, error) {
+	s.calls++
+	return workflow.Verification{Approved: true}, nil
 }

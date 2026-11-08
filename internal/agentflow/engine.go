@@ -190,6 +190,11 @@ type Engine struct {
 	// factory's switch with it. When it is off, run.started says so
 	// (reply_checks).
 	NoReplyChecks bool
+	// NoSpecContract checks a spec with the rules from before the spec contract
+	// (WorkflowSpec.ValidateWithoutContract), and skips the cycle's budget
+	// check, for replaying a record made before it. When it is off, run.started
+	// says so (spec_contract).
+	NoSpecContract bool
 	// NoReplyCap is AgentRuntime.NoReplyCap, for replaying a record made before
 	// the reply cap took the prompt out of the budget left. When it is off,
 	// run.started says so (reply_cap).
@@ -340,8 +345,20 @@ func formatTraceDetail(detail string) string {
 }
 
 func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (RunSummary, error) {
-	if err := spec.Validate(); err != nil {
-		return RunSummary{}, err
+	if e.NoSpecContract {
+		if err := spec.ValidateWithoutContract(); err != nil {
+			return RunSummary{}, err
+		}
+	} else {
+		if err := spec.Validate(); err != nil {
+			return RunSummary{}, err
+		}
+		// Budgets come from the run, not the spec, so this is checked here,
+		// before anything is spawned, and not in Validate.
+		if cycle := spec.DelegationCycle(); cycle != "" && !spec.CanStopCycle(e.Budget) {
+			return RunSummary{}, fmt.Errorf("%w: %s, with max_delegation_depth %d, can still start a process per step at every level; give the run a token budget (aos run --token-budget N) or a strict time budget (--time-budget D --strict-time-budget), or the entry agent a budget of its own",
+				ErrUnboundedDelegation, cycle, spec.MaxDelegationDepth)
+		}
 	}
 	policy, err := spec.VerificationPolicy()
 	if err != nil {
@@ -693,6 +710,14 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 		if !contains(agent.AllowedAgents, call.AgentID) {
 			return runtime.DelegateResult{}, fmt.Errorf("%w: %s -> %s", ErrDelegationDenied, agent.ID, call.AgentID)
 		}
+		if limit := spec.MaxDelegationDepth; limit > 0 {
+			if depth := e.delegationDepth(parent) + 1; depth > limit {
+				// Not run: the delegator reads why and goes on without it.
+				reason := fmt.Sprintf("delegation refused: %s -> %s would start a process %d delegations deep, past the workflow's max_delegation_depth of %d", agent.ID, call.AgentID, depth, limit)
+				e.emitTrace(agent.ID, parent.PID, "delegate_refused", reason)
+				return runtime.DelegateResult{AgentID: call.AgentID, ExitStatus: kernel.ExitStatus{Code: 1, Reason: reason}}, nil
+			}
+		}
 		trace := fmt.Sprintf("to=%s goal=%s", call.AgentID, strings.TrimSpace(call.Goal))
 		if call.Artifacts != "" {
 			trace += " artifacts=" + call.Artifacts
@@ -754,6 +779,24 @@ func (e *Engine) DelegateHandler(spec WorkflowSpec, req RunRequest, agent AgentS
 			Attached:     e.attachedWord(spec, handles),
 		}, nil
 	}
+}
+
+// delegationDepth is how many delegations below the entry agent process is:
+// its agent processes up the parent chain, less one for the entry agent.
+func (e *Engine) delegationDepth(process kernel.Process) int {
+	depth := -1
+	for current := process; current.Metadata["agent_id"] != ""; {
+		depth++
+		if current.ParentPID == "" {
+			break
+		}
+		parent, err := e.Kernel.Get(current.ParentPID)
+		if err != nil {
+			break
+		}
+		current = parent
+	}
+	return max(depth, 0)
 }
 
 // replacedChains finds what a new delegation of agentID replaces: this delegator's

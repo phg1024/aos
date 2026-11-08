@@ -150,6 +150,8 @@ type options struct {
 	// noReplyChecks and noReplyCap record as AOS did before the reply checks
 	// and the reply cap.
 	noReplyChecks, noReplyCap bool
+	// noSpecContract records as AOS did before the spec contract.
+	noSpecContract bool
 	// noDelegateHandles records with the prompt from before handles at a delegation.
 	noDelegateHandles bool
 	// noDelegateAttach records as AOS did before delegate_attach.
@@ -258,6 +260,11 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	allowed, helper := "", ""
 	if opts.delegator {
 		allowed, helper = `"allowed_agents":["helper"],`, `,{"id":"helper","system_prompt":"Help."}`
+		if !opts.noSpecContract {
+			// The spec contract wants the tool with the edge; specs from
+			// before it often lacked it.
+			mailTool += `"spawn_agent",`
+		}
 	}
 	if err := json.Unmarshal([]byte(`{"name":"replayed","entry_agent":"solver",`+recall+`"agents":[{"id":"solver","system_prompt":"Solve the task.",`+allowed+restart+`"max_steps":`+strconv.Itoa(maxSteps)+`,
 		"mounts":[{"name":"workspace","host_path":"`+workspace+`"}],
@@ -274,6 +281,7 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		NoDurationArgs:      opts.noDurationArgs,
 		NoReplyChecks:       opts.noReplyChecks,
 		NoReplyCap:          opts.noReplyCap,
+		NoSpecContract:      opts.noSpecContract,
 		NoDelegateHandles:   opts.noDelegateHandles,
 		NoDelegateAttach:    opts.noDelegateAttach,
 		NoChainDelivery:     opts.noChain,
@@ -1554,5 +1562,26 @@ func TestReplayOfARecordWithoutPublishSource(t *testing.T) {
 	}
 	if report := replayed(t, current, false); !report.Identical() {
 		t.Fatalf("current report = %+v, %+v", report, report.Divergence)
+	}
+}
+
+// A spec from before the spec contract, which it refuses (an edge without
+// spawn_agent), replays under the rules it ran with; recorded since, the
+// same spec does not run at all.
+func TestReplayOfASpecFromBeforeTheContract(t *testing.T) {
+	script := func(string) []step { return []step{exit("done")} }
+	legacy := recordAt(t, newRoot(t), context.Background(), script, options{delegator: true, noSpecContract: true})
+	if runStartedData(t, legacy)[agentflow.SpecContractField] != "" {
+		t.Fatal("the legacy record should have no spec_contract")
+	}
+	if report := replayed(t, legacy, false); !report.Identical() || !report.LegacySpecContract {
+		t.Fatalf("legacy: %+v, %+v", report, report.Divergence)
+	}
+	current := recordAt(t, newRoot(t), context.Background(), script, options{delegator: true})
+	if data := runStartedData(t, current); data[agentflow.SpecContractField] != agentflow.SpecContractV1 {
+		t.Fatalf("run.started %v", data)
+	}
+	if report := replayed(t, current, false); !report.Identical() || report.LegacySpecContract {
+		t.Fatalf("current: %+v, %+v", report, report.Divergence)
 	}
 }

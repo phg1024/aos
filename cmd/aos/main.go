@@ -225,11 +225,18 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 	if err != nil {
 		return err
 	}
-	var spec agentflow.WorkflowSpec
-	if err := json.Unmarshal(specBytes, &spec); err != nil {
+	spec, err := agentflow.DecodeWorkflowSpec(specBytes)
+	if err != nil {
+		return fmt.Errorf("%s: %w", workflowPath, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", workflowPath, err)
+	}
+	ownSkillRoots := resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))
+	if err := preflightHostPaths(spec, ownSkillRoots); err != nil {
 		return err
 	}
-	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...))
+	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), ownSkillRoots...))
 	createWritableMounts(spec)
 
 	if stateDir == "" {

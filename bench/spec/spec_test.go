@@ -403,10 +403,19 @@ func TestS8WorkflowPackage(t *testing.T) {
 	self := &both{approve: true}
 	same := newEngine(t, planner{contracts: 1}, self, self)
 	summary, err = same.Run(context.Background(), parent(same), "goal")
-	finding(t, "S8 one object as worker and verifier: err=%v; accepted=%t approved=%t; it verified its own output: %t", err, summary.Results[0].Accepted, summary.Results[0].Approved, self.verified > 0 && self.executed > 0)
+	finding(t, "S8 one object as worker and verifier: err=%v; %s; it verified its own output: %t", err, firstResult(summary), self.verified > 0 && self.executed > 0)
 	rejecting := newEngine(t, planner{contracts: 1}, &both{}, &both{approve: false})
 	summary, err = rejecting.Run(context.Background(), parent(rejecting), "goal")
-	finding(t, "S8 a verifier that rejects every attempt under required: err=%v; accepted=%t approved=%t attempts=%d", err, summary.Results[0].Accepted, summary.Results[0].Approved, summary.Results[0].Attempts)
+	finding(t, "S8 a verifier that rejects every attempt under required: err=%v; %s", err, firstResult(summary))
+}
+
+// firstResult is the summary's first result in brief.
+func firstResult(summary workflow.Summary) string {
+	if len(summary.Results) == 0 {
+		return "no result"
+	}
+	r := summary.Results[0]
+	return fmt.Sprintf("accepted=%t approved=%t attempts=%d", r.Accepted, r.Approved, r.Attempts)
 }
 
 type planner struct{ contracts int }

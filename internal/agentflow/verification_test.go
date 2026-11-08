@@ -190,7 +190,9 @@ func TestValidateVerification(t *testing.T) {
 	reachedThroughWriter := gatedSpec("required")
 	reachedThroughWriter.Agents[0].AllowedAgents = []string{"writer"}
 	reachedThroughWriter.Agents[1].AllowedAgents = []string{"verifier"}
+	reachedThroughWriter.Agents[1].Capabilities.Tools = []string{"write_file", "spawn_agent"}
 	reachedThroughWriter.Agents[1].Delegable = capability.Set{Tools: []string{"read_file"}}
+	reachedThroughWriter.Agents[0].Delegable.Tools = append(reachedThroughWriter.Agents[0].Delegable.Tools, "spawn_agent")
 	if err := reachedThroughWriter.Validate(); err != nil {
 		t.Fatalf("a verifier reachable through another agent is valid: %v", err)
 	}

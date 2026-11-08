@@ -779,8 +779,12 @@ func TestACrashAfterTheCloseLeavesAStateTheNextRunHandles(t *testing.T) {
 	// Nothing moved to the new child, and the next run goes on.
 	next := &script{replies: []func(runtime.GenerateRequest) runtime.GenerateResult{exitStep(0, false, "done")}}
 	again := f.engine(scripts{"coordinator": next})
+	// The coordinator alone: the spec contract refuses an agent nobody
+	// reaches, and spawn_agent with no edge.
 	spec := chainSpec(nil, 30)
+	spec.Agents = spec.Agents[:1]
 	spec.Agents[0].AllowedAgents = nil
+	spec.Agents[0].Capabilities = capability.Set{Tools: []string{"message_agent"}}
 	if _, err := again.Run(context.Background(), spec, agentflow.RunRequest{Goal: "again"}); err != nil {
 		t.Fatal(err)
 	}
