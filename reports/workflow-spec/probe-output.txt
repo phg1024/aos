@@ -1,0 +1,70 @@
+=== RUN   TestS1SelfDelegation
+FINDING: S1 Validate of an agent in its own allowed_agents: accepted
+FINDING: S1 run: a delegates to a on its first step until the probe stops it at 30 processes: workflow exit code=0 reason="workflow completed"; 31 agent process(es)
+--- PASS: TestS1SelfDelegation (2.92s)
+=== RUN   TestS2DelegationCycle
+FINDING: S2 Validate of a -> b -> a: accepted
+FINDING: S2 no budget, max_steps default: every process delegates on its first step until the probe's own stop at 60: workflow exit code=0 reason="workflow completed"; 61 agent process(es)
+FINDING: S2 max_steps 1 for both: workflow exit code=1 reason="entry agent a exited with code 1: step limit exceeded"; 61 agent process(es); deepest exit: a code=0 reason="done"
+FINDING: S2 a run token budget of 20000, 1000 tokens a call: workflow exit code=1 reason="entry agent a exited with code 1: token budget exceeded: 20000 of 20000 tokens used (budget of run)"; 21 agent process(es); deepest exit: a code=1 reason="token budget exceeded: 20000 of 20000 tokens used (budget of run)"
+FINDING: S2 a process's step limit counts its own steps; a delegation is one step of the delegator and the child starts with its own limit, so steps do not bound the depth. Only a budget shared through the run's account chain does, or the time budget when strict.
+--- PASS: TestS2DelegationCycle (13.80s)
+=== RUN   TestS3UnreachableAgent
+FINDING: S3 Validate with c unreachable from the entry agent: accepted
+FINDING: S3 run: workflow exit code=0 reason="workflow completed"; 2 agent process(es); processes spawned: [a b]
+FINDING: S3 allowed_agents without the spawn_agent tool: Validate accepted; run: workflow exit code=0 reason="workflow completed"; 1 agent process(es); processes spawned: [a]; a's delegation was refused: true
+--- PASS: TestS3UnreachableAgent (0.35s)
+=== RUN   TestS4MaxSteps
+FINDING: S4 max_steps -5: Validate accepted; run: 24 steps taken, workflow exit code=1 reason="entry agent a exited with code 1: step limit exceeded"; 1 agent process(es)
+FINDING: S4 max_steps 0: Validate accepted; run: 24 steps taken, workflow exit code=1 reason="entry agent a exited with code 1: step limit exceeded"; 1 agent process(es)
+FINDING: S4 Validate of max_steps 1000000000: accepted (not run)
+--- PASS: TestS4MaxSteps (1.88s)
+=== RUN   TestS5UnreachablePowerfulAgent
+FINDING: S5 Validate with an unreachable agent holding run, write_file, write_paths [/], a writable mount of / and unconfined_run: accepted
+FINDING: S5 the same agent made reachable from an entry agent without that authority: refused: invalid workflow spec: a -> root exceeds what a may grant: tool run, tool write_file, unconfined_run
+FINDING: S5 the same authority on the entry agent: accepted (the spec and run request are the trust root)
+FINDING: S5 run: workflow exit code=0 reason="workflow completed"; 1 agent process(es); processes spawned: [a]
+--- PASS: TestS5UnreachablePowerfulAgent (0.14s)
+=== RUN   TestS6UnknownFields
+FINDING: S6 as written:     Validate accepted; decoded: verification=true writer max_steps=2 writer tools=[write_file]; run (checker fails the work): writer took 2 steps; workflow exit code=1 reason="verification required: verifier pid-000004 failed: the work is wrong" verdict=fail (verifier pid-000004 failed: the work is wrong); 3 agent process(es)
+FINDING: S6 "verifcation":  Validate accepted; decoded: verification=false writer max_steps=2 writer tools=[write_file]; run (checker fails the work): writer took 2 steps; workflow exit code=0 reason="workflow completed"; 3 agent process(es)
+FINDING: S6 "max_step":     Validate accepted; decoded: verification=true writer max_steps=0 writer tools=[write_file]; run (checker fails the work): writer took 4 steps; workflow exit code=1 reason="verification required: verifier pid-000004 failed: the work is wrong" verdict=fail (verifier pid-000004 failed: the work is wrong); 3 agent process(es)
+FINDING: S6 "capabilites":  Validate accepted; decoded: verification=true writer max_steps=2 writer tools=[]; run (checker fails the work): writer took 2 steps; workflow exit code=1 reason="verification required: verifier pid-000004 failed: the work is wrong" verdict=fail (verifier pid-000004 failed: the work is wrong); 3 agent process(es)
+FINDING: S6 "allowed_agent": Validate accepted; decoded allowed_agents=[]; run: workflow exit code=1 reason="delegation denied: lead -> writer" err="delegation denied: lead -> writer"; 1 agent process(es)
+FINDING: S6 "allowed_agent" with a verifier behind it: Validate refused: invalid workflow spec: verifier "writer" is not reachable from entry agent "lead" through allowed_agents
+FINDING: S6 per-agent "model", "profile", "backend" (D5): Validate accepted; the agent after a round trip: {"id":"a","system_prompt":"Work.","capabilities":{"allow_network":false},"delegable":{"allow_network":false}}
+FINDING: S6 a decoder with DisallowUnknownFields stops at the first: json: unknown field "verifcation"
+--- PASS: TestS6UnknownFields (1.74s)
+=== RUN   TestS7PerAgentModel
+FINDING: S7 StaticBackendFactory.BackendFor gives agents a and b the same Completer: true; AgentSpec has a model, profile or backend field: false
+--- PASS: TestS7PerAgentModel (0.00s)
+=== RUN   TestS8WorkflowPackage
+FINDING: S8 an empty plan under required: 0 results, err=<nil>
+FINDING: S8 one object as worker and verifier: err=<nil>; accepted=true approved=true; it verified its own output: true
+FINDING: S8 a verifier that rejects every attempt under required: err=<nil>; accepted=false approved=false attempts=2
+--- PASS: TestS8WorkflowPackage (0.39s)
+=== RUN   TestS9Verification
+FINDING: S9 verifier not an agent:                     Validate refused: invalid workflow spec: verifier "ghost" is not an agent
+FINDING: S9 verifier unreachable:                      Validate refused: invalid workflow spec: verifier "loner" is not reachable from entry agent "lead" through allowed_agents
+FINDING: S9 verifier is the worker it judges:          Validate accepted; run: workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000003 passed: done); 2 agent process(es); steps lead=2 writer=1
+FINDING: S9 evidence from a publisher that never runs: Validate accepted; run: workflow exit code=1 reason="verification required: verifier pid-000004 ended without a judgement (step limit exceeded). This says nothing about the work: verification is what is missing" verdict=unverified (verifier pid-000004 ended without a judgement (step limit exceeded). This says nothing about the work: verification is what is missing); 3 agent process(es); steps checker=3 lead=3 writer=1
+FINDING: S9 verifier never delegated:                  Validate accepted; run: workflow exit code=1 reason="verification required: no verifier run" verdict=missing (no verifier run); 2 agent process(es); steps lead=2 writer=1
+--- PASS: TestS9Verification (0.84s)
+=== RUN   TestS10CheckedInWorkflows
+FINDING: S10 live-docs-merge.json                     Validate accepted; strict decode: accepted; 3 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed"; 3 agent process(es)
+FINDING: S10 live-fact-sheet.json                     Validate accepted; strict decode: accepted; 3 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed"; 3 agent process(es)
+FINDING: S10 live-reviewed-merge.json                 Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 pathtracer-bunny-metal.json              Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/skills /Users/<user>/Code/aos/reports/pathtracer-bunny-metal /Users/<user>/Code/aos/reports/rasterizer-bunny/assets /Users/<user>/Code/aos/reports/pathtracer-bunny-metal-verification /Users/<user>/Code/aos/reports/pathtracer-bunny-metal/pathtracer_coordinator_log.txt /Users/<user>/Code/aos/reports/pathtracer-bunny-metal/final-summary.txt]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-bunny-cuda-evidence-ipc.json  Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=1 reason="verification required: verifier pid-000005 ended without a judgement (step limit exceeded). This says nothing about the work: verification is what is missing" verdict=unverified (verifier pid-000005 ended without a judgement (step limit exceeded). This says nothing about the work: verification is what is missing); 4 agent process(es)
+FINDING: S10 rasterizer-bunny-cuda-handles-ipc.json   Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-bunny-cuda-ipc.json           Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-bunny-metal-ipc.json          Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-bunny-metal.json              Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/skills /Users/<user>/Code/aos/reports/rasterizer-bunny-metal /Users/<user>/Code/aos/reports/rasterizer-bunny /Users/<user>/Code/aos/reports/rasterizer-bunny-metal-verification /Users/<user>/Code/aos/reports/rasterizer-bunny-metal/metal_coordinator_log.txt /Users/<user>/Code/aos/reports/rasterizer-bunny-metal/final-summary.txt]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-bunny.json                    Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/skills /Users/<user>/Code/aos/reports/rasterizer-bunny /Users/<user>/Code/aos/reports/rasterizer-bunny-verification /Users/<user>/Code/aos/reports/rasterizer-bunny/optimized_coordinator_log.txt /Users/<user>/Code/aos/reports/rasterizer-bunny/final-summary.txt]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-optimized-tail.json           Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/skills /Users/<user>/Code/aos/reports/rasterizer-team-demo /Users/<user>/Code/aos/reports/rasterizer-team-demo-verification /Users/<user>/Code/aos/reports/rasterizer-team-demo/optimized_coordinator_log.txt /Users/<user>/Code/aos/reports/rasterizer-team-demo/final-summary.txt]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 rasterizer-team.json                     Validate accepted; strict decode: accepted; 4 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/skills /Users/<user>/Code/aos/reports/rasterizer-team-demo /Users/<user>/Code/aos/reports/rasterizer-team-demo-verification /Users/<user>/Code/aos/reports/rasterizer-team-demo/optimized_coordinator_log.txt /Users/<user>/Code/aos/reports/rasterizer-team-demo/final-summary.txt]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed" verdict=pass (verifier pid-000005 passed: done); 4 agent process(es)
+FINDING: S10 terminal-bench.json                      Validate accepted; strict decode: accepted; 1 agents, unreachable []; host paths that do not exist here: []; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed"; 1 agent process(es)
+FINDING: S10 two-agent-mini.json                      Validate accepted; strict decode: accepted; 2 agents, unreachable []; host paths that do not exist here: [/Users/<user>/Code/aos/reports/two-agent-mini-demo]; scripted run (each agent delegates to its allowed agents in order, then exits 0): workflow exit code=0 reason="workflow completed"; 2 agent process(es)
+--- PASS: TestS10CheckedInWorkflows (5.87s)
+PASS
+ok  	aos/bench/spec	28.003s

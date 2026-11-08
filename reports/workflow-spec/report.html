@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workflow Spec Probes</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul, ol { padding-left: 20px; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Workflow Specs at v0.1.7: Ten Probes</h1>
+    <p>An earlier design review, written at an older commit, made ten claims about workflow specs. This page checks each one against <code>v0.1.7</code> (<code>6745ba4</code>), for Chapter 10 (Workflow Specs as Executable Contracts). The probe code is new. The behaviour it measures is <code>v0.1.7</code>'s: the probes ran in an export of that tag, and again at <code>fcbe014</code> (the driver fixes after it), with the same findings. Each probe checks <code>Validate</code>, and then a run whose backend is scripted and returns actions directly, so no model, prompt or parser is involved. No model was called.</p>
+    <ul>
+      <li><span class="bad">A one-letter typo removes the verification gate.</span> A spec with <code>"verifcation"</code> is accepted, the block is dropped, and the workflow exits 0 although its checker failed the work (S6).</li>
+      <li><span class="bad">Nothing stops a delegation cycle without a budget.</span> <code>a → b → a</code> and <code>a → a</code> are accepted and recurse until the probe stops them. A step limit does not bound the depth; a shared token budget does (S1, S2).</li>
+      <li><span class="bad">A worker can be its own verifier.</span> With the writer named as verifier, the workflow passes on the writer's own exit (S9).</li>
+      <li><span class="warn">Unreachable agents, typos in agent fields, and a per-agent model are all accepted without a word.</span> That includes an agent holding <code>run</code>, writable <code>/</code> and <code>unconfined_run</code> (S3, S5, S6, S7).</li>
+      <li><span class="good">The edges that are checked hold.</span> A verifier that is not an agent, or that cannot be reached, is refused. So is an edge that grants more than the parent holds (S5, S9).</li>
+    </ul>
+  </div>
+
+  <h2>How to run them</h2>
+  <pre>go test -tags workflowspec -count=1 -v ./bench/spec/</pre>
+  <p>The probes are in <code>bench/spec/spec_test.go</code>, kept out of <code>go test ./...</code> by their build tag. To measure <code>v0.1.7</code> itself, export the tag (<code>git archive v0.1.7</code>), copy the probe file into it, and run the command there. <code>probe-output.txt</code> is that run. Paths print with the home directory's user name replaced, and the probes print no address or hostname.</p>
+  <p>The scripted backend returns an action for each step of each agent process. Delegating takes the <code>spawn_agent</code> tool as well as an <code>allowed_agents</code> edge, so the probe specs give their delegators that tool. Specs are decoded with <code>json.Unmarshal</code>, as <code>aos run --workflow</code> decodes them. The probe does not create writable mounts, which <code>aos run</code> does.</p>
+
+  <h2>The claims, one by one</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>#</th><th>Claim</th><th>Validate at v0.1.7</th><th>At run time</th><th>Premise</th></tr>
+    <tr><td>S1</td><td>Self-delegation is accepted</td><td>Accepted</td><td><code>a</code> delegating to <code>a</code> on its first step spawned 31 processes before the probe's own stop. The engine refuses only a second live child of the same agent under the same parent, and each new <code>a</code> is a child of the last.</td><td class="bad">Holds</td></tr>
+    <tr><td>S2</td><td>A cycle <code>a → b → a</code> is accepted and recurses</td><td>Accepted</td><td>
+      <ul>
+        <li><b>No budget:</b> 61 processes, until the probe's stop at 60. AOS sets no limit.</li>
+        <li><b><code>max_steps: 1</code> for both:</b> still 61 processes. A delegation is one step of the delegator, and each child starts with a limit of its own. The levels then fail on the way back up, and the entry agent exits 1, "step limit exceeded".</li>
+        <li><b>A run token budget of 20,000 at 1,000 tokens a call:</b> 21 processes. The deepest exits "token budget exceeded: 20000 of 20000 tokens used (budget of run)", and so does the entry agent.</li>
+        <li><b>What bounds the depth:</b> a budget shared through the run's account chain (tokens, or time when strict), and otherwise nothing.</li>
+      </ul></td><td class="bad">Holds</td></tr>
+    <tr><td>S3</td><td>An agent unreachable from the entry agent is accepted</td><td>Accepted</td><td>It is never spawned. A related gap: <code>allowed_agents</code> without the <code>spawn_agent</code> tool is accepted too. Every delegation along that edge is then refused at run time, as a capability denial the model reads, and the workflow can still exit 0.</td><td class="warn">Holds</td></tr>
+    <tr><td>S4</td><td>A negative or zero <code>max_steps</code> is accepted</td><td>Accepted, as is 1,000,000,000</td><td><code>-5</code> and <code>0</code> both mean the default: 24 steps, then "step limit exceeded". <code>run.started</code> records <code>max_steps_&lt;id&gt;=24</code>, so the record is honest, but the spec is not refused.</td><td class="warn">Holds</td></tr>
+    <tr><td>S5</td><td>An unreachable agent holding <code>run</code> and write access to <code>/</code> is accepted</td><td>Accepted: <code>run</code>, <code>write_file</code>, <code>write_paths ["/"]</code>, a writable mount of <code>/</code>, <code>unconfined_run</code></td><td>It never runs. Made reachable from an entry agent without that authority, it is refused: "a -&gt; root exceeds what a may grant: tool run, tool write_file, unconfined_run". The same authority on the entry agent is accepted, because the spec and the run request are the trust root.</td><td class="warn">Holds: dormant authority, one edit from live</td></tr>
+    <tr><td>S6</td><td>Unknown fields are dropped silently</td><td>All accepted. A decoder with <code>DisallowUnknownFields</code> would stop at the first one.</td><td>See the typo table below.</td><td class="bad">Holds</td></tr>
+    <tr><td>S7</td><td>There is no per-agent model choice</td><td>The fields are dropped</td><td><code>StaticBackendFactory.BackendFor</code> hands agents <code>a</code> and <code>b</code> the same <code>Completer</code>. <code>AgentSpec</code> has no <code>model</code>, <code>profile</code> or <code>backend</code> field.</td><td>Holds; what a field would need is listed below</td></tr>
+    <tr><td>S8</td><td><code>internal/workflow</code> is imported by agentflow, and its three gaps hold there</td><td>n/a</td><td>
+      <ul>
+        <li><b>The import:</b> agentflow imports the package, but only for the policy vocabulary: <code>VerificationPolicy</code>, its three constants and <code>ParseVerificationPolicy</code>. <code>workflow.Engine</code>, the planner/worker/verifier harness, is not on the path real agents run (<code>aos run --workflow</code>, <code>aos-tui</code>). Only <code>cmd/aos-demo-live</code> and <code>internal/scenario</code> (behind <code>cmd/aos-demo</code>) use it.</li>
+        <li><b>The three gaps, in that engine:</b> all hold. An empty plan under <code>required</code> returns 0 results and no error. One object can be worker and verifier, and it approves its own output. A verifier that rejects every attempt under <code>required</code> returns <code>accepted=false</code> after 2 attempts, with no error.</li>
+      </ul></td><td class="warn">Half wrong: the gaps hold, but not on agentflow's path</td></tr>
+    <tr><td>S9</td><td>The verification block's edge cases</td><td>
+      <ul>
+        <li><b>Refused:</b> a verifier that is not an agent; a verifier that cannot be reached.</li>
+        <li><b>Accepted:</b> a verifier that is the worker it judges; evidence named from a publisher that never runs.</li>
+      </ul></td><td>
+      <ul>
+        <li><b>The worker as its own verifier:</b> it writes, exits 0, and the verdict is <b>pass</b>. A verifier's own runs are left out of the staleness check, so its work never makes its verdict stale.</li>
+        <li><b>A publisher that never runs:</b> each exit 0 the verifier sends is refused, until its 3 steps run out. The verdict is <code>unverified</code>, and the workflow exits 1. That is safe, but it costs the verifier's steps, and the reason only appears at run time.</li>
+        <li><b>A verifier never delegated:</b> verdict <code>missing</code>, exit 1.</li>
+      </ul></td><td>Partly: two of the four are refused</td></tr>
+    <tr><td>S10</td><td>The checked-in workflows</td><td>All 14 validate, and all 14 decode strictly too: none has an unknown field.</td><td>
+      <ul>
+        <li><b>Missing host paths:</b> six name mounts, skill roots or paths that do not exist on this machine: <code>pathtracer-bunny-metal</code>, <code>rasterizer-bunny-metal</code>, <code>rasterizer-bunny</code>, <code>rasterizer-optimized-tail</code>, <code>rasterizer-team</code> and <code>two-agent-mini</code>. They are absolute paths under another user's home (<code>/Users/&lt;user&gt;/Code/aos/...</code>).</li>
+        <li><b>Scripted runs:</b> every workflow runs. Each agent delegates to its allowed agents in order and exits 0. Thirteen complete, and the nine of those with a verifier pass. <code>rasterizer-bunny-cuda-evidence-ipc</code> ends <code>unverified</code>, as it should, because the scripted verifier reads no evidence.</li>
+        <li><b>Why the missing paths pass:</b> no scripted agent touches a mount. A real run would meet the missing paths at its first tool call. <code>aos run</code> creates a missing writable mount only when its parent exists.</li>
+      </ul></td><td>No IP addresses in any of them</td></tr>
+  </table>
+  </div>
+
+  <h3>S6: which typos change behaviour without an error</h3>
+  <p>The spec: a lead delegates to a writer with <code>max_steps: 2</code> and <code>write_file</code>, then to a checker. The policy is <code>required</code>, and the checker fails the work. Each row misspells one field.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Field as written</th><th>Validate</th><th>What the decoder kept</th><th>Run</th><th>Silent change?</th></tr>
+    <tr><td>(spelled right)</td><td>Accepted</td><td>verification, <code>max_steps</code> 2, tools [write_file]</td><td>Exit 1: "verifier failed: the work is wrong"</td><td>n/a</td></tr>
+    <tr><td><code>"verifcation"</code></td><td>Accepted</td><td>No verification</td><td class="bad">Exit 0, "workflow completed", although the checker failed the work</td><td class="bad">Yes: the gate is gone</td></tr>
+    <tr><td><code>"max_step"</code></td><td>Accepted</td><td><code>max_steps</code> 0, so 24</td><td>The writer took 4 steps where 2 were set</td><td class="bad">Yes: the limit is gone</td></tr>
+    <tr><td><code>"capabilites"</code></td><td>Accepted</td><td>No tools; read and write paths are derived from the request</td><td>Every <code>write_file</code> is refused as a capability denial; the run goes on</td><td class="bad">Yes: the agent cannot work</td></tr>
+    <tr><td><code>"allowed_agent"</code></td><td>Accepted</td><td>No <code>allowed_agents</code></td><td>Exit 1, non-retryable: "delegation denied: lead -&gt; writer"</td><td class="warn">An error, but only at run time. With a verifier behind the edge, Validate refuses, but with a message about reachability, not the typo.</td></tr>
+    <tr><td><code>"model"</code>, <code>"profile"</code>, <code>"backend"</code></td><td>Accepted</td><td>Nothing: a round trip drops all three</td><td>The agent runs on the run's one backend</td><td class="bad">Yes (D5)</td></tr>
+  </table>
+  </div>
+
+  <h3>S7: what a per-agent model field would have to reach</h3>
+  <ul>
+    <li><b>The spec:</b> a field on <code>AgentSpec</code>, best a profile name (<code>scripts/models.json</code>), not a raw model id. A profile also carries the backend kind, base URL, key variable and sampling.</li>
+    <li><b>The factory:</b> <code>BackendFactory.BackendFor(agent, spec)</code> builds a backend per profile. <code>StaticBackendFactory</code> today holds one <code>Completer</code>, and <code>cmd/aos</code> builds one backend for the run from <code>--profile</code> or the environment.</li>
+    <li><b>The run record:</b> <code>run.started</code> records one backend (<code>backendRecord</code>). It would need one entry per profile used, and which agents use each.</li>
+    <li><b>The call ledger:</b> it already records <code>backend</code>, <code>model</code> and <code>params.api</code> on every call, so a mixed run is readable as it is. Each driver needs its own call log, or a shared one.</li>
+    <li><b>Replay:</b> today it builds one backend from the ledger's first call (<code>internal/replay/replay.go</code>), and it refuses runs with more than one agent process. It would need a backend per agent, built from that agent's first call.</li>
+    <li><b>Budgets and cost:</b> the token budget counts tokens across models as if they were one currency. The comparison analyzer prices calls by <code>params.api</code>, so it already tells the two kinds apart.</li>
+  </ul>
+
+  <h2>Proposal: what a strict spec contract would refuse at load time</h2>
+  <p>Proposed only; nothing here is implemented. It is ranked by risk: what a mistake costs, and how silently it happens. Every refusal would name the field by its path (<code>agents[1].max_step</code>). Unknown fields would also get the nearest known name. Checked-in workflows would need to pass, or be fixed in the same change, and S10 says they already decode strictly.</p>
+  <ol>
+    <li><b>Unknown fields, anywhere in the spec.</b> Decode with <code>DisallowUnknownFields</code>, at the top level, in agents, capabilities, mounts, verification and evidence. This is the one gap where a typo silently turns a failing workflow into a passing one (<code>"verifcation"</code>). It also catches dropped limits (<code>"max_step"</code>), dropped authority (<code>"capabilites"</code>) and dropped edges (<code>"allowed_agent"</code>). Per-agent <code>model</code>, <code>profile</code> and <code>backend</code> would be refused rather than ignored until they are implemented (D5).</li>
+    <li><b>A verifier that can change the work.</b> Refuse a verifier that is work-changing (<code>write_file</code>, <code>edit_file</code>, <code>run</code>, or write paths) or is the agent whose work it judges. Today such a verifier passes its own work (S9), and staleness cannot catch it.</li>
+    <li><b>Delegation cycles, self-delegation included.</b> Refuse a cycle in the <code>allowed_agents</code> graph, or accept it only with an explicit depth limit in the spec and a run budget. Without a budget nothing ends the recursion (S1, S2), and step limits do not bound depth.</li>
+    <li><b>Evidence nobody can publish.</b> Refuse an evidence publisher that cannot be reached from the entry agent, as an unreachable verifier is refused already. Today the run burns the verifier's steps and ends <code>unverified</code> (S9).</li>
+    <li><b>Unreachable agents.</b> Refuse an agent that no edge reaches from the entry agent. Such an agent is dead configuration (S3). When it carries authority, it is authority that one edit makes live, without any review of that grant (S5).</li>
+    <li><b>Edges without the tool, and the tool without edges.</b> Refuse <code>allowed_agents</code> without <code>spawn_agent</code>: every delegation along it is refused at run time (S3). Refuse <code>spawn_agent</code> with no <code>allowed_agents</code>, which can delegate to nobody.</li>
+    <li><b>Out-of-range limits.</b> Refuse a negative <code>max_steps</code>, and a value above a stated ceiling such as 1,000 (S4). Zero would mean "the default" only when the field is absent. That takes a <code>*int</code>, or refusing an explicit 0.</li>
+    <li><b>Host paths that cannot work here.</b> Refuse read-only mounts, read paths and skill roots that do not exist, and writable mounts whose parent does not exist. <code>aos run</code> skips creating those silently (S10). This one is less a contract than a property of the machine it runs on, so it might be a separate preflight that <code>aos run</code> runs and Validate does not.</li>
+    <li><b><code>internal/workflow</code>'s engine</b> (S8), off agentflow's path. Refuse an empty plan under <code>required</code>, and the same object as worker and verifier. Return an error when <code>required</code> ends unapproved. Or mark the package demo-only and move the policy vocabulary out of it, so agentflow does not import a harness it does not run.</li>
+  </ol>
+  <p>Already refused, and worth keeping in the chapter as the model of a checked edge: a verifier that is not an agent, or not reachable; a verifier that is the entry agent; an edge that grants more tools, paths, mounts or delegable authority than the parent holds; evidence types under the reserved prefix; and evidence from a publisher without <code>publish_artifact</code>, or without <code>read_file</code> for <code>from_file</code>.</p>
+</body>
+</html>
