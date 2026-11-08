@@ -85,7 +85,18 @@ type CallRecord struct {
 	CacheCreationTokens int    `json:"cache_creation_tokens,omitempty"`
 	LatencyMS           int64  `json:"latency_ms"`
 	Error               string `json:"error,omitempty"`
-	Response            string `json:"response,omitempty"`
+	// ErrorStatus and ErrorType are a failed call's HTTP status and the
+	// provider's error type ("refusal" for a refused reply), where the
+	// server gave them. ErrorFinal says the driver called the failure not
+	// temporary, so the step did not retry it, and RetryAfterSeconds is the
+	// wait the server asked for. Outcomes from before drivers classified
+	// errors have none of them, and a replay retries their errors as the
+	// run did (RecordedCallError).
+	ErrorStatus       int     `json:"error_status,omitempty"`
+	ErrorType         string  `json:"error_type,omitempty"`
+	ErrorFinal        bool    `json:"error_final,omitempty"`
+	RetryAfterSeconds float64 `json:"retry_after_s,omitempty"`
+	Response          string  `json:"response,omitempty"`
 	// Reasoning is the model's thinking where the server returns it apart
 	// from the reply (Anthropic thinking blocks). It is never parsed.
 	Reasoning string `json:"reasoning,omitempty"`
@@ -219,7 +230,7 @@ func (b *VLLMBackend) recordStart(ctx context.Context, payload chatCompletionReq
 }
 
 // recordOutcome writes the outcome line of the call pending started.
-func (b *VLLMBackend) recordOutcome(pending pendingCall, model string, usage *responseUsage, latency time.Duration, content string, callErr error) {
+func (b *VLLMBackend) recordOutcome(pending pendingCall, model string, usage *responseUsage, latency time.Duration, reply chatReply, callErr error) {
 	var counts callUsage
 	if usage != nil {
 		counts = callUsage{prompt: usage.PromptTokens, completion: usage.CompletionTokens}
@@ -227,7 +238,7 @@ func (b *VLLMBackend) recordOutcome(pending pendingCall, model string, usage *re
 			counts.cached = usage.PromptTokensDetails.CachedTokens
 		}
 	}
-	b.calls.outcome(pending, b.baseURL, model, counts, latency, content, "", callErr)
+	b.calls.outcome(pending, b.baseURL, model, counts, latency, reply.text, reply.reasoning, callErr)
 }
 
 // callUsage is what the server reported for one call, in the ledger's
@@ -313,6 +324,9 @@ func (recorder *callRecorder) outcome(pending pendingCall, backend, model string
 	}
 	if callErr != nil {
 		record.Error = callErr.Error()
+		failure := failureOf(callErr)
+		record.ErrorStatus, record.ErrorType, record.ErrorFinal = failure.status, failure.kind, failure.final
+		record.RetryAfterSeconds = failure.retryAfter.Seconds()
 	}
 	_, _ = recorder.log.Append(func(seq int) any {
 		record.Seq = seq

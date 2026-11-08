@@ -303,6 +303,11 @@ type AgentRuntime struct {
 	// for replaying a record made before it. Run, web_search and web_fetch need no
 	// such switch: a replay answers them from the record.
 	NoDurationArgs bool
+	// NoReplyCap caps a call's reply at what is left of the token budget,
+	// prompt included, as calls were capped before the driver subtracted the
+	// prompt it sends (CallInfo.TokensLeft). It is for replaying a record
+	// made before the reply cap.
+	NoReplyCap bool
 	// ExitCheck, when set, may refuse this process's exit 0: the error reaches the
 	// model as a tool error and the process goes on. A nonzero exit claims no pass, and
 	// is not checked.
@@ -916,14 +921,22 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 			snapshot = &memory
 		}
 
-		// Check the token budget before the call, and cap the reply to what
-		// is left of it; its prompt may still overshoot, by at most one call.
+		// Check the token budget before the call, and hand the driver what is
+		// left of it: the driver caps the reply at that less the prompt it is
+		// about to send, and refuses the call when nothing is left for a
+		// reply (ErrNoReplyTokens). Without the reply cap (records from
+		// before it) the reply is capped at what is left, and the prompt may
+		// overshoot by at most one call.
 		info := CallInfo{PID: pid, AgentID: process.Metadata["agent_id"], Step: session.Usage.Steps, Elapsed: stepElapsed, Run: RunIDFrom(ctx)}
 		if tokens := account.tokensLeft(); tokens.ok {
 			if tokens.Left <= 0 {
 				return budgetExit(fmt.Sprintf("token budget exceeded: %d of %d tokens used (budget of %s)", tokens.Limit-int(tokens.Left), tokens.Limit, tokens.Owner))
 			}
-			info.MaxTokens = int(tokens.Left)
+			if r.NoReplyCap {
+				info.MaxTokens = int(tokens.Left)
+			} else {
+				info.TokensLeft = int(tokens.Left)
+			}
 		}
 		request := GenerateRequest{
 			Process:       process,
@@ -947,10 +960,12 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		// A failed call is retried within the step, after a growing wait:
 		// an endpoint outage is not the agent's doing and must not spend
-		// its steps.
+		// its steps. A failure its driver says will not change (a 404, a
+		// bad key, a refusal) is not retried (BackendError).
 		retry := r.BackendRetry.withDefaults()
 		var result GenerateResult
 		attempts := 0
+		retryable := true
 		for {
 			attempts++
 			meter := &TokenMeter{}
@@ -962,15 +977,28 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 				// Drop whatever the interrupted call produced, action or error.
 				return stop()
 			}
-			if err == nil || retry.Attempts < 0 || attempts >= retry.Attempts {
+			if errors.Is(err, ErrNoReplyTokens) {
+				return budgetExit(err.Error())
+			}
+			var retryAfter time.Duration
+			if err != nil {
+				retryable, retryAfter = retryBackendError(err)
+			}
+			if err == nil || retry.Attempts < 0 || attempts >= retry.Attempts || !retryable {
 				break
 			}
 			delay := retry.delay(attempts)
-			if _, recordErr := r.Kernel.RecordEvent(pid, "backend.retry", map[string]string{
+			data := map[string]string{
 				"attempt": strconv.Itoa(attempts),
 				"error":   err.Error(),
-				"delay":   delay.String(),
-			}); recordErr != nil {
+			}
+			if retryAfter > 0 {
+				// The server's wait, within the policy's longest.
+				delay = min(retryAfter, retry.Max)
+				data["retry_after"] = retryAfter.String()
+			}
+			data["delay"] = delay.String()
+			if _, recordErr := r.Kernel.RecordEvent(pid, "backend.retry", data); recordErr != nil {
 				return RunResult{}, recordErr
 			}
 			if r.Sleep != nil {
@@ -984,6 +1012,14 @@ func (r *AgentRuntime) runSteps(ctx context.Context, process kernel.Process, ses
 		}
 		if err == nil {
 			session.MailboxUnshown = markShown(session.MailboxUnshown)
+		}
+		if err != nil && retry.Attempts >= 0 && !retryable {
+			// The driver says the same request fails the same way: a wrong
+			// endpoint, model or key, a request the server refuses, a prompt
+			// over the context window, a refusal. Another step cannot fix it,
+			// and waiting does not either. Exit retryable with a checkpoint,
+			// so the operator can fix the cause and recover the run.
+			return budgetExit(fmt.Sprintf("model endpoint refused the call, not retried: %v", err))
 		}
 		if err != nil && retry.Attempts >= 0 {
 			// Retries ran out: the endpoint is down, which another step

@@ -101,11 +101,12 @@ type AnthropicConfig struct {
 // answered. temperature and top_p are never sent, so a profile's are
 // ignored, as is its thinking_budget.
 //
-// Retries: none here. Each call is one request, and its error, a 429 or
-// 529 included, goes to the runtime's BackendRetryPolicy, the only retry
-// layer, so every attempt is a backend.retry event and a ledger line. The
-// error carries retry-after when the server sends it, but the runtime's
-// backoff does not read it.
+// Retries: none here. Each call is one request, and its error goes to the
+// runtime's BackendRetryPolicy, the only retry layer, so every attempt is a
+// backend.retry event and a ledger line. The error says whether it is
+// temporary (a 429 or 529 is; a 400, 401, 404 or refusal is not), and the
+// runtime retries only a temporary one, after the server's retry-after
+// when it sent one.
 type AnthropicBackend struct {
 	baseURL       string
 	model         string
@@ -117,6 +118,7 @@ type AnthropicBackend struct {
 	stream        bool
 	replayer      Replayer
 	calls         *callRecorder
+	prompts       promptEstimator
 
 	usageMu sync.Mutex
 	usage   TokenUsage
@@ -295,7 +297,7 @@ func wireMessages(messages []chatMessage) ([]chatMessage, error) {
 	return wire, nil
 }
 
-func (b *AnthropicBackend) params(ctx context.Context) RequestParams {
+func (b *AnthropicBackend) params() RequestParams {
 	params := RequestParams{
 		API:          APIAnthropicMessages,
 		Model:        b.model,
@@ -307,10 +309,6 @@ func (b *AnthropicBackend) params(ctx context.Context) RequestParams {
 	if fallbackModels[b.model] {
 		params.Fallbacks = "default"
 	}
-	if info, _ := runtime.CallInfoFrom(ctx); info.MaxTokens > 0 && info.MaxTokens < params.MaxTokens {
-		// What is left of the caller's token budget.
-		params.MaxTokens = info.MaxTokens
-	}
 	return params
 }
 
@@ -319,15 +317,23 @@ func (b *AnthropicBackend) complete(ctx context.Context, messages []chatMessage)
 	if err != nil {
 		return "", err
 	}
-	params := b.params(ctx)
+	params := b.params()
+	info, _ := runtime.CallInfoFrom(ctx)
+	// What is left of the caller's token budget, less the prompt.
+	if params.MaxTokens, err = b.prompts.replyCap(info, wire, params.MaxTokens); err != nil {
+		return "", err
+	}
 	payload := anthropicRequestOf(params, wire)
 	pending := b.calls.start(ctx, b.baseURL, payload, params, wire)
 	started := time.Now()
 	reply, err := b.send(ctx, payload)
 	model := firstNonEmpty(reply.model, payload.Model)
 	b.calls.outcome(pending, b.baseURL, model, reply.usage, time.Since(started), reply.text, reply.reasoning, err)
-	if info, _ := runtime.CallInfoFrom(ctx); info.Meter != nil && reply.counted {
+	if info.Meter != nil && reply.counted {
 		info.Meter.Add(reply.usage.prompt + reply.usage.completion)
+	}
+	if reply.counted {
+		b.prompts.observe(info.PID, wire, reply.usage.prompt)
 	}
 	return reply.text, err
 }
@@ -388,6 +394,9 @@ type AnthropicError struct {
 	Message    string
 	RequestID  string
 	RetryAfter string
+	// Wait is RetryAfter read as a duration (or retry-after-ms), zero when
+	// neither was sent or readable.
+	Wait time.Duration
 }
 
 func (e *AnthropicError) Error() string {
@@ -412,16 +421,13 @@ func (e *AnthropicError) Error() string {
 }
 
 // Temporary reports whether the same request may succeed later: a timeout,
-// a conflict, a rate limit (429), a server error or an overload (529).
-// The runtime retries every error alike; this is for callers that tell
-// them apart.
-func (e *AnthropicError) Temporary() bool {
-	switch e.StatusCode {
-	case http.StatusRequestTimeout, http.StatusConflict, http.StatusTooManyRequests:
-		return true
-	}
-	return e.StatusCode >= 500
-}
+// a conflict, a rate limit (429), a server error or an overload (529), but
+// not a prompt over the context window (temporaryFailure). The runtime
+// retries only a temporary error (runtime.BackendError).
+func (e *AnthropicError) Temporary() bool { return temporaryFailure(e.StatusCode, e.Type, e.Message) }
+
+// RetryWait is the wait the server asked for.
+func (e *AnthropicError) RetryWait() time.Duration { return e.Wait }
 
 // send makes the call's one request.
 func (b *AnthropicBackend) send(ctx context.Context, payload anthropicRequest) (anthropicReply, error) {
@@ -504,9 +510,9 @@ func (b *AnthropicBackend) send(ctx context.Context, payload anthropicRequest) (
 
 func refusal(details *stopDetails) error {
 	if details == nil {
-		return ErrModelRefused
+		return &refusalError{text: ErrModelRefused.Error()}
 	}
-	return fmt.Errorf("%w: category %q: %s", ErrModelRefused, details.Category, details.Explanation)
+	return &refusalError{text: fmt.Sprintf("%s: category %q: %s", ErrModelRefused, details.Category, details.Explanation)}
 }
 
 func readAnthropicError(response *http.Response) error {
@@ -515,6 +521,7 @@ func readAnthropicError(response *http.Response) error {
 		Status:     response.Status,
 		RequestID:  response.Header.Get("request-id"),
 		RetryAfter: response.Header.Get("retry-after"),
+		Wait:       parseRetryAfter(response.Header, time.Now()),
 	}
 	raw, _ := io.ReadAll(io.LimitReader(response.Body, errorBodyLimit))
 	var parsed struct {

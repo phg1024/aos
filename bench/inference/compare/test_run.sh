@@ -32,9 +32,12 @@ for g in groups:
     assert g["html_intact"] == 3 and g["misreads"] == 0 and g["repairs"] == 0, name
     assert g["steps_per_agent"] == {"delivery_lead": 15, "merger": 15, "file_writer": 9, "review_partner": 9}, (name, g["steps_per_agent"])
     assert g["stages"].get("trailing object / nested") == 6, (name, g["stages"])
+    # Both drivers record reasoning sent apart from the reply: thinking
+    # blocks, and since the D1 fix reasoning_content.
+    assert g["reasoning_chars"] > 0, name
     if g["arm"] == "sonnet":
-        assert g["usd"] > 0 and g["reasoning_chars"] > 0, name
+        assert g["usd"] > 0, name
     else:
-        assert g["usd"] == 0 and g["reasoning_chars"] == 0, name
+        assert g["usd"] == 0, name
 print("ok: 12 dry-run trials, all passed, HTML intact, report written")
 PY

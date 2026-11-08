@@ -18,6 +18,9 @@ const (
 	// the first brace to the last, with bare or half-quoted keys quoted and
 	// trailing commas dropped.
 	ExtractedLoose = "loose repair"
+	// ExtractedAmbiguous: with the reply checks, the reply held two
+	// different actions, and none was read.
+	ExtractedAmbiguous = "two actions"
 )
 
 // ReplyReading is how the parser reads one model reply, rung by rung, for
@@ -33,29 +36,57 @@ type ReplyReading struct {
 	Result runtime.GenerateResult
 }
 
-// ReadReply reads raw as one step's first parse does.
-func ReadReply(raw string) ReplyReading {
-	extracted := extractTrailingJSONObject(raw)
+// ReplyReader reads recorded replies as a step of a given record read
+// them: NoReplyChecks for a record without reply_checks (ReplyChecksField).
+type ReplyReader struct {
+	NoReplyChecks bool
+}
+
+// ReaderFor is the reader for a run whose run.started data is started.
+func ReaderFor(started map[string]string) ReplyReader {
+	return ReplyReader{NoReplyChecks: started[ReplyChecksField] == ""}
+}
+
+// ReadReply reads raw as one step's first parse does now.
+func ReadReply(raw string) ReplyReading { return ReplyReader{}.Read(raw) }
+
+// ResolveRecordedReply is ReplyReader.Resolve as steps read replies now.
+func ResolveRecordedReply(raw, repaired string, hadRepair bool) (runtime.GenerateResult, string, error) {
+	return ReplyReader{}.Resolve(raw, repaired, hadRepair)
+}
+
+// Read reads raw as one step's first parse does.
+func (r ReplyReader) Read(raw string) ReplyReading {
+	checks := !r.NoReplyChecks
+	text := raw
+	if checks {
+		text = stripThink(raw)
+	}
+	extracted := extractTrailingJSONObject(text)
 	object := repairLooseJSONObject(extracted)
 	reading := ReplyReading{Extraction: ExtractedAsSent}
 	switch {
 	case object != extracted:
 		reading.Extraction = ExtractedLoose
-	case object != strings.TrimSpace(raw):
+	case object != strings.TrimSpace(text):
 		reading.Extraction = ExtractedTrailing
 	}
-	result, shape, ok := parseActionShape(object)
+	if checks && len(distinctActions(text)) > 1 {
+		reading.Extraction = ExtractedAmbiguous
+		return reading
+	}
+	result, shape, ok := parseActionShape(object, checks)
 	reading.Shape, reading.Result = shape, result
 	reading.Usable = ok && !(result.Action.Type == "message" && strings.TrimSpace(result.Action.Message) == "")
 	return reading
 }
 
-// ResolveRecordedReply runs the tolerance ladder over a recorded reply and,
-// when the step asked for one, its recorded repair, and names the rung
-// that gave the action (SourceReply ... SourceUnrepairable). hadRepair false
-// means no repair call was made or recorded.
-func ResolveRecordedReply(raw, repaired string, hadRepair bool) (runtime.GenerateResult, string, error) {
-	return resolveReply(raw, func() (string, error) {
+// Resolve runs the tolerance ladder over a recorded reply and, when the
+// step asked for one, its recorded repair, and names the rung that gave the
+// action (SourceReply ... SourceUnrepairable). hadRepair false means no
+// repair call was made or recorded.
+func (r ReplyReader) Resolve(raw, repaired string, hadRepair bool) (runtime.GenerateResult, string, error) {
+	return resolveReply(raw, !r.NoReplyChecks, func() (string, error) {
 		if !hadRepair {
 			return "", errNoRepairRecorded
 		}

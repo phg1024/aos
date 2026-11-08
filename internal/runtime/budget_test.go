@@ -132,16 +132,33 @@ func TestAdvisoryTimeBudgetWarnsOnceAndNeverStops(t *testing.T) {
 	}
 }
 
-// The token budget is checked before each call and caps its reply; the
-// agent is warned once near the end and stopped before a call that would
-// start over budget.
+// The token budget is checked before each call and hands the driver what
+// is left of it (TokensLeft, or MaxTokens without the reply cap); the agent
+// is warned once near the end and stopped before a call that would start
+// over budget.
 func TestTokenBudgetCapsAndStops(t *testing.T) {
+	for _, noReplyCap := range []bool{true, false} {
+		k, store, process, _ := budgetFixture(t, capability.Set{Budget: capability.Budget{Tokens: 1000}})
+		var caps, left []int
+		backend := &funcBackend{fn: func(_ int, ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			info, _ := runtime.CallInfoFrom(ctx)
+			caps, left = append(caps, info.MaxTokens), append(left, info.TokensLeft)
+			info.Meter.Add(300)
+			return messageAction("thinking"), nil
+		}}
+		if _, err := (&runtime.AgentRuntime{Kernel: k, Artifacts: store, Backend: backend, MaxSteps: 20, NoReplyCap: noReplyCap}).Run(context.Background(), process.PID, nil); err != nil {
+			t.Fatal(err)
+		}
+		want := map[bool][2]string{true: {"1000 700 400 100", "0 0 0 0"}, false: {"0 0 0 0", "1000 700 400 100"}}[noReplyCap]
+		if stringsOf(caps) != want[0] || stringsOf(left) != want[1] {
+			t.Fatalf("NoReplyCap %t: MaxTokens %v, TokensLeft %v, want %v", noReplyCap, caps, left, want)
+		}
+	}
+
 	k, store, process, _ := budgetFixture(t, capability.Set{Budget: capability.Budget{Tokens: 1000}})
-	var caps []int
 	var last []runtime.Message
 	backend := &funcBackend{fn: func(_ int, ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error) {
 		info, _ := runtime.CallInfoFrom(ctx)
-		caps = append(caps, info.MaxTokens)
 		info.Meter.Add(300)
 		last = request.History
 		return messageAction("thinking"), nil
@@ -152,9 +169,6 @@ func TestTokenBudgetCapsAndStops(t *testing.T) {
 	}
 	if got := result.ExitStatus.Reason; got != "token budget exceeded: 1200 of 1000 tokens used (budget of worker (pid-000001))" || !result.ExitStatus.Retryable || result.ExitStatus.Checkpoint == "" {
 		t.Fatalf("exit = %+v", result.ExitStatus)
-	}
-	if stringsOf(caps) != "1000 700 400 100" {
-		t.Fatalf("max_tokens caps = %v, want 1000 700 400 100", caps)
 	}
 	warnings := 0
 	for _, message := range last {

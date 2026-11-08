@@ -1,8 +1,9 @@
 //go:build inferencedriver
 
 // Package inference_test holds the measure-only probes of the inference
-// driver behind Chapter 9 (Treat Inference Like a Device Driver), at
-// v0.1.6 (8d5ff6e). Each probe D1..D7 asks one question of the model
+// driver behind Chapter 9 (Treat Inference Like a Device Driver), written
+// at v0.1.6 (8d5ff6e) and run again after the fixes that followed v0.1.7;
+// reports/inference-driver keeps each run's output. Each probe D1..D7 asks one question of the model
 // client, its parser and its retries, against fake servers or the local
 // records of live6, and logs what it ran and what it saw as "FINDING:"
 // lines. A probe fails only when it cannot run: a defect is recorded as
@@ -79,12 +80,20 @@ func describe(result runtime.GenerateResult, err error) string {
 }
 
 // generate runs one step of a prompt backend over completer, as an agent
-// step of aos run or aos-tui does.
+// step of aos run or aos-tui does, with the reply checks as runs now read
+// replies.
 func generate(completer agentflow.JSONCompleter) (runtime.GenerateResult, error) {
+	return generateAs(completer, false)
+}
+
+// generateAs is generate, reading replies as a record without reply_checks
+// did when noChecks is set.
+func generateAs(completer agentflow.JSONCompleter, noChecks bool) (runtime.GenerateResult, error) {
 	backend := agentflow.PromptBackend{
-		Completer: completer,
-		Workflow:  agentflow.WorkflowSpec{Name: "probe", EntryAgent: "solo"},
-		Agent:     agentflow.AgentSpec{ID: "solo", SystemPrompt: "Work."},
+		Completer:     completer,
+		Workflow:      agentflow.WorkflowSpec{Name: "probe", EntryAgent: "solo"},
+		Agent:         agentflow.AgentSpec{ID: "solo", SystemPrompt: "Work."},
+		NoReplyChecks: noChecks,
 	}
 	request := runtime.GenerateRequest{Process: kernel.Process{PID: "pid-000002", Role: "solo"}}
 	return backend.Generate(context.Background(), request)
@@ -147,9 +156,11 @@ func TestD1StreamingAndNot(t *testing.T) {
 		{"empty content", exitInReasoning, ""},
 		{"reasoning prose with braces, valid content", "I could call {read_file} here.", `{"action":{"type":"message","message":"from content"}}`},
 	}
+	same := true
 	for _, c := range cases {
 		row := map[bool]string{}
 		calls := map[bool]int{}
+		texts := map[bool]string{}
 		for _, stream := range []bool{false, true} {
 			server := &chatServer{reasoning: c.reasoning, content: c.content, repair: repair}
 			srv := httptest.NewServer(server)
@@ -159,14 +170,19 @@ func TestD1StreamingAndNot(t *testing.T) {
 				config.OnStreamEvent = func(e inference.StreamEvent) { events = append(events, e) }
 			}
 			result, err := generate(inference.NewVLLMBackend(config))
-			srv.Close()
 			row[stream] = describe(result, err)
 			calls[stream] = server.calls
+			texts[stream], _ = inference.NewVLLMBackend(config).CompleteText(context.Background(), "system", "user")
+			srv.Close()
 		}
+		same = same && row[false] == row[true] && calls[false] == calls[true]
 		finding(t, "D1 %-48s not streaming (aos run): %s [%d call(s)] | streaming (aos-tui): %s [%d call(s)]",
 			c.name+":", row[false], calls[false], row[true], calls[true])
+		if strings.Contains(texts[true], c.reasoning) != strings.Contains(texts[false], c.reasoning) {
+			finding(t, "D1 %-48s the streamed text holds the reasoning and the non-streamed text does not", c.name+":")
+		}
 	}
-	finding(t, "D1 vllm.go writes every reasoning delta into the text it returns when streaming; without streaming it reads only message.content, so reasoning_content is dropped")
+	finding(t, "D1 streamed and non-streamed calls took the same action, with as many calls, for every reply: %t", same)
 }
 
 // scriptCompleter answers a transcript with replies[0], and a repair with
@@ -200,43 +216,48 @@ func TestD3ToleranceLadder(t *testing.T) {
 		{"trailing commas", `{"action":{"type":"message","message":"hi",},}`, "", `message "hi"`},
 		{"generic shape (tool name beside args)", `{"action":{"type":"tool","tool":"read_file","path":"a.txt"}}`, "", `tool read_file map[path:a.txt]`},
 		{"flat shape (no action wrapper)", `{"type":"message","message":"hi"}`, "", `message "hi"`},
-		{"flat shape the generic stage refuses (delegate without agent)", `{"type":"delegate","delegate":{"goal":"build it"}}`, "", `error: unable to repair malformed action JSON`},
+		{"flat shape the generic stage refuses (delegate without agent)", `{"type":"delegate","delegate":{"goal":"build it"}}`, `{"action":{"type":"delegate","delegate":{"agent_id":"writer","goal":"build it"}}}`, `delegate to=writer goal="build it"`},
 		{"legacy shape (action is a string)", `{"action":"exit","code":0,"reason":"done"}`, "", `exit code=0 reason="done"`},
 		{"in-transcript repair", `I will read the file {read_file a.txt}`, `{"action":{"type":"message","message":"repaired"}}`, `message "repaired"`},
 		{"fallbackMessage (prose twice)", "All done, the file is written.", "Done.", `message "All done, the file is written."`},
 		{"notesAsMessage (empty message twice)", `{"action":{"type":"message","notes":"wrote a.txt","message":""}}`, `{"action":{"type":"message","notes":"wrote a.txt","message":""}}`, `message "wrote a.txt"`},
 		{"unrepairable", unrepairable, unrepairable, "error: unable to repair malformed action JSON"},
-		{"example quoted after the real action", `{"action":{"type":"exit","code":0,"reason":"done"}} For example, you could also send {"action":{"type":"message","message":"example"}}`, "", `exit code=0 reason="done"`},
+		{"example quoted after the real action", `{"action":{"type":"exit","code":0,"reason":"done"}} For example, you could also send {"action":{"type":"message","message":"example"}}`, `{"action":{"type":"exit","code":0,"reason":"done"}}`, `exit code=0 reason="done"`},
 		{"one brace short (live6 seq 28 shape)", `{"action":{"type":"delegate","notes":"n","delegate":{"agent_id":"writer","goal":"build it"}}`, "", `delegate to=writer goal="build it"`},
 		{"two braces short (args left open)", `{"action":{"type":"tool","tool_call":{"name":"run","args":{"command":"ls"}}`, "", `tool run map[command:ls]`},
 		{"<think> JSON, then a real action", `<think>maybe {"action":{"type":"exit","code":0,"reason":"thinking"}}</think>{"action":{"type":"message","message":"real"}}`, "", `message "real"`},
 		{"<think> JSON, then prose", `<think>{"action":{"type":"exit","code":0,"reason":"thinking"}}</think>Here you go.`, "Here you go.", `message "Here you go."`},
 	}
-	correct := 0
-	for _, c := range cases {
-		replies := []string{c.first}
-		if c.repair != "" {
-			replies = append(replies, c.repair)
+	// Each reply is read as a record from before reply_checks reads it, then
+	// with the checks, as runs read replies now.
+	correct := map[bool]int{}
+	for _, noChecks := range []bool{true, false} {
+		label := map[bool]string{true: "D3 without reply_checks", false: "D3 with reply_checks"}[noChecks]
+		for _, c := range cases {
+			replies := []string{c.first}
+			if c.repair != "" {
+				replies = append(replies, c.repair)
+			}
+			completer := &scriptCompleter{replies: replies}
+			result, err := generateAs(completer, noChecks)
+			got := describe(result, err)
+			verdict := "wrong action"
+			switch {
+			case got == c.want:
+				verdict = "correct"
+				correct[noChecks]++
+			case err != nil:
+				verdict = "no action"
+			}
+			repairNote := "no repair call"
+			if len(completer.seen) > 1 {
+				last := completer.seen[1]
+				repairNote = fmt.Sprintf("repair call with the raw reply as the assistant turn (%d messages)", len(last))
+			}
+			finding(t, "%s %-42s -> %-44s %s; %s", label, c.class+":", got, verdict, repairNote)
 		}
-		completer := &scriptCompleter{replies: replies}
-		result, err := generate(completer)
-		got := describe(result, err)
-		verdict := "wrong action"
-		switch {
-		case got == c.want:
-			verdict = "correct"
-			correct++
-		case err != nil:
-			verdict = "no action"
-		}
-		repairNote := "no repair call"
-		if len(completer.seen) > 1 {
-			last := completer.seen[1]
-			repairNote = fmt.Sprintf("repair call with the raw reply as the assistant turn (%d messages)", len(last))
-		}
-		finding(t, "D3 %-42s -> %-44s %s; %s", c.class+":", got, verdict, repairNote)
 	}
-	finding(t, "D3 %d of %d replies read as intended", correct, len(cases))
+	finding(t, "D3 without reply_checks: %d of %d replies read as intended; with reply_checks: %d of %d", correct[true], len(cases), correct[false], len(cases))
 }
 
 // stateFixture is a state directory laid out as aos run lays it out.
@@ -299,17 +320,21 @@ func TestD2Retries(t *testing.T) {
 			}
 		}
 	}
-	status := func(code int) func(hits *int, mu *sync.Mutex) http.HandlerFunc {
+	status := func(code int, retryAfter string) func(hits *int, mu *sync.Mutex) http.HandlerFunc {
 		return func(hits *int, mu *sync.Mutex) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				*hits++
 				mu.Unlock()
+				if retryAfter != "" {
+					w.Header().Set("retry-after", retryAfter)
+				}
 				w.WriteHeader(code)
 			}
 		}
 	}
-	for _, e := range []endpoint{{"hung (client timeout 50ms)", hang}, {"503", status(http.StatusServiceUnavailable)}, {"404", status(http.StatusNotFound)}} {
+	for _, e := range []endpoint{{"hung (client timeout 50ms)", hang}, {"503", status(http.StatusServiceUnavailable, "")}, {"404", status(http.StatusNotFound, "")},
+		{"401", status(http.StatusUnauthorized, "")}, {"429 with retry-after 3", status(http.StatusTooManyRequests, "3")}} {
 		var mu sync.Mutex
 		hits := 0
 		srv := httptest.NewServer(e.handler(&hits, &mu))
@@ -332,6 +357,17 @@ func TestD2Retries(t *testing.T) {
 	}
 	effective := runtime.BackendRetryPolicy{}.Effective()
 	finding(t, "D2 the default policy: %d attempts, base %s, max %s; MaxRetries is never set by NewBackendFromConfig, so the driver makes one attempt per call", effective.Attempts, effective.Base, effective.Max)
+	var classified runtime.BackendError
+	finding(t, "D2 the chat driver's error for a 404 says whether to retry it (runtime.BackendError): %t", errors.As(errorFor(t, http.StatusNotFound), &classified))
+}
+
+// errorFor is the chat driver's error for a server that answers code.
+func errorFor(t *testing.T, code int) error {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) }))
+	defer srv.Close()
+	_, err := inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: srv.URL, Model: "probe"}).CompleteText(context.Background(), "system", "user")
+	return err
 }
 
 // D4: the three provider kinds send the same body for the same call, and a
@@ -550,7 +586,10 @@ func TestD6CacheReuse(t *testing.T) {
 	finding(t, "D6 later calls that do not extend the previous one: %d %v", len(breaks), breaks)
 }
 
-// D7: max_tokens is clamped to what is left of the token budget.
+// D7: max_tokens is clamped to what is left of the token budget. The
+// runtime hands the driver the budget left as CallInfo.MaxTokens before
+// the reply cap (a record without reply_cap), and as CallInfo.TokensLeft
+// since, which the driver caps at less its estimate of the prompt.
 func TestD7MaxTokensClamp(t *testing.T) {
 	var mu sync.Mutex
 	var sent []int
@@ -565,16 +604,32 @@ func TestD7MaxTokensClamp(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": "ok"}}}})
 	}))
 	defer srv.Close()
-	cases := []struct{ configured, left int }{{12000, 500}, {12000, 20000}, {0, 500}, {12000, 0}}
-	for _, c := range cases {
-		backend := inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: srv.URL, Model: "probe", Sampling: inference.Sampling{MaxTokens: c.configured}})
-		ctx := runtime.WithCallInfo(context.Background(), runtime.CallInfo{PID: "pid-000002", MaxTokens: c.left})
-		if _, err := backend.CompleteText(ctx, "system", "user"); err != nil {
-			t.Fatal(err)
+	// A 3,000-character prompt: about 1,000 tokens at 3 characters a token.
+	prompt := strings.Repeat("p", 3000-len("system")-len("user")-len("system"))
+	cases := []struct{ configured, left int }{{12000, 500}, {12000, 20000}, {0, 500}, {12000, 0}, {0, 1500}}
+	for _, noReplyCap := range []bool{true, false} {
+		label := map[bool]string{true: "D7 without reply_cap", false: "D7 with reply_cap"}[noReplyCap]
+		for _, c := range cases {
+			backend := inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: srv.URL, Model: "probe", Sampling: inference.Sampling{MaxTokens: c.configured}})
+			info := runtime.CallInfo{PID: "pid-000002", MaxTokens: c.left}
+			if !noReplyCap {
+				info = runtime.CallInfo{PID: "pid-000002", TokensLeft: c.left}
+			}
+			mu.Lock()
+			before := len(sent)
+			mu.Unlock()
+			_, err := backend.CompleteText(runtime.WithCallInfo(context.Background(), info), "system", prompt)
+			mu.Lock()
+			result := "not sent"
+			if len(sent) > before {
+				result = fmt.Sprintf("sent max_tokens %d (0 = not sent)", sent[len(sent)-1])
+			}
+			mu.Unlock()
+			if err != nil {
+				result += "; error: " + err.Error()
+			}
+			finding(t, "%s configured max_tokens %5d, budget left %5d, a prompt of about 1000 tokens -> %s", label, c.configured, c.left, result)
 		}
-		mu.Lock()
-		finding(t, "D7 configured max_tokens %5d, budget left %5d -> sent max_tokens %d (0 = not sent)", c.configured, c.left, sent[len(sent)-1])
-		mu.Unlock()
 	}
-	finding(t, "D7 the cap is the budget left in prompt plus completion tokens (runtime.go sets CallInfo.MaxTokens = tokens.Left); it does not subtract the prompt the call is about to send")
+	finding(t, "D7 a budget left of 0 means no token budget: the runtime ends the step before the call when a budget is spent")
 }

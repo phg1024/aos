@@ -228,7 +228,8 @@ func readTrial(root, dir string) (Trial, error) {
 	if err != nil {
 		trial.Problems = append(trial.Problems, "no call ledger")
 	}
-	trial.Calls = readCalls(calls)
+	reader := readerOf(filepath.Join(dir, "state", "kernel", "events.json"))
+	trial.Calls = readCalls(calls, reader)
 	for _, call := range trial.Calls {
 		if !call.Repair {
 			trial.Steps[call.Agent]++
@@ -240,13 +241,30 @@ func readTrial(root, dir string) (Trial, error) {
 	}
 	trial.Retries = countEvents(filepath.Join(dir, "state", "kernel", "events.json"), "backend.retry")
 	output, _ := os.ReadFile(filepath.Join(dir, "output.html"))
-	trial.HTML = followHTML(trial.Calls, calls, output)
+	trial.HTML = followHTML(trial.Calls, calls, output, reader)
 	return trial, nil
+}
+
+// readerOf reads replies as the run's steps did: with the reply checks
+// when its run.started says reply_checks, without them otherwise.
+func readerOf(path string) agentflow.ReplyReader {
+	raw, _ := os.ReadFile(path)
+	var events []struct {
+		Type string            `json:"type"`
+		Data map[string]string `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &events)
+	for _, event := range events {
+		if event.Type == agentflow.RunStartedEvent {
+			return agentflow.ReaderFor(event.Data)
+		}
+	}
+	return agentflow.ReplyReader{NoReplyChecks: true}
 }
 
 // readCalls reads every call of a ledger: each step's reply through the
 // ladder, with its repair, as the step read them.
-func readCalls(records []inference.CallRecord) []Call {
+func readCalls(records []inference.CallRecord, reader agentflow.ReplyReader) []Call {
 	outcomes := map[int]inference.CallRecord{}
 	for _, record := range records {
 		if record.Phase == inference.PhaseOutcome {
@@ -273,7 +291,7 @@ func readCalls(records []inference.CallRecord) []Call {
 		}
 		if !start.Repair && outcome.Error == "" {
 			repaired, hadRepair := repairOf(records, outcomes, i)
-			readReply(&call, outcome.Response, repaired, hadRepair)
+			readReply(&call, reader, outcome.Response, repaired, hadRepair)
 		}
 		calls = append(calls, call)
 	}
@@ -296,10 +314,10 @@ func repairOf(records []inference.CallRecord, outcomes map[int]inference.CallRec
 	return "", false
 }
 
-func readReply(call *Call, raw, repaired string, hadRepair bool) {
-	reading := agentflow.ReadReply(raw)
+func readReply(call *Call, reader agentflow.ReplyReader, raw, repaired string, hadRepair bool) {
+	reading := reader.Read(raw)
 	call.Extraction, call.Shape = reading.Extraction, reading.Shape
-	result, source, err := agentflow.ResolveRecordedReply(raw, repaired, hadRepair)
+	result, source, err := reader.Resolve(raw, repaired, hadRepair)
 	call.Source = source
 	if err != nil {
 		call.Action = "none: " + err.Error()
@@ -387,7 +405,7 @@ func jsonEqual(a, b any) bool {
 // followHTML traces the merger's HTML: what it sent in a message action,
 // whether delivery_lead put it in file_writer's goal, what file_writer
 // wrote, and whether the file holds those bytes.
-func followHTML(calls []Call, records []inference.CallRecord, output []byte) htmlPath {
+func followHTML(calls []Call, records []inference.CallRecord, output []byte, reader agentflow.ReplyReader) htmlPath {
 	var path htmlPath
 	var sent, written, goal string
 	outcomes := map[int]inference.CallRecord{}
@@ -402,7 +420,7 @@ func followHTML(calls []Call, records []inference.CallRecord, output []byte) htm
 			continue
 		}
 		repaired, hadRepair := repairOf(records, outcomes, i)
-		result, _, err := agentflow.ResolveRecordedReply(outcome.Response, repaired, hadRepair)
+		result, _, err := reader.Resolve(outcome.Response, repaired, hadRepair)
 		if err != nil {
 			continue
 		}
@@ -735,7 +753,7 @@ func render(summary Summary) string {
 			esc(g.Arm), dry(g.DryRun), esc(g.Set), esc(counts(g.Stages)), g.Misreads, esc(counts(g.Placements)), g.Reasoning, g.Unseen)
 	}
 	b.WriteString(`  </table></div>
-  <p>Reasoning recorded is the thinking a server returned apart from the reply and the ledger kept: the Anthropic driver records it. The chat-completions driver, not streaming, reads only the reply, so a reasoning model's thinking there is dropped; the last column estimates what was dropped, at four characters a token.</p>
+  <p>Reasoning recorded is the thinking a server returned apart from the reply and the ledger kept: the Anthropic driver records it, and so does the chat-completions driver since the D1 fix (its <code>reasoning_content</code>). In runs from before that fix the chat-completions driver, not streaming, read only the reply, so a reasoning model's thinking there was dropped; the last column estimates the completion tokens not in the reply, at four characters a token.</p>
 
   <h2>The HTML's way to the file</h2>
   <p>merger returns the HTML in a message action, delivery_lead hands it to file_writer in a goal, and file_writer writes it. Intact means file_writer wrote exactly the bytes merger sent and the file holds exactly what was written.</p>

@@ -273,7 +273,7 @@ func TestAnthropicBackendErrors(t *testing.T) {
 	}{
 		{http.StatusBadRequest, "invalid_request_error", "", false, []string{"400 Bad Request", "invalid_request_error", "prompt is too long"}},
 		{http.StatusTooManyRequests, "rate_limit_error", "17", true, []string{"429 Too Many Requests", "rate_limit_error", "retry-after 17", "request-id req_test"}},
-		{529, "overloaded_error", "", true, []string{"529", "overloaded_error"}},
+		{529, "overloaded_error", "", true, []string{"529", "overloaded_error", "Overloaded"}},
 	}
 	for _, c := range cases {
 		s := newMessagesServer(t, func(_ int, w http.ResponseWriter) {
@@ -282,7 +282,11 @@ func TestAnthropicBackendErrors(t *testing.T) {
 				w.Header().Set("retry-after", c.retryAfter)
 			}
 			w.WriteHeader(c.status)
-			json.NewEncoder(w).Encode(map[string]any{"type": "error", "error": map[string]any{"type": c.kind, "message": "prompt is too long"}})
+			message := "prompt is too long"
+			if c.status == 529 {
+				message = "Overloaded"
+			}
+			json.NewEncoder(w).Encode(map[string]any{"type": "error", "error": map[string]any{"type": c.kind, "message": message}})
 		})
 		backend := newAnthropic(t, s, key, nil)
 		path := filepath.Join(t.TempDir(), runlog.Dir, runlog.CallsFile)

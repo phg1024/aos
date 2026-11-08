@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -97,6 +98,12 @@ type Report struct {
 	// LegacyDurationArgs means the record predates tools.DurationArg, and it replayed
 	// with the older prompt and acquire_lease's older reading of ttl.
 	LegacyDurationArgs bool `json:"legacy_duration_args,omitempty"`
+	// LegacyReplyChecks means the record predates reply_checks, and its replies
+	// were read as they were then.
+	LegacyReplyChecks bool `json:"legacy_reply_checks,omitempty"`
+	// LegacyReplyCap means the record predates reply_cap, and its replies were
+	// capped at the budget left, prompt included, as they were then.
+	LegacyReplyCap bool `json:"legacy_reply_cap,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
 	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
@@ -326,14 +333,14 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if first != nil && first.Params.API == inference.APIAnthropicMessages {
 		// The same driver, so the bodies it builds hash as recorded.
 		backend = inference.NewAnthropicBackend(inference.AnthropicConfig{BaseURL: first.Backend, Model: first.Params.Model,
-			Timeout: time.Hour, MaxTokens: first.Params.MaxTokens, Stream: first.Params.Stream, Replayer: player})
+			Timeout: time.Hour, MaxTokens: configuredMaxTokens(started, settings, first), Stream: first.Params.Stream, Replayer: player})
 	} else {
 		config := inference.VLLMConfig{Model: settings.Record["model"], Timeout: time.Hour, Replayer: player}
 		if first != nil {
 			// The first request carries the sampling as sent; a later cap from
 			// a token budget is applied the same way on top of it.
 			config.BaseURL, config.Model, config.Stream = first.Backend, first.Params.Model, first.Params.Stream
-			config.Sampling = inference.Sampling{Temperature: first.Params.TemperatureSent(), TopP: first.Params.TopP, MaxTokens: first.Params.MaxTokens, ThinkingBudget: first.Params.ReasoningBudgetTokens}
+			config.Sampling = inference.Sampling{Temperature: first.Params.TemperatureSent(), TopP: first.Params.TopP, MaxTokens: configuredMaxTokens(started, settings, first), ThinkingBudget: first.Params.ReasoningBudgetTokens}
 		}
 		backend = inference.NewVLLMBackend(config)
 	}
@@ -359,6 +366,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 			NoDurationArgs:    started.Data[agentflow.DurationArgsField] == "",
 			NoDelegateHandles: started.Data[agentflow.DelegateHandlesField] == "",
 			NoDelegateAttach:  started.Data[agentflow.DelegateAttachField] == "",
+			NoReplyChecks:     started.Data[agentflow.ReplyChecksField] == "",
 		},
 		Compaction:   settings.Compaction,
 		BackendRetry: settings.BackendRetry,
@@ -400,6 +408,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// Before delegate_attach a reply's artifacts were read in one place only.
 	engine.NoDelegateAttach = started.Data[agentflow.DelegateAttachField] == ""
 	report.LegacyDelegateAttach = engine.NoDelegateAttach
+	// Before reply_checks a reply's <think> block, a second action and an
+	// incomplete flat action were read as they came; before reply_cap a reply
+	// was capped at the budget left, prompt included.
+	engine.NoReplyChecks = started.Data[agentflow.ReplyChecksField] == ""
+	report.LegacyReplyChecks = engine.NoReplyChecks
+	engine.NoReplyCap = started.Data[agentflow.ReplyCapField] == ""
+	report.LegacyReplyCap = engine.NoReplyCap
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call
@@ -428,6 +443,25 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		compareArtifacts(rec, store, &report)
 	}
 	return report, nil
+}
+
+// configuredMaxTokens is the max_tokens the run was configured with. Before
+// reply_cap the first call's is: its cap, the budget left, only fell. Since,
+// the cap takes the prompt out and can rise again after compaction, so the
+// first call's may be lower than configured; run.started's max_tokens says
+// what was ("server default" for none), when the record has it.
+func configuredMaxTokens(started *kernel.Event, settings agentflow.RunSettings, first *inference.CallRecord) int {
+	if started.Data[agentflow.ReplyCapField] != "" {
+		switch value := settings.Record["max_tokens"]; {
+		case value == "server default":
+			return 0
+		case value != "":
+			if n, err := strconv.Atoi(value); err == nil {
+				return n
+			}
+		}
+	}
+	return first.Params.MaxTokens
 }
 
 // leaseGrant reports whether event grants a lease with an expiry, and
@@ -553,7 +587,7 @@ func (p *player) Reply(ctx context.Context, body []byte) (inference.RecordedRepl
 			// signal: stop the replayed run with the same cause.
 			p.stop(cause)
 		}
-		return inference.RecordedReply{}, errors.New(outcome.Error)
+		return inference.RecordedReply{}, inference.RecordedCallError(outcome)
 	}
 	return inference.RecordedReply{Content: outcome.Response, Reasoning: outcome.Reasoning, PromptTokens: outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens,
 		CachedTokens: outcome.CachedTokens, CacheCreationTokens: outcome.CacheCreationTokens}, nil

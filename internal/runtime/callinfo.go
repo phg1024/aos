@@ -12,6 +12,12 @@ type CallInfo struct {
 	// MaxTokens, when positive, caps the completion: what is left of the
 	// process's token budget.
 	MaxTokens int
+	// TokensLeft, when positive, is what is left of the process's token
+	// budget for the step's calls, prompt and reply. A driver caps each
+	// call's reply at it, less what Meter has counted this step and its
+	// estimate of the prompt it is about to send, and refuses the call with
+	// ErrNoReplyTokens when that leaves nothing.
+	TokensLeft int
 	// Meter, when set, receives the tokens each call (repairs included)
 	// used, as the server reports them.
 	Meter *TokenMeter

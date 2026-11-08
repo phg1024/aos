@@ -83,6 +83,17 @@ const (
 	// delegation attached: DelegateAttachV1.
 	DelegateAttachField = "delegate_attach"
 	DelegateAttachV1    = "v1"
+	// ReplyChecksField is the run.started field that says replies were read with
+	// the reply checks: a <think> block stripped before the ladder, a reply holding
+	// two different actions sent to the repair call, and an incomplete flat-shape
+	// action refused (ReplyChecksV1). Records without it read replies as before.
+	ReplyChecksField = "reply_checks"
+	ReplyChecksV1    = "v1"
+	// ReplyCapField is the run.started field that says each call's reply was capped
+	// at the token budget left less the prompt, and a call with no room refused
+	// (ReplyCapV1). Records without it capped the reply at the budget left.
+	ReplyCapField = "reply_cap"
+	ReplyCapV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -166,6 +177,12 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoRedelegationClose {
 		data[RedelegationCloseField] = RedelegationCloseV1
+	}
+	if !e.NoReplyChecks {
+		data[ReplyChecksField] = ReplyChecksV1
+	}
+	if !e.NoReplyCap {
+		data[ReplyCapField] = ReplyCapV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

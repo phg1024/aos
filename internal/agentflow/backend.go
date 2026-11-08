@@ -66,6 +66,11 @@ type PromptBackend struct {
 	// NoDelegateAttach leaves out where a delegation's artifacts go and what the
 	// delegator is told, for replaying a record made before delegate_attach.
 	NoDelegateAttach bool
+	// NoReplyChecks reads a reply as before reply_checks: a <think> block is
+	// read like the rest, a reply with two different actions gives the last,
+	// and a flat-shape action is taken even when incomplete. It is for
+	// replaying a record made before them.
+	NoReplyChecks bool
 }
 
 var bareKeyPattern = regexp.MustCompile(`([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:`)
@@ -472,7 +477,7 @@ func (b PromptBackend) generateFromMessages(ctx context.Context, completer Messa
 	}
 	// Ask for a correction inside the same conversation, so the server can
 	// resume from the transcript it just read instead of starting over.
-	result, _, err := resolveReply(raw, func() (string, error) {
+	result, _, err := resolveReply(raw, !b.NoReplyChecks, func() (string, error) {
 		return completer.CompleteMessages(runtime.AsRepair(ctx), append(append([]runtime.Message(nil), messages...),
 			runtime.Message{Role: "assistant", Content: raw},
 			runtime.Message{Role: "user", Content: repairInstruction},
@@ -497,25 +502,33 @@ var errUnrepairable = errors.New("unable to repair malformed action JSON")
 
 // resolveReply is the tolerance ladder over one step's reply: the reply
 // itself, then a repair the step asks for, then fallbackMessage on either,
-// then notesAsMessage. It names the rung that gave the action.
-func resolveReply(raw string, repair func() (string, error)) (runtime.GenerateResult, string, error) {
-	if parsed, ok := parseGenerateResult(raw); ok {
+// then notesAsMessage. It names the rung that gave the action. With checks
+// (reply_checks), every rung reads a reply without its <think> blocks, and
+// the first two refuse a reply that holds two different actions and an
+// incomplete flat-shape action, so those go to the repair call; the repair
+// call itself is sent the reply as the model wrote it.
+func resolveReply(raw string, checks bool, repair func() (string, error)) (runtime.GenerateResult, string, error) {
+	if parsed, ok := parseGenerateResult(raw, checks); ok {
 		return parsed, SourceReply, nil
 	}
 	repaired, err := repair()
 	if err != nil {
 		return runtime.GenerateResult{}, "", err
 	}
-	if parsed, ok := parseGenerateResult(repaired); ok {
+	if parsed, ok := parseGenerateResult(repaired, checks); ok {
 		return parsed, SourceRepair, nil
 	}
-	if message, ok := fallbackMessage(raw); ok {
+	shown, shownRepair := raw, repaired
+	if checks {
+		shown, shownRepair = stripThink(raw), stripThink(repaired)
+	}
+	if message, ok := fallbackMessage(shown); ok {
 		return message, SourceFallbackMessage, nil
 	}
-	if message, ok := fallbackMessage(repaired); ok {
+	if message, ok := fallbackMessage(shownRepair); ok {
 		return message, SourceFallbackRepair, nil
 	}
-	if message, ok := notesAsMessage(repaired, raw); ok {
+	if message, ok := notesAsMessage(checks, repaired, raw); ok {
 		return message, SourceNotesAsMessage, nil
 	}
 	return runtime.GenerateResult{}, SourceUnrepairable, errUnrepairable
@@ -531,7 +544,7 @@ func (b PromptBackend) generateFromRaw(ctx context.Context, completer RawComplet
 	if err != nil {
 		return runtime.GenerateResult{}, err
 	}
-	result, _, err := resolveReply(raw, func() (string, error) {
+	result, _, err := resolveReply(raw, !b.NoReplyChecks, func() (string, error) {
 		return completer.CompleteText(runtime.AsRepair(ctx), repairSystemPrompt(), repairUserPrompt(systemPrompt, userPrompt, raw))
 	})
 	return result, err
@@ -873,8 +886,8 @@ func repairUserPrompt(systemPrompt, userPrompt, raw string) string {
 // action without text is not an action: the model put its reply where the
 // user cannot see it, so the caller asks for a repair instead of showing
 // nothing.
-func parseGenerateResult(raw string) (runtime.GenerateResult, bool) {
-	result, ok := parseAction(raw)
+func parseGenerateResult(raw string, checks bool) (runtime.GenerateResult, bool) {
+	result, ok := parseAction(raw, checks)
 	if ok && result.Action.Type == "message" && strings.TrimSpace(result.Action.Message) == "" {
 		return result, false
 	}
@@ -883,9 +896,9 @@ func parseGenerateResult(raw string) (runtime.GenerateResult, bool) {
 
 // notesAsMessage is the last resort for a reply that stayed a message
 // without text after repair: its notes, which beat silence.
-func notesAsMessage(raws ...string) (runtime.GenerateResult, bool) {
+func notesAsMessage(checks bool, raws ...string) (runtime.GenerateResult, bool) {
 	for _, raw := range raws {
-		if result, ok := parseAction(raw); ok && result.Action.Type == "message" && strings.TrimSpace(result.Action.Notes) != "" {
+		if result, ok := parseAction(raw, checks); ok && result.Action.Type == "message" && strings.TrimSpace(result.Action.Notes) != "" {
 			result.Action.Message = result.Action.Notes
 			return result, true
 		}
@@ -893,9 +906,61 @@ func notesAsMessage(raws ...string) (runtime.GenerateResult, bool) {
 	return runtime.GenerateResult{}, false
 }
 
-func parseAction(raw string) (runtime.GenerateResult, bool) {
-	result, _, ok := parseActionShape(repairLooseJSONObject(extractTrailingJSONObject(raw)))
+func parseAction(raw string, checks bool) (runtime.GenerateResult, bool) {
+	if checks {
+		raw = stripThink(raw)
+		if len(distinctActions(raw)) > 1 {
+			return runtime.GenerateResult{}, false
+		}
+	}
+	result, _, ok := parseActionShape(repairLooseJSONObject(extractTrailingJSONObject(raw)), checks)
 	return result, ok
+}
+
+var thinkBlock = regexp.MustCompile(`(?s)<think>.*?</think>`)
+
+// stripThink removes a reply's reasoning: every <think>...</think> block,
+// everything up to a closing tag whose opening was in the prompt (as chat
+// templates that open the block for the model do), and an unclosed block
+// to the end, where reasoning was cut off.
+func stripThink(raw string) string {
+	text := thinkBlock.ReplaceAllString(raw, "")
+	if i := strings.LastIndex(text, "</think>"); i >= 0 {
+		text = text[i+len("</think>"):]
+	}
+	if i := strings.Index(text, "<think>"); i >= 0 {
+		text = text[:i]
+	}
+	return text
+}
+
+// distinctActions are the different usable actions among raw's complete
+// top-level JSON objects, scanned left to right. An object that does not
+// decode is skipped a brace at a time, so the action inside a reply one
+// brace short (live6 seq 28) still counts once. More than one is a reply
+// that names two actions, such as a real one and an example quoted after
+// it: no rule picks the intended one for certain, so the reply checks send
+// it to the repair call instead of guessing.
+func distinctActions(raw string) []string {
+	var actions []string
+	for i := 0; i < len(raw); i++ {
+		if raw[i] != '{' {
+			continue
+		}
+		decoder := json.NewDecoder(strings.NewReader(raw[i:]))
+		var object json.RawMessage
+		if decoder.Decode(&object) != nil {
+			continue
+		}
+		if result, _, ok := parseActionShape(string(object), true); ok {
+			key, _ := json.Marshal(result)
+			if !slices.Contains(actions, string(key)) {
+				actions = append(actions, string(key))
+			}
+		}
+		i += int(decoder.InputOffset()) - 1
+	}
+	return actions
 }
 
 // The shapes parseActionShape reads, in the order it tries them.
@@ -907,8 +972,11 @@ const (
 )
 
 // parseActionShape reads an action from one JSON object and names the
-// shape that read it.
-func parseActionShape(raw string) (runtime.GenerateResult, string, bool) {
+// shape that read it. With checks, the flat and legacy shapes, like the
+// nested and generic ones, take only a usable action (actionUsable): an
+// incomplete one, such as a delegate without an agent, goes on to the next
+// shape and, if none reads it, to the repair call.
+func parseActionShape(raw string, checks bool) (runtime.GenerateResult, string, bool) {
 	var nested runtime.GenerateResult
 	if err := json.Unmarshal([]byte(raw), &nested); err == nil && actionUsable(nested.Action) {
 		return nested, ShapeNested, true
@@ -934,7 +1002,7 @@ func parseActionShape(raw string) (runtime.GenerateResult, string, bool) {
 		Code      int                    `json:"code"`
 	}
 	if err := json.Unmarshal([]byte(raw), &flat); err == nil && flat.Type != "" {
-		return runtime.GenerateResult{
+		result := runtime.GenerateResult{
 			Action: runtime.GenerateAction{
 				Type:       flat.Type,
 				Message:    flat.Message,
@@ -945,7 +1013,10 @@ func parseActionShape(raw string) (runtime.GenerateResult, string, bool) {
 				Subscribe:  flat.Subscribe,
 				ExitStatus: exitStatusFor(flat.Type, flat.Code, flat.Reason, flat.Retryable),
 			},
-		}, ShapeFlat, true
+		}
+		if !checks || actionUsable(result.Action) {
+			return result, ShapeFlat, true
+		}
 	}
 
 	var legacy struct {
@@ -955,12 +1026,15 @@ func parseActionShape(raw string) (runtime.GenerateResult, string, bool) {
 		Code      int    `json:"code"`
 	}
 	if err := json.Unmarshal([]byte(raw), &legacy); err == nil && legacy.Action != "" {
-		return runtime.GenerateResult{
+		result := runtime.GenerateResult{
 			Action: runtime.GenerateAction{
 				Type:       legacy.Action,
 				ExitStatus: exitStatusFor(legacy.Action, legacy.Code, legacy.Reason, legacy.Retryable),
 			},
-		}, ShapeLegacy, true
+		}
+		if !checks || actionUsable(result.Action) {
+			return result, ShapeLegacy, true
+		}
 	}
 	return runtime.GenerateResult{}, "", false
 }

@@ -64,6 +64,7 @@ type VLLMBackend struct {
 	stream        bool
 	replayer      Replayer
 	calls         *callRecorder
+	prompts       promptEstimator
 
 	usageMu sync.Mutex
 	usage   TokenUsage
@@ -156,7 +157,12 @@ type chatMessage struct {
 
 type chatCompletionResponse struct {
 	Choices []struct {
-		Message chatMessage `json:"message"`
+		Message struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			Reasoning        string `json:"reasoning"`
+		} `json:"message"`
 	} `json:"choices"`
 	Usage *responseUsage `json:"usage,omitempty"`
 }
@@ -245,19 +251,31 @@ type chatCompletionChunk struct {
 func (b *VLLMBackend) complete(ctx context.Context, messages []chatMessage) (string, error) {
 	payload := b.request(messages)
 	info, _ := runtime.CallInfoFrom(ctx)
-	if info.MaxTokens > 0 && (payload.MaxTokens == 0 || payload.MaxTokens > info.MaxTokens) {
-		// What is left of the caller's token budget.
-		payload.MaxTokens = info.MaxTokens
+	// What is left of the caller's token budget, less the prompt.
+	limit, err := b.prompts.replyCap(info, payload.Messages, payload.MaxTokens)
+	if err != nil {
+		return "", err
 	}
+	payload.MaxTokens = limit
 	pending := b.recordStart(ctx, payload)
 	started := time.Now()
 	var usage *responseUsage
-	content, err := b.send(ctx, payload, &usage)
-	b.recordOutcome(pending, payload.Model, usage, time.Since(started), content, err)
+	reply, err := b.send(ctx, payload, &usage)
+	b.recordOutcome(pending, payload.Model, usage, time.Since(started), reply, err)
 	if info.Meter != nil && usage != nil {
 		info.Meter.Add(usage.PromptTokens + usage.CompletionTokens)
 	}
-	return content, err
+	if err == nil && usage != nil {
+		b.prompts.observe(info.PID, payload.Messages, usage.PromptTokens)
+	}
+	return reply.text, err
+}
+
+// chatReply is one call's reply: the text the parser reads, and the
+// reasoning the server sent apart from it (reasoning_content, reasoning or
+// thinking), which is recorded and never parsed.
+type chatReply struct {
+	text, reasoning string
 }
 
 func (b *VLLMBackend) request(messages []chatMessage) chatCompletionRequest {
@@ -277,15 +295,15 @@ func (b *VLLMBackend) request(messages []chatMessage) chatCompletionRequest {
 }
 
 // send posts payload, retrying timeouts, and sets *usage from the reply.
-func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, usage **responseUsage) (string, error) {
+func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, usage **responseUsage) (chatReply, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return chatReply{}, err
 	}
 	if b.replayer != nil {
 		reply, err := b.replayer.Reply(ctx, body)
 		if err != nil {
-			return reply.Content, err
+			return chatReply{text: reply.Content}, err
 		}
 		recorded := &responseUsage{PromptTokens: reply.PromptTokens, CompletionTokens: reply.CompletionTokens}
 		if reply.CachedTokens > 0 {
@@ -295,13 +313,13 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 		}
 		b.recordUsage(recorded)
 		*usage = recorded
-		return reply.Content, nil
+		return chatReply{text: reply.Content, reasoning: reply.Reasoning}, nil
 	}
 	var lastErr error
 	for attempt := 0; attempt < b.maxRetries; attempt++ {
 		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, b.baseURL+"/v1/chat/completions", bytes.NewReader(body))
 		if err != nil {
-			return "", err
+			return chatReply{}, err
 		}
 		httpRequest.Header.Set("Content-Type", "application/json")
 		if b.apiKey != "" {
@@ -317,25 +335,26 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 			if isRetryableVLLMError(err) && attempt < b.maxRetries-1 {
 				continue
 			}
-			return "", err
+			return chatReply{}, err
 		}
 
-		if response.StatusCode >= 500 {
-			lastErr = fmt.Errorf("vllm request failed: %s", response.Status)
+		if response.StatusCode >= 400 {
+			// A ChatError says whether it is temporary; the runtime retries
+			// only one that is (runtime.BackendError).
+			lastErr = readChatError(response)
 			response.Body.Close()
-			if attempt < b.maxRetries-1 {
+			var failure *ChatError
+			if errors.As(lastErr, &failure) && failure.Temporary() && attempt < b.maxRetries-1 {
 				continue
 			}
-			return "", lastErr
-		}
-		if response.StatusCode >= 400 {
-			lastErr = fmt.Errorf("vllm request failed: %s", response.Status)
-			response.Body.Close()
-			return "", lastErr
+			return chatReply{}, lastErr
 		}
 
 		if b.stream {
-			var fullResponse strings.Builder
+			// Reasoning deltas are passed on and recorded apart from the
+			// text, as a non-streamed reply's reasoning_content is: the
+			// parser reads only the content.
+			var fullResponse, reasoningText strings.Builder
 			scanner := bufio.NewScanner(response.Body)
 			var streamUsage *responseUsage
 			for scanner.Scan() {
@@ -357,7 +376,7 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 						for _, reasoning := range []string{delta.ReasoningContent, delta.Reasoning, delta.Thinking} {
 							if reasoning != "" {
 								b.emit(StreamEvent{Kind: StreamThinking, Text: reasoning})
-								fullResponse.WriteString(reasoning)
+								reasoningText.WriteString(reasoning)
 							}
 						}
 						if delta.Content != "" {
@@ -373,12 +392,12 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 				if isRetryableVLLMError(err) && attempt < b.maxRetries-1 {
 					continue
 				}
-				return fullResponse.String(), err
+				return chatReply{text: fullResponse.String(), reasoning: reasoningText.String()}, err
 			}
 			b.recordUsage(streamUsage)
 			*usage = streamUsage
 			b.emit(StreamEvent{Kind: StreamDone})
-			return fullResponse.String(), nil
+			return chatReply{text: fullResponse.String(), reasoning: reasoningText.String()}, nil
 		}
 
 		var parsed chatCompletionResponse
@@ -389,23 +408,24 @@ func (b *VLLMBackend) send(ctx context.Context, payload chatCompletionRequest, u
 			if attempt < b.maxRetries-1 {
 				continue
 			}
-			return "", err
+			return chatReply{}, err
 		}
 		if len(parsed.Choices) == 0 {
 			lastErr = ErrMalformedModelResponse
 			if attempt < b.maxRetries-1 {
 				continue
 			}
-			return "", ErrMalformedModelResponse
+			return chatReply{}, ErrMalformedModelResponse
 		}
 		b.recordUsage(parsed.Usage)
 		*usage = parsed.Usage
-		return parsed.Choices[0].Message.Content, nil
+		message := parsed.Choices[0].Message
+		return chatReply{text: message.Content, reasoning: firstNonEmpty(message.ReasoningContent, message.Reasoning)}, nil
 	}
 	if lastErr != nil {
-		return "", lastErr
+		return chatReply{}, lastErr
 	}
-	return "", ErrMalformedModelResponse
+	return chatReply{}, ErrMalformedModelResponse
 }
 
 // emit passes a stream event to OnStreamEvent, if set.

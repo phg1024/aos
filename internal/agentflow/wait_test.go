@@ -18,7 +18,7 @@ func TestParseKeepsWaitMessageAndNotes(t *testing.T) {
 		`{"type":"wait","question":"Which file?","notes":"plan: ask"}`:           {Type: "wait", Message: "Which file?", Notes: "plan: ask"},
 		`{"action":{"type":"wait"}}`:                                             {Type: "wait"},
 	} {
-		result, ok := parseGenerateResult(raw)
+		result, ok := parseGenerateResult(raw, true)
 		if !ok || result.Action.Type != want.Type || result.Action.Message != want.Message || result.Action.Notes != want.Notes {
 			t.Fatalf("%s parsed to %+v, %v", raw, result.Action, ok)
 		}

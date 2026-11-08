@@ -16,4 +16,4 @@ func (e *Engine) EvidenceChecks(spec WorkflowSpec, verifierPID string) ([]Eviden
 }
 
 // ParseReply exposes parseGenerateResult, so a test can script what a model wrote.
-func ParseReply(raw string) (runtime.GenerateResult, bool) { return parseGenerateResult(raw) }
+func ParseReply(raw string) (runtime.GenerateResult, bool) { return parseGenerateResult(raw, true) }

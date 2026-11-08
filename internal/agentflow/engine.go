@@ -42,6 +42,8 @@ type StaticBackendFactory struct {
 	NoPublishSource bool
 	// NoDurationArgs is PromptBackend.NoDurationArgs for every backend.
 	NoDurationArgs bool
+	// NoReplyChecks is PromptBackend.NoReplyChecks for every backend.
+	NoReplyChecks bool
 	// NoDelegateHandles is PromptBackend.NoDelegateHandles for every backend.
 	NoDelegateHandles bool
 	// NoDelegateAttach is PromptBackend.NoDelegateAttach for every backend.
@@ -65,6 +67,7 @@ func (f StaticBackendFactory) BackendFor(agent AgentSpec, workflow WorkflowSpec)
 		NoDurationArgs:    f.NoDurationArgs,
 		NoDelegateHandles: f.NoDelegateHandles,
 		NoDelegateAttach:  f.NoDelegateAttach,
+		NoReplyChecks:     f.NoReplyChecks,
 	}, nil
 }
 
@@ -182,6 +185,15 @@ type Engine struct {
 	// NoRedelegationClose leaves the old chain open when a delegator
 	// re-delegates. When it is off, run.started says so (redelegation_close).
 	NoRedelegationClose bool
+	// NoReplyChecks records a run whose replies were read as before reply_checks
+	// (PromptBackend.NoReplyChecks), for replaying one; the caller sets the
+	// factory's switch with it. When it is off, run.started says so
+	// (reply_checks).
+	NoReplyChecks bool
+	// NoReplyCap is AgentRuntime.NoReplyCap, for replaying a record made before
+	// the reply cap took the prompt out of the budget left. When it is off,
+	// run.started says so (reply_cap).
+	NoReplyCap bool
 	// NoLeaseFencing turns lease fencing off
 	// (runtime.AgentRuntime.NoLeaseFencing), for replaying a record made
 	// before it. With fencing on, run.started says so (lease_fencing).
@@ -555,6 +567,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoDelegateAttach: e.NoDelegateAttach,
 		NoPublishSource:  e.NoPublishSource,
 		NoDurationArgs:   e.NoDurationArgs,
+		NoReplyCap:       e.NoReplyCap,
 		NoSenderOutcomes: e.NoSenderOutcomes,
 		ExitCheck:        e.exitCheck(spec, agent),
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {

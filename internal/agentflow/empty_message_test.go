@@ -17,12 +17,12 @@ func TestMessageActionNeedsText(t *testing.T) {
 		`{"action":{"type":"message","response":"hi"}}`: "hi",
 		`{"type":"message","answer":"hi"}`:              "hi",
 	} {
-		if result, ok := parseGenerateResult(raw); !ok || result.Action.Message != want {
+		if result, ok := parseGenerateResult(raw, true); !ok || result.Action.Message != want {
 			t.Fatalf("%s parsed to %+v, %v", raw, result.Action, ok)
 		}
 	}
 	for _, raw := range []string{`{"action":{"type":"message"}}`, `{"action":{"type":"message","message":"  ","notes":"done"}}`, `{"type":"message"}`} {
-		if result, ok := parseGenerateResult(raw); ok {
+		if result, ok := parseGenerateResult(raw, true); ok {
 			t.Fatalf("%s should not be usable, got %+v", raw, result.Action)
 		}
 	}

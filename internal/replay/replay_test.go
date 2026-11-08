@@ -36,6 +36,7 @@ import (
 // step is one scripted model call: a reply action, or a failure.
 type step struct {
 	action map[string]any
+	raw    string // the reply's text as sent, instead of action
 	delay  time.Duration
 	status int  // an HTTP error status instead of a reply
 	block  bool // never answer
@@ -83,6 +84,10 @@ func scriptServerIn(t *testing.T, script []step, anthropic bool) *httptest.Serve
 			return
 		}
 		content, _ := json.Marshal(current.action)
+		text := "{\"action\":" + string(content) + "}"
+		if current.raw != "" {
+			text = current.raw
+		}
 		tokens := current.tokens
 		if tokens == 0 {
 			tokens = 100
@@ -90,13 +95,17 @@ func scriptServerIn(t *testing.T, script []step, anthropic bool) *httptest.Serve
 		if anthropic {
 			json.NewEncoder(w).Encode(map[string]any{
 				"type": "message", "model": "scripted", "stop_reason": "end_turn",
-				"content": []map[string]any{{"type": "thinking", "thinking": "planning the step"}, {"type": "text", "text": "{\"action\":" + string(content) + "}"}},
+				"content": []map[string]any{{"type": "thinking", "thinking": "planning the step"}, {"type": "text", "text": text}},
 				"usage":   map[string]any{"input_tokens": tokens - 60, "cache_read_input_tokens": 60, "output_tokens": 7},
 			})
 			return
 		}
+		reply := string(content)
+		if current.raw != "" {
+			reply = current.raw
+		}
 		json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]any{"content": string(content)}}},
+			"choices": []map[string]any{{"message": map[string]any{"content": reply}}},
 			"usage":   map[string]any{"prompt_tokens": tokens, "completion_tokens": 7},
 		})
 	}))
@@ -138,6 +147,9 @@ type options struct {
 	noPublishSource bool
 	// noDurationArgs records as AOS did before tools.DurationArg.
 	noDurationArgs bool
+	// noReplyChecks and noReplyCap record as AOS did before the reply checks
+	// and the reply cap.
+	noReplyChecks, noReplyCap bool
 	// noDelegateHandles records with the prompt from before handles at a delegation.
 	noDelegateHandles bool
 	// noDelegateAttach records as AOS did before delegate_attach.
@@ -174,7 +186,7 @@ func roundTripScript(workspace string) []step {
 		tool("write_file", map[string]any{"path": filepath.Join(workspace, "a.txt"), "content": "hello"}),
 		tool("run", map[string]any{"command": "cat a.txt && printf x > b.txt"}),
 		tool("read_file", map[string]any{"path": filepath.Join(workspace, "missing.txt")}),
-		{status: http.StatusBadRequest},
+		{status: http.StatusServiceUnavailable},
 		tool("read_file", map[string]any{"path": filepath.Join(workspace, "a.txt")}),
 		tool("read_file", map[string]any{"path": filepath.Join(workspace, "b.txt")}),
 		tool("run", map[string]any{"command": "ls"}),
@@ -253,13 +265,15 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 		t.Fatal(err)
 	}
 	engine := agentflow.Engine{Kernel: k, Artifacts: store, Bus: bus, Leases: leases, Tools: toolRuntime,
-		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoDelegateHandles: opts.noDelegateHandles, NoDelegateAttach: opts.noDelegateAttach, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds},
+		Factory:       agentflow.StaticBackendFactory{Completer: backend, Skills: skills.NewRegistry(nil), NoPublishSource: opts.noPublishSource, NoDurationArgs: opts.noDurationArgs, NoDelegateHandles: opts.noDelegateHandles, NoDelegateAttach: opts.noDelegateAttach, NoPeerFraming: opts.noFraming, NoBusBounds: opts.noBounds, NoReplyChecks: opts.noReplyChecks},
 		NoPeerFraming: opts.noFraming,
 		NoBusBounds:   opts.noBounds,
 
 		NoRedelegationClose: opts.noRedelegationClose,
 		NoPublishSource:     opts.noPublishSource,
 		NoDurationArgs:      opts.noDurationArgs,
+		NoReplyChecks:       opts.noReplyChecks,
+		NoReplyCap:          opts.noReplyCap,
 		NoDelegateHandles:   opts.noDelegateHandles,
 		NoDelegateAttach:    opts.noDelegateAttach,
 		NoChainDelivery:     opts.noChain,
@@ -598,19 +612,93 @@ func TestReplayPinsTheClock(t *testing.T) {
 }
 
 // A token budget caps each call's max_tokens (part of the request) and
-// stops the run; the replay does the same.
+// stops the run; the replay does the same. Before the reply cap the cap was
+// the budget left, and the run stopped once that was spent; since, it is
+// the budget left less the prompt, and the call with no room for a reply is
+// refused before it is sent.
 func TestReplayOfATokenBudget(t *testing.T) {
 	root, _ := filepath.EvalSymlinks(t.TempDir())
 	stateDir := recordAt(t, root, context.Background(), func(ws string) []step {
 		write := tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "x"})
 		write.tokens = 400
 		return []step{write, write, write, write}
-	}, options{budget: capability.Budget{Tokens: 1000}})
-	if !strings.Contains(exitReason(t, stateDir), "token budget exceeded") {
+	}, options{budget: capability.Budget{Tokens: 1000}, noReplyCap: true})
+	if !strings.Contains(exitReason(t, stateDir), "token budget exceeded: 1221 of 1000") {
 		t.Fatalf("the recording should end on the token budget: %s", exitReason(t, stateDir))
 	}
-	if report := replayed(t, stateDir, false); !report.Identical() || report.Matched != 3 {
+	if report := replayed(t, stateDir, false); !report.Identical() || report.Matched != 3 || !report.LegacyReplyCap {
 		t.Fatalf("report = %+v", report)
+	}
+
+	root, _ = filepath.EvalSymlinks(t.TempDir())
+	stateDir = recordAt(t, root, context.Background(), func(ws string) []step {
+		write := tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "x"})
+		write.tokens = 6000
+		return []step{write, write, write, write}
+	}, options{budget: capability.Budget{Tokens: 20000}})
+	if reason := exitReason(t, stateDir); !strings.Contains(reason, "no tokens left for a reply: the prompt is about 6") || !strings.Contains(reason, "and 1979 are left") {
+		t.Fatalf("the recording should end on a refused call: %s", reason)
+	}
+	var caps []int
+	for _, record := range calls(t, stateDir) {
+		if record.Phase == inference.PhaseStart {
+			caps = append(caps, record.Params.MaxTokens)
+		}
+	}
+	if len(caps) != 3 || caps[1] >= 20000-6007-6000 || caps[2] >= 20000-2*6007-6000 {
+		t.Fatalf("max_tokens sent %v: each should leave room for the prompt", caps)
+	}
+	if report := replayed(t, stateDir, false); !report.Identical() || report.Matched != 3 || report.LegacyReplyCap {
+		t.Fatalf("report = %+v", report)
+	}
+}
+
+// A failure the driver says will not pass (a 404) ends the step at once,
+// retryable with a checkpoint, and its outcome records the status and the
+// decision; the replay rebuilds the error and stops the same way. A 503 is
+// retried, as before.
+func TestReplayOfAFailureNotRetried(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	stateDir := recordAt(t, root, context.Background(), func(ws string) []step {
+		return []step{tool("write_file", map[string]any{"path": filepath.Join(ws, "a.txt"), "content": "x"}), {status: http.StatusServiceUnavailable}, {status: http.StatusNotFound}}
+	}, options{})
+	if reason := exitReason(t, stateDir); reason != "model endpoint refused the call, not retried: vllm request failed: 404 Not Found" {
+		t.Fatalf("exit reason %q", reason)
+	}
+	var outcomes []inference.CallRecord
+	for _, record := range calls(t, stateDir) {
+		if record.Phase == inference.PhaseOutcome && record.Error != "" {
+			outcomes = append(outcomes, record)
+		}
+	}
+	if len(outcomes) != 2 || outcomes[0].ErrorStatus != 503 || outcomes[0].ErrorFinal || outcomes[1].ErrorStatus != 404 || !outcomes[1].ErrorFinal {
+		t.Fatalf("failed outcomes %+v", outcomes)
+	}
+	if events := eventTypes(t, stateDir); strings.Count(events, "backend.retry") != 1 {
+		t.Fatalf("one retry (the 503) expected: %s", events)
+	}
+	if report := replayed(t, stateDir, false); !report.Identical() {
+		t.Fatalf("divergence: %+v", report.Divergence)
+	}
+}
+
+// A reply with a real action and an example after it: before the reply
+// checks the step took the example, and a replay of that record does too;
+// with them it asks for the repair.
+func TestReplayOfAReplyBeforeTheChecks(t *testing.T) {
+	const twoActions = `{"action":{"type":"exit","exit_status":{"code":0,"reason":"done"}}} For example: {"action":{"type":"exit","exit_status":{"code":0,"reason":"example"}}}`
+	for _, noChecks := range []bool{true, false} {
+		root, _ := filepath.EvalSymlinks(t.TempDir())
+		stateDir := recordAt(t, root, context.Background(), func(ws string) []step {
+			return []step{{raw: twoActions}, exit("repaired")}
+		}, options{noReplyChecks: noChecks})
+		want := map[bool]string{true: "example", false: "repaired"}[noChecks]
+		if reason := exitReason(t, stateDir); !strings.Contains(reason, want) {
+			t.Fatalf("noChecks %t: exit %q, want %q", noChecks, reason, want)
+		}
+		if report := replayed(t, stateDir, false); !report.Identical() || report.LegacyReplyChecks != noChecks {
+			t.Fatalf("noChecks %t: report %+v", noChecks, report)
+		}
 	}
 }
 

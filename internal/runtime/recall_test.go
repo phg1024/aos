@@ -94,7 +94,73 @@ func TestBackendRetriesDoNotSpendSteps(t *testing.T) {
 			t.Fatalf("the outage should cost one step and leave the history as it was: %+v", session)
 		}
 	})
+	// A failure its driver says will not pass is not retried: the process
+	// exits at once, retryable with a checkpoint, so the operator can fix
+	// the cause and recover.
+	t.Run("not temporary", func(t *testing.T) {
+		k, store, process := newMemoryFixture(t)
+		backend := &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			return runtime.GenerateResult{}, &driverError{text: "404 Not Found"}
+		}}
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 5, BackendRetry: fastRetry}
+		result, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{ContinueOnToolError: true})
+		status := result.ExitStatus
+		if err != nil || backend.calls != 1 || len(kernelEvents(t, k, "backend.retry")) != 0 {
+			t.Fatalf("one attempt, no retry: %d calls, %v", backend.calls, err)
+		}
+		if status.Reason != "model endpoint refused the call, not retried: 404 Not Found" || !status.Retryable || status.Checkpoint == "" {
+			t.Fatalf("exit = %+v", status)
+		}
+	})
+	// A temporary failure with a retry-after waits that long, capped at the
+	// policy's Max, and the event says so.
+	t.Run("retry-after", func(t *testing.T) {
+		k, store, process := newMemoryFixture(t)
+		backend := &funcBackend{fn: func(call int, _ context.Context, _ runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			switch call {
+			case 1:
+				return runtime.GenerateResult{}, &driverError{text: "429", temporary: true, wait: time.Millisecond}
+			case 2:
+				return runtime.GenerateResult{}, &driverError{text: "429", temporary: true, wait: time.Hour}
+			}
+			return exitResult("done"), nil
+		}}
+		var waits []time.Duration
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 5,
+			BackendRetry: runtime.BackendRetryPolicy{Base: time.Second, Max: 2 * time.Second}, Sleep: func(_ context.Context, d time.Duration) { waits = append(waits, d) }}
+		if result, err := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{}); err != nil || result.ExitStatus.Reason != "done" {
+			t.Fatalf("%+v %v", result.ExitStatus, err)
+		}
+		events := kernelEvents(t, k, "backend.retry")
+		if fmt.Sprint(waits) != "[1ms 2s]" || len(events) != 2 || events[1].Data["retry_after"] != "1h0m0s" || events[1].Data["delay"] != "2s" {
+			t.Fatalf("waits %v, events %+v", waits, events)
+		}
+	})
+	// A call the driver refused for want of tokens ends the step as a spent
+	// token budget does, without a retry.
+	t.Run("no tokens for a reply", func(t *testing.T) {
+		k, store, process := newMemoryFixture(t)
+		backend := &funcBackend{fn: func(int, context.Context, runtime.GenerateRequest) (runtime.GenerateResult, error) {
+			return runtime.GenerateResult{}, fmt.Errorf("%w: the prompt is about 900 tokens and 800 are left", runtime.ErrNoReplyTokens)
+		}}
+		agent := &runtime.AgentRuntime{Kernel: k, Artifacts: store, Tools: tools.NewRuntime(), Backend: backend, MaxSteps: 5, BackendRetry: fastRetry}
+		result, _ := agent.RunWithOptions(context.Background(), process.PID, []runtime.Message{{Role: "user", Content: "goal"}}, runtime.RunOptions{})
+		if status := result.ExitStatus; backend.calls != 1 || !strings.HasPrefix(status.Reason, "token budget exceeded: no tokens left for a reply") || !status.Retryable || status.Checkpoint == "" {
+			t.Fatalf("%d calls, exit %+v", backend.calls, status)
+		}
+	})
 }
+
+// driverError is a BackendError, as a driver's error says how to retry it.
+type driverError struct {
+	text      string
+	temporary bool
+	wait      time.Duration
+}
+
+func (e *driverError) Error() string            { return e.text }
+func (e *driverError) Temporary() bool          { return e.temporary }
+func (e *driverError) RetryWait() time.Duration { return e.wait }
 
 // Evidence may cite messages the way the history shows them; it is stored
 // in the canonical form, and a bad form is refused with the forms accepted.
