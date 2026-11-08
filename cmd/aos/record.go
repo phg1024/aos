@@ -67,6 +67,25 @@ func backendRecord(config inference.BackendConfig) map[string]string {
 	if config.ContextWindow > 0 {
 		window = strconv.Itoa(config.ContextWindow)
 	}
+	if config.Kind == inference.BackendAnthropic {
+		// The Anthropic driver sends no sampling field, and max_tokens
+		// always: the profile's value or its default.
+		maxTokens := config.Sampling.MaxTokens
+		if maxTokens <= 0 {
+			maxTokens = inference.DefaultAnthropicMaxTokens
+		}
+		return map[string]string{
+			"backend":         string(config.Kind),
+			"base_url":        config.BaseURL,
+			"model":           config.Model,
+			"temperature":     "not sent",
+			"top_p":           "not sent",
+			"max_tokens":      strconv.Itoa(maxTokens),
+			"thinking_budget": "not sent (adaptive thinking)",
+			"context_window":  window,
+			"timeout":         config.Timeout.String(),
+		}
+	}
 	return map[string]string{
 		"backend":         string(config.Kind),
 		"base_url":        config.BaseURL,

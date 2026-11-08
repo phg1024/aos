@@ -159,7 +159,7 @@ func TestSwitchingModelsMidSession(t *testing.T) {
 	f := newRootFixture(t)
 	stateDir := t.TempDir()
 	callLog, _ := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
-	newBackend := func(config inference.BackendConfig) *inference.VLLMBackend {
+	newBackend := func(config inference.BackendConfig) inference.Backend {
 		backend := inference.NewBackendFromConfig(config, inference.BackendOptions{})
 		backend.SetCallLog(callLog)
 		return backend

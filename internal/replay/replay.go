@@ -322,14 +322,21 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	defer stop(nil)
 	player := newPlayer(rec, store, stop, &report)
 
-	config := inference.VLLMConfig{Model: settings.Record["model"], Timeout: time.Hour, Replayer: player}
-	if first != nil {
-		// The first request carries the sampling as sent; a later cap from
-		// a token budget is applied the same way on top of it.
-		config.BaseURL, config.Model, config.Stream = first.Backend, first.Params.Model, first.Params.Stream
-		config.Sampling = inference.Sampling{Temperature: first.Params.Temperature, TopP: first.Params.TopP, MaxTokens: first.Params.MaxTokens, ThinkingBudget: first.Params.ReasoningBudgetTokens}
+	var backend inference.Backend
+	if first != nil && first.Params.API == inference.APIAnthropicMessages {
+		// The same driver, so the bodies it builds hash as recorded.
+		backend = inference.NewAnthropicBackend(inference.AnthropicConfig{BaseURL: first.Backend, Model: first.Params.Model,
+			Timeout: time.Hour, MaxTokens: first.Params.MaxTokens, Stream: first.Params.Stream, Replayer: player})
+	} else {
+		config := inference.VLLMConfig{Model: settings.Record["model"], Timeout: time.Hour, Replayer: player}
+		if first != nil {
+			// The first request carries the sampling as sent; a later cap from
+			// a token budget is applied the same way on top of it.
+			config.BaseURL, config.Model, config.Stream = first.Backend, first.Params.Model, first.Params.Stream
+			config.Sampling = inference.Sampling{Temperature: first.Params.Temperature, TopP: first.Params.TopP, MaxTokens: first.Params.MaxTokens, ThinkingBudget: first.Params.ReasoningBudgetTokens}
+		}
+		backend = inference.NewVLLMBackend(config)
 	}
-	backend := inference.NewVLLMBackend(config)
 	if callLog, err := runlog.Open(runlog.Path(workDir, runlog.CallsFile)); err == nil {
 		backend.SetCallLog(callLog)
 	}
@@ -548,7 +555,8 @@ func (p *player) Reply(ctx context.Context, body []byte) (inference.RecordedRepl
 		}
 		return inference.RecordedReply{}, errors.New(outcome.Error)
 	}
-	return inference.RecordedReply{Content: outcome.Response, PromptTokens: outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens, CachedTokens: outcome.CachedTokens}, nil
+	return inference.RecordedReply{Content: outcome.Response, Reasoning: outcome.Reasoning, PromptTokens: outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens,
+		CachedTokens: outcome.CachedTokens, CacheCreationTokens: outcome.CacheCreationTokens}, nil
 }
 
 // stopCause rebuilds the cause that cut pid's run short, from its recorded
@@ -728,8 +736,11 @@ func (p *player) unplayed() *inference.CallRecord {
 	return first
 }
 
-// sentRequest is the part of a request body a divergence shows.
+// sentRequest is the part of a request body a divergence shows. An
+// Anthropic body carries its system prompt beside the messages, where the
+// record holds it as the first message.
 type sentRequest struct {
+	System   string                  `json:"system"`
 	Messages []inference.ChatMessage `json:"messages"`
 }
 
@@ -742,6 +753,9 @@ func requestDivergence(records []inference.CallRecord, index int, body []byte) D
 	recorded := inference.RequestMessages(records, index)
 	var sent sentRequest
 	_ = json.Unmarshal(body, &sent)
+	if sent.System != "" {
+		sent.Messages = append([]inference.ChatMessage{{Role: "system", Content: sent.System}}, sent.Messages...)
+	}
 	for i := 0; i < max(len(recorded), len(sent.Messages)); i++ {
 		switch {
 		case i >= len(recorded):

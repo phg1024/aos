@@ -352,7 +352,8 @@ func TestD4ProviderKinds(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": "ok"}}}})
 	}))
 	defer srv.Close()
-	for _, name := range []string{"AOS_LLM_BASE_URL", "AOS_VLLM_BASE_URL", "AOS_LLM_MODEL", "AOS_VLLM_MODEL", "AOS_LLM_API_KEY", "AOS_VLLM_API_KEY"} {
+	// No key from the environment goes even to the test server.
+	for _, name := range []string{"AOS_LLM_BASE_URL", "AOS_VLLM_BASE_URL", "AOS_LLM_MODEL", "AOS_VLLM_MODEL", "AOS_LLM_API_KEY", "AOS_VLLM_API_KEY", "ANTHROPIC_API_KEY"} {
 		t.Setenv(name, "")
 	}
 	kinds := []string{"vllm", "ollama", "openai-compatible", "anthropic"}
@@ -377,10 +378,15 @@ func TestD4ProviderKinds(t *testing.T) {
 		finding(t, "D4 kind %-18s POST %s body %s authorization=%q", kinds[i], c.path, c.body, redactBearer(c.header.Get("Authorization")))
 	}
 	same := true
-	for _, c := range captured[1:] {
+	for _, c := range captured[1:3] {
 		same = same && bytes.Equal(c.body, captured[0].body)
 	}
-	finding(t, "D4 request bodies byte-identical across the four kinds: %t; NewBackendFromConfig ignores Kind, so \"anthropic\" builds the same chat-completions client", same)
+	finding(t, "D4 request bodies byte-identical across vllm, ollama and openai-compatible: %t", same)
+	if captured[3].path == "/v1/chat/completions" && bytes.Equal(captured[3].body, captured[0].body) {
+		finding(t, "D4 anthropic sends the same body: NewBackendFromConfig ignores Kind, so it builds the same chat-completions client (v0.1.6)")
+	} else {
+		finding(t, "D4 anthropic builds the Messages driver: POST %s", captured[3].path)
+	}
 
 	anthropicOnly := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/messages" {
@@ -392,6 +398,7 @@ func TestD4ProviderKinds(t *testing.T) {
 	defer anthropicOnly.Close()
 	t.Setenv("AOS_LLM_BACKEND", "anthropic")
 	config := inference.LoadBackendConfig(time.Minute)
+	config.APIKey = ""
 	config.BaseURL, config.Model = anthropicOnly.URL, "probe"
 	_, err := inference.NewBackendFromConfig(config, inference.BackendOptions{}).CompleteText(context.Background(), "system", "user")
 	finding(t, "D4 a server that speaks only /v1/messages, with AOS_LLM_BACKEND=anthropic: %v", err)
@@ -571,4 +578,3 @@ func TestD7MaxTokensClamp(t *testing.T) {
 	}
 	finding(t, "D7 the cap is the budget left in prompt plus completion tokens (runtime.go sets CallInfo.MaxTokens = tokens.Left); it does not subtract the prompt the call is about to send")
 }
-

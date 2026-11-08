@@ -220,7 +220,7 @@ The contract harness in `internal/workflow` uses the same policies: `Engine.Veri
 
 AOS now uses backend-agnostic env vars for live model selection:
 
-- `AOS_LLM_BACKEND` with values such as `vllm`, `ollama`, or `openai-compatible`
+- `AOS_LLM_BACKEND` with values such as `vllm`, `ollama`, `openai-compatible` (all three speak chat completions), or `anthropic` (the Anthropic Messages API, `internal/inference/anthropic.go`)
 - `AOS_LLM_BASE_URL`
 - `AOS_LLM_MODEL`
 - `AOS_LLM_API_KEY`
@@ -239,6 +239,17 @@ AOS_LLM_BASE_URL=http://localhost:11434 \
 AOS_LLM_MODEL=qwen3.6:35b-a3b-mtp-q4_K_M \
 go run ./cmd/aos run --workflow ./workflows/rasterizer-optimized-tail.json --output ./reports/rasterizer-team-demo/final-summary.txt
 ```
+
+With `AOS_LLM_BACKEND=anthropic` the key comes only from `ANTHROPIC_API_KEY`, never from `AOS_LLM_API_KEY`; the base URL defaults to the Anthropic API and the model to `claude-sonnet-5-5`. A profile selects it with `"backend": "anthropic", "api_key_env": "ANTHROPIC_API_KEY"` (see the `claude` profile in `scripts/models.json`). The driver:
+
+- sends `max_tokens` always: `AOS_LLM_MAX_TOKENS` or the profile's, else 16,000, lowered to what is left of a token budget;
+- sends no `temperature`, `top_p` or thinking budget (API version `2026-10-21` refuses sampling fields), and asks for adaptive thinking with summarized display;
+- keeps thinking blocks apart from the reply: they are recorded as the call's `reasoning` in the ledger and shown as thinking in `aos-tui`, never parsed as the action and never sent back;
+- puts a top-level `cache_control` breakpoint on each request and records cache reads and writes in the usage;
+- for `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-opus-5` and `claude-fable-5-1`, sends `fallbacks: "default"`, so a declined request may be answered by another model; the ledger records the model that answered;
+- makes one request per call: retries, 429 and 529 included, are the runtime's `BackendRetryPolicy`.
+
+These calls cost money; run them only on purpose.
 
 ## Docs
 

@@ -31,16 +31,16 @@ const defaultModelTimeout = 180 * time.Second
 // built on it use the new model from their next call.
 type swapCompleter struct {
 	mu      sync.RWMutex
-	backend *inference.VLLMBackend
+	backend inference.Backend
 }
 
-func (s *swapCompleter) current() *inference.VLLMBackend {
+func (s *swapCompleter) current() inference.Backend {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.backend
 }
 
-func (s *swapCompleter) set(backend *inference.VLLMBackend) {
+func (s *swapCompleter) set(backend inference.Backend) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.backend = backend

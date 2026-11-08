@@ -18,6 +18,9 @@ type ChatMessage = chatMessage
 
 // RequestParams are a request's fields other than its messages.
 type RequestParams struct {
+	// API is the wire format: empty for chat completions, APIAnthropicMessages
+	// for the Anthropic Messages API. A record's body is rebuilt in it.
+	API                   string         `json:"api,omitempty"`
 	Model                 string         `json:"model"`
 	Temperature           float64        `json:"temperature"`
 	TopP                  float64        `json:"top_p,omitempty"`
@@ -25,6 +28,11 @@ type RequestParams struct {
 	ReasoningBudgetTokens int            `json:"reasoning_budget_tokens,omitempty"`
 	Stream                bool           `json:"stream,omitempty"`
 	StreamOptions         *streamOptions `json:"stream_options,omitempty"`
+	// Thinking, CacheControl and Fallbacks are the Anthropic request's own
+	// fields, recorded as sent.
+	Thinking     *ThinkingParam     `json:"thinking,omitempty"`
+	CacheControl *CacheControlParam `json:"cache_control,omitempty"`
+	Fallbacks    string             `json:"fallbacks,omitempty"`
 }
 
 // The two lines of a call in the ledger.
@@ -61,20 +69,26 @@ type CallRecord struct {
 	Run string `json:"run,omitempty"`
 	// Step and ElapsedSeconds are the process's step and the seconds its
 	// budget chain had used when the step began (runtime.CallInfo).
-	Step             int           `json:"step,omitempty"`
-	ElapsedSeconds   float64       `json:"elapsed_s,omitempty"`
-	Backend          string        `json:"backend"`
-	Model            string        `json:"model"`
-	PromptTokens     int           `json:"prompt_tokens"`
-	CachedTokens     int           `json:"cached_tokens"`
-	CompletionTokens int           `json:"completion_tokens"`
-	LatencyMS        int64         `json:"latency_ms"`
-	Error            string        `json:"error,omitempty"`
-	Response         string        `json:"response,omitempty"`
-	Params           RequestParams `json:"params"`
-	Base             int           `json:"base,omitempty"`
-	Messages         []ChatMessage `json:"messages,omitempty"`
-	RequestSHA256    string        `json:"request_sha256"`
+	Step             int     `json:"step,omitempty"`
+	ElapsedSeconds   float64 `json:"elapsed_s,omitempty"`
+	Backend          string  `json:"backend"`
+	Model            string  `json:"model"`
+	PromptTokens     int     `json:"prompt_tokens"`
+	CachedTokens     int     `json:"cached_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	// CacheCreationTokens are prompt tokens written to the cache, where the
+	// server reports them (Anthropic); they are part of PromptTokens.
+	CacheCreationTokens int    `json:"cache_creation_tokens,omitempty"`
+	LatencyMS           int64  `json:"latency_ms"`
+	Error               string `json:"error,omitempty"`
+	Response            string `json:"response,omitempty"`
+	// Reasoning is the model's thinking where the server returns it apart
+	// from the reply (Anthropic thinking blocks). It is never parsed.
+	Reasoning     string        `json:"reasoning,omitempty"`
+	Params        RequestParams `json:"params"`
+	Base          int           `json:"base,omitempty"`
+	Messages      []ChatMessage `json:"messages,omitempty"`
+	RequestSHA256 string        `json:"request_sha256"`
 }
 
 // Finished reports whether the record closes a call: an outcome, or a
@@ -126,8 +140,12 @@ func RequestMessages(records []CallRecord, i int) []ChatMessage {
 }
 
 // RebuildRequestBody reproduces the exact body of a call from its params and
-// its full message list (its base chain's messages plus its own).
+// its full message list (its base chain's messages plus its own), in the
+// wire format params.API names.
 func RebuildRequestBody(params RequestParams, messages []ChatMessage) ([]byte, error) {
+	if params.API == APIAnthropicMessages {
+		return json.Marshal(anthropicRequestOf(params, messages))
+	}
 	return json.Marshal(chatCompletionRequest{
 		Model:                 params.Model,
 		Messages:              messages,
@@ -167,7 +185,7 @@ type pendingCall struct {
 }
 
 // requestHash is the hash of payload's exact body.
-func requestHash(payload chatCompletionRequest) (string, error) {
+func requestHash(payload any) (string, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
@@ -182,9 +200,34 @@ func paramsOf(payload chatCompletionRequest) RequestParams {
 
 // recordStart writes the call's start line before the request is sent.
 func (b *VLLMBackend) recordStart(ctx context.Context, payload chatCompletionRequest) pendingCall {
+	return b.calls.start(ctx, b.baseURL, payload, paramsOf(payload), payload.Messages)
+}
+
+// recordOutcome writes the outcome line of the call pending started.
+func (b *VLLMBackend) recordOutcome(pending pendingCall, model string, usage *responseUsage, latency time.Duration, content string, callErr error) {
+	var counts callUsage
+	if usage != nil {
+		counts = callUsage{prompt: usage.PromptTokens, completion: usage.CompletionTokens}
+		if usage.PromptTokensDetails != nil {
+			counts.cached = usage.PromptTokensDetails.CachedTokens
+		}
+	}
+	b.calls.outcome(pending, b.baseURL, model, counts, latency, content, "", callErr)
+}
+
+// callUsage is what the server reported for one call, in the ledger's
+// terms: prompt includes cached and cacheWrite.
+type callUsage struct {
+	prompt, completion, cached, cacheWrite int
+}
+
+// start writes a call's start line: payload is the exact body, messages
+// its message list as recorded (system first). A nil recorder writes
+// nothing.
+func (recorder *callRecorder) start(ctx context.Context, backend string, payload any, params RequestParams, messages []chatMessage) pendingCall {
 	info, _ := runtime.CallInfoFrom(ctx)
 	pending := pendingCall{info: info}
-	if b.calls == nil {
+	if recorder == nil {
 		return pending
 	}
 	sha, err := requestHash(payload)
@@ -201,18 +244,17 @@ func (b *VLLMBackend) recordStart(ctx context.Context, payload chatCompletionReq
 		Run:            info.Run,
 		Step:           info.Step,
 		ElapsedSeconds: info.Elapsed,
-		Backend:        b.baseURL,
-		Model:          payload.Model,
-		Params:         paramsOf(payload),
-		Messages:       payload.Messages,
+		Backend:        backend,
+		Model:          params.Model,
+		Params:         params,
+		Messages:       messages,
 		RequestSHA256:  sha,
 	}
-	recorder := b.calls
 	recorder.mu.Lock()
 	defer recorder.mu.Unlock()
-	if previous, ok := recorder.last[info.PID]; ok && info.PID != "" && extends(payload.Messages, previous.messages) {
+	if previous, ok := recorder.last[info.PID]; ok && info.PID != "" && extends(messages, previous.messages) {
 		record.Base = previous.seq
-		record.Messages = payload.Messages[len(previous.messages):]
+		record.Messages = messages[len(previous.messages):]
 	}
 	seq, err := recorder.log.Append(func(seq int) any {
 		record.Seq = seq
@@ -223,42 +265,41 @@ func (b *VLLMBackend) recordStart(ctx context.Context, payload chatCompletionReq
 	}
 	pending.seq = seq
 	if info.PID != "" && !info.Repair {
-		recorder.last[info.PID] = previousCall{seq: seq, messages: slices.Clone(payload.Messages)}
+		recorder.last[info.PID] = previousCall{seq: seq, messages: slices.Clone(messages)}
 	}
 	return pending
 }
 
-// recordOutcome writes the outcome line of the call pending started.
-func (b *VLLMBackend) recordOutcome(pending pendingCall, model string, usage *responseUsage, latency time.Duration, content string, callErr error) {
-	if b.calls == nil || pending.seq == 0 {
+// outcome writes the outcome line of the call pending started.
+func (recorder *callRecorder) outcome(pending pendingCall, backend, model string, usage callUsage, latency time.Duration, content, reasoning string, callErr error) {
+	if recorder == nil || pending.seq == 0 {
 		return
 	}
 	info := pending.info
 	record := CallRecord{
-		Phase:         PhaseOutcome,
-		Start:         pending.seq,
-		Time:          time.Now().UTC(),
-		PID:           info.PID,
-		AgentID:       info.AgentID,
-		Repair:        info.Repair,
-		Run:           info.Run,
-		Step:          info.Step,
-		Backend:       b.baseURL,
-		Model:         model,
-		LatencyMS:     latency.Milliseconds(),
-		Response:      content,
-		RequestSHA256: pending.sha,
-	}
-	if usage != nil {
-		record.PromptTokens, record.CompletionTokens = usage.PromptTokens, usage.CompletionTokens
-		if usage.PromptTokensDetails != nil {
-			record.CachedTokens = usage.PromptTokensDetails.CachedTokens
-		}
+		Phase:               PhaseOutcome,
+		Start:               pending.seq,
+		Time:                time.Now().UTC(),
+		PID:                 info.PID,
+		AgentID:             info.AgentID,
+		Repair:              info.Repair,
+		Run:                 info.Run,
+		Step:                info.Step,
+		Backend:             backend,
+		Model:               model,
+		PromptTokens:        usage.prompt,
+		CompletionTokens:    usage.completion,
+		CachedTokens:        usage.cached,
+		CacheCreationTokens: usage.cacheWrite,
+		LatencyMS:           latency.Milliseconds(),
+		Response:            content,
+		Reasoning:           reasoning,
+		RequestSHA256:       pending.sha,
 	}
 	if callErr != nil {
 		record.Error = callErr.Error()
 	}
-	_, _ = b.calls.log.Append(func(seq int) any {
+	_, _ = recorder.log.Append(func(seq int) any {
 		record.Seq = seq
 		return record
 	})

@@ -52,6 +52,14 @@ func exit(reason string) step {
 
 func scriptServer(t *testing.T, script []step) *httptest.Server {
 	t.Helper()
+	return scriptServerIn(t, script, false)
+}
+
+// scriptServerIn answers in the Anthropic Messages format when anthropic is
+// set, with a thinking block before each reply, and in chat completions
+// otherwise.
+func scriptServerIn(t *testing.T, script []step, anthropic bool) *httptest.Server {
+	t.Helper()
 	var mu sync.Mutex
 	n := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +86,14 @@ func scriptServer(t *testing.T, script []step) *httptest.Server {
 		tokens := current.tokens
 		if tokens == 0 {
 			tokens = 100
+		}
+		if anthropic {
+			json.NewEncoder(w).Encode(map[string]any{
+				"type": "message", "model": "scripted", "stop_reason": "end_turn",
+				"content": []map[string]any{{"type": "thinking", "thinking": "planning the step"}, {"type": "text", "text": "{\"action\":" + string(content) + "}"}},
+				"usage":   map[string]any{"input_tokens": tokens - 60, "cache_read_input_tokens": 60, "output_tokens": 7},
+			})
+			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{{"message": map[string]any{"content": string(content)}}},
@@ -128,6 +144,8 @@ type options struct {
 	noDelegateAttach bool
 	// delegator gives the agent an agent it may delegate to, and never does.
 	delegator bool
+	// anthropic records through the Anthropic Messages driver.
+	anthropic bool
 }
 
 func replayed(t *testing.T, stateDir string, unpinned bool) replay.Report {
@@ -197,9 +215,12 @@ func recordRunIn(t *testing.T, root string, ctx context.Context, script func(str
 	toolRuntime := tools.NewRuntime()
 	toolRuntime.Protected = []string{stateDir}
 	toolRuntime.ScratchRoot = filepath.Join(root, "scratch")
-	server := scriptServer(t, script(workspace))
-	backend := inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: server.URL, Model: "scripted", Timeout: time.Minute,
+	server := scriptServerIn(t, script(workspace), opts.anthropic)
+	var backend inference.Backend = inference.NewVLLMBackend(inference.VLLMConfig{BaseURL: server.URL, Model: "scripted", Timeout: time.Minute,
 		Sampling: inference.Sampling{Temperature: 0.6, MaxTokens: 512}})
+	if opts.anthropic {
+		backend = inference.NewAnthropicBackend(inference.AnthropicConfig{BaseURL: server.URL, Model: "scripted", Timeout: time.Minute, MaxTokens: 512})
+	}
 	callLog, _ := runlog.Open(runlog.Path(stateDir, runlog.CallsFile))
 	backend.SetCallLog(callLog)
 	var spec agentflow.WorkflowSpec
@@ -278,6 +299,49 @@ func TestReplayRoundTrip(t *testing.T) {
 	}
 	if report.RecordedBuild["build_version"] != "test" {
 		t.Fatalf("recorded build = %v", report.RecordedBuild)
+	}
+}
+
+// A run through the Anthropic driver replays byte for byte: the replay
+// builds the same driver from the ledger, and its bodies hash as recorded.
+func TestReplayOfAnAnthropicRecord(t *testing.T) {
+	root, _ := filepath.EvalSymlinks(t.TempDir())
+	stateDir := recordAt(t, root, context.Background(), func(ws string) []step { return roundTripScript(ws) },
+		options{budget: capability.Budget{Seconds: 600}, compaction: runtime.CompactionPolicy{MaxMessages: 12, KeepMessages: 4, Handoff: true}, anthropic: true})
+	records := calls(t, stateDir)
+	starts, reasoned := 0, 0
+	for _, record := range records {
+		switch {
+		case record.Phase == inference.PhaseStart:
+			starts++
+			if record.Params.API != inference.APIAnthropicMessages {
+				t.Fatalf("call %d recorded as %q", record.Seq, record.Params.API)
+			}
+		case record.Reasoning == "planning the step":
+			reasoned++
+		}
+	}
+	if starts < 8 || reasoned == 0 || !strings.Contains(eventTypes(t, stateDir), "backend.retry") {
+		t.Fatalf("the recording should hold the calls, their reasoning and a retry: %d starts, %d with reasoning", starts, reasoned)
+	}
+	report := replayed(t, stateDir, false)
+	if !report.Identical() || report.Matched != starts {
+		t.Fatalf("report %+v, divergence %+v", report, report.Divergence)
+	}
+
+	// A changed record shows where the replayed request first differs, the
+	// system prompt counted as message 1, as the ledger holds it.
+	changed := copyDir(t, stateDir)
+	rewrite(t, changed, artifactOf(t, changed, "tool_result", "run"), "hello", "HELLO", true)
+	report = replayed(t, changed, false)
+	if d := report.Divergence; d == nil || d.Kind != "request" || d.Step != 3 || !strings.Contains(d.Recorded, "hello") || !strings.Contains(d.Replayed, "HELLO") {
+		t.Fatalf("a changed run result should diverge at step 3's call: %+v", d)
+	}
+	prompt := copyDir(t, stateDir)
+	rewrite(t, prompt, artifactOf(t, prompt, agentflow.RunSpecArtifact, ""), "Solve the task.", "Solve the task carefully.", true)
+	report = replayed(t, prompt, false)
+	if d := report.Divergence; d == nil || d.Call != 1 || !strings.Contains(d.Detail, "message 1 (system)") {
+		t.Fatalf("a changed prompt should diverge at the first call's system message: %+v", d)
 	}
 }
 

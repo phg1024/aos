@@ -1,11 +1,13 @@
 package inference
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"aos/internal/runlog"
 	"aos/internal/runtime"
 )
 
@@ -15,7 +17,24 @@ const (
 	BackendVLLM             BackendKind = "vllm"
 	BackendOllama           BackendKind = "ollama"
 	BackendOpenAICompatible BackendKind = "openai-compatible"
+	// BackendAnthropic speaks the Anthropic Messages API (AnthropicBackend).
+	BackendAnthropic BackendKind = "anthropic"
 )
+
+// AnthropicKeyEnv is where the anthropic kind reads its key when the
+// environment selects it; a profile names its own in api_key_env.
+const AnthropicKeyEnv = "ANTHROPIC_API_KEY"
+
+// Backend is a model client as the runtime and agentflow use it: either
+// wire format, with its usage totals and call ledger.
+type Backend interface {
+	Generate(ctx context.Context, request runtime.GenerateRequest) (runtime.GenerateResult, error)
+	CompleteJSON(ctx context.Context, systemPrompt, userPrompt string, target any) error
+	CompleteText(ctx context.Context, systemPrompt, userPrompt string) (string, error)
+	CompleteMessages(ctx context.Context, messages []runtime.Message) (string, error)
+	Usage() TokenUsage
+	SetCallLog(log *runlog.Log)
+}
 
 type BackendConfig struct {
 	Kind    BackendKind
@@ -59,6 +78,11 @@ func LoadBackendConfig(defaultTimeout time.Duration) BackendConfig {
 		os.Getenv("AOS_VLLM_API_KEY"),
 		defaultAPIKey(kind),
 	)
+	if kind == BackendAnthropic {
+		// Only its own variable: an AOS_LLM_API_KEY meant for a local
+		// server never goes to the Anthropic API.
+		apiKey = strings.TrimSpace(os.Getenv(AnthropicKeyEnv))
+	}
 
 	return BackendConfig{
 		Kind:          kind,
@@ -77,7 +101,21 @@ func LoadBackendConfig(defaultTimeout time.Duration) BackendConfig {
 	}
 }
 
-func NewBackendFromConfig(config BackendConfig, options BackendOptions) *VLLMBackend {
+// NewBackendFromConfig builds the client config.Kind names: the Anthropic
+// Messages driver for BackendAnthropic, the chat-completions driver for
+// every other kind.
+func NewBackendFromConfig(config BackendConfig, options BackendOptions) Backend {
+	if config.Kind == BackendAnthropic {
+		return NewAnthropicBackend(AnthropicConfig{
+			BaseURL:       config.BaseURL,
+			Model:         config.Model,
+			APIKey:        config.APIKey,
+			SystemPrompt:  options.SystemPrompt,
+			Timeout:       config.Timeout,
+			OnStreamEvent: options.OnStreamEvent,
+			MaxTokens:     config.Sampling.MaxTokens,
+		})
+	}
 	return NewVLLMBackend(VLLMConfig{
 		BaseURL:       config.BaseURL,
 		Model:         config.Model,
@@ -104,6 +142,8 @@ func normalizeBackendKind(value string) BackendKind {
 		return BackendOllama
 	case "openai", "openai-compatible", "openai_compatible", "compatible":
 		return BackendOpenAICompatible
+	case "anthropic", "claude":
+		return BackendAnthropic
 	default:
 		return BackendKind(strings.ToLower(strings.TrimSpace(value)))
 	}
@@ -113,6 +153,8 @@ func defaultBaseURL(kind BackendKind) string {
 	switch kind {
 	case BackendOllama:
 		return "http://localhost:11434"
+	case BackendAnthropic:
+		return defaultAnthropicBaseURL
 	default:
 		return "http://lenovo-px.local:8001"
 	}
@@ -122,6 +164,8 @@ func defaultModel(kind BackendKind) string {
 	switch kind {
 	case BackendOllama:
 		return "qwen3.6:35b-a3b-mtp-q4_K_M"
+	case BackendAnthropic:
+		return defaultAnthropicModel
 	default:
 		return "Qwen/Qwen3.5-27B"
 	}
@@ -129,7 +173,7 @@ func defaultModel(kind BackendKind) string {
 
 func defaultAPIKey(kind BackendKind) string {
 	switch kind {
-	case BackendOllama:
+	case BackendOllama, BackendAnthropic:
 		return ""
 	default:
 		return "dummy"

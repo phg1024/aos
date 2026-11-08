@@ -41,6 +41,15 @@
       "timeout_seconds": 600
     },
     {
+      "name": "claude",
+      "description": "Claude Sonnet 5.5 on the Anthropic API (paid; the key comes from ANTHROPIC_API_KEY)",
+      "backend": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "context_window": 1000000,
+      "timeout_seconds": 600
+    },
+    {
       "name": "vllm",
       "description": "vLLM on lenovo-px",
       "backend": "vllm",

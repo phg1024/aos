@@ -175,7 +175,7 @@ func runTUI() []string {
 	if err != nil {
 		fail(err)
 	}
-	newBackend := func(config inference.BackendConfig) *inference.VLLMBackend {
+	newBackend := func(config inference.BackendConfig) inference.Backend {
 		backend := inference.NewBackendFromConfig(config, inference.BackendOptions{OnStreamEvent: stream.Handle})
 		backend.SetCallLog(callLog)
 		return backend

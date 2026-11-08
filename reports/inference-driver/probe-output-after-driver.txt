@@ -1,0 +1,70 @@
+=== RUN   TestD1StreamingAndNot
+FINDING: D1 valid action in content:                         not streaming (aos run): message "from content" [1 call(s)] | streaming (aos-tui): message "from content" [1 call(s)]
+FINDING: D1 prose in content:                                not streaming (aos run): message "from repair" [2 call(s)] | streaming (aos-tui): exit code=0 reason="from reasoning" [1 call(s)]
+FINDING: D1 content one brace short:                         not streaming (aos run): message "from content" [1 call(s)] | streaming (aos-tui): message "from content" [1 call(s)]
+FINDING: D1 empty content:                                   not streaming (aos run): message "from repair" [2 call(s)] | streaming (aos-tui): exit code=0 reason="from reasoning" [1 call(s)]
+FINDING: D1 reasoning prose with braces, valid content:      not streaming (aos run): message "from content" [1 call(s)] | streaming (aos-tui): message "from content" [1 call(s)]
+FINDING: D1 vllm.go writes every reasoning delta into the text it returns when streaming; without streaming it reads only message.content, so reasoning_content is dropped
+--- PASS: TestD1StreamingAndNot (0.01s)
+=== RUN   TestD3ToleranceLadder
+FINDING: D3 clean nested action:                       -> message "hi"                                 correct; no repair call
+FINDING: D3 trailing JSON after prose:                 -> exit code=0 reason="done"                    correct; no repair call
+FINDING: D3 bare keys:                                 -> message "hi"                                 correct; no repair call
+FINDING: D3 half-quoted keys:                          -> message "hi"                                 correct; no repair call
+FINDING: D3 trailing commas:                           -> message "hi"                                 correct; no repair call
+FINDING: D3 generic shape (tool name beside args):     -> tool read_file map[path:a.txt]               correct; no repair call
+FINDING: D3 flat shape (no action wrapper):            -> message "hi"                                 correct; no repair call
+FINDING: D3 flat shape the generic stage refuses (delegate without agent): -> delegate to= goal="build it"                 wrong action; no repair call
+FINDING: D3 legacy shape (action is a string):         -> exit code=0 reason="done"                    correct; no repair call
+FINDING: D3 in-transcript repair:                      -> message "repaired"                           correct; repair call with the raw reply as the assistant turn (4 messages)
+FINDING: D3 fallbackMessage (prose twice):             -> message "All done, the file is written."     correct; repair call with the raw reply as the assistant turn (4 messages)
+FINDING: D3 notesAsMessage (empty message twice):      -> message "wrote a.txt"                        correct; repair call with the raw reply as the assistant turn (4 messages)
+FINDING: D3 unrepairable:                              -> error: unable to repair malformed action JSON correct; repair call with the raw reply as the assistant turn (4 messages)
+FINDING: D3 example quoted after the real action:      -> message "example"                            wrong action; no repair call
+FINDING: D3 one brace short (live6 seq 28 shape):      -> delegate to=writer goal="build it"           correct; no repair call
+FINDING: D3 two braces short (args left open):         -> error: unable to repair malformed action JSON no action; repair call with the raw reply as the assistant turn (4 messages)
+FINDING: D3 <think> JSON, then a real action:          -> message "real"                               correct; no repair call
+FINDING: D3 <think> JSON, then prose:                  -> exit code=0 reason="thinking"                wrong action; no repair call
+FINDING: D3 14 of 18 replies read as intended
+--- PASS: TestD3ToleranceLadder (0.00s)
+=== RUN   TestD2Retries
+FINDING: D2 hung (client timeout 50ms): driver alone: 1 request(s), error "Post \"http://<test server>/v1/chat/completions\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)" | runtime: 12 request(s), 11 waits [1s 2s 4s 8s 16s 32s 1m4s 2m0s 2m0s 2m0s 2m0s] totalling 10m7s; exit code=1 retryable=true reason="entry agent solo exited with code 1: model endpoint failed 12 times in a row: Post \"http://<test server>/v1/chat/completions\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+FINDING: D2 503:                       driver alone: 1 request(s), error "vllm request failed: 503 Service Unavailable" | runtime: 12 request(s), 11 waits [1s 2s 4s 8s 16s 32s 1m4s 2m0s 2m0s 2m0s 2m0s] totalling 10m7s; exit code=1 retryable=true reason="entry agent solo exited with code 1: model endpoint failed 12 times in a row: vllm request failed: 503 Service Unavailable"
+FINDING: D2 404:                       driver alone: 1 request(s), error "vllm request failed: 404 Not Found" | runtime: 12 request(s), 11 waits [1s 2s 4s 8s 16s 32s 1m4s 2m0s 2m0s 2m0s 2m0s] totalling 10m7s; exit code=1 retryable=true reason="entry agent solo exited with code 1: model endpoint failed 12 times in a row: vllm request failed: 404 Not Found"
+FINDING: D2 the default policy: 12 attempts, base 1s, max 2m0s; MaxRetries is never set by NewBackendFromConfig, so the driver makes one attempt per call
+--- PASS: TestD2Retries (3.34s)
+=== RUN   TestD4ProviderKinds
+FINDING: D4 kind vllm               defaults: base URL is a hostname (not printed), model "Qwen/Qwen3.5-27B", key set=true
+FINDING: D4 kind ollama             defaults: base URL is localhost, model "qwen3.6:35b-a3b-mtp-q4_K_M", key set=false
+FINDING: D4 kind openai-compatible  defaults: base URL is a hostname (not printed), model "Qwen/Qwen3.5-27B", key set=true
+FINDING: D4 kind anthropic          defaults: base URL is a hostname (not printed), model "claude-sonnet-5-5", key set=false
+FINDING: D4 kind vllm               POST /v1/chat/completions body {"model":"probe","messages":[{"role":"system","content":"system"},{"role":"user","content":"user"}],"temperature":0} authorization="Bearer <redacted>"
+FINDING: D4 kind ollama             POST /v1/chat/completions body {"model":"probe","messages":[{"role":"system","content":"system"},{"role":"user","content":"user"}],"temperature":0} authorization=""
+FINDING: D4 kind openai-compatible  POST /v1/chat/completions body {"model":"probe","messages":[{"role":"system","content":"system"},{"role":"user","content":"user"}],"temperature":0} authorization="Bearer <redacted>"
+FINDING: D4 kind anthropic          POST /v1/messages body {"model":"probe","max_tokens":16000,"system":"system","messages":[{"role":"user","content":"user"}],"thinking":{"type":"adaptive","display":"summarized"},"cache_control":{"type":"ephemeral"}} authorization=""
+FINDING: D4 request bodies byte-identical across vllm, ollama and openai-compatible: true
+FINDING: D4 anthropic builds the Messages driver: POST /v1/messages
+FINDING: D4 a server that speaks only /v1/messages, with AOS_LLM_BACKEND=anthropic: <nil>
+--- PASS: TestD4ProviderKinds (0.00s)
+=== RUN   TestD5PerAgentModel
+FINDING: D5 json.Unmarshal as aos run decodes a workflow: err=<nil>; Validate: err=<nil>; fields left after a round trip: []
+FINDING: D5 a strict decoder would refuse it: json: unknown field "model"
+FINDING: D5 StaticBackendFactory.BackendFor hands every agent the one Completer; the agent spec has no model, profile or backend field
+--- PASS: TestD5PerAgentModel (0.00s)
+=== RUN   TestD6CacheReuse
+FINDING: D6 live6: 203 calls with an outcome (3 repairs), 7 processes' first calls; prompt 8531139 tokens, cached 8051138 (94.4%), as the server reported them
+FINDING: D6 cached share of each call's prompt: 0%: 5, 1-49%: 5, 50-89%: 29, 90-98%: 130, 99-100%: 34
+FINDING: D6 195 of 196 later calls are a strict prefix extension of the same process's previous call
+FINDING: D6 on those, cached tokens over the previous call's prompt tokens: min 0.000, p10 0.999, median 1.000, p90 1.000, max 1.000
+FINDING: D6 extensions that reused under 99% of the previous prompt: 2 [pid-000002 repair=false cached=0 prev_prompt=15207 pid-000002 repair=false cached=0 prev_prompt=17321]
+FINDING: D6 later calls that do not extend the previous one: 1 [pid-000002 repair=false cached=7994/7999]
+--- PASS: TestD6CacheReuse (0.01s)
+=== RUN   TestD7MaxTokensClamp
+FINDING: D7 configured max_tokens 12000, budget left   500 -> sent max_tokens 500 (0 = not sent)
+FINDING: D7 configured max_tokens 12000, budget left 20000 -> sent max_tokens 12000 (0 = not sent)
+FINDING: D7 configured max_tokens     0, budget left   500 -> sent max_tokens 500 (0 = not sent)
+FINDING: D7 configured max_tokens 12000, budget left     0 -> sent max_tokens 12000 (0 = not sent)
+FINDING: D7 the cap is the budget left in prompt plus completion tokens (runtime.go sets CallInfo.MaxTokens = tokens.Left); it does not subtract the prompt the call is about to send
+--- PASS: TestD7MaxTokensClamp (0.00s)
+PASS
+ok  	aos/bench/inference	3.474s

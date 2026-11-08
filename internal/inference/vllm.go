@@ -44,10 +44,12 @@ type Replayer interface {
 
 // RecordedReply is a recorded call's raw reply and usage.
 type RecordedReply struct {
-	Content          string
-	PromptTokens     int
-	CompletionTokens int
-	CachedTokens     int
+	Content             string
+	Reasoning           string
+	PromptTokens        int
+	CompletionTokens    int
+	CachedTokens        int
+	CacheCreationTokens int
 }
 
 type VLLMBackend struct {
@@ -68,11 +70,15 @@ type VLLMBackend struct {
 }
 
 // TokenUsage totals what the server reported across completed requests.
+// PromptTokens includes CachedTokens and CacheCreationTokens.
 type TokenUsage struct {
 	Requests         int `json:"requests"`
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	CachedTokens     int `json:"cached_tokens"`
+	// CacheCreationTokens are prompt tokens written to the cache, where the
+	// server reports them (Anthropic).
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
 }
 
 // Usage returns the token totals so far.
@@ -428,8 +434,14 @@ func max(a, b int) int {
 }
 
 func (b *VLLMBackend) messages(request runtime.GenerateRequest) []chatMessage {
+	return processMessages(b.system, request)
+}
+
+// processMessages is Generate's transcript: the backend's system prompt,
+// the process line, then the history.
+func processMessages(system string, request runtime.GenerateRequest) []chatMessage {
 	messages := []chatMessage{
-		{Role: "system", Content: b.system},
+		{Role: "system", Content: system},
 		{Role: "user", Content: fmt.Sprintf("Process role=%s pid=%s", request.Process.Role, request.Process.PID)},
 	}
 	for _, message := range request.History {

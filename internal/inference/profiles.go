@@ -55,7 +55,8 @@ func DefaultProfilesFile() string {
 
 // LoadProfiles reads a profiles file: {"profiles": [...]}. A missing file
 // has no profiles. A profile must have a unique name, a base URL and a
-// model, and may not carry a key.
+// model, and may not carry a key; an anthropic profile without a base URL
+// gets the Anthropic API's.
 func LoadProfiles(path string) ([]Profile, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -90,14 +91,16 @@ func LoadProfiles(path string) ([]Profile, error) {
 			return nil, fmt.Errorf("%s: profile %d needs a name without spaces", path, i+1)
 		case seen[profile.Name]:
 			return nil, fmt.Errorf("%s: profile %q is defined twice", path, profile.Name)
-		case profile.BaseURL == "" || profile.Model == "":
+		case profile.Model == "":
+			return nil, fmt.Errorf("%s: profile %q needs a model", path, profile.Name)
+		case profile.BaseURL == "" && normalizeBackendKind(string(profile.Backend)) != BackendAnthropic:
 			return nil, fmt.Errorf("%s: profile %q needs base_url and model", path, profile.Name)
 		case profile.CompactRatio < 0 || profile.CompactRatio > 1:
 			return nil, fmt.Errorf("%s: profile %q: compact_ratio must be within 0 and 1", path, profile.Name)
 		}
 		seen[profile.Name] = true
 		file.Profiles[i].Backend = normalizeBackendKind(string(profile.Backend))
-		file.Profiles[i].BaseURL = normalizeBaseURL(profile.BaseURL)
+		file.Profiles[i].BaseURL = normalizeBaseURL(firstNonEmpty(profile.BaseURL, defaultBaseURL(file.Profiles[i].Backend)))
 	}
 	return file.Profiles, nil
 }
@@ -111,7 +114,7 @@ func EnvProfile(name string, config BackendConfig) Profile {
 		Backend:        config.Kind,
 		BaseURL:        config.BaseURL,
 		Model:          config.Model,
-		APIKeyEnv:      "AOS_LLM_API_KEY",
+		APIKeyEnv:      envKeyName(config.Kind),
 		ContextWindow:  config.ContextWindow,
 		CompactRatio:   config.CompactRatio,
 		TimeoutSeconds: int(config.Timeout / time.Second),
@@ -151,4 +154,12 @@ func (p Profile) Config(apiKey string, defaultTimeout time.Duration) BackendConf
 			ThinkingBudget: p.Sampling.ThinkingBudget,
 		},
 	}
+}
+
+// envKeyName is the variable LoadBackendConfig reads kind's key from.
+func envKeyName(kind BackendKind) string {
+	if kind == BackendAnthropic {
+		return AnthropicKeyEnv
+	}
+	return "AOS_LLM_API_KEY"
 }

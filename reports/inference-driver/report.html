@@ -152,5 +152,33 @@
     <li><b>D5:</b> confirmed. A spec cannot name a model per agent, and the field is dropped silently, not refused.</li>
     <li><b>D7:</b> confirmed. The cap is the whole budget left, not what is left after the prompt.</li>
   </ul>
+  <h2>After the probes: a native Anthropic Messages driver</h2>
+  <p><code>internal/inference/anthropic.go</code> adds the <code>anthropic</code> backend kind. It uses only the standard library. Two things select it: <code>AOS_LLM_BACKEND=anthropic</code>, or a profile with <code>"backend": "anthropic", "api_key_env": "ANTHROPIC_API_KEY"</code>. It implements what <code>VLLMBackend</code> implements for the runtime and agentflow: <code>Generate</code>, <code>CompleteJSON</code>, <code>CompleteText</code>, <code>CompleteMessages</code>, <code>Usage</code>, the call ledger, and a <code>Replayer</code> for <code>aos replay</code>. <code>NewBackendFromConfig</code> now returns an <code>inference.Backend</code> interface and builds the driver that <code>Kind</code> names. No real API call was made, and nothing here has run against the Anthropic API.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Concern</th><th>What the driver does</th></tr>
+    <tr><td>Transcript</td><td>Leading system messages become the top-level <code>system</code> field. Every role but <code>assistant</code> is sent as <code>user</code>, and consecutive turns of one role are joined with a blank line. Empty messages are dropped. A transcript that starts with an assistant turn, or ends with one (a prefill), is refused before any request is sent.</td></tr>
+    <tr><td>Reply and thinking</td><td>The reply is the <code>text</code> blocks. <code>thinking</code> blocks are kept apart: they go to <code>OnStreamEvent</code> as thinking and are recorded as the ledger's new <code>reasoning</code> field. They are never parsed as the action and never sent back. This is the opposite of D1's streamed chat-completions reply. Because no thinking block is ever replayed, AOS's compaction cannot trip the API's history-editing check.</td></tr>
+    <tr><td>Request fields</td><td>API version <code>2026-10-21</code>. Adaptive thinking with <code>display: "summarized"</code>, and a top-level <code>cache_control</code> breakpoint. <code>fallbacks: "default"</code>, with its beta header, for <code>claude-sonnet-5-5</code>, <code>claude-opus-5-5</code>, <code>claude-opus-5</code> and <code>claude-fable-5-1</code>; the ledger records the model that answered. No <code>temperature</code> or <code>top_p</code> is sent, because that API version refuses them, and no thinking budget is sent either. The run record says "not sent" for those three.</td></tr>
+    <tr><td><code>max_tokens</code></td><td>The API requires it. It is the profile's value or <code>AOS_LLM_MAX_TOKENS</code>, else 16,000, lowered to what is left of a token budget, as D7 shows the other driver does. 16,000 was chosen because thinking counts toward the limit, and that leaves room for adaptive thinking and an AOS action while a non-streamed reply stays well inside the HTTP timeout.</td></tr>
+    <tr><td>Usage</td><td><code>input_tokens</code>, <code>cache_read_input_tokens</code> and <code>cache_creation_input_tokens</code> add up to the ledger's prompt tokens. Cache reads are recorded as cached tokens, and cache writes in the new <code>cache_creation_tokens</code> field, in <code>TokenUsage</code> and in the ledger.</td></tr>
+    <tr><td>Headers and key</td><td><code>x-api-key</code> and <code>anthropic-version</code>. The key comes only from the variable the profile names. With <code>AOS_LLM_BACKEND</code>, that is <code>ANTHROPIC_API_KEY</code> alone: an <code>AOS_LLM_API_KEY</code> meant for a local server is never sent. The key is not in the ledger, the run record, any error or any fixture. The tests make up a random key per run and check that it reaches neither the error nor the ledger.</td></tr>
+    <tr><td>Retries</td><td>Stated, not inherited. Each call is one request. A 400, 429, 529 or stream error comes back as an <code>AnthropicError</code> with its type, message, <code>retry-after</code> and request id. Retrying is left to the runtime's <code>BackendRetryPolicy</code>, as D2 measures it, which does not read <code>retry-after</code>. <code>stop_reason: "refusal"</code> is <code>ErrModelRefused</code>, with its category.</td></tr>
+    <tr><td>Replay</td><td>Calls are recorded with <code>params.api: "anthropic-messages"</code>, and <code>RebuildRequestBody</code> rebuilds them byte for byte. <code>aos replay</code> builds the same driver from the ledger. A divergence names the first differing message, with the system prompt counted as message 1.</td></tr>
+  </table>
+  </div>
+  <p><b>Tests.</b> All of them run against <code>httptest</code> servers.</p>
+  <ul>
+    <li><b>The request:</b> its headers and body; the fields left out; no fallbacks for other models; how the transcript is mapped and which transcripts are refused.</li>
+    <li><b>Thinking:</b> a thinking block that holds an action, non-streamed and streamed, yields only the text.</li>
+    <li><b>Usage:</b> cache reads and writes, in the totals, the ledger and the token meter.</li>
+    <li><b>Errors:</b> 400, 429 with <code>retry-after</code>, and 529, each one request; a stream error event, and a stream cut before <code>message_stop</code>; a refusal.</li>
+    <li><b>Limits:</b> the four <code>max_tokens</code> cases.</li>
+    <li><b>The ledger:</b> it rebuilds each body through the base chain, and a replayer answers from it.</li>
+    <li><b>Configuration:</b> config and profile selection, and the key read only from its own variable.</li>
+    <li><b>Replay:</b> <code>internal/replay</code> records a whole run through the driver and replays it identically, and finds a changed run result and a changed system prompt where they first matter.</li>
+  </ul>
+  <p>With the driver in place, only D4's anthropic rows change. That kind now posts to <code>/v1/messages</code>, and the Anthropic-only server answers it. <code>probe-output-after-driver.txt</code> is that run. D1, D2, D3, D5, D6 and D7 report exactly what they reported at <code>v0.1.6</code>.</p>
+  <p><b>Not done.</b> Nothing has been run against the real API. The default model and effort are not tuned for AOS: the driver leaves <code>effort</code> at the API default. Prompt-cache hit rates on Anthropic are not measured. A live run needs a cost estimate and the user's approval first.</p>
 </body>
 </html>

@@ -92,4 +92,7 @@ func TestCheckedInProfiles(t *testing.T) {
 	if byName["strata"].BaseURL != "http://127.0.0.1:8080" || byName["strata"].APIKeyEnv != "" || byName["strata"].ContextWindow != 262144 {
 		t.Fatalf("strata = %+v", byName["strata"])
 	}
+	if claude := byName["claude"]; claude.Backend != BackendAnthropic || claude.BaseURL != defaultAnthropicBaseURL || claude.Model != "claude-sonnet-5-5" || claude.APIKeyEnv != AnthropicKeyEnv {
+		t.Fatalf("claude = %+v", claude)
+	}
 }
