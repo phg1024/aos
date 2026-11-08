@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Six Live IPC Runs</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1180px; padding: 0 16px; line-height: 1.5; color: #1f2937; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    pre { background: #f3f4f6; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 13px; white-space: pre-wrap; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    ul { padding-left: 20px; }
+    .scroll { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 14px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .good { color: #047857; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>The Six Live IPC Runs, live1 to live6</h1>
+    <p>After <code>v0.1.5</code> the IPC contract ran six times with a real model. The task was to write a CUDA rasterizer for the Stanford bunny, time it against a CPU baseline, and verify it. A coordinator delegates, in rounds, to a writer, a benchmarker and a verifier. Their commands run confined on a Linux machine with one RTX 3080, and only that card is granted. live1 to live4 each changed AOS. live5 was interrupted, and live6 ran clean. This page stands on its own: the run records are gitignored and are not in the repository.</p>
+    <ul>
+      <li><span class="good">live6:</span> verdict pass, <code>art-000418</code> by verifier pid-000008. <code>analyze.py</code> calls it CLEAN. Each of the four delegations with handles put them inside <code>delegate</code>, and all eight handles were granted.</li>
+      <li><span class="bad">live2 and live3:</span> the kernel recorded a pass from a verifier that never read the benchmarker's record. Only <code>analyze.py</code> caught it.</li>
+      <li><span class="warn">Not yet shown by any real run:</span> an exit refused for unread evidence, an <code>unverified</code> verdict, a second model or task, or a real injection attempt. See section 9.</li>
+    </ul>
+  </div>
+
+  <h2>1. The runs at a glance</h2>
+  <p>Times are Pacific (PST). Each start is the first trace line and each end is <code>job.ended</code>. The model was the same in every run: <code>qwen3.8-flash-next-nvfp4-nvfp4</code>, with a 262,144-token window and 12,000 output tokens. "Calls" counts model calls started.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Run</th><th>Start (PST)</th><th>Duration</th><th>Workflow</th><th>Job exit</th><th>Calls</th><th>Kernel verdict</th><th><code>analyze.py</code></th></tr>
+    <tr><td>live1</td><td>Thu Nov 5, 23:20</td><td>10 min 7 s</td><td><code>rasterizer-bunny-cuda-ipc</code></td><td>1</td><td>0 reached the model</td><td>missing, no verifier ran</td><td>nothing to judge</td></tr>
+    <tr><td>live2</td><td>Thu Nov 5, 23:53</td><td>57 min 10 s</td><td><code>rasterizer-bunny-cuda-ipc</code></td><td>0</td><td>183, 0 failed</td><td>pass, <code>art-000363</code> by pid-000010</td><td class="bad">UNCLEAN PASS</td></tr>
+    <tr><td>live3</td><td>Fri Nov 6, 10:19</td><td>58 min 54 s</td><td><code>rasterizer-bunny-cuda-handles-ipc</code></td><td>0</td><td>197, 0 failed</td><td>pass, <code>art-000393</code> by pid-000009</td><td class="bad">UNCLEAN PASS</td></tr>
+    <tr><td>live4</td><td>Fri Nov 6, 22:12</td><td>75 min 15 s</td><td><code>rasterizer-bunny-cuda-evidence-ipc</code></td><td>0</td><td>271, 0 failed</td><td>pass, <code>art-000556</code> by pid-000009</td><td class="good">CLEAN</td></tr>
+    <tr><td>live5</td><td>Sat Nov 7, 22:34</td><td>61 min 11 s</td><td><code>rasterizer-bunny-cuda-evidence-ipc</code></td><td>143 (SIGTERM)</td><td>137, 1 cut off by the signal</td><td>stale, <code>art-000272</code></td><td>no pass to look behind</td></tr>
+    <tr><td>live6</td><td>Sat Nov 7, 23:47</td><td>75 min 53 s</td><td><code>rasterizer-bunny-cuda-evidence-ipc</code></td><td>0</td><td>203, 0 failed</td><td>pass, <code>art-000418</code> by pid-000008</td><td class="good">CLEAN</td></tr>
+  </table>
+  </div>
+  <p>The advisory time budget was 3600 s in live2 and live3, and 5400 s from live4 on. From live3 on, the benchmarker's directory is private, so a verifier can read the benchmarker's record only through a handle. live5 and live6 record <code>delegate_attach: v1</code> in <code>run.started</code>, so they ran the binary from <code>8d5ff6e</code>.</p>
+
+  <h2>2. live1: it never reached the model</h2>
+  <ul>
+    <li><b>Records.</b> The coordinator's model call failed 12 times in a row, because the job could not resolve the model server's name. Then the coordinator exited 1. No request reached the model, and no verifier ran.</li>
+    <li><b>What changed.</b> The job now names the model server by address. That is the submitter's environment, so there is no commit for it. <code>60da2bb</code> makes <code>submit.sh</code> pass the model client's timeout, 1200 s unless set. live1 had run with the client's 2-minute default, and a full 12,000-token reply would outlast that.</li>
+  </ul>
+
+  <h2>3. live2: a pass from a verifier that read nothing</h2>
+  <ul>
+    <li><b>Records.</b> The judged verifier, pid-000010, read no artifact and exited 0. The kernel recorded a pass. The benchmarker's record, <code>art-000319</code>, was 3,580 bytes the model had typed. All three verifiers (pid-000006, -000007 and -000010) read no artifact. <code>analyze.py</code> exits 3: UNCLEAN PASS, for both reasons.</li>
+    <li><b>Durations.</b> 51 <code>run</code> calls could be parsed. 39 of them asked for a timeout, and every one was a bare number such as <code>"300"</code>. The other 12 asked for none. A bare number fell back to the 60-second default, so every command ran with it.</li>
+    <li><b>What changed.</b>
+      <ul>
+        <li><code>e75b622</code>: <code>publish_artifact</code> takes a file's bytes from a path, up to 1 MiB, with its sha256.</li>
+        <li><code>7188082</code>: the handle-only workflow, where the benchmarker works in a directory only it can reach.</li>
+        <li><code>09db0be</code>: a bare number in a duration is read as seconds, and a value the tool cannot read is a tool error.</li>
+        <li><code>202ea95</code> and <code>32d22fe</code>: a test and the report.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>The <code>09db0be</code> commit message says "All 51 timeouts". 51 is the count of <code>run</code> calls, and 39 of them asked for a timeout. The commit is left as it is, and this page has the right count.</p>
+
+  <h2>4. live3: the record reached one verifier, and the judged one read none</h2>
+  <ul>
+    <li><b>Records.</b> The benchmarker published its record, <code>art-000172</code>, as 258,263 bytes from a file.</li>
+    <li><b>Verifier pid-000006</b> had its read refused and exited 1. It said it could not reach the record.</li>
+    <li><b>Verifier pid-000007</b> had its read refused too. It parked in a <code>wait</code>, and the coordinator mailed it the record as a handle. It read all four pages and exited 0.</li>
+    <li><b>Verifier pid-000009</b> was a new process and the one judged. Its read was refused, it read none of the record, and it exited 0. Its report names <code>art-000172</code>. The kernel recorded a pass, and <code>analyze.py</code> exits 3: UNCLEAN PASS.</li>
+    <li><b>What changed.</b>
+      <ul>
+        <li><code>6252c8a</code>: handles at a delegation, and a pass bound to the evidence the workflow declares.</li>
+        <li><code>0275b77</code>: the report, and a fix to test_path's clean path.</li>
+        <li><code>8718ad8</code>: live3 recorded a 3600 s budget under a 5400 s job limit, so the job's limit is now the run's time budget.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>5. live4: clean, but two attachments were dropped without a word</h2>
+  <ul>
+    <li><b>Records.</b> <code>analyze.py</code> calls the pass CLEAN. The judged verifier, pid-000009, read the declared record <code>art-000465</code> to its end, two pages.</li>
+    <li><b>The dropped attachments.</b> Twice, at model calls 186 and 504, the coordinator wrote <code>artifacts</code> at the action level, beside <code>delegate</code> rather than inside it. The parser read only the inside, so nothing was attached or refused, and the coordinator was told nothing. pid-000009 got <code>art-000465</code> only by mail, after a refused read and a <code>wait</code>.</li>
+    <li><b>The earlier verifier.</b> pid-000005 had its read of <code>art-000167</code> refused. It failed the round on a closeup mismatch of 0.6388%.</li>
+    <li><b>The verifier's words against its files.</b> pid-000009 called the four scenes "pixel-identical", 0.0000% diff. Its own renders differ from the CPU renders in 93, 4, 40 and 9 pixels, each by 1. That is within the 2-level tolerance, but it is not identical. Reading bytes is not understanding them.</li>
+    <li><b>What changed.</b> <code>8d5ff6e</code>: a delegation's artifacts are read inside <code>delegate</code> or at the action level. Two places that disagree are refused. The delegator's result line says <code>attached=</code> with the ids, or <code>none</code>.</li>
+  </ul>
+
+  <h2>6. live5: interrupted, no verdict</h2>
+  <ul>
+    <li><b>Records.</b> At 23:36:05 PST the job received SIGTERM, and every process exited. The one model call in flight was cut off by the signal. The records do not say why the job was signalled.</li>
+    <li><b>The refused delegation.</b> At model call 98 the coordinator attached <code>art-000089</code> to a benchmarker delegation, inside <code>delegate</code>. <code>art-000089</code> is a runtime record, so the delegation was refused and nothing started. The next delegation went without it.</li>
+    <li><b>The granted delegation.</b> At model call 204 the coordinator attached the benchmarker's record, <code>art-000179</code>, to the verifier. Verifier pid-000006 read it to its end, three pages, and passed. Then the coordinator started writer pid-000007 for another round, so the kernel marks the verdict <code>stale</code>, and the run ended before a new verifier ran.</li>
+    <li><b>Other refusals.</b> The coordinator also had two <code>read_artifact</code> calls on runtime records refused, and one call to a tool named <code>raw_record</code>, which it does not hold.</li>
+    <li><b>What changed.</b> Nothing.</li>
+  </ul>
+
+  <h2>7. live6: the clean run</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>What</th><th>The records</th></tr>
+    <tr><td>Verdict</td><td>pass, <code>art-000418</code>, by verifier pid-000008. <code>analyze.py</code>: CLEAN. The judged verifier read the latest record to its end, and the record is a file's bytes. Exits refused for evidence: 0.</td></tr>
+    <tr><td>Delegations</td><td>Six. Four carried handles, each time inside <code>delegate</code>: the round-1 verifier, the round-2 writer and benchmarker (<code>art-000163</code> and <code>art-000166</code>), and the round-2 verifier (<code>art-000361</code> and <code>art-000354</code>). That is eight handles, all granted. The result line the coordinator was shown named the ids each time.</td></tr>
+    <tr><td>What the verifiers read</td><td>Round-1 verifier pid-000005 read the raw record <code>art-000163</code>, four pages to the end, then the benchmark json <code>art-000166</code>. Round-2 verifier pid-000008 read <code>art-000361</code>, four pages to the end, then <code>art-000354</code>. Both exited 0 after their reads. The writer and the round-2 benchmarker never read the handles they were given.</td></tr>
+    <tr><td>Round 2 pixels</td><td>Against the CPU baseline, 45, 1, 17 and 2 pixels of the default, side, closeup and small scenes differ, each by 1. The benchmarker's renders and pid-000008's give the same counts. The verifier reported none over 2 and a worst difference of 1, which is accurate.</td></tr>
+    <tr><td>Round 1 pixels</td><td>The default scene is byte-identical to the CPU reference, both in the benchmarker's smoke test and in pid-000005's render. pid-000005's side, closeup and small renders were overwritten by pid-000008 under the same names. So its claim for those three scenes is checked only indirectly, through the round-2 renders.</td></tr>
+    <tr><td>The headline</td><td>Best CUDA render 4.194 ms against a baseline best of 38.3226 ms over 52 trials, a 9.14x speedup (9.1375). Both lines are in the record, <code>raw_record_round1_plus_round2.txt</code>, whose sha256 begins <code>566f1b45</code>. It holds the same bytes on disk at the end.</td></tr>
+    <tr><td>Model calls</td><td>203 started, 0 failed. AOS's usage counts 203 requests and one backend retry.</td></tr>
+    <tr><td>Refusals</td><td>One: the coordinator's <code>read_artifact</code> of <code>art-000170</code>, a runtime record.</td></tr>
+    <tr><td>A loose reply</td><td>Model call 28, the first writer delegation, ended one closing brace short of valid JSON. The parser's trailing-object step found the complete action object inside it, and the delegation went ahead as written.</td></tr>
+    <tr><td>Step limits</td><td>The round-1 benchmarker, pid-000004, and the round-2 writer, pid-000006, each exited at the step limit. In both rounds the coordinator went on from there.</td></tr>
+  </table>
+  </div>
+
+  <h2>8. What the runs changed in AOS</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Run</th><th>Commits</th></tr>
+    <tr><td>live1</td><td><code>60da2bb</code>. The model server is now named by address in the submitter's environment, with no commit.</td></tr>
+    <tr><td>live2</td><td><code>e75b622</code>, <code>7188082</code>, <code>202ea95</code>, <code>09db0be</code>, <code>32d22fe</code></td></tr>
+    <tr><td>live3</td><td><code>6252c8a</code>, <code>0275b77</code>, <code>8718ad8</code></td></tr>
+    <tr><td>live4</td><td><code>8d5ff6e</code></td></tr>
+    <tr><td>live5, live6</td><td>none</td></tr>
+  </table>
+  </div>
+  <p>All of these are in <code>v0.1.6</code>. The phase reports are <code>cuda-report.html</code>, <code>handles-report.html</code> and <code>evidence-report.html</code>, sections 9 and 10.</p>
+
+  <h2>9. Not yet shown</h2>
+  <ul>
+    <li>No real model has had an exit refused for unread evidence. In every run, "exits refused for evidence" is 0.</li>
+    <li>No verdict has been withheld as <code>unverified</code>. That path, and the refused exit, are tested with scripted replies only.</li>
+    <li>One model, one task, each run once. Nothing here says how a second model or task would go.</li>
+    <li>No real injection attempt. <code>analyze.py</code> found no body or tool output imitating a runtime line in live6.</li>
+  </ul>
+
+  <h2>10. Running again</h2>
+  <p>The model server's API key was removed from the run machine on 2026-11-08. That was reported to this session, not checked here. <code>job.sh</code> in live mode stops before <code>aos</code> starts unless the key file exists with mode 600. So a live rerun needs the user to approve placing the key again. Preflight runs use the scripted model and need no key.</p>
+
+  <h2>11. Sources</h2>
+  <ul>
+    <li><b>Records.</b> <code>reports/ipc-live/runs/live1</code> to <code>live6</code> (gitignored): <code>job.ended</code>, <code>run.log</code>, the state directory's trace, call log and kernel events, and the bench and verification directories.</li>
+    <li><b>The analyzer.</b> <code>python3 analyze.py runs/liveN/state</code>, with <code>analyze.py</code> as of <code>8d5ff6e</code>.</li>
+    <li><b>Pixel counts.</b> These were recomputed here from the PPM files, comparing per pixel the largest difference in any channel.</li>
+    <li><b>Placement.</b> Where each delegation put <code>artifacts</code> was read from the coordinator's raw replies in the call log.</li>
+  </ul>
+</body>
+</html>
