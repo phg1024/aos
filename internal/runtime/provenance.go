@@ -31,6 +31,12 @@ const (
 	// ProducedByRanMetadata lists "path=sha256" for each file the command
 	// names, other than the published one, joined by newlines.
 	ProducedByRanMetadata = "produced_by_ran"
+	// ProducedByOutputMetadata is a SHA-256 of the file as the producing
+	// run left it when it ended, if that run wrote it by redirection
+	// (tools.Result.Wrote), or ProducedByNone. Under publish_provenance v2
+	// only; a reader compares it with the published bytes' hash to tell
+	// whether the file changed after the run.
+	ProducedByOutputMetadata = "produced_by_output_sha256"
 	// ProducedByNone is ProducedByMetadata when no run named the file.
 	ProducedByNone = "none"
 	// MaxProvenanceCommand bounds the recorded command, in bytes.
@@ -51,7 +57,7 @@ func (r *AgentRuntime) provenance(process kernel.Process, path string) map[strin
 		return out
 	}
 	var latest *artifact.Artifact
-	var command string
+	var command, output string
 	for i := range records {
 		record := &records[i]
 		if record.Type != "tool_result" || record.ProducerPID != pid || record.Metadata["tool"] != "run" {
@@ -64,12 +70,18 @@ func (r *AgentRuntime) provenance(process kernel.Process, path string) map[strin
 		if err := r.Artifacts.ReadJSON(record.ID, &result); err != nil || !slices.Contains(commandPaths(result.Output["command"], dir), path) {
 			continue
 		}
-		latest, command = record, result.Output["command"]
+		latest, command, output = record, result.Output["command"], result.Wrote[path]
 	}
 	if latest == nil {
 		return out
 	}
 	out[ProducedByMetadata] = latest.ID
+	if !r.PublishProvenanceV1 {
+		if output == "" {
+			output = ProducedByNone
+		}
+		out[ProducedByOutputMetadata] = output
+	}
 	if len(command) > MaxProvenanceCommand {
 		command = command[:MaxProvenanceCommand]
 	}

@@ -316,6 +316,10 @@ type AgentRuntime struct {
 	// (ProducedByMetadata), for replaying a record made before provenance
 	// (run.started publish_provenance).
 	NoPublishProvenance bool
+	// PublishProvenanceV1 records provenance as publish_provenance v1 did:
+	// a run hashes nothing it wrote, and a publication records no
+	// ProducedByOutputMetadata. It is for replaying a record made under v1.
+	PublishProvenanceV1 bool
 	// ExitCheck, when set, may refuse this process's exit 0: the error reaches the
 	// model as a tool error and the process goes on. A nonzero exit claims no pass, and
 	// is not checked.
@@ -2435,6 +2439,7 @@ func (r *AgentRuntime) executeToolCall(ctx context.Context, process kernel.Proce
 			CapabilitySet: process.CapabilitySet,
 			Mounts:        process.Mounts,
 			PID:           process.PID,
+			HashOutputs:   call.Name == "run" && !r.NoPublishProvenance && !r.PublishProvenanceV1,
 		})
 		return nil
 	}

@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"aos/internal/tools"
 )
 
-// The instrument rules (run.started instrument_rules v1) decide whether a
+// The instrument rules (run.started instrument_rules) decide whether a
 // record declared trusted_instrument has a trusted instrument behind it. A
 // record is trusted only when the engine can account for everything its
 // producing command ran, and every file it accounts for is trusted or lies
@@ -18,16 +20,11 @@ import (
 // the construct that stopped it as the reason: the grammar is an allowlist,
 // so a route nobody thought of fails closed rather than passing.
 //
-// The grammar of a command the engine reads:
-//
-//	command    = list of simple commands joined by "|", "&&", ";" or a newline
-//	simple     = word { word | redirection }
-//	word       = one or more of A-Z a-z 0-9 _ - . / , : = + @ %
-//	redirection = [digits] (">" | ">>" | "<") word  |  [digits] (">&" | "<&") digits
-//
-// So no quotes, $, backticks, globs (* ? [ ]), ~, braces, parentheses,
-// backslashes, comments, "||", "&" or here-documents. Then each simple
-// command must hold:
+// The engine reads the command with tools.ParseCommandLine's grammar:
+// simple commands joined by |, &&, ; or a newline, words of A-Z a-z 0-9
+// _ - . / , : = + @ %, and file redirections; so no quotes, $, backticks,
+// globs, ~, braces, parentheses, backslashes, comments, ||, & or
+// here-documents. Then each simple command must hold:
 //
 //   - It does not start with an assignment (NAME=value), which can change
 //     what the program finds (PATH=...).
@@ -46,9 +43,16 @@ import (
 //     with a slash always (a file by its hash, anything else as "-"), a bare
 //     word when it exists relative to the working directory. An option with
 //     a path in it must be -name=path. The published file itself may be
-//     named as an argument (a tool that writes its record), but not read
-//     with < or appended to with >>, whose earlier content no instrument
-//     accounts for.
+//     named as an argument, but not read with < or appended to with >>,
+//     whose earlier content no instrument accounts for.
+//
+// Version 2 binds the record to the run (instrumentAccounted's bind): the
+// command must write the published file with >, and the published bytes
+// must hash to what the run left when it ended (tools.Result.Wrote). A tool
+// that writes its record by naming it as an argument is refused: a run
+// hashes only its redirections, and a file it merely names may be one a
+// worker wrote before it. A record changed after its run, by anyone, is
+// refused.
 //
 // The rules see one command line. A trusted script, or a system program,
 // that itself runs or reads a file a worker can write is trusted
@@ -58,196 +62,6 @@ import (
 // InstrumentNoFile is the account of a named path that is not a regular
 // file: a directory, a device, or nothing.
 const InstrumentNoFile = "-"
-
-// instrumentCommand is one simple command.
-type instrumentCommand struct {
-	words      []string
-	inputs     []string
-	appends    []string
-	redirected bool
-}
-
-// instrumentWordChars are the characters a word may hold.
-func instrumentWordChar(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("_-./,:=+@%", c) >= 0
-}
-
-// instrumentRefusedChar names the construct a character outside the grammar
-// starts.
-func instrumentRefusedChar(c byte) string {
-	switch c {
-	case '\'', '"':
-		return "quotes"
-	case '$':
-		return "$ (a variable or a command substitution)"
-	case '`':
-		return "backticks (a command substitution)"
-	case '*', '?', '[', ']':
-		return "a glob (" + string(c) + ")"
-	case '~':
-		return "~ (a home directory expansion)"
-	case '{', '}':
-		return "braces"
-	case '(', ')':
-		return "parentheses (a subshell or a process substitution)"
-	case '\\':
-		return "a backslash escape"
-	case '#':
-		return "# (a comment)"
-	}
-	return fmt.Sprintf("the character %q", c)
-}
-
-// parseInstrumentCommand splits command into simple commands under the
-// grammar above, or says what it cannot read.
-func parseInstrumentCommand(command string) ([]instrumentCommand, error) {
-	var commands []instrumentCommand
-	var current instrumentCommand
-	// pending is a "|" or "&&" still waiting for the command after it.
-	pending := ""
-	end := func(op string) error {
-		if len(current.words) == 0 {
-			switch {
-			case current.redirected:
-				return fmt.Errorf("a redirection with no command")
-			case pending != "":
-				return fmt.Errorf("an empty command after %s", pending)
-			case op != ";":
-				return fmt.Errorf("an empty command before %s", op)
-			}
-			return nil
-		}
-		commands = append(commands, current)
-		current = instrumentCommand{}
-		pending = ""
-		if op != ";" {
-			pending = op
-		}
-		return nil
-	}
-	word := func(i int) (string, int) {
-		start := i
-		for i < len(command) && instrumentWordChar(command[i]) {
-			i++
-		}
-		return command[start:i], i
-	}
-	for i := 0; i < len(command); {
-		c := command[i]
-		switch {
-		case c == ' ' || c == '\t':
-			i++
-		case c == '\n' || c == ';':
-			if err := end(";"); err != nil {
-				return nil, err
-			}
-			i++
-		case c == '|':
-			if strings.HasPrefix(command[i:], "||") {
-				return nil, fmt.Errorf("|| (a command run on another's failure)")
-			}
-			if err := end("|"); err != nil {
-				return nil, err
-			}
-			i++
-		case c == '&':
-			if !strings.HasPrefix(command[i:], "&&") {
-				return nil, fmt.Errorf("& (a command in the background, or &>)")
-			}
-			if err := end("&&"); err != nil {
-				return nil, err
-			}
-			i += 2
-		case c == '<' || c == '>':
-			if err := redirection(command, &i, "", &current); err != nil {
-				return nil, err
-			}
-		case instrumentWordChar(c):
-			w, next := word(i)
-			if next < len(command) && (command[next] == '<' || command[next] == '>') && isDigits(w) {
-				i = next
-				if err := redirection(command, &i, w, &current); err != nil {
-					return nil, err
-				}
-				continue
-			}
-			if next < len(command) && !strings.ContainsRune(" \t\n;|&<>", rune(command[next])) {
-				return nil, fmt.Errorf("%s in %q", instrumentRefusedChar(command[next]), w+string(command[next]))
-			}
-			current.words = append(current.words, w)
-			i = next
-		default:
-			return nil, fmt.Errorf("%s", instrumentRefusedChar(c))
-		}
-	}
-	if err := end(";"); err != nil {
-		return nil, err
-	}
-	if len(commands) == 0 {
-		return nil, fmt.Errorf("no command")
-	}
-	return commands, nil
-}
-
-// redirection reads one redirection at command[*i], a < or >, into into.
-func redirection(command string, i *int, fd string, into *instrumentCommand) error {
-	into.redirected = true
-	rest := command[*i:]
-	op := rest[:1]
-	switch {
-	case strings.HasPrefix(rest, "<<"):
-		return fmt.Errorf("<< (a here-document)")
-	case strings.HasPrefix(rest, "<>"):
-		return fmt.Errorf("<> (a read-write redirection)")
-	case strings.HasPrefix(rest, ">|"):
-		return fmt.Errorf(">| (a clobbering redirection)")
-	case strings.HasPrefix(rest, ">>"):
-		op = ">>"
-	}
-	*i += len(op)
-	if *i < len(command) && command[*i] == '&' {
-		start := *i + 1
-		end := start
-		for end < len(command) && command[end] >= '0' && command[end] <= '9' {
-			end++
-		}
-		if op == ">>" || end == start {
-			return fmt.Errorf("%s%s& with no descriptor after it", fd, op)
-		}
-		*i = end
-		return nil
-	}
-	for *i < len(command) && (command[*i] == ' ' || command[*i] == '\t') {
-		*i++
-	}
-	start := *i
-	for *i < len(command) && instrumentWordChar(command[*i]) {
-		*i++
-	}
-	target := command[start:*i]
-	if *i < len(command) && !strings.ContainsRune(" \t\n;|&<>", rune(command[*i])) {
-		return fmt.Errorf("%s in the target of %s", instrumentRefusedChar(command[*i]), op)
-	}
-	if target == "" {
-		return fmt.Errorf("%s%s with no file after it", fd, op)
-	}
-	switch op {
-	case "<":
-		into.inputs = append(into.inputs, target)
-	case ">>":
-		into.appends = append(into.appends, target)
-	}
-	return nil
-}
-
-func isDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return s != ""
-}
 
 // shellNames change the shell's own state, or are its syntax: a command
 // after them is not read the way the grammar reads it.
@@ -295,7 +109,7 @@ func setOf(names ...string) map[string]bool {
 // published the record's file, and writable whether a worker can write a
 // path. An error is the reason the command cannot be accounted for.
 func instrumentAccount(command, dir, pathEnv, published string, writable func(string) bool) (map[string]string, error) {
-	commands, err := parseInstrumentCommand(command)
+	commands, err := tools.ParseCommandLine(command)
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +129,8 @@ type instrumentAccounting struct {
 	ran                     map[string]string
 }
 
-func (a *instrumentAccounting) simple(c instrumentCommand) error {
-	program := c.words[0]
+func (a *instrumentAccounting) simple(c tools.SimpleCommand) error {
+	program := c.Words[0]
 	if name, _, ok := strings.Cut(program, "="); ok && isIdentifier(name) {
 		return fmt.Errorf("a leading assignment (%s=...), which can change what the program finds", name)
 	}
@@ -336,7 +150,7 @@ func (a *instrumentAccounting) simple(c instrumentCommand) error {
 			return err
 		}
 	}
-	args := c.words[1:]
+	args := c.Words[1:]
 	interpreter, isInterpreter := interpreters[strings.ToLower(versionSuffix.ReplaceAllString(base, ""))]
 	switch {
 	case base == "find":
@@ -390,7 +204,7 @@ func (a *instrumentAccounting) simple(c instrumentCommand) error {
 			return err
 		}
 	}
-	for _, input := range c.inputs {
+	for _, input := range c.Inputs {
 		path := a.abs(input)
 		if path == a.published {
 			return fmt.Errorf("< %s reads the published file, whose earlier content no instrument accounts for", input)
@@ -399,7 +213,7 @@ func (a *instrumentAccounting) simple(c instrumentCommand) error {
 			return err
 		}
 	}
-	for _, target := range c.appends {
+	for _, target := range c.Appends {
 		if a.abs(target) == a.published {
 			return fmt.Errorf(">> %s appends to the published file, whose earlier content no instrument accounts for", target)
 		}
@@ -513,4 +327,23 @@ func (a *instrumentAccounting) account(path string, always bool) error {
 		a.ran[path] = InstrumentNoFile
 	}
 	return nil
+}
+
+// writesByRedirect is whether command writes published with >, resolved
+// against dir.
+func writesByRedirect(command, dir, published string) bool {
+	commands, err := tools.ParseCommandLine(command)
+	if err != nil {
+		return false
+	}
+	a := instrumentAccounting{dir: dir}
+	published = a.abs(published)
+	for _, simple := range commands {
+		for _, target := range simple.Outputs {
+			if a.abs(target) == published {
+				return true
+			}
+		}
+	}
+	return false
 }

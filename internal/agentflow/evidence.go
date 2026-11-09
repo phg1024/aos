@@ -56,6 +56,11 @@ type EvidenceCheck struct {
 	Ran        map[string]string `json:"ran,omitempty"`
 	Untrusted  []string          `json:"untrusted,omitempty"`
 	Refused    string            `json:"refused,omitempty"`
+	// AtRunEnd is the file's hash when its producing run ended, and
+	// Published the published bytes' hash; under instrument_rules v2 they
+	// must match.
+	AtRunEnd  string `json:"at_run_end,omitempty"`
+	Published string `json:"published_sha256,omitempty"`
 }
 
 // evidenceChecks resolves each declared record to the latest match under the
@@ -98,7 +103,7 @@ func (e *Engine) evidenceChecks(spec WorkflowSpec, verifierPID string) ([]Eviden
 				check.Status = EvidenceNotFromFile
 			} else if trusted && e.NoInstrumentRules && !spec.instrumentTrusted(*latest, &check) {
 				check.Status = EvidenceUntrusted
-			} else if trusted && !e.NoInstrumentRules && !spec.instrumentAccounted(*latest, &check, processes, e.scratchRoot()) {
+			} else if trusted && !e.NoInstrumentRules && !spec.instrumentAccounted(*latest, &check, processes, e.scratchRoot(), !e.InstrumentRulesV1) {
 				check.Status = EvidenceUntrusted
 			} else {
 				pages, err := e.readPages(records, chain, latest.ID)
@@ -337,7 +342,12 @@ func (s WorkflowSpec) instrumentTrusted(record artifact.Artifact, check *Evidenc
 // agent can write is any process's mount or write path, any agent's mount
 // in spec, and the run scratch root; with unconfined_run anywhere, only a
 // trusted path is out of a worker's reach.
-func (s WorkflowSpec) instrumentAccounted(record artifact.Artifact, check *EvidenceCheck, processes []kernel.Process, scratch string) bool {
+//
+// With bind (instrument_rules v2) the record must also be what its
+// producing run made: that run wrote the file with >, and the published
+// bytes hash to what the run left when it ended. A change after the run, by
+// anyone, makes it untrusted.
+func (s WorkflowSpec) instrumentAccounted(record artifact.Artifact, check *EvidenceCheck, processes []kernel.Process, scratch string, bind bool) bool {
 	check.ProducedBy = record.Metadata[runtime.ProducedByMetadata]
 	check.Command = record.Metadata[runtime.ProducedByCommandMetadata]
 	if check.ProducedBy == "" || check.ProducedBy == runtime.ProducedByNone {
@@ -397,6 +407,21 @@ func (s WorkflowSpec) instrumentAccounted(record artifact.Artifact, check *Evide
 		check.Refused = "the command runs no file the engine can account for (a shell builtin alone), and an empty account is never trusted"
 		return false
 	}
+	if bind {
+		published := runtime.PublishedPath(record)
+		check.AtRunEnd, check.Published = record.Metadata[runtime.ProducedByOutputMetadata], runtime.PublishedSHA256(record)
+		switch {
+		case !writesByRedirect(check.Command, dir, published):
+			check.Refused = "the command does not write the published file with >, so nothing binds the record to the run"
+			return false
+		case check.AtRunEnd == "" || check.AtRunEnd == runtime.ProducedByNone:
+			check.Refused = "the run that produced it recorded no hash of the file when it ended"
+			return false
+		case check.AtRunEnd != check.Published:
+			check.Refused = fmt.Sprintf("the record changed after the run that produced it (hash %s at its end, %s published)", short(check.AtRunEnd), short(check.Published))
+			return false
+		}
+	}
 	for path := range ran {
 		if writable(path) {
 			check.Untrusted = append(check.Untrusted, path)
@@ -413,4 +438,12 @@ func (e *Engine) scratchRoot() string {
 		return ""
 	}
 	return e.Tools.Scratch()
+}
+
+// short is the first 12 characters of a hash, as a verdict quotes it.
+func short(hash string) string {
+	if len(hash) > 12 {
+		return hash[:12]
+	}
+	return hash
 }

@@ -119,6 +119,9 @@ const (
 	// from a file records the run that produced it (PublishProvenanceV1).
 	PublishProvenanceField = "publish_provenance"
 	PublishProvenanceV1    = "v1"
+	// PublishProvenanceV2 adds the hash of the file as its producing run
+	// left it (runtime.ProducedByOutputMetadata).
+	PublishProvenanceV2 = "v2"
 	// InstrumentRulesField is the run.started field that says evidence
 	// declared trusted_instrument was judged under the instrument rules
 	// (InstrumentRulesV1): trusted only when the engine can account for what
@@ -126,6 +129,9 @@ const (
 	// files its command named, none at all included.
 	InstrumentRulesField = "instrument_rules"
 	InstrumentRulesV1    = "v1"
+	// InstrumentRulesV2 also binds the record to its producing run: the run
+	// wrote the file with >, and the published bytes are what it left.
+	InstrumentRulesV2 = "v2"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -229,11 +235,19 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	if !e.NoExitOrigin {
 		data[ExitOriginField] = ExitOriginV1
 	}
-	if !e.NoPublishProvenance {
+	switch {
+	case e.NoPublishProvenance:
+	case e.PublishProvenanceV1:
 		data[PublishProvenanceField] = PublishProvenanceV1
+	default:
+		data[PublishProvenanceField] = PublishProvenanceV2
 	}
-	if !e.NoInstrumentRules {
+	switch {
+	case e.NoInstrumentRules:
+	case e.InstrumentRulesV1:
 		data[InstrumentRulesField] = InstrumentRulesV1
+	default:
+		data[InstrumentRulesField] = InstrumentRulesV2
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

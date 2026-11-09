@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -147,12 +148,19 @@ func TestV5eMoreIndirectRoutes(t *testing.T) {
 	}
 }
 
-// V5f: the record is made by a trusted command, then overwritten by a
-// later run that does not name it. Provenance takes the latest run that
-// names the file, so the trusted run still stands behind it. Measure only.
+// V5f: the record is made by a trusted command, then changed by a later
+// run: one that does not name it, so provenance still points at the
+// trusted run, and one that names it and appends. At v0.1.9's instrument
+// rules the first passed; under v2 the record must be what its run left.
 func TestV5fARecordRewrittenAfterTheRun(t *testing.T) {
-	finding(t, "V5f %s", runIndirect(t, indirectRoute{name: "a trusted run, then cp of the writer's numbers.txt over the record by a glob",
-		command: "sh REF/bench.sh > RECORD", after: "cp SRC/numbers.txt WORKSPACE/raw_record.tx?", trustedScript: true}))
+	for _, c := range []indirectRoute{
+		{name: "a trusted run, then cp of the writer's numbers.txt over the record by a glob",
+			command: "sh REF/bench.sh > RECORD", after: "cp SRC/numbers.txt WORKSPACE/raw_record.tx?", trustedScript: true},
+		{name: "a trusted run, then the same agent appends to the record, naming it",
+			command: "sh REF/bench.sh > RECORD", after: "echo frame_ms=0.010 >> RECORD", trustedScript: true},
+	} {
+		finding(t, "V5f %s", runIndirect(t, c))
+	}
 }
 
 // indirectRoute is a command the benchmarker runs to make its record. SRC
@@ -231,6 +239,9 @@ func runIndirect(t *testing.T, c indirectRoute) string {
 		return exitWith(0, "done", false)
 	})
 	got, _ := os.ReadFile(record)
+	if c.after != "" {
+		command += ", then " + expand(c.after)
+	}
 	return fmt.Sprintf("%s (%s), evidence trusted_instrument: %s; the record holds %q; evidence: %s; refused: %s; produced_by_ran: %s",
 		c.name, redact(command), o, strings.TrimSpace(string(got)), evidenceText(o), refusedText(o), ranText(o))
 }
@@ -254,5 +265,6 @@ func ranText(o outcome) string {
 	for path := range ran {
 		paths = append(paths, redact(path))
 	}
+	sort.Strings(paths)
 	return strings.Join(paths, ", ")
 }

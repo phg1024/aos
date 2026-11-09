@@ -213,11 +213,19 @@ type Engine struct {
 	// NoPublishProvenance is AgentRuntime.NoPublishProvenance (run.started
 	// publish_provenance).
 	NoPublishProvenance bool
+	// PublishProvenanceV1 is AgentRuntime.PublishProvenanceV1 (run.started
+	// publish_provenance v1).
+	PublishProvenanceV1 bool
 	// NoInstrumentRules judges evidence declared trusted_instrument as the
 	// engine did before the instrument rules (run.started instrument_rules):
 	// by the files its producing command names, an empty list trusted. It is
 	// for replaying a record made before them.
 	NoInstrumentRules bool
+	// InstrumentRulesV1 judges it under the instrument rules' first
+	// version, which did not bind the record to its producing run's output
+	// (run.started instrument_rules v1). It is for replaying a record made
+	// under v1.
+	InstrumentRulesV1 bool
 	// NoReplyCap is AgentRuntime.NoReplyCap, for replaying a record made before
 	// the reply cap took the prompt out of the budget left. When it is off,
 	// run.started says so (reply_cap).
@@ -622,6 +630,7 @@ func (e *Engine) drive(spec WorkflowSpec, req RunRequest, agent AgentSpec, proce
 		NoSenderOutcomes: e.NoSenderOutcomes,
 
 		NoPublishProvenance: e.NoPublishProvenance,
+		PublishProvenanceV1: e.PublishProvenanceV1,
 		ExitCheck:           e.exitCheck(spec, agent),
 		DelegateHandler: e.DelegateHandler(spec, req, agent, func(child AgentRun) {
 			childRuns = append(childRuns, child)

@@ -328,13 +328,16 @@ func benchWorkflow(work, trusted, bench string) agentflow.WorkflowSpec {
 }
 
 // runBench runs benchWorkflow with the benchmarker publishing record after
-// command, and returns the evidence check.
-func runBench(t *testing.T, spec agentflow.WorkflowSpec, command, record string) (exitFixture, agentflow.RunSummary, agentflow.EvidenceCheck) {
+// running each of commands, and returns the evidence check.
+func runBench(t *testing.T, spec agentflow.WorkflowSpec, record string, commands ...string) (exitFixture, agentflow.RunSummary, agentflow.EvidenceCheck) {
 	t.Helper()
-	f, summary := runBound(t, spec, false,
-		delegateAction("benchmarker"), toolAction("run", map[string]string{"command": command}),
-		toolAction("publish_artifact", map[string]string{"type": "raw", "path": record}), exitWith(0, "published", false),
+	actions := []map[string]any{delegateAction("benchmarker")}
+	for _, command := range commands {
+		actions = append(actions, toolAction("run", map[string]string{"command": command}))
+	}
+	actions = append(actions, toolAction("publish_artifact", map[string]string{"type": "raw", "path": record}), exitWith(0, "published", false),
 		delegateAction("verifier"), exitWith(1, "not read", false), exitWith(0, "done", false))
+	f, summary := runBound(t, spec, false, actions...)
 	checks, err := f.engine.EvidenceChecks(spec, summary.Verification.VerifierPID)
 	if err != nil {
 		t.Fatal(err)
@@ -357,7 +360,7 @@ func TestEvidenceNeedsATrustedInstrument(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := filepath.Join(bench, "raw.txt")
-		_, _, check := runBench(t, benchWorkflow(work, trusted, bench), "sh "+script+" > "+record, record)
+		_, _, check := runBench(t, benchWorkflow(work, trusted, bench), record, "sh "+script+" > "+record)
 		if check.ProducedBy == "" || check.ProducedBy == runtime.ProducedByNone || !strings.Contains(check.Command, script) || len(check.Ran[script]) != 64 {
 			t.Fatalf("provenance %+v", check)
 		}
@@ -385,7 +388,7 @@ func TestEvidenceRefusesACommandItCannotAccountFor(t *testing.T) {
 		{"echo frame_ms=0.01 > " + record, "an empty account is never trusted"},
 	} {
 		spec := benchWorkflow(work, trusted, bench)
-		f, summary, check := runBench(t, spec, c.command, record)
+		f, summary, check := runBench(t, spec, record, c.command)
 		if check.Status != agentflow.EvidenceUntrusted || !strings.Contains(check.Refused, c.refused) || len(check.Ran) != 0 {
 			t.Fatalf("%q: %+v", c.command, check)
 		}
@@ -399,6 +402,66 @@ func TestEvidenceRefusesACommandItCannotAccountFor(t *testing.T) {
 		}
 		if checks[0].Status != agentflow.EvidenceUnread || checks[0].Refused != "" {
 			t.Fatalf("%q before the rules: %+v", c.command, checks[0])
+		}
+	}
+}
+
+// Under instrument_rules v2 the record must be what its trusted run left:
+// that run wrote it with >, and nothing changed it after. Under v1 neither
+// was checked, and a replay of a v1 record judges it so again.
+func TestEvidenceIsBoundToItsRunsOutput(t *testing.T) {
+	work, trusted, bench := t.TempDir(), t.TempDir(), t.TempDir()
+	script := filepath.Join(trusted, "bench.sh")
+	output := filepath.Join(trusted, "bench.out")
+	fake := filepath.Join(work, "numbers.txt")
+	for path, content := range map[string]string{script: "echo frame_ms=12.5\n", output: "frame_ms=12.5\n", fake: "frame_ms=0.01\n"} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := filepath.Join(bench, "raw.txt")
+	for _, c := range []struct {
+		name     string
+		commands []string
+		refused  string
+	}{
+		{"the trusted run alone", []string{"sh " + script + " > " + record}, ""},
+		{"rewritten after it by a run that does not name it", []string{"sh " + script + " > " + record, "cp " + fake + " " + bench + "/raw.tx?"}, "the record changed after the run that produced it (hash "},
+		{"written by naming it as an argument", []string{"cp " + output + " " + record}, "does not write the published file with >"},
+	} {
+		spec := benchWorkflow(work, trusted, bench)
+		f, summary, check := runBench(t, spec, record, c.commands...)
+		if c.refused == "" {
+			if check.Status != agentflow.EvidenceUnread || check.Refused != "" || check.AtRunEnd != check.Published || len(check.AtRunEnd) != 64 {
+				t.Fatalf("%s: %+v", c.name, check)
+			}
+			continue
+		}
+		if check.Status != agentflow.EvidenceUntrusted || !strings.Contains(check.Refused, c.refused) {
+			t.Fatalf("%s: %+v", c.name, check)
+		}
+		f.engine.InstrumentRulesV1 = true
+		checks, err := f.engine.EvidenceChecks(spec, summary.Verification.VerifierPID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if checks[0].Status != agentflow.EvidenceUnread || checks[0].Refused != "" {
+			t.Fatalf("%s under v1: %+v", c.name, checks[0])
+		}
+	}
+}
+
+// A run replaying a v1 record says v1 for the two fields that have a v2.
+func TestRunStartedRecordsTheV1OutputRules(t *testing.T) {
+	f := newExitFixture(t, &sequenceCompleter{actions: passingRun()})
+	f.engine.PublishProvenanceV1, f.engine.InstrumentRulesV1 = true, true
+	if _, err := f.engine.Run(context.Background(), boundWorkflow(t.TempDir(), "required"), agentflow.RunRequest{Goal: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := f.kernel.Events()
+	for _, event := range events {
+		if event.Type == agentflow.RunStartedEvent && (event.Data[agentflow.PublishProvenanceField] != agentflow.PublishProvenanceV1 || event.Data[agentflow.InstrumentRulesField] != agentflow.InstrumentRulesV1) {
+			t.Fatalf("run.started %v", event.Data)
 		}
 	}
 }
@@ -421,7 +484,7 @@ func TestRunStartedRecordsTheVerificationVersions(t *testing.T) {
 			}
 		}
 		want := map[string]string{agentflow.SpecContractField: agentflow.SpecContractV2, agentflow.VerdictRulesField: agentflow.VerdictRulesV1,
-			agentflow.ExitOriginField: agentflow.ExitOriginV1, agentflow.PublishProvenanceField: agentflow.PublishProvenanceV1, agentflow.InstrumentRulesField: agentflow.InstrumentRulesV1}
+			agentflow.ExitOriginField: agentflow.ExitOriginV1, agentflow.PublishProvenanceField: agentflow.PublishProvenanceV2, agentflow.InstrumentRulesField: agentflow.InstrumentRulesV2}
 		if legacy {
 			want = map[string]string{agentflow.SpecContractField: agentflow.SpecContractV1, agentflow.VerdictRulesField: "", agentflow.ExitOriginField: "", agentflow.PublishProvenanceField: "", agentflow.InstrumentRulesField: ""}
 		}

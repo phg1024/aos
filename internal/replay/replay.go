@@ -119,6 +119,10 @@ type Report struct {
 	// LegacyInstrumentRules means the record predates the instrument rules,
 	// and its trusted_instrument evidence was judged as it was then.
 	LegacyInstrumentRules bool `json:"legacy_instrument_rules,omitempty"`
+	// LegacyOutputBinding means the record was made under publish_provenance
+	// or instrument_rules v1: runs hashed nothing they wrote, and evidence
+	// was not bound to its producing run's output.
+	LegacyOutputBinding bool `json:"legacy_output_binding,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
 	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
@@ -446,6 +450,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyPublishProvenance = engine.NoPublishProvenance
 	engine.NoInstrumentRules = started.Data[agentflow.InstrumentRulesField] == ""
 	report.LegacyInstrumentRules = engine.NoInstrumentRules
+	// Before v2 of both, a run hashed nothing it wrote, and a record was
+	// not bound to the run that produced it.
+	engine.PublishProvenanceV1 = started.Data[agentflow.PublishProvenanceField] == agentflow.PublishProvenanceV1
+	engine.InstrumentRulesV1 = started.Data[agentflow.InstrumentRulesField] == agentflow.InstrumentRulesV1
+	report.LegacyOutputBinding = engine.PublishProvenanceV1 || engine.InstrumentRulesV1
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

@@ -197,6 +197,12 @@ func PublishedPath(record artifact.Artifact) string {
 	return record.Metadata[sourcePathMetadata]
 }
 
+// PublishedSHA256 is the SHA-256 of the bytes a publication read from its
+// file, or "".
+func PublishedSHA256(record artifact.Artifact) string {
+	return record.Metadata[sourceSHA256Metadata]
+}
+
 // SplitHandles parses a comma-separated list of artifact IDs, without repeats.
 func SplitHandles(raw string) []string { return splitHandles(raw) }
 

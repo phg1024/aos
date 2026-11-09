@@ -61,6 +61,9 @@ type Request struct {
 	Mounts        []capability.Mount
 	// PID is the calling process; run keeps a scratch directory per PID.
 	PID string
+	// HashOutputs has a run that ends hash the files it wrote by
+	// redirection (Result.Wrote).
+	HashOutputs bool
 }
 
 type Result struct {
@@ -71,6 +74,11 @@ type Result struct {
 	// mount's files. It is recorded, not shown to the agent. A run that was
 	// cancelled or timed out returns its changes with its error.
 	Changes *FileChanges `json:"changes,omitempty"`
+	// Wrote, on a run result asked for with HashOutputs, is a SHA-256 of
+	// each regular file the command wrote with > or >>, by absolute path,
+	// taken when it ended. A command outside ParseCommandLine's grammar has
+	// none. It is recorded, not shown to the agent.
+	Wrote map[string]string `json:"wrote,omitempty"`
 }
 
 type Runtime struct {
@@ -472,12 +480,16 @@ func (r *Runtime) ExecuteContext(ctx context.Context, req Request) (Result, erro
 		if clamped {
 			output["timeout_clamped"] = "true"
 		}
-		return Result{
+		result := Result{
 			Tool:    req.Tool,
 			Summary: fmt.Sprintf("ran command (exit: %d)", exitCode),
 			Output:  output,
 			Changes: changes(),
-		}, nil
+		}
+		if req.HashOutputs {
+			result.Wrote = redirectHashes(command, mountRoot(req.Mounts))
+		}
+		return result, nil
 	case "web_search":
 		query := strings.TrimSpace(req.Args["query"])
 		if query == "" {
