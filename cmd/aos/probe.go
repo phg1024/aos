@@ -86,9 +86,15 @@ func probeConfig(completer agentflow.JSONCompleter, compaction runtime.Compactio
 	if err != nil {
 		return memprobe.Config{}, err
 	}
-	var spec agentflow.WorkflowSpec
-	if err := json.Unmarshal(specBytes, &spec); err != nil {
-		return memprobe.Config{}, err
+	// The spec is checked as aos run checks it, but without the host-path
+	// preflight: probes work in a copy of a finished run, which may have
+	// run on another machine.
+	spec, err := agentflow.DecodeWorkflowSpec(specBytes)
+	if err != nil {
+		return memprobe.Config{}, fmt.Errorf("%s: %w", workflowPath, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return memprobe.Config{}, fmt.Errorf("%s: %w", workflowPath, err)
 	}
 	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...))
 	return memprobe.Config{

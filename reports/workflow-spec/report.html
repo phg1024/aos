@@ -139,5 +139,16 @@
     <li><b>An explicit <code>"max_steps": 0</code></b> is refused at decode rather than in <code>Validate</code>, since only the decoder can tell 0 from absent.</li>
     <li><b><code>internal/workflow</code></b> was fixed rather than marked demo-only. The three fixes were small, and its two callers (<code>aos-demo</code>, <code>aos-demo-live</code>) already treat an error as a failed run. agentflow still imports only its policy vocabulary.</li>
   </ul>
+  <h2>Two gaps closed after v0.1.8</h2>
+  <p>At <code>v0.1.8</code> two entry points checked less than <code>aos run --workflow</code>. Both now check the same things, before anything is made.</p>
+  <ul>
+    <li><b><code>aos probe-memory</code></b> read its spec with <code>json.Unmarshal</code>. It now decodes strictly and runs <code>Validate</code>. The host-path preflight is left out, because probes work in a copy of a finished run, which may have run on another machine. The two pathtracer workflows memory probes have used still load. Two stale cached rasterizer copies are refused by an older delegation rule, the same one <code>aos run</code> applies, and no probe script uses them. Example: <code>misspelled.json: invalid workflow spec: agents[0].max_step: unknown field; did you mean max_steps?</code></li>
+    <li><b><code>aos-tui --workflow</code></b> decoded strictly but drives agents through <code>Engine.DelegateHandler</code>, so it never reached <code>Engine.Run</code>. Before making or locking its state directory, it now runs <code>Validate</code>, the preflight (moved to <code>agentflow.PreflightHostPaths</code> so both commands share it), and the cycle rule (<code>WorkflowSpec.CheckCycleBudget</code>, which <code>Engine.Run</code> now calls too).
+      <ul>
+        <li><b>The TUI has no run budget.</b> It was given no <code>--token-budget</code> flag, because a run account there would cap the whole interactive session. A cycle from the agent the TUI drives therefore needs that agent's own token or strict time budget, and the error says how to give one. The driven agent is the entry agent, or <code>--agent</code> when given, since every delegation descends from it.</li>
+        <li><b>Resume.</b> A resumed session does not replay a record. It reads the workflow file again and runs live, under the engine's depth limit, so <code>ValidateWithoutContract</code> does not apply to it. A resumed root keeps the budget it was started with, so the cycle rule is checked against that recorded budget as well. A pre-contract session whose root had none is refused, with a hint to start a new session.</li>
+        <li><b>Example:</b> <code>loop.json: a delegation cycle needs a budget that can stop it: lead -&gt; helper -&gt; lead, with max_delegation_depth 3, can still start a process per step at every level; aos-tui has no run budget, so give agent lead a budget of its own in the workflow: …</code></li>
+      </ul></li>
+  </ul>
 </body>
 </html>

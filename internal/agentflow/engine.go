@@ -355,9 +355,8 @@ func (e *Engine) Run(ctx context.Context, spec WorkflowSpec, req RunRequest) (Ru
 		}
 		// Budgets come from the run, not the spec, so this is checked here,
 		// before anything is spawned, and not in Validate.
-		if cycle := spec.DelegationCycle(); cycle != "" && !spec.CanStopCycle(e.Budget) {
-			return RunSummary{}, fmt.Errorf("%w: %s, with max_delegation_depth %d, can still start a process per step at every level; give the run a token budget (aos run --token-budget N) or a strict time budget (--time-budget D --strict-time-budget), or the entry agent a budget of its own",
-				ErrUnboundedDelegation, cycle, spec.MaxDelegationDepth)
+		if err := spec.CheckCycleBudget(e.Budget, "give the run a token budget (aos run --token-budget N) or a strict time budget (--time-budget D --strict-time-budget), or the entry agent a budget of its own"); err != nil {
+			return RunSummary{}, err
 		}
 	}
 	policy, err := spec.VerificationPolicy()

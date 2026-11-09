@@ -1,4 +1,4 @@
-package main
+package agentflow
 
 import (
 	"errors"
@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"aos/internal/agentflow"
 )
 
 // ErrPreflight is a workflow whose host paths cannot work on this machine.
@@ -16,14 +14,14 @@ var ErrPreflight = errors.New("preflight")
 
 var placeholder = regexp.MustCompile(`__[A-Z][A-Z0-9_]*__`)
 
-// preflightHostPaths refuses, before anything is spawned, a workflow whose
+// PreflightHostPaths refuses, before anything is spawned, a workflow whose
 // host paths cannot work here: a skill root the spec names, a read-only
 // mount or a read path that does not exist, or a writable mount whose
-// parent does not exist (createWritableMounts creates one whose parent
-// does). skillRoots are the spec's own, resolved against its directory;
+// parent does not exist (aos run creates one whose parent does). skillRoots are the spec's own, resolved against its directory;
 // the default roots are not checked. Validate is host-independent; this is
-// the check that is not.
-func preflightHostPaths(spec agentflow.WorkflowSpec, skillRoots []string) error {
+// the check that is not. aos run and aos-tui run it before they make a
+// state directory.
+func PreflightHostPaths(spec WorkflowSpec, skillRoots []string) error {
 	var missing []string
 	exists := func(path string) bool {
 		_, err := os.Stat(path)

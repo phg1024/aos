@@ -228,3 +228,14 @@ func (s WorkflowSpec) CanStopCycle(budget capability.Budget) bool {
 	}
 	return false
 }
+
+// CheckCycleBudget refuses a delegation cycle that neither budget nor the
+// entry agent's own budget can stop (CanStopCycle). howToBudget tells the
+// person how the command running the spec gives it one.
+func (s WorkflowSpec) CheckCycleBudget(budget capability.Budget, howToBudget string) error {
+	cycle := s.DelegationCycle()
+	if cycle == "" || s.CanStopCycle(budget) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s, with max_delegation_depth %d, can still start a process per step at every level; %s", ErrUnboundedDelegation, cycle, s.MaxDelegationDepth, howToBudget)
+}

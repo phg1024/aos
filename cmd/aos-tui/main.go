@@ -69,8 +69,15 @@ func runTUI() []string {
 
 	ui := render.NewPalette(os.Stdout)
 
+	absWorkdir, err := filepath.Abs(workdir)
+	if err != nil {
+		fail(err)
+	}
+	// The workflow is checked, and refused, before a state directory is
+	// made or locked.
+	spec, agent := loadInteractiveSpec(workflowPath, agentID, systemPrompt, absWorkdir, parseTools(toolList), []string(skillDirs), []string(skillRefs))
+
 	if stateDir == "" {
-		var err error
 		stateDir, err = os.MkdirTemp("", "aos-tui-*")
 		if err != nil {
 			fail(err)
@@ -89,13 +96,6 @@ func runTUI() []string {
 		fail(err)
 	}
 	defer releaseState()
-
-	absWorkdir, err := filepath.Abs(workdir)
-	if err != nil {
-		fail(err)
-	}
-
-	spec, agent := loadInteractiveSpec(workflowPath, agentID, systemPrompt, absWorkdir, parseTools(toolList), []string(skillDirs), []string(skillRefs))
 
 	k, err := kernel.New(filepath.Join(stateDir, "kernel"))
 	if err != nil {
@@ -132,6 +132,11 @@ func runTUI() []string {
 	root, resumeNote, resumed, err := startRoot(k, bus, stateDir, agent.ID, spawnRoot)
 	if err != nil {
 		fail(err)
+	}
+	if workflowPath != "" {
+		if err := checkResumedRoot(spec, workflowPath, agent.ID, root.process); err != nil {
+			fail(err)
+		}
 	}
 
 	// The environment's backend is one profile among those /model offers;
@@ -696,15 +701,18 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 	if err != nil {
 		fail(fmt.Errorf("%s: %w", workflowPath, err))
 	}
+	targetID := requestedAgentID
+	if targetID == "" {
+		targetID = spec.EntryAgent
+	}
+	if err := checkWorkflow(spec, workflowPath, targetID); err != nil {
+		fail(err)
+	}
 	spec.SkillRoots = append(defaultSkillRoots(workdir), normalizeSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))...)
 	if len(skillDirs) > 0 {
 		spec.SkillRoots = append(spec.SkillRoots, normalizeSkillRoots(skillDirs, workdir)...)
 	}
 	spec.SkillRoots = dedupeStrings(spec.SkillRoots)
-	targetID := requestedAgentID
-	if targetID == "" {
-		targetID = spec.EntryAgent
-	}
 	agent, ok := spec.Agent(targetID)
 	if !ok {
 		fail(fmt.Errorf("agent %s not found in workflow", targetID))
@@ -724,6 +732,51 @@ func loadInteractiveSpec(workflowPath, requestedAgentID, systemPrompt, workdir s
 		agent.Mounts = []capability.Mount{{Name: "workspace", HostPath: workdir}}
 	}
 	return spec, agent
+}
+
+// checkWorkflow checks a spec as aos run --workflow does, before anything
+// is made: the spec contract (Validate), the host paths it names, and a
+// budget that can stop a delegation cycle. The TUI has no run budget, so
+// the agent it drives, which every delegation descends from, must have one
+// of its own. A resumed session reads the workflow file again and runs
+// live, so it is checked the same way; only replay runs a record under the
+// rules it was made with.
+func checkWorkflow(spec agentflow.WorkflowSpec, workflowPath, agentID string) error {
+	if err := spec.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", workflowPath, err)
+	}
+	if _, ok := spec.Agent(agentID); !ok {
+		return fmt.Errorf("agent %s not found in workflow", agentID)
+	}
+	if err := agentflow.PreflightHostPaths(spec, normalizeSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))); err != nil {
+		return err
+	}
+	agent, _ := spec.Agent(agentID)
+	return checkCycleBudget(spec, workflowPath, agentID, agent.Capabilities.Budget, fmt.Sprintf(`aos-tui has no run budget, so give agent %s a budget of its own in the workflow: "capabilities": {"budget": {"tokens": N}}, or {"budget": {"seconds": S, "strict_time": true}}`, agentID))
+}
+
+// checkCycleBudget refuses a delegation cycle from agentID that rootBudget,
+// the budget of the process the TUI drives, cannot stop.
+func checkCycleBudget(spec agentflow.WorkflowSpec, workflowPath, agentID string, rootBudget capability.Budget, howToBudget string) error {
+	driven := spec
+	driven.EntryAgent = agentID
+	driven.Agents = slices.Clone(spec.Agents)
+	for i := range driven.Agents {
+		if driven.Agents[i].ID == agentID {
+			driven.Agents[i].Capabilities.Budget = rootBudget
+		}
+	}
+	if err := driven.CheckCycleBudget(capability.Budget{}, howToBudget); err != nil {
+		return fmt.Errorf("%s: %w", workflowPath, err)
+	}
+	return nil
+}
+
+// checkResumedRoot repeats the cycle rule for the root a session resumed:
+// the process keeps the budget it was started with, whatever the workflow
+// now gives the agent.
+func checkResumedRoot(spec agentflow.WorkflowSpec, workflowPath, agentID string, root kernel.Process) error {
+	return checkCycleBudget(spec, workflowPath, agentID, root.CapabilitySet.Budget, fmt.Sprintf("this session's %s (%s) was started without a budget that can stop it, and a resumed process keeps the budget it started with; start a new session (another --state-dir) from a workflow that gives %s a budget", agentID, root.PID, agentID))
 }
 
 type sliceFlags []string

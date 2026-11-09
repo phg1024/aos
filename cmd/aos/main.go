@@ -233,7 +233,7 @@ func runWorkflow(ctx context.Context, backend agentflow.JSONCompleter, compactio
 		return fmt.Errorf("%s: %w", workflowPath, err)
 	}
 	ownSkillRoots := resolveSkillRoots(spec.SkillRoots, filepath.Dir(workflowPath))
-	if err := preflightHostPaths(spec, ownSkillRoots); err != nil {
+	if err := agentflow.PreflightHostPaths(spec, ownSkillRoots); err != nil {
 		return err
 	}
 	spec.SkillRoots = dedupeStrings(append(defaultSkillRoots(filepath.Dir(workflowPath)), ownSkillRoots...))
