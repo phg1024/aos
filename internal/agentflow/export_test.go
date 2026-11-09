@@ -19,3 +19,9 @@ func (e *Engine) EvidenceChecks(spec WorkflowSpec, verifierPID string) ([]Eviden
 
 // ParseReply exposes parseGenerateResult, so a test can script what a model wrote.
 func ParseReply(raw string) (runtime.GenerateResult, bool) { return parseGenerateResult(raw, true) }
+
+// InstrumentAccount exposes instrumentAccount, so a test can read a command
+// under the instrument rules without a run.
+func InstrumentAccount(command, dir, pathEnv, published string, writable func(string) bool) (map[string]string, error) {
+	return instrumentAccount(command, dir, pathEnv, published, writable)
+}

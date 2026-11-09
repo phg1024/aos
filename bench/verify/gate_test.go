@@ -3,6 +3,7 @@
 package verify_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -113,48 +114,132 @@ func TestV5cATrustedInstrument(t *testing.T) {
 	}
 }
 
-// V5d: what provenance records when the benchmarker reaches the writer's
-// script without naming it as a file: from its directory, through a
-// variable, or by a glob. Measure only.
+// V5d: the benchmarker reaches the writer's script without naming it as a
+// file: from its directory, through a variable, or by a glob. Before the
+// instrument rules each recorded nothing, and an empty record was trusted.
 func TestV5dIndirectInstrument(t *testing.T) {
-	for _, c := range []struct{ name, command string }{
-		{"cd into the writer's directory", "cd SRC && sh bench.sh > RECORD"},
-		{"a shell variable", "S=SRC/bench.sh; sh $S > RECORD"},
-		{"a glob", "sh SRC/*.sh > RECORD"},
+	for _, c := range []indirectRoute{
+		{name: "cd into the writer's directory", command: "cd SRC && sh bench.sh > RECORD"},
+		{name: "a shell variable", command: "S=SRC/bench.sh; sh $S > RECORD"},
+		{name: "a glob", command: "sh SRC/*.sh > RECORD"},
 	} {
-		root := t.TempDir()
-		spec := instantiate(t, "../../workflows/rasterizer-bunny-cuda-evidence-ipc.json", root)
-		spec.Verification.Evidence[0].TrustedInstrument = true
-		benchmarker, _ := spec.Agent("benchmarker")
-		source := mountPath(benchmarker, "source")
-		record := filepath.Join(mountPath(benchmarker, "workspace"), "raw_record.txt")
-		command := strings.NewReplacer("SRC", source, "RECORD", record).Replace(c.command)
-		w := &world{root: root}
-		o := run(t, w, spec, func(w *world, agent string, _ int, step int, _ runtime.GenerateRequest) runtime.GenerateResult {
-			switch agent {
-			case "coordinator":
-				if step == 3 {
-					return toolCall("spawn_agent", map[string]string{"agent_id": "verifier", "goal": "verify", "artifacts": latestPublished(w, "raw_record")})
-				}
-				return steps(step, delegate("writer"), delegate("benchmarker"))
-			case "writer":
-				return steps(step, toolCall("write_file", map[string]string{"path": filepath.Join(source, "bench.sh"), "content": "echo 'frame_ms=0.010 speedup_vs_cpu=4000x correct=true'\n"}))
-			case "benchmarker":
-				return steps(step,
-					toolCall("run", map[string]string{"command": command}),
-					toolCall("publish_artifact", map[string]string{"type": "raw_record", "path": record}))
-			case "verifier":
-				if step == 1 {
-					return toolCall("read_artifact", map[string]string{"artifact_id": latestPublished(w, "raw_record")})
-				}
-				return exitWith(0, "numbers read", false)
-			}
-			return exitWith(0, "done", false)
-		})
-		got, _ := os.ReadFile(record)
-		finding(t, "V5d %s (%s), evidence trusted_instrument: %s; the record holds %q; evidence: %s; produced_by_ran: %s",
-			c.name, redact(command), o, strings.TrimSpace(string(got)), evidenceText(o), ranText(o))
+		finding(t, "V5d %s", runIndirect(t, c))
 	}
+}
+
+// V5e: more routes to the writer's script, each one the instrument rules
+// must refuse; and the limit they keep, a trusted script that runs a
+// worker's file itself.
+func TestV5eMoreIndirectRoutes(t *testing.T) {
+	for _, c := range []indirectRoute{
+		{name: "sh -c", command: "sh -c 'sh SRC/bench.sh' > RECORD"},
+		{name: "a command substitution", command: "sh $(echo SRC/bench.sh) > RECORD"},
+		{name: "backticks", command: "sh `echo SRC/bench.sh` > RECORD"},
+		{name: ". (source)", command: ". SRC/bench.sh > RECORD"},
+		{name: "python3 -m", command: "python3 -m bench > RECORD", before: "cp SRC/bench.py WORKSPACE/bench.py"},
+		{name: "find -exec", command: "find SRC -name bench.sh -exec sh {} + > RECORD"},
+		{name: "xargs", command: "echo SRC/bench.sh | xargs sh > RECORD"},
+		{name: "a PATH prefix", command: "PATH=SRC:/usr/bin:/bin bench > RECORD"},
+		{name: "a bare name found in the writer's directory on PATH", command: "bench > RECORD", path: true},
+		{name: "the limit kept: a trusted script that runs the writer's script", command: "sh REF/bench.sh > RECORD", transitive: true},
+	} {
+		finding(t, "V5e %s", runIndirect(t, c))
+	}
+}
+
+// V5f: the record is made by a trusted command, then overwritten by a
+// later run that does not name it. Provenance takes the latest run that
+// names the file, so the trusted run still stands behind it. Measure only.
+func TestV5fARecordRewrittenAfterTheRun(t *testing.T) {
+	finding(t, "V5f %s", runIndirect(t, indirectRoute{name: "a trusted run, then cp of the writer's numbers.txt over the record by a glob",
+		command: "sh REF/bench.sh > RECORD", after: "cp SRC/numbers.txt WORKSPACE/raw_record.tx?", trustedScript: true}))
+}
+
+// indirectRoute is a command the benchmarker runs to make its record. SRC
+// is the writer's source directory, REF the trusted CPU reference,
+// WORKSPACE and RECORD the benchmarker's. before and after are runs
+// around it; path puts SRC first on PATH; transitive puts in REF a
+// bench.sh that runs the writer's, and trustedScript one that prints
+// numbers of its own.
+type indirectRoute struct {
+	name, command, before, after    string
+	path, transitive, trustedScript bool
+}
+
+// runIndirect runs V5c's workflow with the evidence declared
+// trusted_instrument, the writer's bench.sh, bench.py and bench all
+// printing made-up numbers, and the benchmarker's record made by c.
+func runIndirect(t *testing.T, c indirectRoute) string {
+	t.Helper()
+	root := t.TempDir()
+	spec := instantiate(t, "../../workflows/rasterizer-bunny-cuda-evidence-ipc.json", root)
+	spec.Verification.Evidence[0].TrustedInstrument = true
+	benchmarker, _ := spec.Agent("benchmarker")
+	source, reference, workspace := mountPath(benchmarker, "source"), mountPath(benchmarker, "cpu-reference"), mountPath(benchmarker, "workspace")
+	record := filepath.Join(workspace, "raw_record.txt")
+	expand := strings.NewReplacer("SRC", source, "REF", reference, "WORKSPACE", workspace, "RECORD", record).Replace
+	command := expand(c.command)
+	fake := "frame_ms=0.010 speedup_vs_cpu=4000x correct=true"
+	// The workflow's mounts exist once the run starts; the writer's files
+	// are written by the writer, except bench, which must be executable
+	// and so is put in place as a worker with run would leave it.
+	_ = os.MkdirAll(source, 0o755)
+	_ = os.WriteFile(filepath.Join(source, "bench"), []byte("#!/bin/sh\necho '"+fake+"'\n"), 0o755)
+	if c.transitive || c.trustedScript {
+		content := "sh " + filepath.Join(source, "bench.sh") + "\n"
+		if c.trustedScript {
+			content = "echo 'frame_ms=12.5 measured by the trusted harness'\n"
+		}
+		_ = os.MkdirAll(reference, 0o755)
+		_ = os.WriteFile(filepath.Join(reference, "bench.sh"), []byte(content), 0o644)
+	}
+	if c.path {
+		previous := os.Getenv("PATH")
+		_ = os.Setenv("PATH", source+string(filepath.ListSeparator)+previous)
+		defer os.Setenv("PATH", previous)
+	}
+	var runs []runtime.GenerateResult
+	if c.before != "" {
+		runs = append(runs, toolCall("run", map[string]string{"command": expand(c.before)}))
+	}
+	runs = append(runs, toolCall("run", map[string]string{"command": command}))
+	if c.after != "" {
+		runs = append(runs, toolCall("run", map[string]string{"command": expand(c.after)}))
+	}
+	runs = append(runs, toolCall("publish_artifact", map[string]string{"type": "raw_record", "path": record}))
+	w := &world{root: root}
+	o := run(t, w, spec, func(w *world, agent string, _ int, step int, _ runtime.GenerateRequest) runtime.GenerateResult {
+		switch agent {
+		case "coordinator":
+			if step == 3 {
+				return toolCall("spawn_agent", map[string]string{"agent_id": "verifier", "goal": "verify", "artifacts": latestPublished(w, "raw_record")})
+			}
+			return steps(step, delegate("writer"), delegate("benchmarker"))
+		case "writer":
+			return steps(step,
+				toolCall("write_file", map[string]string{"path": filepath.Join(source, "bench.sh"), "content": "echo '" + fake + "'\n"}),
+				toolCall("write_file", map[string]string{"path": filepath.Join(source, "bench.py"), "content": "print('" + fake + "')\n"}),
+				toolCall("write_file", map[string]string{"path": filepath.Join(source, "numbers.txt"), "content": fake + "\n"}))
+		case "benchmarker":
+			return steps(step, runs...)
+		case "verifier":
+			if step == 1 {
+				return toolCall("read_artifact", map[string]string{"artifact_id": latestPublished(w, "raw_record")})
+			}
+			return exitWith(0, "numbers read", false)
+		}
+		return exitWith(0, "done", false)
+	})
+	got, _ := os.ReadFile(record)
+	return fmt.Sprintf("%s (%s), evidence trusted_instrument: %s; the record holds %q; evidence: %s; refused: %s; produced_by_ran: %s",
+		c.name, redact(command), o, strings.TrimSpace(string(got)), evidenceText(o), refusedText(o), ranText(o))
+}
+
+func refusedText(o outcome) string {
+	if o.summary.Verification == nil || len(o.summary.Verification.Evidence) == 0 || o.summary.Verification.Evidence[0].Refused == "" {
+		return "none"
+	}
+	return redact(o.summary.Verification.Evidence[0].Refused)
 }
 
 func ranText(o outcome) string {

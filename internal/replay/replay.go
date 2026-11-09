@@ -116,6 +116,9 @@ type Report struct {
 	// LegacyPublishProvenance means the record predates publication
 	// provenance, and file publications were replayed without it.
 	LegacyPublishProvenance bool `json:"legacy_publish_provenance,omitempty"`
+	// LegacyInstrumentRules means the record predates the instrument rules,
+	// and its trusted_instrument evidence was judged as it was then.
+	LegacyInstrumentRules bool `json:"legacy_instrument_rules,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
 	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
@@ -441,6 +444,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.LegacyExitOrigin = engine.NoExitOrigin
 	engine.NoPublishProvenance = started.Data[agentflow.PublishProvenanceField] == ""
 	report.LegacyPublishProvenance = engine.NoPublishProvenance
+	engine.NoInstrumentRules = started.Data[agentflow.InstrumentRulesField] == ""
+	report.LegacyInstrumentRules = engine.NoInstrumentRules
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

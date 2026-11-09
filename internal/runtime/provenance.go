@@ -33,8 +33,8 @@ const (
 	ProducedByRanMetadata = "produced_by_ran"
 	// ProducedByNone is ProducedByMetadata when no run named the file.
 	ProducedByNone = "none"
-	// maxProvenanceCommand bounds the recorded command.
-	maxProvenanceCommand = 2000
+	// MaxProvenanceCommand bounds the recorded command, in bytes.
+	MaxProvenanceCommand = 2000
 )
 
 // provenance is the producing run of path, published by process, as
@@ -70,8 +70,8 @@ func (r *AgentRuntime) provenance(process kernel.Process, path string) map[strin
 		return out
 	}
 	out[ProducedByMetadata] = latest.ID
-	if len(command) > maxProvenanceCommand {
-		command = command[:maxProvenanceCommand]
+	if len(command) > MaxProvenanceCommand {
+		command = command[:MaxProvenanceCommand]
 	}
 	out[ProducedByCommandMetadata] = command
 	if ran := RanFiles(command, path, dir); len(ran) > 0 {

@@ -192,6 +192,11 @@ func PublishedFromFile(record artifact.Artifact) bool {
 	return record.Metadata[sourceMetadata] == sourceFile
 }
 
+// PublishedPath is the file a publication was read from, or "".
+func PublishedPath(record artifact.Artifact) string {
+	return record.Metadata[sourcePathMetadata]
+}
+
 // SplitHandles parses a comma-separated list of artifact IDs, without repeats.
 func SplitHandles(raw string) []string { return splitHandles(raw) }
 

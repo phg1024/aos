@@ -312,6 +312,36 @@ func TestTrustedPathsAreCheckedAgainstTheRunRequest(t *testing.T) {
 	}
 }
 
+// benchWorkflow is boundWorkflow with a benchmarker that publishes raw
+// evidence, declared trusted_instrument, from bench, and reads trusted.
+func benchWorkflow(work, trusted, bench string) agentflow.WorkflowSpec {
+	spec := boundWorkflow(work, "required")
+	spec.Agents[0].AllowedAgents = append(spec.Agents[0].AllowedAgents, "benchmarker")
+	spec.Agents[0].Delegable = capability.Set{Tools: []string{"run", "publish_artifact"}, WritePaths: []string{bench}, ReadPaths: []string{bench, trusted}}
+	spec.Agents[0].Mounts = append(spec.Agents[0].Mounts, capability.Mount{Name: "bench", HostPath: bench}, capability.Mount{Name: "trusted", HostPath: trusted, ReadOnly: true})
+	spec.Agents = append(spec.Agents, agentflow.AgentSpec{ID: "benchmarker", SystemPrompt: "Bench.",
+		Mounts:       []capability.Mount{{Name: "bench", HostPath: bench}, {Name: "work", HostPath: work, ReadOnly: true}, {Name: "trusted", HostPath: trusted, ReadOnly: true}},
+		Capabilities: capability.Set{Tools: []string{"run", "read_file", "publish_artifact"}, WritePaths: []string{bench}, ReadPaths: []string{bench, work, trusted}}})
+	spec.Verification.Trusted = []string{trusted}
+	spec.Verification.Evidence = []agentflow.EvidenceSpec{{Publisher: "benchmarker", Type: "raw", TrustedInstrument: true}}
+	return spec
+}
+
+// runBench runs benchWorkflow with the benchmarker publishing record after
+// command, and returns the evidence check.
+func runBench(t *testing.T, spec agentflow.WorkflowSpec, command, record string) (exitFixture, agentflow.RunSummary, agentflow.EvidenceCheck) {
+	t.Helper()
+	f, summary := runBound(t, spec, false,
+		delegateAction("benchmarker"), toolAction("run", map[string]string{"command": command}),
+		toolAction("publish_artifact", map[string]string{"type": "raw", "path": record}), exitWith(0, "published", false),
+		delegateAction("verifier"), exitWith(1, "not read", false), exitWith(0, "done", false))
+	checks, err := f.engine.EvidenceChecks(spec, summary.Verification.VerifierPID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f, summary, checks[0]
+}
+
 // Evidence declared trusted_instrument must come from a run that named only
 // trusted files and system tools; a worker-writable script makes it
 // untrusted, and the record says what ran.
@@ -327,24 +357,7 @@ func TestEvidenceNeedsATrustedInstrument(t *testing.T) {
 			t.Fatal(err)
 		}
 		record := filepath.Join(bench, "raw.txt")
-		spec := boundWorkflow(work, "required")
-		spec.Agents[0].AllowedAgents = append(spec.Agents[0].AllowedAgents, "benchmarker")
-		spec.Agents[0].Delegable = capability.Set{Tools: []string{"run", "publish_artifact"}, WritePaths: []string{bench}, ReadPaths: []string{bench, trusted}}
-		spec.Agents[0].Mounts = append(spec.Agents[0].Mounts, capability.Mount{Name: "bench", HostPath: bench}, capability.Mount{Name: "trusted", HostPath: trusted, ReadOnly: true})
-		spec.Agents = append(spec.Agents, agentflow.AgentSpec{ID: "benchmarker", SystemPrompt: "Bench.",
-			Mounts:       []capability.Mount{{Name: "bench", HostPath: bench}, {Name: "work", HostPath: work, ReadOnly: true}, {Name: "trusted", HostPath: trusted, ReadOnly: true}},
-			Capabilities: capability.Set{Tools: []string{"run", "read_file", "publish_artifact"}, WritePaths: []string{bench}, ReadPaths: []string{bench, work, trusted}}})
-		spec.Verification.Trusted = []string{trusted}
-		spec.Verification.Evidence = []agentflow.EvidenceSpec{{Publisher: "benchmarker", Type: "raw", TrustedInstrument: true}}
-		f, summary := runBound(t, spec, false,
-			delegateAction("benchmarker"), toolAction("run", map[string]string{"command": "sh " + script + " > " + record}),
-			toolAction("publish_artifact", map[string]string{"type": "raw", "path": record}), exitWith(0, "published", false),
-			delegateAction("verifier"), exitWith(1, "not read", false), exitWith(0, "done", false))
-		checks, err := f.engine.EvidenceChecks(spec, summary.Verification.VerifierPID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		check := checks[0]
+		_, _, check := runBench(t, benchWorkflow(work, trusted, bench), "sh "+script+" > "+record, record)
 		if check.ProducedBy == "" || check.ProducedBy == runtime.ProducedByNone || !strings.Contains(check.Command, script) || len(check.Ran[script]) != 64 {
 			t.Fatalf("provenance %+v", check)
 		}
@@ -357,12 +370,45 @@ func TestEvidenceNeedsATrustedInstrument(t *testing.T) {
 	}
 }
 
+// A command the instrument rules cannot account for makes its record
+// untrusted, and the check says what stopped it. Before the rules, a
+// command that named no file was trusted: a replay of such a record judges
+// it so again.
+func TestEvidenceRefusesACommandItCannotAccountFor(t *testing.T) {
+	work, trusted, bench := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(work, "bench.sh"), []byte("echo frame_ms=0.01\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(bench, "raw.txt")
+	for _, c := range []struct{ command, refused string }{
+		{"cd " + work + " && sh bench.sh > " + record, "cd, which changes the shell"},
+		{"echo frame_ms=0.01 > " + record, "an empty account is never trusted"},
+	} {
+		spec := benchWorkflow(work, trusted, bench)
+		f, summary, check := runBench(t, spec, c.command, record)
+		if check.Status != agentflow.EvidenceUntrusted || !strings.Contains(check.Refused, c.refused) || len(check.Ran) != 0 {
+			t.Fatalf("%q: %+v", c.command, check)
+		}
+		if evidence := summary.Verification.Evidence; len(evidence) != 1 || evidence[0].Refused != check.Refused {
+			t.Fatalf("%q: the verdict's record %+v", c.command, evidence)
+		}
+		f.engine.NoInstrumentRules = true
+		checks, err := f.engine.EvidenceChecks(spec, summary.Verification.VerifierPID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if checks[0].Status != agentflow.EvidenceUnread || checks[0].Refused != "" {
+			t.Fatalf("%q before the rules: %+v", c.command, checks[0])
+		}
+	}
+}
+
 // run.started says which verification rules a run ran under, so a replay
 // can set them up again.
 func TestRunStartedRecordsTheVerificationVersions(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
 		f := newExitFixture(t, &sequenceCompleter{actions: passingRun()})
-		f.engine.NoVerdictRules, f.engine.SpecContractV1, f.engine.NoExitOrigin, f.engine.NoPublishProvenance = legacy, legacy, legacy, legacy
+		f.engine.NoVerdictRules, f.engine.SpecContractV1, f.engine.NoExitOrigin, f.engine.NoPublishProvenance, f.engine.NoInstrumentRules = legacy, legacy, legacy, legacy, legacy
 		summary, err := f.engine.Run(context.Background(), boundWorkflow(t.TempDir(), "required"), agentflow.RunRequest{Goal: "go"})
 		if err != nil {
 			t.Fatal(err)
@@ -375,9 +421,9 @@ func TestRunStartedRecordsTheVerificationVersions(t *testing.T) {
 			}
 		}
 		want := map[string]string{agentflow.SpecContractField: agentflow.SpecContractV2, agentflow.VerdictRulesField: agentflow.VerdictRulesV1,
-			agentflow.ExitOriginField: agentflow.ExitOriginV1, agentflow.PublishProvenanceField: agentflow.PublishProvenanceV1}
+			agentflow.ExitOriginField: agentflow.ExitOriginV1, agentflow.PublishProvenanceField: agentflow.PublishProvenanceV1, agentflow.InstrumentRulesField: agentflow.InstrumentRulesV1}
 		if legacy {
-			want = map[string]string{agentflow.SpecContractField: agentflow.SpecContractV1, agentflow.VerdictRulesField: "", agentflow.ExitOriginField: "", agentflow.PublishProvenanceField: ""}
+			want = map[string]string{agentflow.SpecContractField: agentflow.SpecContractV1, agentflow.VerdictRulesField: "", agentflow.ExitOriginField: "", agentflow.PublishProvenanceField: "", agentflow.InstrumentRulesField: ""}
 		}
 		for field, value := range want {
 			if data[field] != value {

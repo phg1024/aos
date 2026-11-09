@@ -213,6 +213,11 @@ type Engine struct {
 	// NoPublishProvenance is AgentRuntime.NoPublishProvenance (run.started
 	// publish_provenance).
 	NoPublishProvenance bool
+	// NoInstrumentRules judges evidence declared trusted_instrument as the
+	// engine did before the instrument rules (run.started instrument_rules):
+	// by the files its producing command names, an empty list trusted. It is
+	// for replaying a record made before them.
+	NoInstrumentRules bool
 	// NoReplyCap is AgentRuntime.NoReplyCap, for replaying a record made before
 	// the reply cap took the prompt out of the budget left. When it is off,
 	// run.started says so (reply_cap).

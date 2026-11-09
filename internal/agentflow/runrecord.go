@@ -119,6 +119,13 @@ const (
 	// from a file records the run that produced it (PublishProvenanceV1).
 	PublishProvenanceField = "publish_provenance"
 	PublishProvenanceV1    = "v1"
+	// InstrumentRulesField is the run.started field that says evidence
+	// declared trusted_instrument was judged under the instrument rules
+	// (InstrumentRulesV1): trusted only when the engine can account for what
+	// its producing command ran. Records without it trusted a record by the
+	// files its command named, none at all included.
+	InstrumentRulesField = "instrument_rules"
+	InstrumentRulesV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -224,6 +231,9 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	}
 	if !e.NoPublishProvenance {
 		data[PublishProvenanceField] = PublishProvenanceV1
+	}
+	if !e.NoInstrumentRules {
+		data[InstrumentRulesField] = InstrumentRulesV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

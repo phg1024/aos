@@ -76,6 +76,13 @@ func (r *Runtime) runPolicy(req Request) (sandbox.Policy, error) {
 	}, nil
 }
 
+// Scratch is ScratchRoot as it stands: empty until a run has made it.
+func (r *Runtime) Scratch() string {
+	r.scratchMu.Lock()
+	defer r.scratchMu.Unlock()
+	return r.ScratchRoot
+}
+
 // scratchDir is pid's own writable directory for run, kept across its
 // calls (so build caches stay warm) and shared with no other process.
 func (r *Runtime) scratchDir(pid string) (string, error) {

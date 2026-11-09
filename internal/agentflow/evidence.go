@@ -3,6 +3,7 @@ package agentflow
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -46,10 +47,15 @@ type EvidenceCheck struct {
 	// (runtime.ProducedByMetadata); Untrusted the files it ran that are
 	// neither trusted nor outside every agent's mounts. Set for a record
 	// declared trusted_instrument.
+	//
+	// Under the instrument rules Ran is the engine's own account of what
+	// Command ran (instrumentAccount), and Refused, when set, says why the
+	// command could not be accounted for.
 	ProducedBy string            `json:"produced_by,omitempty"`
 	Command    string            `json:"command,omitempty"`
 	Ran        map[string]string `json:"ran,omitempty"`
 	Untrusted  []string          `json:"untrusted,omitempty"`
+	Refused    string            `json:"refused,omitempty"`
 }
 
 // evidenceChecks resolves each declared record to the latest match under the
@@ -90,7 +96,9 @@ func (e *Engine) evidenceChecks(spec WorkflowSpec, verifierPID string) ([]Eviden
 			trusted := evidence.TrustedInstrument && !e.NoVerdictRules
 			if (evidence.FromFile || trusted) && !runtime.PublishedFromFile(*latest) {
 				check.Status = EvidenceNotFromFile
-			} else if trusted && !spec.instrumentTrusted(*latest, &check) {
+			} else if trusted && e.NoInstrumentRules && !spec.instrumentTrusted(*latest, &check) {
+				check.Status = EvidenceUntrusted
+			} else if trusted && !e.NoInstrumentRules && !spec.instrumentAccounted(*latest, &check, processes, e.scratchRoot()) {
 				check.Status = EvidenceUntrusted
 			} else {
 				pages, err := e.readPages(records, chain, latest.ID)
@@ -225,7 +233,9 @@ func unmetEvidence(checks []EvidenceCheck) string {
 		case EvidenceNotFromFile:
 			unmet = append(unmet, label+" is not from a file, and a file is required")
 		case EvidenceUntrusted:
-			if check.ProducedBy == runtime.ProducedByNone || check.ProducedBy == "" {
+			if check.Refused != "" {
+				unmet = append(unmet, fmt.Sprintf("%s was written by a command no trusted instrument can be accounted for in: %s (%s)", label, check.Refused, check.Command))
+			} else if check.ProducedBy == runtime.ProducedByNone || check.ProducedBy == "" {
 				unmet = append(unmet, label+" was written by no run of its publisher, so no trusted instrument stands behind it")
 			} else {
 				unmet = append(unmet, fmt.Sprintf("%s was written by a run of %s that worker-writable files can shape (%s)", label, strings.Join(check.Untrusted, ", "), check.Command))
@@ -289,7 +299,8 @@ func evidencePrompt(spec WorkflowSpec, agentID string) string {
 
 // instrumentTrusted reads what produced record's file into check, and
 // reports whether every file that run named is trusted or lies outside every
-// agent's mounts (a system tool).
+// agent's mounts (a system tool). It is the rule before the instrument
+// rules, kept for replaying a record made under it.
 func (s WorkflowSpec) instrumentTrusted(record artifact.Artifact, check *EvidenceCheck) bool {
 	check.ProducedBy = record.Metadata[runtime.ProducedByMetadata]
 	check.Command = record.Metadata[runtime.ProducedByCommandMetadata]
@@ -317,4 +328,89 @@ func (s WorkflowSpec) instrumentTrusted(record artifact.Artifact, check *Evidenc
 	}
 	slices.Sort(check.Untrusted)
 	return len(check.Untrusted) == 0
+}
+
+// instrumentAccounted is instrumentTrusted under the instrument rules
+// (instrument.go): record is trusted only when the engine can account for
+// what its producing command ran, the account names at least one file, and
+// every path in it is trusted or lies where no agent can write. Where an
+// agent can write is any process's mount or write path, any agent's mount
+// in spec, and the run scratch root; with unconfined_run anywhere, only a
+// trusted path is out of a worker's reach.
+func (s WorkflowSpec) instrumentAccounted(record artifact.Artifact, check *EvidenceCheck, processes []kernel.Process, scratch string) bool {
+	check.ProducedBy = record.Metadata[runtime.ProducedByMetadata]
+	check.Command = record.Metadata[runtime.ProducedByCommandMetadata]
+	if check.ProducedBy == "" || check.ProducedBy == runtime.ProducedByNone {
+		return false
+	}
+	if len(check.Command) >= runtime.MaxProvenanceCommand {
+		check.Refused = fmt.Sprintf("the recorded command is cut at %d bytes", runtime.MaxProvenanceCommand)
+		return false
+	}
+	var roots []string
+	unconfined := false
+	var dir string
+	for _, process := range processes {
+		for _, mount := range process.Mounts {
+			roots = append(roots, capability.ResolvePath(mount.HostPath))
+		}
+		for _, path := range process.CapabilitySet.WritePaths {
+			roots = append(roots, capability.ResolvePath(path))
+		}
+		unconfined = unconfined || process.CapabilitySet.UnconfinedRun
+		if process.PID == record.ProducerPID && len(process.Mounts) > 0 {
+			dir = process.Mounts[0].HostPath
+		}
+	}
+	for _, agent := range s.Agents {
+		for _, mount := range agent.Mounts {
+			roots = append(roots, capability.ResolvePath(mount.HostPath))
+		}
+		unconfined = unconfined || agent.Capabilities.UnconfinedRun || agent.Delegable.UnconfinedRun
+	}
+	if scratch == "" {
+		scratch = os.TempDir()
+	}
+	roots = append(roots, capability.ResolvePath(scratch))
+	writable := func(path string) bool {
+		if s.isTrusted(path) {
+			return false
+		}
+		if unconfined {
+			return true
+		}
+		resolved := capability.ResolvePath(path)
+		for _, root := range roots {
+			if pathsWithin(resolved, root) {
+				return true
+			}
+		}
+		return false
+	}
+	ran, err := instrumentAccount(check.Command, dir, os.Getenv("PATH"), runtime.PublishedPath(record), writable)
+	if err != nil {
+		check.Refused = err.Error()
+		return false
+	}
+	check.Ran = ran
+	if len(ran) == 0 {
+		check.Refused = "the command runs no file the engine can account for (a shell builtin alone), and an empty account is never trusted"
+		return false
+	}
+	for path := range ran {
+		if writable(path) {
+			check.Untrusted = append(check.Untrusted, path)
+		}
+	}
+	slices.Sort(check.Untrusted)
+	return len(check.Untrusted) == 0
+}
+
+// scratchRoot is where run's scratch directories are, or "" if no run has
+// made one.
+func (e *Engine) scratchRoot() string {
+	if e.Tools == nil {
+		return ""
+	}
+	return e.Tools.Scratch()
 }
