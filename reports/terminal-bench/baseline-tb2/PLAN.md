@@ -431,3 +431,75 @@ Each arm-round's agent timeouts sum to 22,800 s: 10 tasks at 900 s, 1 at
   projection is sent to aos book, and the run continues.
 
 ## Amendments
+
+### A1, 2026-11-09, before the first counted trial: smoke, judging strings, drivers
+
+**Smoke, counted for nothing.** Both trials ran on git-leak-recovery
+through the relay on 2026-11-09, with records in `smoke.jsonl` (seq 0 and
+−1).
+
+| | terminus-2 (seq 0) | aos (seq −1) |
+|---|---|---|
+| Start (PST) | 15:09:28 | 15:12:37 |
+| Reward, ending | 1.0, completed | 1.0, completed |
+| Agent time / whole trial | 147 s / 184 s | 53 s / 72 s |
+| Model calls (relay POSTs, all 200) | 8 | 10 (ledger: 10, none unfinished) |
+| Tokens: prompt / cached / completion | 38,148 / 29,818 / 6,948 (Harbor) | 52,366 / 44,535 / 2,505 (ledger) |
+| Contention: server delta / relay | 8 / 8 | 10 / 10 |
+
+- **Terminus-2 reaches Strata through the relay.** All 8 of its requests
+  returned 200, with User-Agent `litellm/1.106.5`.
+- **The sampling table holds.** Every request of both trials carried the
+  same fields, as logged by the relay: `max_tokens` 8192, `model`
+  `qwen3.8-flash-next-nvfp4-nvfp4`, `reasoning_budget_tokens` 2048,
+  `temperature` 0.6, `top_p` 0.95.
+  - Neither client sent `stream`, so neither arm streams.
+  - LiteLLM merges `extra_body` into the request, so Strata sees the same
+    `reasoning_budget_tokens` field AOS sends.
+  - A direct check through Harbor's `LiteLLM` class at 15:00, before the
+    smoke, also reported a context limit of 262144 and an output limit of
+    8192.
+- **AOS contracts in the smoke.**
+  - The flag was `--time-budget 879s --strict-time-budget`.
+  - There were 10 budget notes with the strict suffix, 10 checkpoints and
+    a complete ledger.
+  - There was no warning, no budget exit and no compaction.
+- **Replay.** The smoke trial replayed identical: exit 0, 10 of 10 calls
+  matched. Recorded build 4c12d930… (v0.1.10), replay build 2f1c777e….
+- **The key stayed out.** It appears in none of the 155 files under the two
+  smoke job folders, this folder and the replay copies.
+- **Terminus-2's records** for the hand-check are `agent/trajectory.json`
+  (8 agent steps), `agent/recording.cast` and `agent/terminus_2.pane`.
+
+**Judging strings, confirmed in v0.1.10's `internal/runtime/budget.go`.**
+They are unchanged from the rerun's A1:
+
+- the time note `budget time=<L>s used=<U>s left=<R>s`, with the strict
+  suffix;
+- the warning, `budget warning: less than 10% of the time is left. …`,
+  at fraction 0.1;
+- the exit, `time budget exceeded: <L>s strict budget of <owner>`, from
+  `ErrTimeBudgetExceeded`.
+
+In v0.1.10 the notes are user messages with the `[#N] ` prefix, which
+`collect.py` strips before matching.
+
+**Changes made after the freeze of the sampling section, before any
+counted trial.**
+
+- `draw.py` gained the `smoke_task` step, which implements the smoke rule
+  stated in the sampling section. It ran once, with the draw.
+- `replay.py` now also drops the report's `replay_dir` (a local path) from
+  its output. It was fixed after the smoke, and `replay-smoke.jsonl` was
+  rewritten without that field. Only the collection side changed.
+
+**Driver files at this commit.** These are not edited during the run:
+
+- `run.sh`, `collect.py`, `relay.py`, `relay-start.sh`, `replay.py`,
+  `analyze.py`, `terminus2-settings.json` and `schedule.json`.
+- If a parsing bug turns up mid-run, the raw job folders are kept. The
+  records are recomputed from them after the run, and the fix is listed in
+  the report.
+- `relay.log` and the Harbor logs in `logs/` match the repository's `*.log`
+  ignore rule. `relay.log` is force-added with the results, because the
+  contention and sampling checks rest on it.
