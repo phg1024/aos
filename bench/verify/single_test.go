@@ -312,14 +312,14 @@ func TestV11WhoAsksTheVerifier(t *testing.T) {
 		case "verifier":
 			for _, m := range req.History {
 				if strings.Contains(m.Content, goal) {
-					told = m.Role
+					told = m.Role + " message: " + m.Content
 				}
 			}
 			return exitWith(0, "out.txt exists", false)
 		}
 		return exitWith(0, "done", false)
 	})
-	finding(t, "V11 the lead, which delegates the writer, words the verifier's goal %q: the verifier's history holds it as a %q message; %s", goal, told, o)
+	finding(t, "V11 the lead, which delegates the writer, words the verifier's goal %q: the verifier's history holds it in this %q; %s", goal, told, o)
 
 	best := gateSpec(t, work, 3)
 	best.Verification.Policy = "best_effort"

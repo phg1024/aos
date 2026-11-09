@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"aos/internal/agentflow"
@@ -110,4 +111,63 @@ func TestV5cATrustedInstrument(t *testing.T) {
 		}
 		finding(t, "V5c bench.sh in %s, evidence trusted_instrument, the verifier reads it in full and exits 0: %s; evidence: %s", where, o, evidenceText(o))
 	}
+}
+
+// V5d: what provenance records when the benchmarker reaches the writer's
+// script without naming it as a file: from its directory, through a
+// variable, or by a glob. Measure only.
+func TestV5dIndirectInstrument(t *testing.T) {
+	for _, c := range []struct{ name, command string }{
+		{"cd into the writer's directory", "cd SRC && sh bench.sh > RECORD"},
+		{"a shell variable", "S=SRC/bench.sh; sh $S > RECORD"},
+		{"a glob", "sh SRC/*.sh > RECORD"},
+	} {
+		root := t.TempDir()
+		spec := instantiate(t, "../../workflows/rasterizer-bunny-cuda-evidence-ipc.json", root)
+		spec.Verification.Evidence[0].TrustedInstrument = true
+		benchmarker, _ := spec.Agent("benchmarker")
+		source := mountPath(benchmarker, "source")
+		record := filepath.Join(mountPath(benchmarker, "workspace"), "raw_record.txt")
+		command := strings.NewReplacer("SRC", source, "RECORD", record).Replace(c.command)
+		w := &world{root: root}
+		o := run(t, w, spec, func(w *world, agent string, _ int, step int, _ runtime.GenerateRequest) runtime.GenerateResult {
+			switch agent {
+			case "coordinator":
+				if step == 3 {
+					return toolCall("spawn_agent", map[string]string{"agent_id": "verifier", "goal": "verify", "artifacts": latestPublished(w, "raw_record")})
+				}
+				return steps(step, delegate("writer"), delegate("benchmarker"))
+			case "writer":
+				return steps(step, toolCall("write_file", map[string]string{"path": filepath.Join(source, "bench.sh"), "content": "echo 'frame_ms=0.010 speedup_vs_cpu=4000x correct=true'\n"}))
+			case "benchmarker":
+				return steps(step,
+					toolCall("run", map[string]string{"command": command}),
+					toolCall("publish_artifact", map[string]string{"type": "raw_record", "path": record}))
+			case "verifier":
+				if step == 1 {
+					return toolCall("read_artifact", map[string]string{"artifact_id": latestPublished(w, "raw_record")})
+				}
+				return exitWith(0, "numbers read", false)
+			}
+			return exitWith(0, "done", false)
+		})
+		got, _ := os.ReadFile(record)
+		finding(t, "V5d %s (%s), evidence trusted_instrument: %s; the record holds %q; evidence: %s; produced_by_ran: %s",
+			c.name, redact(command), o, strings.TrimSpace(string(got)), evidenceText(o), ranText(o))
+	}
+}
+
+func ranText(o outcome) string {
+	if o.summary.Verification == nil || len(o.summary.Verification.Evidence) == 0 {
+		return "none"
+	}
+	ran := o.summary.Verification.Evidence[0].Ran
+	if len(ran) == 0 {
+		return "empty"
+	}
+	var paths []string
+	for path := range ran {
+		paths = append(paths, redact(path))
+	}
+	return strings.Join(paths, ", ")
 }
