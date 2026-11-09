@@ -1,0 +1,1198 @@
+[
+ {
+  "task": "adaptive-rejection-sampler",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/adaptive-rejection-sampler:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 29729019
+ },
+ {
+  "task": "bn-fit-modify",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/bn-fit-modify:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 262231215
+ },
+ {
+  "task": "break-filter-js-from-html",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/break-filter-js-from-html:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 382365840
+ },
+ {
+  "task": "build-cython-ext",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/build-cython-ext:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 303214315
+ },
+ {
+  "task": "build-pmars",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/build-pmars:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 61140540
+ },
+ {
+  "task": "build-pov-ray",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 12000.0,
+  "verifier_timeout_s": 12000.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/build-pov-ray:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 163062783
+ },
+ {
+  "task": "caffe-cifar-10",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/caffe-cifar-10:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 209535953
+ },
+ {
+  "task": "cancel-async-tasks",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/cancel-async-tasks:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 44164493
+ },
+ {
+  "task": "chess-best-move",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/chess-best-move:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 240205069
+ },
+ {
+  "task": "circuit-fibsqrt",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/circuit-fibsqrt:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 149127889
+ },
+ {
+  "task": "cobol-modernization",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/cobol-modernization:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 162011504
+ },
+ {
+  "task": "code-from-image",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/code-from-image:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 44244747
+ },
+ {
+  "task": "compile-compcert",
+  "cpus": 2,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 2400.0,
+  "verifier_timeout_s": 2400.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/compile-compcert:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 29723240
+ },
+ {
+  "task": "configure-git-webserver",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/configure-git-webserver:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 72338544
+ },
+ {
+  "task": "constraints-scheduling",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/constraints-scheduling:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 49849705
+ },
+ {
+  "task": "count-dataset-tokens",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/count-dataset-tokens:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 44164493
+ },
+ {
+  "task": "crack-7z-hash",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/crack-7z-hash:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 355841799
+ },
+ {
+  "task": "custom-memory-heap-crash",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/custom-memory-heap-crash:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 1267991521
+ },
+ {
+  "task": "db-wal-recovery",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/db-wal-recovery:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 175272473
+ },
+ {
+  "task": "distribution-search",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/distribution-search:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 181095925
+ },
+ {
+  "task": "dna-assembly",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/dna-assembly:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 29724813
+ },
+ {
+  "task": "dna-insert",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/dna-insert:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 29724629
+ },
+ {
+  "task": "extract-elf",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/extract-elf:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 347385449
+ },
+ {
+  "task": "extract-moves-from-video",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/extract-moves-from-video:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 29723240
+ },
+ {
+  "task": "feal-differential-cryptanalysis",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/feal-differential-cryptanalysis:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 51631558
+ },
+ {
+  "task": "feal-linear-cryptanalysis",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/feal-linear-cryptanalysis:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 150821673
+ },
+ {
+  "task": "filter-js-from-html",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/filter-js-from-html:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 377962614
+ },
+ {
+  "task": "financial-document-processor",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/financial-document-processor:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 51790066
+ },
+ {
+  "task": "fix-code-vulnerability",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/fix-code-vulnerability:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 190685882
+ },
+ {
+  "task": "fix-git",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/fix-git:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 158051230
+ },
+ {
+  "task": "fix-ocaml-gc",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/fix-ocaml-gc:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 765425815
+ },
+ {
+  "task": "gcode-to-text",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/gcode-to-text:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 45036582
+ },
+ {
+  "task": "git-leak-recovery",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/git-leak-recovery:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 95724176
+ },
+ {
+  "task": "git-multibranch",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/git-multibranch:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 222129979
+ },
+ {
+  "task": "gpt2-codegolf",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/gpt2-codegolf:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 614179061
+ },
+ {
+  "task": "headless-terminal",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/headless-terminal:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 62277092
+ },
+ {
+  "task": "hf-model-inference",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/hf-model-inference:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 6185996249
+ },
+ {
+  "task": "install-windows-3.11",
+  "cpus": 2,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/install-windows-3.11:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 573371248
+ },
+ {
+  "task": "kv-store-grpc",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/kv-store-grpc:20251031",
+  "platforms": [
+   "linux/amd64"
+  ],
+  "compressed_bytes": 44164493
+ },
+ {
+  "task": "large-scale-text-editing",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1200.0,
+  "verifier_timeout_s": 1200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/large-scale-text-editing:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "largest-eigenval",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/largest-eigenval:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "llm-inference-batching-scheduler",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/llm-inference-batching-scheduler:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "log-summary-date-ranges",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/log-summary-date-ranges:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "mailman",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/mailman:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "make-doom-for-mips",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/make-doom-for-mips:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "make-mips-interpreter",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/make-mips-interpreter:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "mcmc-sampling-stan",
+  "cpus": 4,
+  "memory_mb": 8192,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/mcmc-sampling-stan:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "merge-diff-arc-agi-task",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/merge-diff-arc-agi-task:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "model-extraction-relu-logits",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/model-extraction-relu-logits:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "modernize-scientific-stack",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 600.0,
+  "verifier_timeout_s": 600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/modernize-scientific-stack:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "mteb-leaderboard",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/mteb-leaderboard:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "mteb-retrieve",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/mteb-retrieve:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "multi-source-data-merger",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/multi-source-data-merger:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "nginx-request-logging",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/nginx-request-logging:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "openssl-selfsigned-cert",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/openssl-selfsigned-cert:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "overfull-hbox",
+  "cpus": 2,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 750.0,
+  "verifier_timeout_s": 360.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/overfull-hbox:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "password-recovery",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/password-recovery:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "path-tracing",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/path-tracing:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "path-tracing-reverse",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/path-tracing-reverse:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "polyglot-c-py",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/polyglot-c-py:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "polyglot-rust-c",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/polyglot-rust-c:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "portfolio-optimization",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/portfolio-optimization:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "protein-assembly",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/protein-assembly:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "prove-plus-comm",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/prove-plus-comm:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "pypi-server",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/pypi-server:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "pytorch-model-cli",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/pytorch-model-cli:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "pytorch-model-recovery",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/pytorch-model-recovery:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "qemu-alpine-ssh",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/qemu-alpine-ssh:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "qemu-startup",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/qemu-startup:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "query-optimize",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/query-optimize:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "raman-fitting",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/raman-fitting:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "regex-chess",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/regex-chess:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "regex-log",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/regex-log:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "reshard-c4-data",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/reshard-c4-data:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "rstan-to-pystan",
+  "cpus": 4,
+  "memory_mb": 8192,
+  "gpus": null,
+  "agent_timeout_s": 1800.0,
+  "verifier_timeout_s": 1800.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/rstan-to-pystan:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "sam-cell-seg",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 7200.0,
+  "verifier_timeout_s": 7200.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/sam-cell-seg:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "sanitize-git-repo",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/sanitize-git-repo:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "schemelike-metacircular-eval",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 2400.0,
+  "verifier_timeout_s": 2400.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/schemelike-metacircular-eval:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "sparql-university",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/sparql-university:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "sqlite-db-truncate",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/sqlite-db-truncate:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "sqlite-with-gcov",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/sqlite-with-gcov:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "torch-pipeline-parallelism",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/torch-pipeline-parallelism:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "torch-tensor-parallelism",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/torch-tensor-parallelism:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "train-fasttext",
+  "cpus": 1,
+  "memory_mb": 4096,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/train-fasttext:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "tune-mjcf",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/tune-mjcf:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "video-processing",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/video-processing:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "vulnerable-secret",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/vulnerable-secret:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "winning-avg-corewars",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 3600.0,
+  "verifier_timeout_s": 3600.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/winning-avg-corewars:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ },
+ {
+  "task": "write-compressor",
+  "cpus": 1,
+  "memory_mb": 2048,
+  "gpus": null,
+  "agent_timeout_s": 900.0,
+  "verifier_timeout_s": 900.0,
+  "verifier_mode": "shared",
+  "image": "alexgshaw/write-compressor:20251031",
+  "platforms": null,
+  "compressed_bytes": null,
+  "image_error": "not read: registry rate limit (HTTP 429) or open error; the start check decides"
+ }
+]
