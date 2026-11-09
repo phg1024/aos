@@ -223,6 +223,21 @@ func (o outcome) recordedMatches() string {
 	return fmt.Sprintf("verdict artifact differs: %+v", *o.recorded)
 }
 
+// accepted decodes and validates raw, logging a refusal as a finding of
+// probe, which then has nothing to run.
+func accepted(t *testing.T, probe, raw string) (agentflow.WorkflowSpec, bool) {
+	t.Helper()
+	spec, err := agentflow.DecodeWorkflowSpec([]byte(raw))
+	if err == nil {
+		err = spec.Validate()
+	}
+	if err != nil {
+		finding(t, "%s the spec is refused before anything runs: %v", probe, err)
+		return spec, false
+	}
+	return spec, true
+}
+
 func decode(t *testing.T, raw string) agentflow.WorkflowSpec {
 	t.Helper()
 	spec, err := agentflow.DecodeWorkflowSpec([]byte(raw))

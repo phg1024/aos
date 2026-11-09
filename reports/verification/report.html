@@ -121,5 +121,39 @@
     <li>evidence that must be read in the verifier's own process and attached by its delegation;</li>
     <li>the contract's write-scope rule for verifiers.</li>
   </ul>
+  <h2>After the fixes</h2>
+  <p>The proposal's items 1–6 and 9 are now in place, with two parts of item 7. Item 7's separate verifier model, which needs per-agent models, and item 8, a declaration of which criteria workers are told, stay proposed. A frozen copy of the work for the verifier is not implemented either: the hash below makes any later change visible, and gate checks run against the work the hash bound. <code>probe-output-after-fixes.txt</code> is the run after the fixes. It has two new probes, V4c and V5c, which use fields <code>v0.1.8</code> does not have, so they live in <code>bench/verify/gate_test.go</code>, which is left out of a run there. With the probe edit made for this run (a spec the contract refuses is now a finding, not a stop), <code>probe-output.txt</code> is reproduced unchanged at <code>v0.1.8</code>.</p>
+  <div class="scroll">
+  <table>
+    <tr><th>Probe</th><th>At v0.1.8</th><th>After the fixes</th></tr>
+    <tr><td>V1</td><td>A standing fail exited <code>retryable=true</code>, the verifier's own flag. The runtime's exit had an empty origin.</td><td>The fail stands with <code>retryable=false</code>. The step-limit exit records <code>origin=runtime</code>, and a root's records <code>origin=engine</code>.</td></tr>
+    <tr><td>V2</td><td>Confirmed.</td><td>Unchanged. A fail now also stands only while the work's hash is the one the verifier judged.</td></tr>
+    <tr><td>V3</td><td>An entry agent that rewrote the work after a pass: <b>pass</b>.</td><td><b>stale</b>: "the work changed after verifier … passed it (hash 21776dacc0b9 at its exit, 3d31330e0b7c now)", exit 1, retryable. The checked-in coordinators still write only their log and summary, which the hash leaves out.</td></tr>
+    <tr><td>V4, V4c</td><td>A planted test script passed a broken renderer.</td><td>V4 itself is unchanged: the checked-in workflow declares no gate check, and the verifier model still trusts the script. V4c adds a gate check, a comparison with a reference in the trusted CPU directory. The gate fails it: "gate check "compare" exited 1, want 0; verifier …'s pass does not stand", not retryable. The check ran confined, and its script's hash is in the verdict. The three workflows whose baseline the writer can write are now refused by the contract (below).</td></tr>
+    <tr><td>V5, V5c</td><td>Evidence from a writer-written script passed when read in full.</td><td>V5 is unchanged: <code>trusted_instrument</code> is opt-in. With it declared (V5c), the same record is <code>untrusted_instrument</code> and the verdict <b>unverified</b>. The same run with the script in the trusted CPU reference passes. The record now says what produced it: the run, its command, and a hash of each file the command named.</td></tr>
+    <tr><td>V6</td><td>A bare exit 0 passed in 9 of 10.</td><td>Unchanged for the checked-in workflows, which declare no checks. A workflow that declares checks no longer passes on a verifier's exit alone (V4c).</td></tr>
+    <tr><td>V7</td><td>Procedural mode wrote outside the output directory. The result did not say who verified.</td><td>The generated program runs confined: its write outside fails, and with it the run. The result records <code>WorkerModel</code>, <code>VerifierModel</code> and <code>VerifierSameAsWorker</code>. A best_effort rejection makes <code>aos run</code> exit 1.</td></tr>
+    <tr><td>V8</td><td>Confirmed.</td><td>Unchanged.</td></tr>
+    <tr><td>V9</td><td>Measured.</td><td>Unchanged; item 8 stays proposed.</td></tr>
+    <tr><td>V10</td><td>The tests ran in the agent's container, unstated.</td><td>Stated in <code>bench/harbor/aos_agent.py</code> and in the workflow's description.</td></tr>
+    <tr><td>V11</td><td><code>unconfined_run</code> wrote the state directory. The lead's goal was the verifier's task. best_effort with a fail exited 0.</td><td>A required gate with <code>unconfined_run</code> on any agent is refused before anything runs. The verifier is given the spec's task, or a default, with the lead's goal marked line by line as the lead's words; the probe's scripted verifier still obeys, which is why gate checks exist. best_effort with a fail exits 1.</td></tr>
+  </table>
+  </div>
+  <p><b>The checked-in workflows.</b> The nine whose verifier holds <code>run</code> now declare <code>verification.trusted</code>:</p>
+  <ul>
+    <li>the four IPC workflows and <code>rasterizer-bunny-metal</code>: the read-only CPU reference, and the CUDA toolchain where there is one;</li>
+    <li><code>pathtracer-bunny-metal</code>: the mesh and the verifier's own frozen baseline and scenes;</li>
+    <li><code>rasterizer-bunny</code>, <code>rasterizer-team</code> and <code>rasterizer-optimized-tail</code>: the baseline the writer builds in the workspace.</li>
+  </ul>
+  <p>Those last three are refused: "verification.trusted[0] …/baseline can be written by writer, benchmarker". They were not weakened to pass. They run again once their verifier keeps a baseline of its own, as the pathtracer's does. The other 11 of the 14 validate.</p>
+  <p>Two tests pin the files that the live IPC runs used, <code>rasterizer-bunny-cuda-ipc</code> and <code>rasterizer-bunny-cuda-handles-ipc</code>, by hash. Those pins now name the new files, and the old hashes are kept in the tests' comments. The added declaration changes nothing a process can do.</p>
+  <p><b>Replay.</b> The change is versioned in four <code>run.started</code> fields:</p>
+  <ul>
+    <li><code>spec_contract</code> <code>v2</code>;</li>
+    <li><code>verdict_rules</code>;</li>
+    <li><code>exit_origin</code>;</li>
+    <li><code>publish_provenance</code>.</li>
+  </ul>
+  <p>A record without them replays under the old rules. Two runs recorded by <code>v0.1.8</code>'s own test harness replay identically under the new <code>aos replay</code>, which notes the older rules it applied. One run publishes a file a <code>run</code> wrote; the other ends at the step limit. The same two runs recorded now carry the new fields and also replay identically. Replay refuses runs with more than one agent process, so no verification gate is ever replayed.</p>
 </body>
 </html>

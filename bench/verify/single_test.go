@@ -274,7 +274,10 @@ func TestV11UnconfinedAgentAndTheRecords(t *testing.T) {
 	  "delegable":{"tools":["run","read_file"],"write_paths":["WORK"],"read_paths":["WORK"],"unconfined_run":true}},
 	 {"id":"solver","system_prompt":"Solve.","mounts":[{"name":"work","host_path":"WORK"}],"capabilities":{"tools":["run"],"write_paths":["WORK"],"read_paths":["WORK"],"unconfined_run":true}},
 	 {"id":"verifier","system_prompt":"Check.","mounts":[{"name":"work","host_path":"WORK","read_only":true}],"capabilities":{"tools":["read_file"],"read_paths":["WORK"]}}]}`, "WORK", work)
-	spec := decode(t, raw)
+	spec, ok := accepted(t, "V11 a solver with unconfined_run under a required gate:", raw)
+	if !ok {
+		return
+	}
 	var saw string
 	o := run(t, w, spec, func(w *world, agent string, _ int, step int, req runtime.GenerateRequest) runtime.GenerateResult {
 		switch agent {
