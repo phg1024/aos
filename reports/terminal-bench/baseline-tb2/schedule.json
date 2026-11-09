@@ -1,0 +1,700 @@
+{
+ "seed": 20261110,
+ "tasks": [
+  "mailman",
+  "feal-linear-cryptanalysis",
+  "make-doom-for-mips",
+  "distribution-search",
+  "headless-terminal",
+  "winning-avg-corewars",
+  "prove-plus-comm",
+  "polyglot-c-py",
+  "vulnerable-secret",
+  "protein-assembly",
+  "gpt2-codegolf",
+  "log-summary-date-ranges",
+  "break-filter-js-from-html",
+  "fix-git",
+  "regex-log",
+  "adaptive-rejection-sampler"
+ ],
+ "arms": [
+  "aos",
+  "terminus-2"
+ ],
+ "rounds": 3,
+ "trials": [
+  {
+   "seq": 1,
+   "round": 1,
+   "task": "regex-log",
+   "arm": "aos",
+   "job": "tb2-base-001-regex-log-aos"
+  },
+  {
+   "seq": 2,
+   "round": 1,
+   "task": "regex-log",
+   "arm": "terminus-2",
+   "job": "tb2-base-002-regex-log-terminus-2"
+  },
+  {
+   "seq": 3,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "job": "tb2-base-003-polyglot-c-py-terminus-2"
+  },
+  {
+   "seq": 4,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "job": "tb2-base-004-polyglot-c-py-aos"
+  },
+  {
+   "seq": 5,
+   "round": 1,
+   "task": "mailman",
+   "arm": "aos",
+   "job": "tb2-base-005-mailman-aos"
+  },
+  {
+   "seq": 6,
+   "round": 1,
+   "task": "mailman",
+   "arm": "terminus-2",
+   "job": "tb2-base-006-mailman-terminus-2"
+  },
+  {
+   "seq": 7,
+   "round": 1,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "terminus-2",
+   "job": "tb2-base-007-feal-linear-cryptanalysis-terminus-2"
+  },
+  {
+   "seq": 8,
+   "round": 1,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "aos",
+   "job": "tb2-base-008-feal-linear-cryptanalysis-aos"
+  },
+  {
+   "seq": 9,
+   "round": 1,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "job": "tb2-base-009-make-doom-for-mips-aos"
+  },
+  {
+   "seq": 10,
+   "round": 1,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "job": "tb2-base-010-make-doom-for-mips-terminus-2"
+  },
+  {
+   "seq": 11,
+   "round": 1,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "job": "tb2-base-011-adaptive-rejection-sampler-terminus-2"
+  },
+  {
+   "seq": 12,
+   "round": 1,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "job": "tb2-base-012-adaptive-rejection-sampler-aos"
+  },
+  {
+   "seq": 13,
+   "round": 1,
+   "task": "headless-terminal",
+   "arm": "aos",
+   "job": "tb2-base-013-headless-terminal-aos"
+  },
+  {
+   "seq": 14,
+   "round": 1,
+   "task": "headless-terminal",
+   "arm": "terminus-2",
+   "job": "tb2-base-014-headless-terminal-terminus-2"
+  },
+  {
+   "seq": 15,
+   "round": 1,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "job": "tb2-base-015-protein-assembly-terminus-2"
+  },
+  {
+   "seq": 16,
+   "round": 1,
+   "task": "protein-assembly",
+   "arm": "aos",
+   "job": "tb2-base-016-protein-assembly-aos"
+  },
+  {
+   "seq": 17,
+   "round": 1,
+   "task": "break-filter-js-from-html",
+   "arm": "aos",
+   "job": "tb2-base-017-break-filter-js-from-html-aos"
+  },
+  {
+   "seq": 18,
+   "round": 1,
+   "task": "break-filter-js-from-html",
+   "arm": "terminus-2",
+   "job": "tb2-base-018-break-filter-js-from-html-terminus-2"
+  },
+  {
+   "seq": 19,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "terminus-2",
+   "job": "tb2-base-019-prove-plus-comm-terminus-2"
+  },
+  {
+   "seq": 20,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "aos",
+   "job": "tb2-base-020-prove-plus-comm-aos"
+  },
+  {
+   "seq": 21,
+   "round": 1,
+   "task": "log-summary-date-ranges",
+   "arm": "aos",
+   "job": "tb2-base-021-log-summary-date-ranges-aos"
+  },
+  {
+   "seq": 22,
+   "round": 1,
+   "task": "log-summary-date-ranges",
+   "arm": "terminus-2",
+   "job": "tb2-base-022-log-summary-date-ranges-terminus-2"
+  },
+  {
+   "seq": 23,
+   "round": 1,
+   "task": "distribution-search",
+   "arm": "terminus-2",
+   "job": "tb2-base-023-distribution-search-terminus-2"
+  },
+  {
+   "seq": 24,
+   "round": 1,
+   "task": "distribution-search",
+   "arm": "aos",
+   "job": "tb2-base-024-distribution-search-aos"
+  },
+  {
+   "seq": 25,
+   "round": 1,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "job": "tb2-base-025-gpt2-codegolf-aos"
+  },
+  {
+   "seq": 26,
+   "round": 1,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "job": "tb2-base-026-gpt2-codegolf-terminus-2"
+  },
+  {
+   "seq": 27,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "terminus-2",
+   "job": "tb2-base-027-fix-git-terminus-2"
+  },
+  {
+   "seq": 28,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "aos",
+   "job": "tb2-base-028-fix-git-aos"
+  },
+  {
+   "seq": 29,
+   "round": 1,
+   "task": "winning-avg-corewars",
+   "arm": "aos",
+   "job": "tb2-base-029-winning-avg-corewars-aos"
+  },
+  {
+   "seq": 30,
+   "round": 1,
+   "task": "winning-avg-corewars",
+   "arm": "terminus-2",
+   "job": "tb2-base-030-winning-avg-corewars-terminus-2"
+  },
+  {
+   "seq": 31,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "terminus-2",
+   "job": "tb2-base-031-vulnerable-secret-terminus-2"
+  },
+  {
+   "seq": 32,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "aos",
+   "job": "tb2-base-032-vulnerable-secret-aos"
+  },
+  {
+   "seq": 33,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "terminus-2",
+   "job": "tb2-base-033-fix-git-terminus-2"
+  },
+  {
+   "seq": 34,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "aos",
+   "job": "tb2-base-034-fix-git-aos"
+  },
+  {
+   "seq": 35,
+   "round": 2,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "job": "tb2-base-035-adaptive-rejection-sampler-aos"
+  },
+  {
+   "seq": 36,
+   "round": 2,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "job": "tb2-base-036-adaptive-rejection-sampler-terminus-2"
+  },
+  {
+   "seq": 37,
+   "round": 2,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "job": "tb2-base-037-gpt2-codegolf-terminus-2"
+  },
+  {
+   "seq": 38,
+   "round": 2,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "job": "tb2-base-038-gpt2-codegolf-aos"
+  },
+  {
+   "seq": 39,
+   "round": 2,
+   "task": "protein-assembly",
+   "arm": "aos",
+   "job": "tb2-base-039-protein-assembly-aos"
+  },
+  {
+   "seq": 40,
+   "round": 2,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "job": "tb2-base-040-protein-assembly-terminus-2"
+  },
+  {
+   "seq": 41,
+   "round": 2,
+   "task": "regex-log",
+   "arm": "terminus-2",
+   "job": "tb2-base-041-regex-log-terminus-2"
+  },
+  {
+   "seq": 42,
+   "round": 2,
+   "task": "regex-log",
+   "arm": "aos",
+   "job": "tb2-base-042-regex-log-aos"
+  },
+  {
+   "seq": 43,
+   "round": 2,
+   "task": "distribution-search",
+   "arm": "aos",
+   "job": "tb2-base-043-distribution-search-aos"
+  },
+  {
+   "seq": 44,
+   "round": 2,
+   "task": "distribution-search",
+   "arm": "terminus-2",
+   "job": "tb2-base-044-distribution-search-terminus-2"
+  },
+  {
+   "seq": 45,
+   "round": 2,
+   "task": "log-summary-date-ranges",
+   "arm": "terminus-2",
+   "job": "tb2-base-045-log-summary-date-ranges-terminus-2"
+  },
+  {
+   "seq": 46,
+   "round": 2,
+   "task": "log-summary-date-ranges",
+   "arm": "aos",
+   "job": "tb2-base-046-log-summary-date-ranges-aos"
+  },
+  {
+   "seq": 47,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "job": "tb2-base-047-polyglot-c-py-aos"
+  },
+  {
+   "seq": 48,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "job": "tb2-base-048-polyglot-c-py-terminus-2"
+  },
+  {
+   "seq": 49,
+   "round": 2,
+   "task": "break-filter-js-from-html",
+   "arm": "terminus-2",
+   "job": "tb2-base-049-break-filter-js-from-html-terminus-2"
+  },
+  {
+   "seq": 50,
+   "round": 2,
+   "task": "break-filter-js-from-html",
+   "arm": "aos",
+   "job": "tb2-base-050-break-filter-js-from-html-aos"
+  },
+  {
+   "seq": 51,
+   "round": 2,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "job": "tb2-base-051-make-doom-for-mips-aos"
+  },
+  {
+   "seq": 52,
+   "round": 2,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "job": "tb2-base-052-make-doom-for-mips-terminus-2"
+  },
+  {
+   "seq": 53,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "terminus-2",
+   "job": "tb2-base-053-vulnerable-secret-terminus-2"
+  },
+  {
+   "seq": 54,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "aos",
+   "job": "tb2-base-054-vulnerable-secret-aos"
+  },
+  {
+   "seq": 55,
+   "round": 2,
+   "task": "winning-avg-corewars",
+   "arm": "aos",
+   "job": "tb2-base-055-winning-avg-corewars-aos"
+  },
+  {
+   "seq": 56,
+   "round": 2,
+   "task": "winning-avg-corewars",
+   "arm": "terminus-2",
+   "job": "tb2-base-056-winning-avg-corewars-terminus-2"
+  },
+  {
+   "seq": 57,
+   "round": 2,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "terminus-2",
+   "job": "tb2-base-057-feal-linear-cryptanalysis-terminus-2"
+  },
+  {
+   "seq": 58,
+   "round": 2,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "aos",
+   "job": "tb2-base-058-feal-linear-cryptanalysis-aos"
+  },
+  {
+   "seq": 59,
+   "round": 2,
+   "task": "mailman",
+   "arm": "aos",
+   "job": "tb2-base-059-mailman-aos"
+  },
+  {
+   "seq": 60,
+   "round": 2,
+   "task": "mailman",
+   "arm": "terminus-2",
+   "job": "tb2-base-060-mailman-terminus-2"
+  },
+  {
+   "seq": 61,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "terminus-2",
+   "job": "tb2-base-061-prove-plus-comm-terminus-2"
+  },
+  {
+   "seq": 62,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "aos",
+   "job": "tb2-base-062-prove-plus-comm-aos"
+  },
+  {
+   "seq": 63,
+   "round": 2,
+   "task": "headless-terminal",
+   "arm": "aos",
+   "job": "tb2-base-063-headless-terminal-aos"
+  },
+  {
+   "seq": 64,
+   "round": 2,
+   "task": "headless-terminal",
+   "arm": "terminus-2",
+   "job": "tb2-base-064-headless-terminal-terminus-2"
+  },
+  {
+   "seq": 65,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "aos",
+   "job": "tb2-base-065-prove-plus-comm-aos"
+  },
+  {
+   "seq": 66,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "terminus-2",
+   "job": "tb2-base-066-prove-plus-comm-terminus-2"
+  },
+  {
+   "seq": 67,
+   "round": 3,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "terminus-2",
+   "job": "tb2-base-067-feal-linear-cryptanalysis-terminus-2"
+  },
+  {
+   "seq": 68,
+   "round": 3,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "aos",
+   "job": "tb2-base-068-feal-linear-cryptanalysis-aos"
+  },
+  {
+   "seq": 69,
+   "round": 3,
+   "task": "protein-assembly",
+   "arm": "aos",
+   "job": "tb2-base-069-protein-assembly-aos"
+  },
+  {
+   "seq": 70,
+   "round": 3,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "job": "tb2-base-070-protein-assembly-terminus-2"
+  },
+  {
+   "seq": 71,
+   "round": 3,
+   "task": "headless-terminal",
+   "arm": "terminus-2",
+   "job": "tb2-base-071-headless-terminal-terminus-2"
+  },
+  {
+   "seq": 72,
+   "round": 3,
+   "task": "headless-terminal",
+   "arm": "aos",
+   "job": "tb2-base-072-headless-terminal-aos"
+  },
+  {
+   "seq": 73,
+   "round": 3,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "job": "tb2-base-073-make-doom-for-mips-aos"
+  },
+  {
+   "seq": 74,
+   "round": 3,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "job": "tb2-base-074-make-doom-for-mips-terminus-2"
+  },
+  {
+   "seq": 75,
+   "round": 3,
+   "task": "mailman",
+   "arm": "terminus-2",
+   "job": "tb2-base-075-mailman-terminus-2"
+  },
+  {
+   "seq": 76,
+   "round": 3,
+   "task": "mailman",
+   "arm": "aos",
+   "job": "tb2-base-076-mailman-aos"
+  },
+  {
+   "seq": 77,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "aos",
+   "job": "tb2-base-077-fix-git-aos"
+  },
+  {
+   "seq": 78,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "terminus-2",
+   "job": "tb2-base-078-fix-git-terminus-2"
+  },
+  {
+   "seq": 79,
+   "round": 3,
+   "task": "break-filter-js-from-html",
+   "arm": "terminus-2",
+   "job": "tb2-base-079-break-filter-js-from-html-terminus-2"
+  },
+  {
+   "seq": 80,
+   "round": 3,
+   "task": "break-filter-js-from-html",
+   "arm": "aos",
+   "job": "tb2-base-080-break-filter-js-from-html-aos"
+  },
+  {
+   "seq": 81,
+   "round": 3,
+   "task": "log-summary-date-ranges",
+   "arm": "aos",
+   "job": "tb2-base-081-log-summary-date-ranges-aos"
+  },
+  {
+   "seq": 82,
+   "round": 3,
+   "task": "log-summary-date-ranges",
+   "arm": "terminus-2",
+   "job": "tb2-base-082-log-summary-date-ranges-terminus-2"
+  },
+  {
+   "seq": 83,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "terminus-2",
+   "job": "tb2-base-083-vulnerable-secret-terminus-2"
+  },
+  {
+   "seq": 84,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "aos",
+   "job": "tb2-base-084-vulnerable-secret-aos"
+  },
+  {
+   "seq": 85,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "job": "tb2-base-085-polyglot-c-py-aos"
+  },
+  {
+   "seq": 86,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "job": "tb2-base-086-polyglot-c-py-terminus-2"
+  },
+  {
+   "seq": 87,
+   "round": 3,
+   "task": "winning-avg-corewars",
+   "arm": "terminus-2",
+   "job": "tb2-base-087-winning-avg-corewars-terminus-2"
+  },
+  {
+   "seq": 88,
+   "round": 3,
+   "task": "winning-avg-corewars",
+   "arm": "aos",
+   "job": "tb2-base-088-winning-avg-corewars-aos"
+  },
+  {
+   "seq": 89,
+   "round": 3,
+   "task": "distribution-search",
+   "arm": "aos",
+   "job": "tb2-base-089-distribution-search-aos"
+  },
+  {
+   "seq": 90,
+   "round": 3,
+   "task": "distribution-search",
+   "arm": "terminus-2",
+   "job": "tb2-base-090-distribution-search-terminus-2"
+  },
+  {
+   "seq": 91,
+   "round": 3,
+   "task": "regex-log",
+   "arm": "terminus-2",
+   "job": "tb2-base-091-regex-log-terminus-2"
+  },
+  {
+   "seq": 92,
+   "round": 3,
+   "task": "regex-log",
+   "arm": "aos",
+   "job": "tb2-base-092-regex-log-aos"
+  },
+  {
+   "seq": 93,
+   "round": 3,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "job": "tb2-base-093-adaptive-rejection-sampler-aos"
+  },
+  {
+   "seq": 94,
+   "round": 3,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "job": "tb2-base-094-adaptive-rejection-sampler-terminus-2"
+  },
+  {
+   "seq": 95,
+   "round": 3,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "job": "tb2-base-095-gpt2-codegolf-terminus-2"
+  },
+  {
+   "seq": 96,
+   "round": 3,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "job": "tb2-base-096-gpt2-codegolf-aos"
+  }
+ ]
+}

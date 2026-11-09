@@ -327,8 +327,7 @@ will usually not be significant.
 
 ## Estimate
 
-Filled in from the draw (see "Draw"), using the drawn tasks' agent
-timeouts.
+See "Estimate, from the draw" below.
 
 ## Stop rule
 
@@ -375,7 +374,60 @@ records derived from them are committed.
 
 ## Draw
 
-To be filled in after the start check, in the commit that adds
-`drawn.json`.
+Done on 2026-11-09, 15:08–15:09 PST.
+
+**Start check.** Every candidate image passed `startcheck.sh` (`uname -m`
+printed `x86_64`). The first attempt at 14:57 hit the registry rate limit,
+and the script waited and tried again. No task was skipped for Rosetta.
+
+**The 16 tasks**, in draw order, with their agent timeouts:
+
+| # | Task | Agent timeout | Pilot task |
+|---|---|---|---|
+| 1 | mailman | 1800 s | |
+| 2 | feal-linear-cryptanalysis | 1800 s | |
+| 3 | make-doom-for-mips | 900 s | |
+| 4 | distribution-search | 3600 s | |
+| 5 | headless-terminal | 900 s | |
+| 6 | winning-avg-corewars | 3600 s | |
+| 7 | prove-plus-comm | 900 s | yes |
+| 8 | polyglot-c-py | 900 s | yes |
+| 9 | vulnerable-secret | 900 s | yes |
+| 10 | protein-assembly | 1800 s | |
+| 11 | gpt2-codegolf | 900 s | |
+| 12 | log-summary-date-ranges | 900 s | |
+| 13 | break-filter-js-from-html | 1200 s | |
+| 14 | fix-git | 900 s | yes |
+| 15 | regex-log | 900 s | |
+| 16 | adaptive-rejection-sampler | 900 s | |
+
+Four of the 16 are pilot tasks, against an expected 16 × 8/85 ≈ 1.5. They
+are kept, as the sampling rule says.
+
+**Smoke task:** git-leak-recovery. It is the 17th in the order, with an
+agent timeout of 900 s and an expert estimate of 30 min.
+
+**Schedule.** `schedule.json` (seed 20261110) has 96 trials, with `aos`
+first in 24 of the 48 task pairs.
+
+## Estimate, from the draw
+
+Each arm-round's agent timeouts sum to 22,800 s: 10 tasks at 900 s, 1 at
+1200 s, 3 at 1800 s and 2 at 3600 s.
+
+- **Upper bound.** Every trial runs to its timeout: 6 × 22,800 s = 38.0 h.
+  Adding about 90 s per trial for setup and the verifier (2.4 h) gives
+  about **40 h**.
+- **Expected.** About **27 h**.
+  - Trials that fail tend to run to the deadline (both rerun failures did),
+    and TB2's random tasks are harder than the pilot's.
+  - So trials are taken to use about 65% of their timeout on average:
+    0.65 × 38 h ≈ 25 h.
+  - Overhead adds 2.4 h.
+- **Daily window.** Each morning, a trial that could still be running at
+  08:55 is held until 09:10. This costs at most about 1.4 h a day, on the
+  3600 s tasks.
+- **Timing check.** If round 1 (32 trials) takes more than 15 h, the
+  projection is sent to aos book, and the run continues.
 
 ## Amendments

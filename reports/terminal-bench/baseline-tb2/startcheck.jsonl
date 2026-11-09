@@ -1,0 +1,16 @@
+{"task": "mailman", "image": "alexgshaw/mailman:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 420732633, "checked_at": "2026-11-09T23:08:08Z"}
+{"task": "feal-linear-cryptanalysis", "image": "alexgshaw/feal-linear-cryptanalysis:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 395026610, "checked_at": "2026-11-09T23:08:12Z"}
+{"task": "make-doom-for-mips", "image": "alexgshaw/make-doom-for-mips:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 464797485, "checked_at": "2026-11-09T23:08:17Z"}
+{"task": "distribution-search", "image": "alexgshaw/distribution-search:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 411575575, "checked_at": "2026-11-09T23:08:21Z"}
+{"task": "headless-terminal", "image": "alexgshaw/headless-terminal:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 147752147, "checked_at": "2026-11-09T23:08:23Z"}
+{"task": "winning-avg-corewars", "image": "alexgshaw/winning-avg-corewars:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 709133216, "checked_at": "2026-11-09T23:08:31Z"}
+{"task": "prove-plus-comm", "image": "alexgshaw/prove-plus-comm:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 1288503262, "checked_at": "2026-11-09T23:08:32Z"}
+{"task": "polyglot-c-py", "image": "alexgshaw/polyglot-c-py:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 340877587, "checked_at": "2026-11-09T23:08:33Z"}
+{"task": "vulnerable-secret", "image": "alexgshaw/vulnerable-secret:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 372395519, "checked_at": "2026-11-09T23:08:34Z"}
+{"task": "protein-assembly", "image": "alexgshaw/protein-assembly:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 120338506, "checked_at": "2026-11-09T23:08:35Z"}
+{"task": "gpt2-codegolf", "image": "alexgshaw/gpt2-codegolf:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 846846058, "checked_at": "2026-11-09T23:08:44Z"}
+{"task": "log-summary-date-ranges", "image": "alexgshaw/log-summary-date-ranges:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 126326843, "checked_at": "2026-11-09T23:08:45Z"}
+{"task": "break-filter-js-from-html", "image": "alexgshaw/break-filter-js-from-html:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 1037400001, "checked_at": "2026-11-09T23:08:55Z"}
+{"task": "fix-git", "image": "alexgshaw/fix-git:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 310226371, "checked_at": "2026-11-09T23:08:56Z"}
+{"task": "regex-log", "image": "alexgshaw/regex-log:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 78122856, "checked_at": "2026-11-09T23:08:57Z"}
+{"task": "adaptive-rejection-sampler", "image": "alexgshaw/adaptive-rejection-sampler:20251031", "passed": true, "detail": "uname -m: x86_64", "image_bytes": 78128408, "checked_at": "2026-11-09T23:08:58Z"}

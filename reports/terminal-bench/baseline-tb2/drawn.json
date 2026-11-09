@@ -1,0 +1,23 @@
+{
+ "seed": 20261109,
+ "drawn": [
+  "mailman",
+  "feal-linear-cryptanalysis",
+  "make-doom-for-mips",
+  "distribution-search",
+  "headless-terminal",
+  "winning-avg-corewars",
+  "prove-plus-comm",
+  "polyglot-c-py",
+  "vulnerable-secret",
+  "protein-assembly",
+  "gpt2-codegolf",
+  "log-summary-date-ranges",
+  "break-filter-js-from-html",
+  "fix-git",
+  "regex-log",
+  "adaptive-rejection-sampler"
+ ],
+ "skipped_for_rosetta": [],
+ "smoke_task": "git-leak-recovery"
+}

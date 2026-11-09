@@ -2,17 +2,21 @@
 
   python3 -I draw.py eligible        # survey.json -> eligible.json (the filter)
   python3 -I draw.py order           # the seeded candidate order, one task per line
-  python3 -I draw.py draw            # eligible.json + startcheck.jsonl -> drawn.json
+  python3 -I draw.py draw DATASET    # eligible.json + startcheck.jsonl -> drawn.json
 
 The filter reads survey.json (survey.py's output). The draw shuffles the
 sorted eligible list with SEED and walks it in that order; a candidate is
 taken if its image passed the start check (startcheck.sh), and skipped,
-with the reason kept, if it failed. It stops at 16.
+with the reason kept, if it failed. It stops at 16. It then names the
+smoke task: the first task after the drawn ones, in the same order, whose
+agent timeout is 900 s and whose expert_time_estimate_min is 30 or less,
+read from the downloaded dataset's task.toml files.
 """
 
 import json
 import os
 import random
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,7 +61,17 @@ def order():
     return tasks
 
 
-def draw():
+def smoke_task(after, dataset):
+    survey = {t["task"]: t for t in json.load(open(os.path.join(HERE, "survey.json")))}
+    for task in after:
+        toml = open(os.path.join(dataset, task, "task.toml")).read()
+        m = re.search(r"^expert_time_estimate_min\s*=\s*([\d.]+)", toml, re.M)
+        if survey[task]["agent_timeout_s"] == 900 and m and float(m.group(1)) <= 30:
+            return task
+    return None
+
+
+def draw(dataset):
     checks = {}
     for line in open(os.path.join(HERE, "startcheck.jsonl")):
         row = json.loads(line)
@@ -72,7 +86,9 @@ def draw():
             drawn.append(task)
         else:
             skipped.append({"task": task, "reason": checks[task]["detail"]})
-    return {"seed": SEED, "drawn": drawn, "skipped_for_rosetta": skipped}
+    rest = order()
+    rest = rest[rest.index(drawn[-1]) + 1:]
+    return {"seed": SEED, "drawn": drawn, "skipped_for_rosetta": skipped, "smoke_task": smoke_task(rest, dataset)}
 
 
 if __name__ == "__main__":
@@ -82,6 +98,6 @@ if __name__ == "__main__":
     elif what == "order":
         print("\n".join(order()))
     elif what == "draw":
-        print(json.dumps(draw(), indent=1))
+        print(json.dumps(draw(sys.argv[2]), indent=1))
     else:
         sys.exit(__doc__)
