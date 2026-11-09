@@ -41,7 +41,7 @@ func TestCheckedInWorkflowsValidate(t *testing.T) {
 		if err := json.Unmarshal(raw, &spec); err != nil {
 			t.Fatalf("parse %s: %v", path, err)
 		}
-		if err := spec.Validate(); err != nil {
+		if err := spec.Validate(); err != nil && !refusedByTrust[filepath.Base(path)] {
 			t.Fatalf("%s does not validate: %v", path, err)
 		}
 		policy, _ := spec.VerificationPolicy()

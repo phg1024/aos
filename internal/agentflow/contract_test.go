@@ -17,7 +17,14 @@ import (
 	"aos/internal/tools"
 )
 
-// The checked-in workflows decode strictly and meet the spec contract.
+// refusedByTrust are the checked-in workflows whose verifier compares
+// against a baseline the writer and benchmarker write. Their trusted paths
+// say so, and spec contract v2 refuses them until the verifier keeps a
+// baseline of its own, as pathtracer-bunny-metal's does.
+var refusedByTrust = map[string]bool{"rasterizer-bunny.json": true, "rasterizer-team.json": true, "rasterizer-optimized-tail.json": true}
+
+// The checked-in workflows decode strictly and meet the spec contract, but
+// the three refusedByTrust, which v2 refuses for their baseline.
 func TestCheckedInWorkflowsMeetTheContract(t *testing.T) {
 	paths, _ := filepath.Glob("../../workflows/*.json")
 	if len(paths) < 14 {
@@ -32,8 +39,16 @@ func TestCheckedInWorkflowsMeetTheContract(t *testing.T) {
 		if err == nil {
 			err = spec.Validate()
 		}
-		if err != nil {
-			t.Errorf("%s: %v", filepath.Base(path), err)
+		switch name := filepath.Base(path); {
+		case refusedByTrust[name]:
+			if err == nil || !strings.Contains(err.Error(), "can be written by writer, benchmarker: what the verifier trusts must be out of every other agent's write scope") {
+				t.Errorf("%s: %v", name, err)
+			}
+			if spec.ValidateContractV1() != nil {
+				t.Errorf("%s: spec contract v1 refuses it too", name)
+			}
+		case err != nil:
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 }
@@ -114,7 +129,10 @@ func TestValidateRefusesWhatTheContractForbids(t *testing.T) {
 	}
 	// A verifier with write paths of its own, apart from the work, may run
 	// and write there, as the rasterizer workflows' verifiers do.
-	ok, err := agentflow.DecodeWorkflowSpec([]byte(`{"name":"w","entry_agent":"lead",` + required("checker") + `"agents":[` + lead + `,` + writer + `,{"id":"checker","system_prompt":"C.","capabilities":{"tools":["run","write_file"],"write_paths":["/work-verification"]}}]}`))
+	// Under a required gate it names what it trusts, and no agent is
+	// unconfined.
+	confined := strings.Replace(lead, `,"unconfined_run":true`, "", 1)
+	ok, err := agentflow.DecodeWorkflowSpec([]byte(`{"name":"w","entry_agent":"lead","verification":{"policy":"required","verifier":"checker","trusted":["/reference"]},"agents":[` + confined + `,` + writer + `,{"id":"checker","system_prompt":"C.","capabilities":{"tools":["run","write_file"],"write_paths":["/work-verification"]}}]}`))
 	if err != nil || ok.Validate() != nil {
 		t.Fatalf("a verifier writing apart from the work: %v %v", err, ok.Validate())
 	}

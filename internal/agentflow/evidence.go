@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"aos/internal/artifact"
+	"aos/internal/capability"
 	"aos/internal/kernel"
 	"aos/internal/runtime"
 	"aos/internal/statedir"
@@ -28,6 +29,10 @@ const (
 	EvidenceUnread       = "unread"
 	EvidenceNotPublished = "not_published"
 	EvidenceNotFromFile  = "not_from_file"
+	// EvidenceUntrusted is a record declared trusted_instrument whose file no
+	// run of the publisher wrote, or whose run named a file a worker can
+	// write: the instrument is not one the verifier trusts.
+	EvidenceUntrusted = "untrusted_instrument"
 )
 
 // EvidenceCheck is one declared record at one moment: which artifact it resolved
@@ -37,6 +42,14 @@ type EvidenceCheck struct {
 	Type       string `json:"type"`
 	ArtifactID string `json:"artifact_id,omitempty"`
 	Status     string `json:"status"`
+	// ProducedBy, Command and Ran are what the record says produced its file
+	// (runtime.ProducedByMetadata); Untrusted the files it ran that are
+	// neither trusted nor outside every agent's mounts. Set for a record
+	// declared trusted_instrument.
+	ProducedBy string            `json:"produced_by,omitempty"`
+	Command    string            `json:"command,omitempty"`
+	Ran        map[string]string `json:"ran,omitempty"`
+	Untrusted  []string          `json:"untrusted,omitempty"`
 }
 
 // evidenceChecks resolves each declared record to the latest match under the
@@ -74,8 +87,11 @@ func (e *Engine) evidenceChecks(spec WorkflowSpec, verifierPID string) ([]Eviden
 		}
 		if latest != nil {
 			check.ArtifactID = latest.ID
-			if evidence.FromFile && !runtime.PublishedFromFile(*latest) {
+			trusted := evidence.TrustedInstrument && !e.NoVerdictRules
+			if (evidence.FromFile || trusted) && !runtime.PublishedFromFile(*latest) {
 				check.Status = EvidenceNotFromFile
+			} else if trusted && !spec.instrumentTrusted(*latest, &check) {
+				check.Status = EvidenceUntrusted
 			} else {
 				pages, err := e.readPages(records, chain, latest.ID)
 				if err != nil {
@@ -208,6 +224,12 @@ func unmetEvidence(checks []EvidenceCheck) string {
 			unmet = append(unmet, label+" was read only in part")
 		case EvidenceNotFromFile:
 			unmet = append(unmet, label+" is not from a file, and a file is required")
+		case EvidenceUntrusted:
+			if check.ProducedBy == runtime.ProducedByNone || check.ProducedBy == "" {
+				unmet = append(unmet, label+" was written by no run of its publisher, so no trusted instrument stands behind it")
+			} else {
+				unmet = append(unmet, fmt.Sprintf("%s was written by a run of %s that worker-writable files can shape (%s)", label, strings.Join(check.Untrusted, ", "), check.Command))
+			}
 		case EvidenceNotPublished:
 			unmet = append(unmet, fmt.Sprintf("%s has published no %s", check.Publisher, check.Type))
 		}
@@ -263,4 +285,36 @@ func evidencePrompt(spec WorkflowSpec, agentID string) string {
 		}
 	}
 	return out.String()
+}
+
+// instrumentTrusted reads what produced record's file into check, and
+// reports whether every file that run named is trusted or lies outside every
+// agent's mounts (a system tool).
+func (s WorkflowSpec) instrumentTrusted(record artifact.Artifact, check *EvidenceCheck) bool {
+	check.ProducedBy = record.Metadata[runtime.ProducedByMetadata]
+	check.Command = record.Metadata[runtime.ProducedByCommandMetadata]
+	check.Ran = runtime.ParseRan(record.Metadata[runtime.ProducedByRanMetadata])
+	if check.ProducedBy == "" || check.ProducedBy == runtime.ProducedByNone {
+		return false
+	}
+	var mounted []string
+	for _, agent := range s.Agents {
+		for _, mount := range agent.Mounts {
+			mounted = append(mounted, capability.ResolvePath(mount.HostPath))
+		}
+	}
+	for path := range check.Ran {
+		if s.isTrusted(path) {
+			continue
+		}
+		resolved := capability.ResolvePath(path)
+		for _, root := range mounted {
+			if pathsWithin(resolved, root) {
+				check.Untrusted = append(check.Untrusted, path)
+				break
+			}
+		}
+	}
+	slices.Sort(check.Untrusted)
+	return len(check.Untrusted) == 0
 }

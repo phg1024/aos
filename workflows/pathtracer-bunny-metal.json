@@ -4,7 +4,12 @@
   "entry_agent": "coordinator",
   "verification": {
     "policy": "required",
-    "verifier": "verifier"
+    "verifier": "verifier",
+    "trusted": [
+      "/Users/claw/Code/aos/reports/rasterizer-bunny/assets",
+      "/Users/claw/Code/aos/reports/pathtracer-bunny-metal-verification/baseline",
+      "/Users/claw/Code/aos/reports/pathtracer-bunny-metal-verification/scenes"
+    ]
   },
   "skill_roots": [
     "/Users/claw/Code/aos/skills"

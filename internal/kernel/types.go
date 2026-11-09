@@ -55,17 +55,26 @@ type ExitStatus struct {
 	Reason    string `json:"reason"`
 	Retryable bool   `json:"retryable"`
 	// Origin says who decided the exit: ExitOriginAgent for an agent's own
-	// exit action; empty for exits the runtime, engine or scheduler recorded
-	// (step limit, crash, cancel, errors). An agent cannot set it: the
-	// runtime overwrites it at the one place it executes exit actions.
+	// exit action, ExitOriginRuntime for one the agent runtime recorded (step
+	// limit, budget, crash, cancel, errors), ExitOriginEngine for a workflow
+	// root's. Empty is a record made before origins were named (run.started
+	// exit_origin), or an exit another caller recorded. An agent cannot set
+	// it: the runtime overwrites it at the one place it executes exit actions.
 	Origin string `json:"origin,omitempty"`
 	// Checkpoint is the process's latest checkpoint when it exited, if any:
 	// where a Recover would resume from.
 	Checkpoint string `json:"checkpoint,omitempty"`
 }
 
-// ExitOriginAgent marks an exit the agent chose itself.
-const ExitOriginAgent = "agent"
+// Exit origins.
+const (
+	// ExitOriginAgent marks an exit the agent chose itself.
+	ExitOriginAgent = "agent"
+	// ExitOriginRuntime marks an exit the agent runtime recorded.
+	ExitOriginRuntime = "runtime"
+	// ExitOriginEngine marks a workflow root's exit, which the engine records.
+	ExitOriginEngine = "engine"
+)
 
 type ProcessSpec struct {
 	ParentPID     string             `json:"parent_pid,omitempty"`

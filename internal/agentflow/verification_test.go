@@ -43,7 +43,7 @@ func TestRequiredVerificationPassesAfterWriter(t *testing.T) {
 		delegateAction("writer"), exitWith(0, "wrote", false),
 		delegateAction("verifier"), exitWith(0, "PASS", false),
 		exitWith(0, "done", false))
-	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 0, Reason: "workflow completed"}) {
+	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 0, Reason: "workflow completed", Origin: kernel.ExitOriginEngine}) {
 		t.Fatalf("root exit = %+v", status)
 	}
 	if summary.Verification == nil || summary.Verification.Status != agentflow.VerdictPass {
@@ -58,7 +58,7 @@ func TestRequiredVerificationFailsRootDespiteEntrySuccess(t *testing.T) {
 		exitWith(0, "all good", false))
 	status := f.rootStatus(t, summary)
 	verifierPID := summary.Verification.VerifierPID
-	want := kernel.ExitStatus{Code: 1, Reason: "verification required: verifier " + verifierPID + " failed: FAIL: 3 scenes differ"}
+	want := kernel.ExitStatus{Code: 1, Reason: "verification required: verifier " + verifierPID + " failed: FAIL: 3 scenes differ", Origin: kernel.ExitOriginEngine}
 	if status != want {
 		t.Fatalf("root exit = %+v, want %+v", status, want)
 	}
@@ -68,7 +68,7 @@ func TestRequiredVerificationWithoutVerifierRunFails(t *testing.T) {
 	f, summary := runGated(t, "required",
 		delegateAction("writer"), exitWith(0, "wrote", false),
 		exitWith(0, "done", false))
-	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 1, Reason: "verification required: no verifier run"}) {
+	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 1, Reason: "verification required: no verifier run", Origin: kernel.ExitOriginEngine}) {
 		t.Fatalf("root exit = %+v", status)
 	}
 	if summary.Verification.Status != agentflow.VerdictMissing || summary.Verification.VerifierExit != nil {
@@ -114,11 +114,16 @@ func TestEntryFailureTakesPrecedenceOverVerdict(t *testing.T) {
 	}
 }
 
+// Under the verdict rules a failed best_effort verdict fails the workflow
+// (TestBestEffortFailsOnAFailedVerdict); before them it was only recorded.
 func TestBestEffortVerificationRecordsFailureWithoutGating(t *testing.T) {
-	f, summary := runGated(t, "best_effort",
-		delegateAction("writer"), exitWith(0, "wrote", false),
-		delegateAction("verifier"), exitWith(1, "FAIL", false),
-		exitWith(0, "done", false))
+	f := newExitFixture(t, &sequenceCompleter{actions: []map[string]any{delegateAction("writer"), exitWith(0, "wrote", false),
+		delegateAction("verifier"), exitWith(1, "FAIL", false), exitWith(0, "done", false)}})
+	f.engine.NoVerdictRules = true
+	summary, err := f.engine.Run(context.Background(), gatedSpec("best_effort"), agentflow.RunRequest{Goal: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if status := f.rootStatus(t, summary); status.Code != 0 {
 		t.Fatalf("best_effort must not gate, got %+v", status)
 	}
@@ -255,7 +260,7 @@ func TestRuntimeVerifierFailureCanBeRetried(t *testing.T) {
 		t.Fatalf("a retry after a runtime-recorded failure should pass, got %+v %+v", status, summary.Verification)
 	}
 	first := summary.AgentRuns[0].Children[1]
-	if first.ExitStatus.Reason != "step limit exceeded" || first.ExitStatus.Origin != "" {
+	if first.ExitStatus.Reason != "step limit exceeded" || first.ExitStatus.Origin != kernel.ExitOriginRuntime {
 		t.Fatalf("the first verifier run should be a runtime step limit, got %+v", first.ExitStatus)
 	}
 }

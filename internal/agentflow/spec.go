@@ -43,6 +43,32 @@ type VerificationSpec struct {
 	Verifier string `json:"verifier,omitempty"`
 	// Evidence is what the verifier must have read for its exit 0 to be a pass.
 	Evidence []EvidenceSpec `json:"evidence,omitempty"`
+	// Task is the verifier's task, which the engine gives it at each
+	// delegation; the delegator's goal follows, marked as the delegator's
+	// words. Absent, the task is DefaultVerifierTask.
+	Task string `json:"task,omitempty"`
+	// Trusted are the paths the verifier measures with and against: its
+	// scripts, baselines and reference binaries. No other agent may be able
+	// to write one (spec contract v2). A verifier holding run under a
+	// required gate must name them.
+	Trusted []string `json:"trusted,omitempty"`
+	// Checks are commands the gate runs itself, after the verifier passes,
+	// in the verifier's confinement; each must exit as declared for the
+	// verdict to stay a pass.
+	Checks []CheckSpec `json:"checks,omitempty"`
+}
+
+// CheckSpec is one command the gate runs. Uses names the scripts and
+// binaries it runs, each inside a trusted path; the verdict records a
+// SHA-256 of each, the command's exit code and a SHA-256 of its output.
+type CheckSpec struct {
+	Name    string   `json:"name"`
+	Command string   `json:"command"`
+	Uses    []string `json:"uses"`
+	// ExitCode is the exit the check must give; absent, 0.
+	ExitCode int `json:"exit_code,omitempty"`
+	// Timeout bounds the command, as run's timeout arg; absent, 60s.
+	Timeout string `json:"timeout,omitempty"`
 }
 
 // EvidenceSpec declares one record a verifier must read. Its artifact ID is not
@@ -54,6 +80,11 @@ type EvidenceSpec struct {
 	// FromFile requires the record to be a file's bytes (publish_artifact's path)
 	// and not text a model typed.
 	FromFile bool `json:"from_file,omitempty"`
+	// TrustedInstrument requires the file to have been written by a run of
+	// the publisher whose every named file lies in a trusted path or outside
+	// every agent's mounts (a system tool): not a script a worker can write.
+	// It implies FromFile.
+	TrustedInstrument bool `json:"trusted_instrument,omitempty"`
 }
 
 type AgentSpec struct {
@@ -82,7 +113,16 @@ func (s WorkflowSpec) Validate() error {
 	if err := s.ValidateWithoutContract(); err != nil {
 		return err
 	}
-	return s.validateContract()
+	return s.validateContract(SpecContractVersion)
+}
+
+// ValidateContractV1 checks the spec as spec contract v1 did, before the
+// verification rules of v2, for replaying a record made under v1.
+func (s WorkflowSpec) ValidateContractV1() error {
+	if err := s.ValidateWithoutContract(); err != nil {
+		return err
+	}
+	return s.validateContract(1)
 }
 
 // ValidateWithoutContract checks the spec as AOS did before the spec

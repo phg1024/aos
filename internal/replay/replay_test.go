@@ -1578,7 +1578,7 @@ func TestReplayOfASpecFromBeforeTheContract(t *testing.T) {
 		t.Fatalf("legacy: %+v, %+v", report, report.Divergence)
 	}
 	current := recordAt(t, newRoot(t), context.Background(), script, options{delegator: true})
-	if data := runStartedData(t, current); data[agentflow.SpecContractField] != agentflow.SpecContractV1 {
+	if data := runStartedData(t, current); data[agentflow.SpecContractField] != agentflow.SpecContractV2 {
 		t.Fatalf("run.started %v", data)
 	}
 	if report := replayed(t, current, false); !report.Identical() || report.LegacySpecContract {

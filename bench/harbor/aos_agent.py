@@ -7,6 +7,13 @@ environment directly. The model endpoint comes from the AOS_LLM_* variables of
 the host process; a loopback base URL is rewritten to host.docker.internal so
 the container can reach a server on the host.
 
+Where the grade comes from: Harbor uploads a task's hidden tests to /tests
+only after the agent exits, so the agent never sees them. By default it then
+runs them in the agent's own container, which the AOS solver could write as
+root (the workflow mounts / writable with unconfined_run); a separate
+verifier environment is opt-in, per task. The tests are independent of the
+agent's work only as far as the task image keeps them so.
+
 Use with:
     harbor run --agent-import-path aos_agent:AOSAgent ...
 with this directory on PYTHONPATH (run-tb.sh does both).

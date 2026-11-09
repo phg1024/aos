@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,6 +26,9 @@ type AssembleRequest struct {
 	OutputPath string
 	// Verification defaults to workflow.VerificationNone.
 	Verification workflow.VerificationPolicy
+	// Model names the completer's model, for the result's record of who
+	// verified; empty when the caller does not know it.
+	Model string
 }
 
 type AssembleResult struct {
@@ -38,6 +40,13 @@ type AssembleResult struct {
 	SourceCount        int
 	Mode               string
 	ScriptPath         string
+	// WorkerModel and VerifierModel are the models of the two calls, and
+	// VerifierSameAsWorker says the verifier was the worker's own completer:
+	// a fresh call to the same model, not an independent judge. AssembleFiles
+	// takes one completer, so it always is; the result says so.
+	WorkerModel          string
+	VerifierModel        string `json:",omitempty"`
+	VerifierSameAsWorker bool
 }
 
 type workerResponse struct {
@@ -121,7 +130,7 @@ func assembleFilesSynthesis(ctx context.Context, completer JSONCompleter, req As
 		return AssembleResult{}, err
 	}
 
-	return AssembleResult{
+	return withVerifier(AssembleResult{
 		OutputPath:         req.OutputPath,
 		Verification:       req.Verification,
 		Approved:           verifierOut.Approved,
@@ -129,7 +138,7 @@ func assembleFilesSynthesis(ctx context.Context, completer JSONCompleter, req As
 		OutputBytes:        len(workerOut.Content),
 		SourceCount:        len(req.InputPaths),
 		Mode:               "synthesis",
-	}, nil
+	}, req), nil
 }
 
 func assembleFilesProcedural(ctx context.Context, completer JSONCompleter, req AssembleRequest) (AssembleResult, error) {
@@ -159,12 +168,29 @@ func assembleFilesProcedural(ctx context.Context, completer JSONCompleter, req A
 		return AssembleResult{}, err
 	}
 
-	cmdArgs := append([]string{scriptPath}, req.InputPaths...)
-	cmdArgs = append(cmdArgs, "--output", req.OutputPath)
-	command := exec.CommandContext(ctx, "python3", cmdArgs...)
-	output, err := command.CombinedOutput()
+	// The program is a model's, so it runs as run runs: confined to reading
+	// the inputs and its own script, and writing the output's directory.
+	mounts, set := deriveCapabilities(req.InputPaths, req.OutputPath)
+	mounts = append(mounts, capability.Mount{Name: "script", HostPath: scriptDir, ReadOnly: true})
+	set.ReadPaths = append(set.ReadPaths, scriptDir)
+	words := []string{"python3", scriptPath}
+	words = append(words, req.InputPaths...)
+	words = append(words, "--output", req.OutputPath)
+	for i, word := range words {
+		words[i] = shellQuote(word)
+	}
+	ran, err := tools.NewRuntime().ExecuteContext(ctx, tools.Request{
+		Tool:          "run",
+		Args:          map[string]string{"command": strings.Join(words, " "), "timeout": "10m"},
+		Mounts:        mounts,
+		CapabilitySet: set,
+		PID:           "assemble",
+	})
 	if err != nil {
-		return AssembleResult{}, fmt.Errorf("generated python failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return AssembleResult{}, fmt.Errorf("generated python not run: %w", err)
+	}
+	if code := ran.Output["exit_code"]; code != "0" {
+		return AssembleResult{}, fmt.Errorf("generated python failed: exit %s: %s", code, strings.TrimSpace(ran.Output["stdout"]+" "+ran.Output["stderr"]))
 	}
 
 	bytes, err := os.ReadFile(req.OutputPath)
@@ -185,7 +211,7 @@ func assembleFilesProcedural(ctx context.Context, completer JSONCompleter, req A
 		return AssembleResult{}, err
 	}
 
-	return AssembleResult{
+	return withVerifier(AssembleResult{
 		OutputPath:         req.OutputPath,
 		Verification:       req.Verification,
 		Approved:           verifierOut.Approved,
@@ -194,7 +220,30 @@ func assembleFilesProcedural(ctx context.Context, completer JSONCompleter, req A
 		SourceCount:        len(req.InputPaths),
 		Mode:               "procedural",
 		ScriptPath:         scriptPath,
-	}, nil
+	}, req), nil
+}
+
+// withVerifier records who did the work and who verified it.
+func withVerifier(result AssembleResult, req AssembleRequest) AssembleResult {
+	result.WorkerModel = req.Model
+	if req.Verification != workflow.VerificationNone {
+		result.VerifierModel = req.Model
+		result.VerifierSameAsWorker = true
+	}
+	return result
+}
+
+// shellQuote quotes word for sh.
+func shellQuote(word string) string {
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+}
+
+// BestEffortRejected reports whether result is a best_effort verification
+// whose verifier judged the output and rejected it: the output was kept,
+// and aos run exits non-zero so the rejection is not read as a pass. A
+// verifier call that failed judged nothing.
+func BestEffortRejected(result AssembleResult) bool {
+	return result.Verification == workflow.VerificationBestEffort && !result.Approved && !strings.HasPrefix(result.VerificationReason, "verification error")
 }
 
 // verifyOutput asks the completer to review a candidate under policy. Only

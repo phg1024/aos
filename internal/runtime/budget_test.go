@@ -55,7 +55,7 @@ func TestStrictTimeBudgetCancelsTheModelCall(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	status := result.ExitStatus
-	if status.Code != 1 || !status.Retryable || status.Origin != "" || status.Checkpoint == "" || !strings.HasPrefix(status.Reason, "time budget exceeded: 1s strict budget of worker (pid-000001)") {
+	if status.Code != 1 || !status.Retryable || status.Origin != kernel.ExitOriginRuntime || status.Checkpoint == "" || !strings.HasPrefix(status.Reason, "time budget exceeded: 1s strict budget of worker (pid-000001)") {
 		t.Fatalf("exit = %+v", status)
 	}
 	if !errors.Is(cause, runtime.ErrTimeBudgetExceeded) || time.Since(start) > 3*time.Second {

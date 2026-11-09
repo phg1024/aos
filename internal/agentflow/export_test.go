@@ -1,13 +1,15 @@
 package agentflow
 
 import (
+	"context"
+
 	"aos/internal/runtime"
 	"aos/internal/workflow"
 )
 
 // Judge exposes judge, so a test can reach the verdict again from a run's records.
-func (e *Engine) Judge(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
-	return e.judge(spec, policy, rootPID, entryPID)
+func (e *Engine) Judge(spec WorkflowSpec, req RunRequest, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
+	return e.judge(context.Background(), spec, req, policy, rootPID, entryPID)
 }
 
 // EvidenceChecks exposes evidenceChecks, for records a test builds by hand.

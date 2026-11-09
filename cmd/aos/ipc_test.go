@@ -141,7 +141,7 @@ func TestParkedChildIsAbandonedWhenItsLeadExits(t *testing.T) {
 	}
 	k, _ := kernel.New(filepath.Join(stateDir, "kernel"))
 	status, err := k.Await("pid-000003")
-	if err != nil || status.Code != 1 || status.Reason != agentflow.AbandonedReason || !status.Retryable || status.Origin != "" || status.Checkpoint == "" {
+	if err != nil || status.Code != 1 || status.Reason != agentflow.AbandonedReason || !status.Retryable || status.Origin != kernel.ExitOriginEngine || status.Checkpoint == "" {
 		t.Fatalf("abandoned child = %+v, %v", status, err)
 	}
 	processes, _ := k.Processes()

@@ -200,6 +200,7 @@ func run(args []string) {
 		InputPaths:   []string(inputs),
 		OutputPath:   outputPath,
 		Verification: policy,
+		Model:        llmConfig.Model,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -212,6 +213,10 @@ func run(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println(string(bytes))
+	if app.BestEffortRejected(result) {
+		fmt.Fprintf(os.Stderr, "verification best_effort: the verifier rejected the output, which is kept at %s: %s\n", result.OutputPath, result.VerificationReason)
+		os.Exit(1)
+	}
 }
 
 // backendRetry is how agents retry failed model calls; tests shorten it.

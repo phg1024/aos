@@ -4,7 +4,10 @@
   "entry_agent": "coordinator",
   "verification": {
     "policy": "required",
-    "verifier": "verifier"
+    "verifier": "verifier",
+    "trusted": [
+      "__AOS_ROOT__/reports/rasterizer-bunny"
+    ]
   },
   "skill_roots": [
     "__AOS_ROOT__/skills"

@@ -38,12 +38,16 @@ func loadHandlesWorkflow(t *testing.T, fills map[string]string) agentflow.Workfl
 }
 
 // live2 ran the older file, and its hash is how the report names that run.
+// Since spec contract v2 the file also declares verification.trusted, a
+// declaration that changes nothing a process can do; live2 ran it at
+// bf3abbc3db92a1bdddbbe61c293213339f1c13278c0214b753dbbe8d24c20676, which
+// git holds.
 func TestTheWorkflowLive2RanIsUnchanged(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "workflows", "rasterizer-bunny-cuda-ipc.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != "bf3abbc3db92a1bdddbbe61c293213339f1c13278c0214b753dbbe8d24c20676" {
+	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != "c8bf43fad49ef31338225f4fa8fc7dc2246f2f0bde7861fc59c3d717eea3ae87" {
 		t.Fatalf("sha256 = %s", got)
 	}
 }
@@ -225,7 +229,9 @@ func TestTheHandlesGrantsReachOnlyWhatTheySay(t *testing.T) {
 	}
 }
 
-// live3 ran the handles workflow as it stands. The evidence workflow is its successor,
+// live3 ran the handles workflow as it stood before spec contract v2 added
+// its verification.trusted declaration, at
+// d0ab28df10b3246ef14ccfdd2accb7fa2f0157229dea078d208fd39e2c13c706. The evidence workflow is its successor,
 // and what it changes is its declaration, some prompt text and its step budgets: no
 // process can reach anything it could not before.
 func TestTheEvidenceWorkflowDeclaresAndGrantsNothingNew(t *testing.T) {
@@ -233,7 +239,7 @@ func TestTheEvidenceWorkflowDeclaresAndGrantsNothingNew(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != "d0ab28df10b3246ef14ccfdd2accb7fa2f0157229dea078d208fd39e2c13c706" {
+	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != "58e51806ce8f815c31ec943fe33720a5e3f739c027c8f1513c7c9113e509ba52" {
 		t.Fatalf("the workflow live3 ran changed: %s", got)
 	}
 	load := func(name string) agentflow.WorkflowSpec {

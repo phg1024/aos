@@ -96,6 +96,15 @@ func writeReplayReport(w io.Writer, report replay.Report, build map[string]strin
 	if report.LegacyReplyCap {
 		fmt.Fprintln(w, "  the record predates the reply cap; replies capped at the budget left, prompt included")
 	}
+	if report.LegacyVerification {
+		fmt.Fprintln(w, "  the record predates spec contract v2 or the verdict rules; its verification checked and judged as it was then")
+	}
+	if report.LegacyExitOrigin {
+		fmt.Fprintln(w, "  the record predates named exit origins; the runtime's exits replayed without one")
+	}
+	if report.LegacyPublishProvenance {
+		fmt.Fprintln(w, "  the record predates publication provenance; file publications replayed without it")
+	}
 	if report.Identical() {
 		fmt.Fprintf(w, "  kernel: %d events and the process table identical\n", report.Events)
 		fmt.Fprintf(w, "  artifacts: %d identical (checkpoint usage seconds not compared)\n", report.Artifacts)

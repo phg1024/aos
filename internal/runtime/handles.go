@@ -507,6 +507,11 @@ func (r *AgentRuntime) publicationBody(ctx context.Context, process kernel.Proce
 	metadata[sourceMetadata] = sourceFile
 	metadata[sourcePathMetadata] = path
 	metadata[sourceSHA256Metadata] = hex.EncodeToString(sum[:])
+	if !r.NoPublishProvenance {
+		for key, value := range r.provenance(process, path) {
+			metadata[key] = value
+		}
+	}
 	return string(content), metadata, nil
 }
 

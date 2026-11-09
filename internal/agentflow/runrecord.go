@@ -100,6 +100,25 @@ const (
 	// rules before it, and a replay checks them so.
 	SpecContractField = "spec_contract"
 	SpecContractV1    = "v1"
+	// SpecContractV2 adds the verification rules: trusted paths, gate checks,
+	// and no unconfined_run or work scope of / under a required gate.
+	SpecContractV2 = "v2"
+	// VerdictRulesField is the run.started field that says a verification was
+	// judged under the verdict rules (VerdictRulesV1): a pass bound to a hash
+	// of the work, the gate's own checks, the verifier's task from the spec,
+	// a failed best_effort verdict exiting non-zero, and a standing failure
+	// not retryable. Records without it were judged as before.
+	VerdictRulesField = "verdict_rules"
+	VerdictRulesV1    = "v1"
+	// ExitOriginField is the run.started field that says the exits the runtime
+	// and the engine record name their origin (ExitOriginV1). Records without
+	// it left those origins empty.
+	ExitOriginField = "exit_origin"
+	ExitOriginV1    = "v1"
+	// PublishProvenanceField is the run.started field that says a publication
+	// from a file records the run that produced it (PublishProvenanceV1).
+	PublishProvenanceField = "publish_provenance"
+	PublishProvenanceV1    = "v1"
 )
 
 // LeaseClockField is the run.started field that says lease expiries come
@@ -190,8 +209,21 @@ func (e *Engine) runStartedData(spec WorkflowSpec, specID, specSHA string) map[s
 	if !e.NoReplyCap {
 		data[ReplyCapField] = ReplyCapV1
 	}
-	if !e.NoSpecContract {
+	switch {
+	case e.NoSpecContract:
+	case e.SpecContractV1:
 		data[SpecContractField] = SpecContractV1
+	default:
+		data[SpecContractField] = SpecContractV2
+	}
+	if !e.NoVerdictRules {
+		data[VerdictRulesField] = VerdictRulesV1
+	}
+	if !e.NoExitOrigin {
+		data[ExitOriginField] = ExitOriginV1
+	}
+	if !e.NoPublishProvenance {
+		data[PublishProvenanceField] = PublishProvenanceV1
 	}
 	for name, value := range e.RunRecord {
 		if _, own := data[name]; !own {

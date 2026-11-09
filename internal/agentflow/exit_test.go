@@ -73,7 +73,7 @@ func TestWorkflowRootSucceedsWhenEntrySucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 0, Reason: "workflow completed"}) {
+	if status := f.rootStatus(t, summary); status != (kernel.ExitStatus{Code: 0, Reason: "workflow completed", Origin: kernel.ExitOriginEngine}) {
 		t.Fatalf("unexpected root exit %+v", status)
 	}
 }
@@ -84,7 +84,7 @@ func TestWorkflowRootFailsWhenEntryExitsNonZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a failed entry agent is an outcome, not a Go error: %v", err)
 	}
-	want := kernel.ExitStatus{Code: 3, Reason: "entry agent solver exited with code 3: tests failed", Retryable: true}
+	want := kernel.ExitStatus{Code: 3, Reason: "entry agent solver exited with code 3: tests failed", Retryable: true, Origin: kernel.ExitOriginEngine}
 	if status := f.rootStatus(t, summary); status != want {
 		t.Fatalf("root exit = %+v, want %+v", status, want)
 	}

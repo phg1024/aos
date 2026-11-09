@@ -107,6 +107,15 @@ type Report struct {
 	// LegacySpecContract means the record predates the spec contract, and its
 	// spec was checked with the rules it ran under.
 	LegacySpecContract bool `json:"legacy_spec_contract,omitempty"`
+	// LegacyVerification means the record predates spec contract v2 or the
+	// verdict rules, and its spec and verdict were checked as they were then.
+	LegacyVerification bool `json:"legacy_verification,omitempty"`
+	// LegacyExitOrigin means the record predates named exit origins, and the
+	// runtime's exits were replayed without one.
+	LegacyExitOrigin bool `json:"legacy_exit_origin,omitempty"`
+	// LegacyPublishProvenance means the record predates publication
+	// provenance, and file publications were replayed without it.
+	LegacyPublishProvenance bool `json:"legacy_publish_provenance,omitempty"`
 	// LegacyDelegateHandles means the record predates handles at a delegation, and it
 	// replayed with the older prompt.
 	LegacyDelegateHandles bool `json:"legacy_delegate_handles,omitempty"`
@@ -422,6 +431,16 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	// under.
 	engine.NoSpecContract = started.Data[agentflow.SpecContractField] == ""
 	report.LegacySpecContract = engine.NoSpecContract
+	// Before spec contract v2 and the verdict rules, a spec's verification
+	// was checked, and judged, without trusted paths, gate checks or a hash
+	// of the work.
+	engine.SpecContractV1 = started.Data[agentflow.SpecContractField] == agentflow.SpecContractV1
+	engine.NoVerdictRules = started.Data[agentflow.VerdictRulesField] == ""
+	report.LegacyVerification = !engine.NoSpecContract && (engine.SpecContractV1 || engine.NoVerdictRules)
+	engine.NoExitOrigin = started.Data[agentflow.ExitOriginField] == ""
+	report.LegacyExitOrigin = engine.NoExitOrigin
+	engine.NoPublishProvenance = started.Data[agentflow.PublishProvenanceField] == ""
+	report.LegacyPublishProvenance = engine.NoPublishProvenance
 	if !opts.UnpinnedClock {
 		// Budgets read a fixed origin, the run's start, except at each
 		// step's reading, which is the origin plus what the step's call

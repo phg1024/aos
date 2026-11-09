@@ -18,8 +18,8 @@ import (
 // a spec with a misspelled field.
 func TestRunWorkflowChecksBeforeRunning(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), "state")
-	err := runWorkflow(context.Background(), nil, runtime.CompactionPolicy{}, capability.Budget{}, "../../workflows/rasterizer-bunny.json", nil, "", "", stateDir, "go", false)
-	if !errors.Is(err, agentflow.ErrPreflight) || !strings.Contains(err.Error(), "workflow rasterizer-bunny names host paths that do not exist on this machine") {
+	err := runWorkflow(context.Background(), nil, runtime.CompactionPolicy{}, capability.Budget{}, "../../workflows/rasterizer-bunny-metal.json", nil, "", "", stateDir, "go", false)
+	if !errors.Is(err, agentflow.ErrPreflight) || !strings.Contains(err.Error(), "workflow rasterizer-bunny-metal names host paths that do not exist on this machine") {
 		t.Fatalf("err %v", err)
 	}
 	if _, statErr := os.Stat(stateDir); statErr == nil {

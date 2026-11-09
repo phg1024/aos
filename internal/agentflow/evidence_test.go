@@ -478,7 +478,7 @@ func TestAPassIsBoundToTheDeclaredEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			again, err := engine.Judge(spec, policy, summary.RootPID, summary.EntryPID)
+			again, err := engine.Judge(spec, agentflow.RunRequest{Goal: "verify the work"}, policy, summary.RootPID, summary.EntryPID)
 			if err != nil {
 				t.Fatal(err)
 			}

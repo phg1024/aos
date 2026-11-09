@@ -257,3 +257,69 @@ func TestAssembleFilesRejectsUnknownPolicy(t *testing.T) {
 		t.Fatalf("expected invalid policy error, got %v", err)
 	}
 }
+
+// scriptCompleter answers the worker with a program and approves it.
+type scriptCompleter struct{ program string }
+
+func (s scriptCompleter) CompleteJSON(_ context.Context, _ string, _ string, target any) error {
+	if setField(target, "Python", s.program) {
+		return nil
+	}
+	if setField(target, "Reason", "ok") && setBoolField(target, "Approved", true) {
+		return nil
+	}
+	return errors.New("unexpected target")
+}
+
+// The generated program runs confined, as run does: it can write the
+// output's directory but nothing outside it.
+func TestProceduralProgramIsConfined(t *testing.T) {
+	root := t.TempDir()
+	input := writeInput(t, root)
+	outside := filepath.Join(t.TempDir(), "escape.txt")
+	program := "import sys\nopen(sys.argv[sys.argv.index('--output')+1], 'w').write('ok')\nopen(" + strconv.Quote(outside) + ", 'w').write('escaped')\n"
+	_, err := app.AssembleFiles(context.Background(), scriptCompleter{program: program}, app.AssembleRequest{
+		Goal: "write a python program and run it", InputPaths: []string{input}, OutputPath: filepath.Join(root, "out.txt")})
+	if err == nil {
+		t.Fatal("a program writing outside the output directory ran to the end")
+	}
+	if _, statErr := os.Stat(outside); statErr == nil {
+		t.Fatalf("the program wrote %s: %v", outside, err)
+	}
+}
+
+// The result says the verifier was the worker's own model, in a fresh call.
+func TestTheResultSaysWhoVerified(t *testing.T) {
+	root := t.TempDir()
+	input := writeInput(t, root)
+	for _, policy := range []workflow.VerificationPolicy{workflow.VerificationRequired, workflow.VerificationNone} {
+		result, err := app.AssembleFiles(context.Background(), &fakeCompleter{}, app.AssembleRequest{
+			Goal: "combine", InputPaths: []string{input}, OutputPath: filepath.Join(root, "out-"+string(policy)+".txt"), Verification: policy, Model: "model-a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		verified := policy != workflow.VerificationNone
+		if result.WorkerModel != "model-a" || result.VerifierSameAsWorker != verified || (result.VerifierModel == "model-a") != verified {
+			t.Fatalf("%s: %+v", policy, result)
+		}
+	}
+}
+
+// A best_effort rejection is one aos run exits non-zero for; a verifier
+// call that failed judged nothing, and an approval is a pass.
+func TestBestEffortRejected(t *testing.T) {
+	cases := []struct {
+		result app.AssembleResult
+		want   bool
+	}{
+		{app.AssembleResult{Verification: workflow.VerificationBestEffort, Approved: false, VerificationReason: "missing details"}, true},
+		{app.AssembleResult{Verification: workflow.VerificationBestEffort, Approved: false, VerificationReason: "verification error: timeout"}, false},
+		{app.AssembleResult{Verification: workflow.VerificationBestEffort, Approved: true}, false},
+		{app.AssembleResult{Verification: workflow.VerificationNone}, false},
+	}
+	for _, c := range cases {
+		if got := app.BestEffortRejected(c.result); got != c.want {
+			t.Fatalf("%+v: %t", c.result, got)
+		}
+	}
+}

@@ -113,7 +113,7 @@ func TestInfrastructureFailuresCloseTheProcess(t *testing.T) {
 			if getErr != nil {
 				t.Fatal(getErr)
 			}
-			if process.State != kernel.StateExited || process.ExitStatus.Origin != "" || !process.ExitStatus.Retryable || process.ExitStatus.Code != 1 {
+			if process.State != kernel.StateExited || process.ExitStatus.Origin != kernel.ExitOriginRuntime || !process.ExitStatus.Retryable || process.ExitStatus.Code != 1 {
 				t.Fatalf("process = %s %+v", process.State, process.ExitStatus)
 			}
 			if name != "artifact store" {

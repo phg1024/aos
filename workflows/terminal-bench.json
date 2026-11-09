@@ -1,6 +1,6 @@
 {
   "name": "terminal-bench",
-  "description": "Single-agent solver for Terminal-Bench style tasks: the agent works directly inside the task container and hidden tests grade the final state. __WORKDIR__ is replaced with the container's working directory at launch.",
+  "description": "Single-agent solver for Terminal-Bench style tasks: the agent works directly inside the task container and hidden tests grade the final state. Harbor uploads those tests to /tests after the agent exits and, unless the task asks for a separate verifier environment, runs them in this same container, which the solver could write as root (writable /, unconfined_run): the grade is independent of the agent only as far as the task image keeps it so. __WORKDIR__ is replaced with the container's working directory at launch.",
   "entry_agent": "solver",
   "agents": [
     {

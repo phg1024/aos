@@ -4,7 +4,11 @@
   "entry_agent": "coordinator",
   "verification": {
     "policy": "required",
-    "verifier": "verifier"
+    "verifier": "verifier",
+    "trusted": [
+      "__AOS_ROOT__/reports/rasterizer-bunny",
+      "__CUDA_HOME__"
+    ]
   },
   "skill_roots": [
     "__AOS_ROOT__/skills"

@@ -1,6 +1,7 @@
 package agentflow
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -36,22 +37,93 @@ type Verdict struct {
 	StalePID     string                      `json:"stale_pid,omitempty"`
 	// Evidence is each declared record as it stood when the verdict was reached.
 	Evidence []EvidenceCheck `json:"evidence,omitempty"`
+	// WorkAtVerify is the work's hash when VerifierPID exited, and WorkAtGate
+	// its hash when the root exited; they must match for a pass to stand.
+	// Both are absent from a record made before the verdict rules.
+	WorkAtVerify *WorkHash `json:"work_at_verify,omitempty"`
+	WorkAtGate   *WorkHash `json:"work_at_gate,omitempty"`
+	// Checks are the gate's own checks, run once the verifier passed.
+	Checks []CheckResult `json:"checks,omitempty"`
 }
 
 // judge derives the verdict for the workflow under root. Runs are ordered
 // by the kernel's event sequence, which is total, rather than timestamps.
 // The entry agent is left out of the freshness check: its run spans the
 // whole workflow, so it always ends last.
-func (e *Engine) judge(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
-	verdict, err := e.judgeExits(spec, policy, rootPID, entryPID)
+//
+// Under the verdict rules a pass must also hold three more ways, checked in
+// this order: the work's hash when the root exits is its hash when the
+// verifier exited (bindWork); the declared evidence was read (withEvidence);
+// and every gate check exits as declared.
+func (e *Engine) judge(ctx context.Context, spec WorkflowSpec, req RunRequest, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
+	var hashes map[string]WorkHash
+	if !e.NoVerdictRules {
+		var err error
+		if hashes, err = e.recordedWorkHashes(); err != nil {
+			return Verdict{}, err
+		}
+	}
+	verdict, err := e.judgeExits(spec, policy, rootPID, entryPID, hashes)
 	if err != nil {
 		return Verdict{}, err
 	}
-	return e.withEvidence(spec, verdict)
+	if !e.NoVerdictRules {
+		verdict = e.bindWork(spec, req, verdict, hashes)
+	}
+	if verdict, err = e.withEvidence(spec, verdict); err != nil {
+		return Verdict{}, err
+	}
+	if !e.NoVerdictRules && verdict.Status == VerdictPass && len(spec.Verification.Checks) > 0 {
+		verdict.Checks = e.runChecks(ctx, spec, req, rootPID)
+		if failed, ok := failedCheck(verdict.Checks); ok {
+			verdict.Status = VerdictFail
+			if failed.Err != "" {
+				verdict.Reason = fmt.Sprintf("gate check %q did not run: %s; verifier %s's pass does not stand without it", failed.Name, failed.Err, verdict.VerifierPID)
+			} else {
+				verdict.Reason = fmt.Sprintf("gate check %q exited %d, want %d; verifier %s's pass does not stand", failed.Name, failed.ExitCode, failed.Want, verdict.VerifierPID)
+			}
+		}
+	}
+	return verdict, nil
+}
+
+// bindWork holds a pass to the work the verifier saw: the hash recorded when
+// the verifier exited against the work's hash now. Any change since, by any
+// process or none, makes the pass stale; work that could not be hashed
+// leaves it unverified.
+func (e *Engine) bindWork(spec WorkflowSpec, req RunRequest, verdict Verdict, hashes map[string]WorkHash) Verdict {
+	if verdict.VerifierPID == "" {
+		return verdict
+	}
+	at, recorded := hashes[verdict.VerifierPID]
+	if recorded {
+		verdict.WorkAtVerify = &at
+	}
+	if verdict.Status != VerdictPass {
+		return verdict
+	}
+	scopes, excluded := e.workScopes(spec, req)
+	now := hashWork(scopes, excluded)
+	verdict.WorkAtGate = &now
+	switch {
+	case !recorded:
+		verdict.Status = VerdictUnverified
+		verdict.Reason = fmt.Sprintf("verifier %s exited 0, and no hash of the work was recorded at its exit. This says nothing about the work: verification is what is missing", verdict.VerifierPID)
+	case at.Err != "" || now.Err != "":
+		verdict.Status = VerdictUnverified
+		verdict.Reason = fmt.Sprintf("verifier %s exited 0, and the work could not be bound to its verdict: %s. This says nothing about the work: verification is what is missing", verdict.VerifierPID, strings.TrimSpace(at.Err+" "+now.Err))
+	case at.SHA256 != now.SHA256:
+		verdict.Status = VerdictStale
+		verdict.Reason = fmt.Sprintf("verdict stale; the work changed after verifier %s passed it (hash %.12s at its exit, %.12s now)", verdict.VerifierPID, at.SHA256, now.SHA256)
+	}
+	return verdict
 }
 
 // judgeExits is the verdict from the kernel's record of exits alone.
-func (e *Engine) judgeExits(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string) (Verdict, error) {
+//
+// hashes, under the verdict rules, are the work's hashes at verifier exits:
+// a verifier's failure stands only while the work is as it failed it.
+func (e *Engine) judgeExits(spec WorkflowSpec, policy workflow.VerificationPolicy, rootPID, entryPID string, hashes map[string]WorkHash) (Verdict, error) {
 	verdict := Verdict{Policy: policy, Verifier: spec.Verification.Verifier}
 	runs, err := e.descendantExits(rootPID)
 	if err != nil {
@@ -104,6 +176,12 @@ func (e *Engine) judgeExits(spec WorkflowSpec, policy workflow.VerificationPolic
 		if run.agentID != verdict.Verifier || (lastChange != nil && run.seq < lastChange.seq) {
 			continue
 		}
+		if failedOn, ok := hashes[run.pid]; ok && failedOn.Err == "" {
+			if now, ok := hashes[latest.pid]; ok && now.Err == "" && now.SHA256 != failedOn.SHA256 {
+				// The work changed since this verifier judged it.
+				continue
+			}
+		}
 		status, err := e.Kernel.Await(run.pid)
 		if err != nil {
 			return Verdict{}, err
@@ -139,7 +217,17 @@ func (e *Engine) judgeExits(spec WorkflowSpec, policy workflow.VerificationPolic
 
 // gateExit applies a required policy to the root's exit: an entry agent
 // that succeeded still fails the workflow without a fresh passing verdict.
-func gateExit(root kernel.ExitStatus, policy workflow.VerificationPolicy, verdict Verdict) kernel.ExitStatus {
+//
+// Under the verdict rules (legacy false) two things change. A best_effort
+// workflow whose verifier judged the work wrong fails too, where before it
+// exited 0; best_effort still does not wait for a verdict that is missing,
+// stale or unverified. And a failure that stands is not retryable: the
+// verifier's own claim of retryable is an agent's word, and running the
+// verifier again cannot clear the failure without a change to the work.
+func gateExit(root kernel.ExitStatus, policy workflow.VerificationPolicy, verdict Verdict, legacy bool) kernel.ExitStatus {
+	if !legacy {
+		return gateExitV1(root, policy, verdict)
+	}
 	if policy != workflow.VerificationRequired || root.Code != 0 || verdict.Status == VerdictPass {
 		return root
 	}
@@ -153,6 +241,26 @@ func gateExit(root kernel.ExitStatus, policy workflow.VerificationPolicy, verdic
 		gated.Retryable = true
 	case VerdictUnverified:
 		// Nobody judged the work, so running the verifier again is the remedy.
+		gated.Retryable = true
+	}
+	return gated
+}
+
+func gateExitV1(root kernel.ExitStatus, policy workflow.VerificationPolicy, verdict Verdict) kernel.ExitStatus {
+	if root.Code != 0 || verdict.Status == VerdictPass || policy == workflow.VerificationNone {
+		return root
+	}
+	if policy == workflow.VerificationBestEffort && verdict.Status != VerdictFail {
+		return root
+	}
+	gated := kernel.ExitStatus{Code: 1, Reason: "verification " + string(policy) + ": " + verdict.Reason}
+	switch verdict.Status {
+	case VerdictFail:
+		if verdict.VerifierExit != nil && verdict.VerifierExit.Code != 0 {
+			gated.Code = verdict.VerifierExit.Code
+		}
+	case VerdictStale, VerdictUnverified:
+		// Verifying the work again is the remedy.
 		gated.Retryable = true
 	}
 	return gated

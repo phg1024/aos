@@ -4,7 +4,10 @@
   "entry_agent": "coordinator",
   "verification": {
     "policy": "required",
-    "verifier": "verifier"
+    "verifier": "verifier",
+    "trusted": [
+      "/Users/claw/Code/aos/reports/rasterizer-team-demo/baseline"
+    ]
   },
   "skill_roots": [
     "/Users/claw/Code/aos/skills"
