@@ -12,8 +12,11 @@ import json
 import math
 import os
 import statistics
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import collect  # noqa: E402  (A3: corrected endings)
 ARMS = ["aos", "terminus-2"]
 ENDINGS = ["completed", "budget_exit", "harbor_timeout", "infra_error", "agent_crash"]
 BUCKETS = ["no_answer", "wrong_answer", "environment", "timeout", "infra"]
@@ -73,7 +76,7 @@ def tokens(r):
 
 
 def main():
-    rows = jsonl("results.jsonl")
+    rows = collect.corrected_rows(jsonl("results.jsonl"))
     tasks = json.load(open(os.path.join(HERE, "drawn.json")))["drawn"]
     hand_path = os.path.join(HERE, "failures.json")
     hand = {f["seq"]: f for f in json.load(open(hand_path))["trials"]} if os.path.isfile(hand_path) else {}
@@ -100,12 +103,16 @@ def main():
             "pass_at": {k: statistics.mean(per[arm][t]["pass_at"][k] for t in full) if full else None for k in (1, 2, 3)},
             "pass_hat": {k: statistics.mean(per[arm][t]["pass_hat"][k] for t in full) if full else None for k in (2, 3)},
             "endings": {e: sum(1 for r in rs if r["ending"] == e) for e in ENDINGS},
+            "endings_corrected": {e: sum(1 for r in rs if r.get("ending_corrected") == e) for e in ENDINGS},
+            "cancelled_at_end": sum(len((r.get("attribution") or {}).get("cancelled_at_end") or []) for r in rs),
             "agent_s_median": statistics.median(agent) if agent else None, "agent_s_total": sum(agent),
             "trial_s_total": sum(r.get("trial_s") or 0 for r in rs),
             "prompt_tokens": sum(tokens(r)[0] for r in rs), "cached_tokens": sum(tokens(r)[1] for r in rs),
             "completion_tokens": sum(tokens(r)[2] for r in rs),
             "relay_posts": sum((r.get("relay") or {}).get("posts") or 0 for r in rs),
             "contended": sum(1 for r in rs if (r.get("contention") or {}).get("surplus", 0) > 0),
+            "contended_corrected": sum(1 for r in rs if (r.get("contention_corrected") or {}).get("surplus", 0) > 0),
+            "contention_unknown": sum(1 for r in rs if "error" in (r.get("contention_corrected") or {"error": 1})),
         }
         if arm == "aos":
             c = [r.get("contracts") or {} for r in rs]
@@ -132,16 +139,27 @@ def main():
 
     out["per_trial"] = [{
         "seq": r["seq"], "round": r["round"], "task": r["task"], "arm": r["arm"], "reward": r["reward"],
-        "ending": r["ending"], "agent_s": r.get("agent_s"), "trial_s": r.get("trial_s"),
+        "ending": r["ending"], "ending_corrected": r.get("ending_corrected"),
+        "contention": r.get("contention"), "contention_corrected": r.get("contention_corrected"), "agent_s": r.get("agent_s"), "trial_s": r.get("trial_s"),
         "tokens": tokens(r), "calls": r.get("model_calls") or (r.get("relay") or {}).get("posts"),
         "contracts": r.get("contracts"), "replay": (replays.get(r["seq"]) or {}).get("exit"),
         "bucket": (hand.get(r["seq"]) or {}).get("bucket")} for r in rows]
+    # A3: every trial whose attribution differs from the frozen slice: a request
+    # cut off at its own end, a request carried in from an earlier trial, or a
+    # changed ending.
+    out["a3"] = [{"seq": r["seq"], "task": r["task"], "arm": r["arm"], "ending": r["ending"],
+                  "ending_corrected": r.get("ending_corrected"),
+                  "cancelled_at_end": (r.get("attribution") or {}).get("cancelled_at_end"),
+                  "carried_in": (r.get("attribution") or {}).get("carried_in"),
+                  "contention": r.get("contention"), "contention_corrected": r.get("contention_corrected")}
+                 for r in rows if r["ending"] != r.get("ending_corrected")
+                 or (r.get("attribution") or {}).get("cancelled_at_end") or (r.get("attribution") or {}).get("carried_in")]
     json.dump(out, open(os.path.join(HERE, "analysis.json"), "w"), indent=1)
 
     for arm in ARMS:
         a = out["arms"][arm]
         print(f"{arm:10} {a['successes']}/{a['n']} pass@1 {a['pass_at'][1]} pass@3 {a['pass_at'][3]} "
-              f"pass^3 {a['pass_hat'][3]} endings {a['endings']} failures {a['failures']}")
+              f"pass^3 {a['pass_hat'][3]} endings {a['endings']} corrected {a['endings_corrected']} failures {a['failures']}")
     print("primary", out["primary"])
 
 

@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta
 
@@ -199,7 +200,7 @@ def terminus_fields(tdir, agent):
             "trajectory_steps": len(steps) if steps is not None else None}
 
 
-def record(seq, round_, task, arm, job_dir, before, after):
+def record(seq, round_, task, arm, job_dir, before, after, wait=0):
     base = {"seq": seq, "round": round_, "task": task, "arm": arm}
     survey = {t["task"]: t for t in json.load(open(os.path.join(HERE, "survey.json")))}
     base.update({"agent_timeout_s": survey[task]["agent_timeout_s"],
@@ -232,20 +233,22 @@ def record(seq, round_, task, arm, job_dir, before, after):
     relay_502 = (relay or {}).get("statuses", {}).get("502", 0)
     api_error = bool(exc and API_ERRORS.search(exc + " " + (info.get("exception_message") or "")[:2000]))
 
-    if exc == "AgentTimeoutError":
-        ending = "harbor_timeout"
-    elif "reward" not in rewards or relay_502 or fields.get("backend_errors") or api_error:
-        ending = "infra_error"
-    elif exc and arm == "terminus-2" and not a_end:
-        ending = "infra_error"  # raised before the agent ran: environment or setup
-    elif exc and arm == "aos":
-        ending = "infra_error"
-    elif arm == "aos" and fields["budget_exit"]:
-        ending = "budget_exit"
-    elif arm == "aos":
-        ending = "completed" if meta.get("aos_exit") in ("0", "1") else "agent_crash"
-    else:
-        ending = "agent_crash" if exc else "completed"
+    def ending_of(relay_502):
+        if exc == "AgentTimeoutError":
+            return "harbor_timeout"
+        if "reward" not in rewards or relay_502 or fields.get("backend_errors") or api_error:
+            return "infra_error"
+        if exc and arm == "terminus-2" and not a_end:
+            return "infra_error"  # raised before the agent ran: environment or setup
+        if exc and arm == "aos":
+            return "infra_error"
+        if arm == "aos" and fields["budget_exit"]:
+            return "budget_exit"
+        if arm == "aos":
+            return "completed" if meta.get("aos_exit") in ("0", "1") else "agent_crash"
+        return "agent_crash" if exc else "completed"
+
+    ending = ending_of(relay_502)  # the frozen rule: any 502 in the relay slice
 
     contention = None
     try:
@@ -256,24 +259,109 @@ def record(seq, round_, task, arm, job_dir, before, after):
     except Exception as exc_:
         contention = {"error": str(exc_)}
 
+    server = None
+    try:
+        server = json.loads(after)["requests"] - json.loads(before)["requests"]
+    except Exception:
+        pass
+    corrected = correct(t_start, t_end, a_end, server, ending_of, wait=wait)
+
     return {
         **base, "trial": os.path.basename(tdir), "reward": rewards.get("reward"), "failed_tests": failed_tests,
         "ending": ending, "exception": exc, "exception_message": (info.get("exception_message") or "")[:300],
         "agent_s": (a_end - a_start).total_seconds() if a_start and a_end else None,
         "trial_s": (t_end - t_start).total_seconds() if t_start and t_end else None,
-        **fields, "relay": relay, "contention": contention,
+        **fields, "relay": relay, "contention": contention, **corrected,
     }
 
 
+# A3: attribute relay requests by START time. A request in flight when a trial
+# ends is counted by the server inside the trial, but the relay logs it only
+# when it finishes, often after the closing check, so it fell into the next
+# trial's slice. The window is the two backend checks around the trial: the
+# last status GET at or before the trial's start, the first at or after its end.
+
+def line_time(line):
+    return parse_time(line.split(" ", 1)[0])
+
+
+def windows(lines):
+    """Status GETs (index, time) in log order."""
+    return [(i, line_time(l)) for i, l in enumerate(lines) if " GET /v1/status " in l]
+
+
+def attribute(lines, t_start, t_end, a_end, kind):
+    gets = windows(lines)
+    open_ = [g for g in gets if g[1] <= t_start]
+    close = [g for g in gets if g[1] >= t_end]
+    if not open_ or not close:
+        return None
+    (i0, w0), (i1, w1) = open_[-1], close[0]
+    posts = [(i, line_time(l), l.split(" ", 4)[3]) for i, l in enumerate(lines)
+             if " POST /v1/chat/completions " in l]
+    inside = [p for p in posts if w0 <= p[1] < w1]
+    cancelled = []
+    # A request cut off by the trial's own end: the last one started before the
+    # agent's end, in a trial that ended by Harbor's timeout or AOS's budget
+    # exit, which returned 502 or was logged after the closing check.
+    if a_end and kind in ("harbor_timeout", "budget_exit"):
+        before_end = [p for p in inside if p[1] < a_end]
+        if before_end:
+            last = max(before_end, key=lambda p: p[1])
+            if last[2] == "502" or last[0] > i1:
+                cancelled = [last]
+    own_502 = [p for p in inside if p[2] == "502" and p not in cancelled]
+    carried_in = [p for p in posts if i0 < p[0] < i1 and p[1] < w0]
+    return {"window": [w0.isoformat(), w1.isoformat()], "posts_started": len(inside),
+            "cancelled_at_end": [p[1].isoformat() for p in cancelled],
+            "own_502": len(own_502), "carried_in": [p[1].isoformat() for p in carried_in]}
+
+
+def correct(t_start, t_end, a_end, server, ending_of, wait=0):
+    """The A3 fields: ending_corrected, contention_corrected, attribution.
+    With wait, give a request still in flight at the closing check up to
+    `wait` seconds to be logged."""
+    if not (t_start and t_end):
+        return {"ending_corrected": None, "contention_corrected": {"error": "no trial times"}, "attribution": None}
+    kind = ending_of(0)
+    deadline = datetime.now().timestamp() + wait
+    while True:
+        att = attribute(relay_lines(), t_start, t_end, a_end, kind)
+        short = server is not None and att is not None and server > att["posts_started"]
+        if not short or datetime.now().timestamp() >= deadline:
+            break
+        time.sleep(10)
+    if att is None:
+        return {"ending_corrected": None, "contention_corrected": {"error": "no window"}, "attribution": None}
+    contention = ({"error": "backend counts not saved"} if server is None else
+                  {"server_requests": server, "posts_started": att["posts_started"],
+                   "surplus": server - att["posts_started"]})
+    return {"ending_corrected": ending_of(att["own_502"]), "contention_corrected": contention, "attribution": att}
+
+
+def corrected_rows(rows):
+    """Records with the A3 fields: their own, or corrections.jsonl's for
+    records written before A3."""
+    fixes = {r["seq"]: r for r in jsonl(os.path.join(HERE, "corrections.jsonl"))}
+    out = []
+    for r in rows:
+        if "ending_corrected" not in r and r["seq"] in fixes:
+            r = {**r, **{k: fixes[r["seq"]][k] for k in ("ending_corrected", "contention_corrected", "attribution")}}
+        out.append(r)
+    return out
+
+
 def stop_rule(path):
-    rows = jsonl(path)
-    infra = sum(1 for r in rows if r["ending"] == "infra_error")
+    # A3: from seq 40 on, judged on the corrected endings and contention.
+    rows = corrected_rows(jsonl(path))
+    infra = sum(1 for r in rows if (r.get("ending_corrected") or r["ending"]) == "infra_error")
     if infra >= 10:
         return f"{infra} infra errors"
     if len(rows) >= 10 and infra > 0.10 * len(rows):
         return f"{infra} infra errors in {len(rows)} trials"
     last3 = rows[-3:]
-    if len(last3) == 3 and all((r.get("contention") or {}).get("surplus", 0) > 0 for r in last3):
+    if len(last3) == 3 and all((r.get("contention_corrected") or r.get("contention") or {}).get("surplus", 0) > 0
+                               for r in last3):
         return "three contended trials in a row"
     return None
 
@@ -284,6 +372,9 @@ def main(argv):
         return backend()
     if cmd == "done":
         seq = int(argv[2])
+        pause = os.path.join(HERE, "PAUSE")  # A3: a clean stop at a trial boundary
+        if seq > 0 and os.path.isfile(pause) and seq > int(open(pause).read()):
+            return 0
         path = os.path.join(HERE, "smoke.jsonl" if seq <= 0 else "results.jsonl")
         return 0 if any(r["seq"] == seq for r in jsonl(path)) else 1
     if cmd == "show":
@@ -291,12 +382,13 @@ def main(argv):
         return 0
     if cmd == "record":
         seq, round_, task, arm, job_dir, before, after = argv[2:9]
-        rec = record(int(seq), int(round_), task, arm, job_dir, before, after)
+        rec = record(int(seq), int(round_), task, arm, job_dir, before, after, wait=600)
         path = os.path.join(HERE, "smoke.jsonl" if rec["seq"] <= 0 else "results.jsonl")
         with open(path, "a") as out:
             out.write(json.dumps(rec, default=str) + "\n")
-        print(f"  reward {rec['reward']} {rec['ending']} agent {rec.get('agent_s')}s "
-              f"posts {(rec.get('relay') or {}).get('posts')} contention {rec.get('contention')}")
+        print(f"  reward {rec['reward']} {rec['ending']} (corrected {rec.get('ending_corrected')}) "
+              f"agent {rec.get('agent_s')}s posts {(rec.get('relay') or {}).get('posts')} "
+              f"contention {rec.get('contention_corrected')} cancelled {(rec.get('attribution') or {}).get('cancelled_at_end')}")
         if rec["seq"] <= 0:
             return 0
         reason = stop_rule(path)

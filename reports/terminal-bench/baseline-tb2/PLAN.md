@@ -534,3 +534,68 @@ as a stop, so the run halted at 21:19 PST with seq 29 unrecorded.
   lose them again.
 - The run resumes at seq 30. `run.sh` skips recorded trials. The 08:55–09:10
   Pacific hold still applies.
+
+### A3, 2026-11-09, after 39 counted trials: requests attributed by start time
+
+**Timing.** This amendment comes after 39 counted trials. The user approved
+it on 2026-11-09 at about 23:40 PST. It was applied at a trial boundary:
+after seq 39's record, before seq 40 started. `collect.py done` returns
+"done" for every seq above the number in a `PAUSE` file, so `run.sh` ends
+without starting another trial. It changes no trial, reward or test.
+
+**What happened.** The relay logs a request only when its reply ends.
+
+- A request still in flight when a trial ends was counted by the server
+  inside that trial. The relay, though, logged it after the closing backend
+  check, so it fell into the next trial's slice. This happened in two ways:
+  - a Terminus-2 call in flight when Harbor's timeout killed the agent;
+  - an AOS call abandoned at a budget exit.
+- The trial that ended showed a surplus of +1.
+- The next trial showed −1, and was recorded as infra_error whenever the
+  carried request had returned 502 to the gone client.
+- Seqs 16, 31 and 38 were recorded as infra_error this way. All three ran
+  normally, and three false infra errors brought the 10% stop rule within one
+  trial.
+
+**Changes.**
+
+- `collect.py` attributes relay requests by START time inside the trial's
+  window. The window runs from the last status check at or before the
+  trial's start to the first at or after its end.
+- A request cut off by the trial's own end is recorded as "cancelled at the
+  trial's end", with a count per trial. It is counted for neither contention
+  nor infra. It qualifies when all of these hold:
+  - it started inside the window;
+  - it is the last request started before the agent's end;
+  - the trial ended by harbor_timeout or budget_exit;
+  - it returned 502, or was logged after the closing check.
+- A 502 that started inside the window, while the agent was still running,
+  stays an infra_error.
+- Corrected surplus = the server's request delta minus the requests started
+  in the window.
+- New records keep the frozen fields (`ending`, `contention`) and add
+  `ending_corrected`, `contention_corrected` and `attribution`: the window,
+  the requests started, the cancelled ones, the 502s, and those carried in
+  from earlier trials.
+- At a timeout or budget exit, `record` waits up to 600 s for a request still
+  in flight to be logged before attributing it.
+- Records already written are not edited. `a3_corrections.py` recomputes the
+  A3 fields for seqs 1–39 from their job folders into `corrections.jsonl`.
+  The server delta comes from the stored contention; seq 29 has none (A2).
+  The recomputed frozen ending matches the stored one in every record, apart
+  from the slice 502s, whose line counts were not saved before A2.
+- Result for seqs 1–39:
+  - Corrected surplus is 0 in every trial with saved counts.
+  - Cancelled at the trial's end: seqs 10, 11, 15, 30, 37 (terminus-2
+    timeouts) and 38 (an aos budget exit).
+  - Carried into the next trial: 15→16, 30→31, 37→38, 38→39.
+  - Seq 39 is recorded as completed (corrected: completed). Its slice holds
+    seq 38's late call, so its frozen surplus is −1.
+  - Corrected endings: 16 and 31 completed, 38 budget_exit.
+- **From seq 40 on, the stop rule is evaluated on the corrected endings and
+  the corrected contention**, for all records, using `corrections.jsonl` for
+  seqs 1–39.
+- `analyze.py` and the report show both the as-recorded and the corrected
+  endings, and list every cancellation and carry-over by seq.
+- `PAUSE` is a driver mechanism for a clean stop between trials. It is
+  removed before the run resumes.
