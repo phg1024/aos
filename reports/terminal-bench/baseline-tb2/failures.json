@@ -1,0 +1,271 @@
+{
+ "rule": "Each failed trial was read from its trace and given one bucket by PLAN.md's definitions. Where two buckets applied, the earliest cause was chosen and the other noted. A trial ended by Harbor's timeout or AOS's budget while the agent was still working is timeout, even when an unfinished or wrong answer was already on disk; wrong_answer is a trial whose agent finished (exited, or marked the task complete) with a wrong answer. Under the strict reading, in which any written answer that a test failed on comes first, seqs 12, 14, 35, 70 and 71 (other: wrong_answer) would be wrong_answer instead: 2 aos trials and 3 terminus-2 trials.",
+ "checked_by": "four read-only subagents, one per task group; failing-test messages spot-checked in seqs 3, 4, 15, 25, 30, 38, 47, 48, 85, 86, 93 and 96",
+ "trials": [
+  {
+   "seq": 3,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "bucket": "wrong_answer",
+   "reason": "Trajectory step 4 rebuilt the binary into the answer folder (`gcc /app/polyglot/main.py.c -o /app/polyglot/cmain`) and step 5 marked the task complete without removing it; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 4,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "reason": "calls.jsonl seq 22 (trace.jsonl lines 22-23) ran `gcc -Wall -Wextra /app/polyglot/main.py.c -o /app/polyglot/cmain` and seq 24 / trace line 24 exited code=0 with cmain still in /app/polyglot; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 9,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "bucket": "timeout",
+   "reason": "Still writing the libc shim when the 879s budget hit: ledger calls 55 and 57 (write_file /app/build/minic.c) both ran to the 8192-token cap, call 59 was cut off and trace line 56 exits 'time budget exceeded'; nothing was compiled, so /app/doomgeneric_mips never existed (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 10,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Harbor's 900s timeout hit while the agent was mid-build: step 17 installed gcc-mipsel-linux-gnu, step 29 wrote /app/build/include/my_stdlib.h, and the last step, 30, was still writing /app/build/mylibc.c (heredoc); no compile or link ever ran (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 11,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "other": "no_answer",
+   "reason": "Harbor 900s timeout hit while the agent was still rebuilding ars.R chunk by chunk (step 25: splicing a new ars_init_points after dexp failed at step 22); test() and the sample files were never written, so test_has_test_function failed with \"No 'test' function found\" and test_sample_files_generated with \"At least one sample file must be generated\" (/app/normal_samples.txt missing)."
+  },
+  {
+   "seq": 12,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "bucket": "timeout",
+   "other": "wrong_answer",
+   "reason": "AOS stopped at its 879s budget (trace line 68) while still fixing the sampler: ledger call 66 (trace 64) wrote /app/normal_samples.txt with mean -34.3, and call 68 (trace 66) rewrote it the same way, so test_sample_files_generated failed with \"Normal samples don't match expected distribution (mean=-34.315, std=7.221)\"; test_can_generate_standard_distribution_samples also failed because ars.R's interface rejects ars(f, c(-5,5), n=1000): \"'df' (support indicator) must be a function of x or NULL\"."
+  },
+  {
+   "seq": 14,
+   "task": "headless-terminal",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Agent was still in its first smoke test of /app/headless_terminal.py when Harbor's 900 s timeout hit (exception.txt AgentTimeoutError): step 25 ran /tmp/t1.py, steps 26-27 were probing pyte's Screen API after a crash; the partial file passed 6/7 tests but test_background_commands failed with requests ConnectionError to localhost:8000 (verifier/test-stdout.txt)",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 15,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Spent steps 3-22 identifying components (FLAG, Clover 5WJ2, DHFR, mCherry 2H5Q, SNAP 3KZY) through the RCSB and FPBase APIs; final.py at step 23 wrote the sequence only to /tmp/gblock.txt, then Harbor's 1800 s agent timeout hit before it was copied to /app (exception.txt); test_gblock: 'File /app/gblock.txt does not exist.'",
+   "other": "no_answer"
+  },
+  {
+   "seq": 25,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "reason": "Wrote /app/gpt2.c at ledger calls 23/25 and edited it at call 27 (trace lines 22-27, 3892 bytes); its own test run at call 31 (trace 30-31, ./a.out ... \"The capital of France is\") timed out after 1m50s with no output, yet call 33 exited code 0 claiming success; test_gpt2_implementation failed with subprocess.TimeoutExpired: a.out timed out after 90 seconds (verifier/test-stdout.txt).",
+   "other": null
+  },
+  {
+   "seq": 26,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "All 14 trajectory steps went to reverse-engineering the raw float32 weight layout (steps 4-14: scan.c to scan7.c block-stat probes; numpy was missing at step 4 but it switched to C); step 14 was still probing layer-0 block stats when Harbor stopped it (AgentTimeoutError after 900 s, exception.txt); test_gpt2_implementation: 'File /app/gpt2.c does not exist'.",
+   "other": "no_answer"
+  },
+  {
+   "seq": 30,
+   "task": "winning-avg-corewars",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Harbor's 3600s timeout hit while the agent was still testing candidates: step 44's grade.py output already showed /app/cand2 variants marked OK under the exact `pmars -b -r 100 -f` command (e.g. v_3000_7_9_4.red 77/82/82/47/51), but none was copied to /app/my_warrior.red; steps 45-55 were spent on slow -P/-F robustness sweeps, interrupted at step 52 and still running at step 55 (test_warrior_exists 'my_warrior.red file not found' and test_warrior_performance \"Unable to open file '/app/my_warrior.red'\").",
+   "other": "no_answer"
+  },
+  {
+   "seq": 35,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "bucket": "timeout",
+   "other": "wrong_answer",
+   "reason": "AOS hit its 879s budget (trace line 24) while running the command that appends a concavity fix and runs test() to write the sample files (ledger call 30, trace 22, cancelled at trace 23); about 6 minutes had gone to three ars.R writes cut off at 8192 tokens (calls 8, 10 and 12). No sample file existed (test_sample_files_generated: \"At least one sample file must be generated\"), and the ars.R assembled at trace 16 rejects ars(f, c(-5,5), n=1000): \"'lower' must be a single number (may be -Inf)\"."
+  },
+  {
+   "seq": 36,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "other": "no_answer",
+   "reason": "Harbor 900s timeout hit right after step 17, where the first working smoke test returned sd 1.31 for dnorm; test() and the sample files were never written (test_has_test_function: \"No 'test' function found\"; test_sample_files_generated: /app/normal_samples.txt missing), and the ars(density, lower, upper) interface also failed the generation test with \"'lower' and 'upper' must each be a single number\"."
+  },
+  {
+   "seq": 37,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Steps 4-15 were spent probing the weight layout in pure Python (probe.py to probeA.py; no numpy, step 3); step 15 was still taking value histograms when Harbor's 900 s agent timeout hit (exception.txt); /app/gpt2.c never written, so test_gpt2_implementation: 'File /app/gpt2.c does not exist'.",
+   "other": "no_answer"
+  },
+  {
+   "seq": 38,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "bucket": "timeout",
+   "reason": "Spent ledger calls 1-27 probing the weight layout (trace lines 4-27); call 27 alone took 331 s of model latency; call 29 tried write_file /app/gpt2.c but returned invalid JSON cut off mid-file, and the repair call 31 hit the strict budget (trace line 28: 'time budget exceeded: 879s strict budget of run'); test_gpt2_implementation: 'File /app/gpt2.c does not exist'.",
+   "other": "no_answer"
+  },
+  {
+   "seq": 40,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Lost steps 8-20 to failed RCSB search queries (HTTP 400) and an NCBI BLAST job that stayed in WAITING (steps 12-17); step 27 was still building the protein (build2.py, 869 aa) when Harbor's 1800 s agent timeout hit (exception.txt); /app/gblock.txt never written, so test_gblock: 'File /app/gblock.txt does not exist.'",
+   "other": "no_answer"
+  },
+  {
+   "seq": 47,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "reason": "calls.jsonl seq 36 (trace.jsonl lines 36-37) ran `rm -f /app/polyglot/cmain` but then rebuilt it with `gcc /app/polyglot/main.py.c -o /app/polyglot/cmain`; seq 40 / trace line 40 exited code=0 leaving it; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 48,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "bucket": "wrong_answer",
+   "reason": "Trajectory step 7 rebuilt the binary into the answer folder (`gcc /app/polyglot/main.py.c -o /app/polyglot/cmain` in a loop) and step 8 marked the task complete without removing it; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 51,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "bucket": "timeout",
+   "reason": "Budget ran out mid-work: ledger call 51 hit the 8192-token cap on a libc write_file (110s), call 53 wrote only /app/mystdlib/libc1.c (trace line 50), the planned libc2.c and the compile were never done, and trace line 52 exits 'time budget exceeded' (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 52,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Harbor's 900s timeout hit during setup: step 32 wrote /app/mipsbuild/include/my_stdlib.h and the last step, 37, was still fixing its O_* flag constants against vm.js; no libc .c file was written and nothing was compiled (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 56,
+   "task": "winning-avg-corewars",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Harbor's 3600s timeout hit while the agent was still searching for a design: no candidate met the thresholds (the best, in step 26, was the bundled rave.red at stone 59 < 75, and step 42's p1.red scored 1/33/0/4/0); the last step, 43, was still running sweep.sh, and /app/my_warrior.red was never written (test_warrior_exists 'my_warrior.red file not found' and test_warrior_performance \"Unable to open file '/app/my_warrior.red'\").",
+   "other": "no_answer"
+  },
+  {
+   "seq": 67,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "other": "no_answer",
+   "reason": "Harbor 1800s timeout hit while the agent was iterating on meet-in-the-middle key-recovery programs (attack.c through attack9.c); at step 25 attack9 exited 127 in its self-test, and no key was recovered. /app/plaintexts.txt was never written, so test_attack failed with \"FileNotFoundError: No such file or directory: '/app/plaintexts.txt'\"."
+  },
+  {
+   "seq": 68,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "aos",
+   "bucket": "timeout",
+   "other": "no_answer",
+   "reason": "AOS hit its 1779s budget (trace line 32) while ledger call 30 (trace 30, solve.c recovering s0, s1 and s2 from the three s3 candidates found at trace 28/29) was still running; it was cancelled at trace 31. Earlier, call 20's full-LAT brute force (trace 20) used the whole 15-minute tool timeout (trace 21). /app/plaintexts.txt was never written, so test_attack failed with \"FileNotFoundError: ... '/app/plaintexts.txt'\"."
+  },
+  {
+   "seq": 70,
+   "task": "protein-assembly",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Step 22 wrote /app/gblock.txt with SNAP-tag stripped of its first residue (build.py step 21: snap[1:] gives 'PGSDKD...', not the expected 'GPGSDKD...'); step 25 rewrote it with GGYG/GMYG and step 26 rewrote it with chromophore X->'G', so the Clover donor (...TTFGYGVAC...) was missing too; test_gblock: 'Fusion protein must be in the order flag - donor - dhfr - acceptor - snap', assert 0 < -1; Harbor's 1800 s timeout ended the run during these rewrites.",
+   "other": "wrong_answer",
+   "note": "Its checker chose wrong_answer; moved to timeout for consistency with seqs 12, 14, 35 and 71, where the agent was still reworking an answer already on disk when the end came."
+  },
+  {
+   "seq": 71,
+   "task": "headless-terminal",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Agent was still debugging its first smoke run of /app/headless_terminal.py when Harbor's 900 s timeout hit (exception.txt AgentTimeoutError): step 18 had just fixed `'spawn' object has no attribute 'fd'` and a broken ANSI regex; 4/7 tests failed, e.g. test_send_non_interactive_command `assert path.exists()` for /app/test.txt and test_background_commands ConnectionError to localhost:8000 (verifier/test-stdout.txt)",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 73,
+   "task": "make-doom-for-mips",
+   "arm": "aos",
+   "bucket": "timeout",
+   "reason": "Ended while the first full build was running: the trace line 48 compile failed on 'INT_MAX undeclared' (am_map.c, m_bbox.c), trace line 50 failed with a shell 'Syntax error', and ledger call 57's `sh /app/build.sh` (trace line 54) was cancelled with 'context deadline exceeded' (trace line 55) before /app/doomgeneric_mips was linked (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 74,
+   "task": "make-doom-for-mips",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Harbor's 900s timeout hit mid-work: steps 15-18 got clang+lld installed (after a backgrounded apt was stopped at step 17), and the last step, 36, had only just written /app/mipslibc/include/my_stdlib.h; no libc, linker script or build ran (test_vm_execution 'Timeout waiting for frame.bmp to be created' and test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 85,
+   "task": "polyglot-c-py",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "reason": "calls.jsonl seq 40 (trace.jsonl lines 38-39) rebuilt /app/polyglot/cmain, reasoning \"leaving the built binary is fine, harmless\"; seq 42 listed /app/polyglot and removed only __pycache__, then trace line 42 exited code=0; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 86,
+   "task": "polyglot-c-py",
+   "arm": "terminus-2",
+   "bucket": "wrong_answer",
+   "reason": "Trajectory step 12 ran `rm -f /app/polyglot/cmain && gcc /app/polyglot/main.py.c -o /app/polyglot/cmain` and `ls -l /app/polyglot/` showed cmain, then step 13 marked the task complete; test_fibonacci_polyglot: AssertionError \"Expected only main.py.c, found: ['cmain', 'main.py.c']\" (verifier/test-stdout.txt)",
+   "other": null
+  },
+  {
+   "seq": 93,
+   "task": "adaptive-rejection-sampler",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "other": null,
+   "reason": "Ledger call 48 (trace 46/47) wrote /app/normal_samples.txt from a sampler that was still wrong (output: \"norm: 5000 -0.0227 3.783\"), and the agent exited anyway at call 52 (trace 48), saying the sd of 3.78 was too large. test_sample_files_generated failed with \"Normal samples don't match expected distribution (mean=-0.023, std=3.783)\", and test_can_generate_standard_distribution_samples failed with \"'x_init' needs at least 3 abscissae (got 2)\"."
+  },
+  {
+   "seq": 94,
+   "task": "adaptive-rejection-sampler",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "other": "no_answer",
+   "reason": "Harbor 900s timeout hit while the agent was still writing and patching ars.R (step 20: python patch of ars_make_logtarget); ars() was never run, and test() and the sample files were never written (test_has_test_function: \"No 'test' function found\"; test_sample_files_generated: /app/normal_samples.txt missing). The ars(n, density, x.min, x.max) interface also failed the generation test with \"'x.min' and 'x.max' must be single values\"."
+  },
+  {
+   "seq": 95,
+   "task": "gpt2-codegolf",
+   "arm": "terminus-2",
+   "bucket": "timeout",
+   "reason": "Steps 4-16 were spent decoding the weight layout (numpy missing at step 4, then pure-Python scans /tmp/scan2.py to /tmp/blk2.py); step 16 was still checking the per-layer offset arithmetic when Harbor's 900 s agent timeout hit (exception.txt); /app/gpt2.c never written, so test_gpt2_implementation: 'File /app/gpt2.c does not exist'.",
+   "other": "no_answer"
+  },
+  {
+   "seq": 96,
+   "task": "gpt2-codegolf",
+   "arm": "aos",
+   "bucket": "wrong_answer",
+   "reason": "Final /app/gpt2.c written at ledger call 45 (trace line 42, 2965 bytes); its own test at call 47 (trace 44-45, artifacts/payloads/art-000044.json) printed garbage ('er again again C a b00 A ...' and ' de de de ...'), yet call 49 exited code 0 claiming success; test_gpt2_implementation: AssertionError 'Wrong output', stdout '_ de re de re th_d cd_ reifdifd re_ red'.",
+   "other": null
+  }
+ ]
+}

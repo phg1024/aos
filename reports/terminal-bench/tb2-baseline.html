@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AOS Terminal-Bench 2 Baseline</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #ecfdf5, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pass { color: #047857; font-weight: 600; }
+    .fail { color: #b91c1c; font-weight: 600; }
+    .muted { color: #6b7280; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Terminal-Bench 2.0 baseline: AOS against Terminus-2</h1>
+    <p><b>On 16 tasks drawn at random from Terminal-Bench 2.0, with the same model and sampling, AOS solved 35 of 48 trials and Terminus-2 28 of 48.</b>
+    That is 72.9% against 58.3%, a difference of +14.6 points. The frozen primary test, an exact stratified permutation test within tasks, gives p = 0.0152 (two-sided, α = 0.05).</p>
+    <p><b>AOS never did worse on a task.</b> It solved more trials on 3 tasks (headless-terminal, winning-avg-corewars, protein-assembly) and fewer on 0. Both arms failed every trial of 4 tasks (make-doom-for-mips, polyglot-c-py, gpt2-codegolf, adaptive-rejection-sampler); the other 9 tasks were tied.</p>
+    <p><b>AOS finished inside its own deadline every time; Terminus-2 often did not.</b> 22 of 48 Terminus-2 trials ran into Harbor's timeout. AOS had no Harbor timeouts: 7 trials ended at its strict budget and the rest finished. AOS's median agent time was 443 s against 799 s.</p>
+    <p><b>Every AOS trial replayed identically</b> (48 of 48), and every AOS ledger is complete.</p>
+  </div>
+
+  <p class="note"><b>Scope.</b> This is one model (qwen3.8-flash-next-nvfp4-nvfp4, served by Strata on a shared GPU server), 16 of the 85 eligible tasks, and 3 trials per arm per task. The run was sized to detect a difference of about 30 points with 80% power. The observed difference, 14.6 points, is smaller than that and comes from 3 of the 16 tasks, so read the p-value together with the per-task table. Terminus-2 runs with its defaults apart from the settings needed to reach the model and match sampling.</p>
+
+  <h2>What was run</h2>
+  <ul>
+    <li><b>Plan.</b> <code>reports/terminal-bench/baseline-tb2/PLAN.md</code>. Sampling was frozen before the draw (cdd6452); the draw, start check and schedule came next (3e3d9d4); the plan was frozen with amendment A1 before any counted trial (1bcd318).</li>
+    <li><b>Two amendments came during the run</b>, both approved by the user while the run was paused between trials, and both changing measurement only, never a trial:
+      <ul>
+        <li><b>A2</b> (5515155, after 29 trials): the collector crashed on a 5-digit timestamp fraction in seq 29's ledger. The parser was fixed (the 28 stored records recompute identically), seq 29 was recorded from its job folder without a rerun, and the backend checks are now saved before each record. Seq 29's server-side request count was lost.</li>
+        <li><b>A3</b> (9a2ac87, after 39 trials): relay requests are attributed by start time, and a request cut off at its trial's own end is recorded as cancelled. See "Data quality". Stored records were not edited; both the frozen and the corrected endings are shown below. From seq 40 on, the stop rule used the corrected values.</li>
+      </ul></li>
+    <li><b>Tasks.</b> 85 of the 89 TB2 tasks fit the machine's memory and the agent-time cap. 16 were drawn with seed 20261109, after a start check of each image under Rosetta. Their agent timeouts range from 900 s to 3600 s.</li>
+    <li><b>Arms.</b> <code>aos</code>: AOS v0.1.10 (9070498) through the Harbor adapter, with the adapter's default strict time budget (agent timeout − setup − 20 s). <code>terminus-2</code>: Harbor's built-in Terminus-2. Both used temperature 0.6, top_p 0.95, max_tokens 8192 and a thinking budget of 2048 tokens. The relay logged every request's sampling fields: all 2,089 chat completions in the run carried the same set.</li>
+    <li><b>Harness.</b> Harbor 0.25.0, one trial at a time, Docker Desktop with Rosetta (18 CPUs, 7,932 MiB). Trials alternated arms within each task pair, in an order fixed by seed 20261110.</li>
+    <li><b>Time.</b> The first trial started 2026-11-09 15:16 PST and the last ended 2026-11-10 13:23 PST. That includes the two amendment pauses and an 81-minute hold for the server's daily 08:55–09:10 PST window.</li>
+  </ul>
+
+  <h2>Reward</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>Solved</th>
+<th class='num'>pass@1</th>
+<th class='num'>pass@2</th>
+<th class='num'>pass@3</th>
+<th class='num'>pass^2</th>
+<th class='num'>pass^3</th>
+</tr>
+<tr><td>aos</td><td class='num'>35/48</td><td class='num'>72.9%</td><td class='num'>75.0%</td><td class='num'>75.0%</td><td class='num'>70.8%</td><td class='num'>68.8%</td></tr>
+<tr><td>terminus-2</td><td class='num'>28/48</td><td class='num'>58.3%</td><td class='num'>64.6%</td><td class='num'>68.8%</td><td class='num'>52.1%</td><td class='num'>50.0%</td></tr>
+</table></div>
+  <p class="muted">pass@k and pass^k are computed per task from c successes in n = 3 and averaged over the 16 tasks. pass^3 is the share of tasks solved in all three trials.</p>
+  <div class='wrap'><table><tr>
+<th>Task</th>
+<th class='num'>aos</th>
+<th class='num'>terminus-2</th>
+<th class='num'>difference</th>
+</tr>
+<tr><td>mailman</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>feal-linear-cryptanalysis</td><td class='num'>2/3</td><td class='num'>2/3</td><td class='num'>+0</td></tr>
+<tr><td>make-doom-for-mips</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td></tr>
+<tr><td>distribution-search</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>headless-terminal</td><td class='num'>3/3</td><td class='num'>1/3</td><td class='num'>+2</td></tr>
+<tr><td>winning-avg-corewars</td><td class='num'>3/3</td><td class='num'>1/3</td><td class='num'>+2</td></tr>
+<tr><td>prove-plus-comm</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>polyglot-c-py</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td></tr>
+<tr><td>vulnerable-secret</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>protein-assembly</td><td class='num'>3/3</td><td class='num'>0/3</td><td class='num'>+3</td></tr>
+<tr><td>gpt2-codegolf</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td></tr>
+<tr><td>log-summary-date-ranges</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>break-filter-js-from-html</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>fix-git</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>regex-log</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td></tr>
+<tr><td>adaptive-rejection-sampler</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td></tr>
+</table></div>
+  <p>Primary test: n = 48 per arm, mean reward 0.7292 against 0.5833, difference +0.1458, exact two-sided p = 0.0152. Labels were permuted within each task's 6 trials; the p-value is computed exactly by convolving the 16 per-task distributions.</p>
+
+  <h2>Endings</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th>completed</th>
+<th>budget_exit</th>
+<th>harbor_timeout</th>
+<th>infra_error</th>
+<th>agent_crash</th>
+</tr>
+<tr><td>aos</td><td>40 → 41</td><td>6 → 7</td><td>0</td><td>2 → 0</td><td>0</td></tr>
+<tr><td>terminus-2</td><td>25 → 26</td><td>0</td><td>22</td><td>1 → 0</td><td>0</td></tr>
+</table></div>
+  <p class="muted">"a → b" shows the frozen rule's count and the A3-corrected count. The three frozen infra errors (seqs 16, 31 and 38) were requests from the previous trial logged late; under A3 there are no infra errors and no agent crashes.</p>
+  <ul>
+    <li><b>aos:</b> completed: 35 of 41 passed; budget_exit: 0 of 7 passed.</li>
+    <li><b>terminus-2:</b> completed: 23 of 26 passed; harbor_timeout: 5 of 22 passed. A Harbor timeout is not always a failure: the verifier still runs, and a trial passes if the answer was already in place.</li>
+  </ul>
+
+  <h2>Why each failed trial failed</h2>
+  <p>Every failed trial was read from its own trace (the AOS ledger and trace, or Terminus-2's trajectory and pane) and given one bucket, by the plan's rules: the earliest cause wins, and a second cause is noted.</p>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>no_answer</th>
+<th class='num'>wrong_answer</th>
+<th class='num'>environment</th>
+<th class='num'>timeout</th>
+<th class='num'>infra</th>
+<th class='num'>unexplained</th>
+</tr>
+<tr><td>aos</td><td class='num'>0</td><td class='num'>6</td><td class='num'>0</td><td class='num'>7</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td>terminus-2</td><td class='num'>0</td><td class='num'>3</td><td class='num'>0</td><td class='num'>17</td><td class='num'>0</td><td class='num'>0</td></tr>
+</table></div>
+  <ul>
+    <li><b>How the tie rule was applied.</b> Each failed trial was read from its trace and given one bucket by PLAN.md&#x27;s definitions. Where two buckets applied, the earliest cause was chosen and the other noted. A trial ended by Harbor&#x27;s timeout or AOS&#x27;s budget while the agent was still working is timeout, even when an unfinished or wrong answer was already on disk; wrong_answer is a trial whose agent finished (exited, or marked the task complete) with a wrong answer. Under the strict reading, in which any written answer that a test failed on comes first, seqs 12, 14, 35, 70 and 71 (other: wrong_answer) would be wrong_answer instead: 2 aos trials and 3 terminus-2 trials.</li>
+    <li><b>polyglot-c-py failed the same way in all 6 trials, in both arms.</b> Each agent compiled the C side into <code>/app/polyglot/cmain</code> to test it and left it there; the one test requires <code>main.py.c</code> alone in that folder ("Expected only main.py.c, found: ['cmain', 'main.py.c']"). The polyglot itself worked in every trial.</li>
+    <li><b>AOS's wrong answers include two exits after a failed self-check.</b> In gpt2-codegolf seqs 25 and 96, AOS's own test of <code>gpt2.c</code> timed out or printed garbage, and it exited with code 0 anyway. In adaptive-rejection-sampler seq 93 it exited knowing its sample standard deviation was too large.</li>
+    <li><b>adaptive-rejection-sampler.</b> The test calls <code>ars(f, c(-5, 5), n = 1000)</code>. In every sampler trial but seq 11, the agent's <code>ars()</code> read <code>c(-5, 5)</code> as a different argument, so that test would have failed on the interface however good the sampler was.</li>
+    <li><b>Most failures in both arms were trials cut off mid-work with no answer written</b>: make-doom-for-mips (6 of 6), gpt2-codegolf for Terminus-2 (3 of 3), Terminus-2's two winning-avg-corewars failures and two of its three protein-assembly failures. In seq 30, Terminus-2 had a warrior that met the thresholds about 15 minutes before its timeout and never saved it.</li>
+  </ul>
+  <div class='wrap'><table><tr>
+<th>Seq</th>
+<th>Task</th>
+<th>Arm</th>
+<th>Ending</th>
+<th>Bucket</th>
+<th>Reason, from the trace</th>
+<th>Also</th>
+</tr>
+<tr><td>11</td><td>adaptive-rejection-sampler</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor 900s timeout hit while the agent was still rebuilding ars.R chunk by chunk (step 25: splicing a new ars_init_points after dexp failed at step 22); test() and the sample files were never written, so test_has_test_function failed with &quot;No &#x27;test&#x27; function found&quot; and test_sample_files_generated with &quot;At least one sample file must be generated&quot; (/app/normal_samples.txt missing).</td><td>no_answer</td></tr>
+<tr><td>12</td><td>adaptive-rejection-sampler</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>AOS stopped at its 879s budget (trace line 68) while still fixing the sampler: ledger call 66 (trace 64) wrote /app/normal_samples.txt with mean -34.3, and call 68 (trace 66) rewrote it the same way, so test_sample_files_generated failed with &quot;Normal samples don&#x27;t match expected distribution (mean=-34.315, std=7.221)&quot;; test_can_generate_standard_distribution_samples also failed because ars.R&#x27;s interface rejects ars(f, c(-5,5), n=1000): &quot;&#x27;df&#x27; (support indicator) must be a function of x or NULL&quot;.</td><td>wrong_answer</td></tr>
+<tr><td>35</td><td>adaptive-rejection-sampler</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>AOS hit its 879s budget (trace line 24) while running the command that appends a concavity fix and runs test() to write the sample files (ledger call 30, trace 22, cancelled at trace 23); about 6 minutes had gone to three ars.R writes cut off at 8192 tokens (calls 8, 10 and 12). No sample file existed (test_sample_files_generated: &quot;At least one sample file must be generated&quot;), and the ars.R assembled at trace 16 rejects ars(f, c(-5,5), n=1000): &quot;&#x27;lower&#x27; must be a single number (may be -Inf)&quot;.</td><td>wrong_answer</td></tr>
+<tr><td>36</td><td>adaptive-rejection-sampler</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor 900s timeout hit right after step 17, where the first working smoke test returned sd 1.31 for dnorm; test() and the sample files were never written (test_has_test_function: &quot;No &#x27;test&#x27; function found&quot;; test_sample_files_generated: /app/normal_samples.txt missing), and the ars(density, lower, upper) interface also failed the generation test with &quot;&#x27;lower&#x27; and &#x27;upper&#x27; must each be a single number&quot;.</td><td>no_answer</td></tr>
+<tr><td>93</td><td>adaptive-rejection-sampler</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>Ledger call 48 (trace 46/47) wrote /app/normal_samples.txt from a sampler that was still wrong (output: &quot;norm: 5000 -0.0227 3.783&quot;), and the agent exited anyway at call 52 (trace 48), saying the sd of 3.78 was too large. test_sample_files_generated failed with &quot;Normal samples don&#x27;t match expected distribution (mean=-0.023, std=3.783)&quot;, and test_can_generate_standard_distribution_samples failed with &quot;&#x27;x_init&#x27; needs at least 3 abscissae (got 2)&quot;.</td><td></td></tr>
+<tr><td>94</td><td>adaptive-rejection-sampler</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor 900s timeout hit while the agent was still writing and patching ars.R (step 20: python patch of ars_make_logtarget); ars() was never run, and test() and the sample files were never written (test_has_test_function: &quot;No &#x27;test&#x27; function found&quot;; test_sample_files_generated: /app/normal_samples.txt missing). The ars(n, density, x.min, x.max) interface also failed the generation test with &quot;&#x27;x.min&#x27; and &#x27;x.max&#x27; must be single values&quot;.</td><td>no_answer</td></tr>
+<tr><td>67</td><td>feal-linear-cryptanalysis</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor 1800s timeout hit while the agent was iterating on meet-in-the-middle key-recovery programs (attack.c through attack9.c); at step 25 attack9 exited 127 in its self-test, and no key was recovered. /app/plaintexts.txt was never written, so test_attack failed with &quot;FileNotFoundError: No such file or directory: &#x27;/app/plaintexts.txt&#x27;&quot;.</td><td>no_answer</td></tr>
+<tr><td>68</td><td>feal-linear-cryptanalysis</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>AOS hit its 1779s budget (trace line 32) while ledger call 30 (trace 30, solve.c recovering s0, s1 and s2 from the three s3 candidates found at trace 28/29) was still running; it was cancelled at trace 31. Earlier, call 20&#x27;s full-LAT brute force (trace 20) used the whole 15-minute tool timeout (trace 21). /app/plaintexts.txt was never written, so test_attack failed with &quot;FileNotFoundError: ... &#x27;/app/plaintexts.txt&#x27;&quot;.</td><td>no_answer</td></tr>
+<tr><td>25</td><td>gpt2-codegolf</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>Wrote /app/gpt2.c at ledger calls 23/25 and edited it at call 27 (trace lines 22-27, 3892 bytes); its own test run at call 31 (trace 30-31, ./a.out ... &quot;The capital of France is&quot;) timed out after 1m50s with no output, yet call 33 exited code 0 claiming success; test_gpt2_implementation failed with subprocess.TimeoutExpired: a.out timed out after 90 seconds (verifier/test-stdout.txt).</td><td></td></tr>
+<tr><td>26</td><td>gpt2-codegolf</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>All 14 trajectory steps went to reverse-engineering the raw float32 weight layout (steps 4-14: scan.c to scan7.c block-stat probes; numpy was missing at step 4 but it switched to C); step 14 was still probing layer-0 block stats when Harbor stopped it (AgentTimeoutError after 900 s, exception.txt); test_gpt2_implementation: &#x27;File /app/gpt2.c does not exist&#x27;.</td><td>no_answer</td></tr>
+<tr><td>37</td><td>gpt2-codegolf</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Steps 4-15 were spent probing the weight layout in pure Python (probe.py to probeA.py; no numpy, step 3); step 15 was still taking value histograms when Harbor&#x27;s 900 s agent timeout hit (exception.txt); /app/gpt2.c never written, so test_gpt2_implementation: &#x27;File /app/gpt2.c does not exist&#x27;.</td><td>no_answer</td></tr>
+<tr><td>38</td><td>gpt2-codegolf</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>Spent ledger calls 1-27 probing the weight layout (trace lines 4-27); call 27 alone took 331 s of model latency; call 29 tried write_file /app/gpt2.c but returned invalid JSON cut off mid-file, and the repair call 31 hit the strict budget (trace line 28: &#x27;time budget exceeded: 879s strict budget of run&#x27;); test_gpt2_implementation: &#x27;File /app/gpt2.c does not exist&#x27;.</td><td>no_answer</td></tr>
+<tr><td>95</td><td>gpt2-codegolf</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Steps 4-16 were spent decoding the weight layout (numpy missing at step 4, then pure-Python scans /tmp/scan2.py to /tmp/blk2.py); step 16 was still checking the per-layer offset arithmetic when Harbor&#x27;s 900 s agent timeout hit (exception.txt); /app/gpt2.c never written, so test_gpt2_implementation: &#x27;File /app/gpt2.c does not exist&#x27;.</td><td>no_answer</td></tr>
+<tr><td>96</td><td>gpt2-codegolf</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>Final /app/gpt2.c written at ledger call 45 (trace line 42, 2965 bytes); its own test at call 47 (trace 44-45, artifacts/payloads/art-000044.json) printed garbage (&#x27;er again again C a b00 A ...&#x27; and &#x27; de de de ...&#x27;), yet call 49 exited code 0 claiming success; test_gpt2_implementation: AssertionError &#x27;Wrong output&#x27;, stdout &#x27;_ de re de re th_d cd_ reifdifd re_ red&#x27;.</td><td></td></tr>
+<tr><td>14</td><td>headless-terminal</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Agent was still in its first smoke test of /app/headless_terminal.py when Harbor&#x27;s 900 s timeout hit (exception.txt AgentTimeoutError): step 25 ran /tmp/t1.py, steps 26-27 were probing pyte&#x27;s Screen API after a crash; the partial file passed 6/7 tests but test_background_commands failed with requests ConnectionError to localhost:8000 (verifier/test-stdout.txt)</td><td>wrong_answer</td></tr>
+<tr><td>71</td><td>headless-terminal</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Agent was still debugging its first smoke run of /app/headless_terminal.py when Harbor&#x27;s 900 s timeout hit (exception.txt AgentTimeoutError): step 18 had just fixed `&#x27;spawn&#x27; object has no attribute &#x27;fd&#x27;` and a broken ANSI regex; 4/7 tests failed, e.g. test_send_non_interactive_command `assert path.exists()` for /app/test.txt and test_background_commands ConnectionError to localhost:8000 (verifier/test-stdout.txt)</td><td>wrong_answer</td></tr>
+<tr><td>9</td><td>make-doom-for-mips</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>Still writing the libc shim when the 879s budget hit: ledger calls 55 and 57 (write_file /app/build/minic.c) both ran to the 8192-token cap, call 59 was cut off and trace line 56 exits &#x27;time budget exceeded&#x27;; nothing was compiled, so /app/doomgeneric_mips never existed (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>10</td><td>make-doom-for-mips</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900s timeout hit while the agent was mid-build: step 17 installed gcc-mipsel-linux-gnu, step 29 wrote /app/build/include/my_stdlib.h, and the last step, 30, was still writing /app/build/mylibc.c (heredoc); no compile or link ever ran (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>51</td><td>make-doom-for-mips</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>Budget ran out mid-work: ledger call 51 hit the 8192-token cap on a libc write_file (110s), call 53 wrote only /app/mystdlib/libc1.c (trace line 50), the planned libc2.c and the compile were never done, and trace line 52 exits &#x27;time budget exceeded&#x27; (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>52</td><td>make-doom-for-mips</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900s timeout hit during setup: step 32 wrote /app/mipsbuild/include/my_stdlib.h and the last step, 37, was still fixing its O_* flag constants against vm.js; no libc .c file was written and nothing was compiled (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>73</td><td>make-doom-for-mips</td><td>aos</td><td>budget_exit</td><td><b>timeout</b></td><td>Ended while the first full build was running: the trace line 48 compile failed on &#x27;INT_MAX undeclared&#x27; (am_map.c, m_bbox.c), trace line 50 failed with a shell &#x27;Syntax error&#x27;, and ledger call 57&#x27;s `sh /app/build.sh` (trace line 54) was cancelled with &#x27;context deadline exceeded&#x27; (trace line 55) before /app/doomgeneric_mips was linked (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>74</td><td>make-doom-for-mips</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900s timeout hit mid-work: steps 15-18 got clang+lld installed (after a backgrounded apt was stopped at step 17), and the last step, 36, had only just written /app/mipslibc/include/my_stdlib.h; no libc, linker script or build ran (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27; and test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>3</td><td>polyglot-c-py</td><td>terminus-2</td><td>completed</td><td><b>wrong_answer</b></td><td>Trajectory step 4 rebuilt the binary into the answer folder (`gcc /app/polyglot/main.py.c -o /app/polyglot/cmain`) and step 5 marked the task complete without removing it; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>4</td><td>polyglot-c-py</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>calls.jsonl seq 22 (trace.jsonl lines 22-23) ran `gcc -Wall -Wextra /app/polyglot/main.py.c -o /app/polyglot/cmain` and seq 24 / trace line 24 exited code=0 with cmain still in /app/polyglot; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>47</td><td>polyglot-c-py</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>calls.jsonl seq 36 (trace.jsonl lines 36-37) ran `rm -f /app/polyglot/cmain` but then rebuilt it with `gcc /app/polyglot/main.py.c -o /app/polyglot/cmain`; seq 40 / trace line 40 exited code=0 leaving it; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>48</td><td>polyglot-c-py</td><td>terminus-2</td><td>completed</td><td><b>wrong_answer</b></td><td>Trajectory step 7 rebuilt the binary into the answer folder (`gcc /app/polyglot/main.py.c -o /app/polyglot/cmain` in a loop) and step 8 marked the task complete without removing it; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>85</td><td>polyglot-c-py</td><td>aos</td><td>completed</td><td><b>wrong_answer</b></td><td>calls.jsonl seq 40 (trace.jsonl lines 38-39) rebuilt /app/polyglot/cmain, reasoning &quot;leaving the built binary is fine, harmless&quot;; seq 42 listed /app/polyglot and removed only __pycache__, then trace line 42 exited code=0; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>86</td><td>polyglot-c-py</td><td>terminus-2</td><td>completed</td><td><b>wrong_answer</b></td><td>Trajectory step 12 ran `rm -f /app/polyglot/cmain &amp;&amp; gcc /app/polyglot/main.py.c -o /app/polyglot/cmain` and `ls -l /app/polyglot/` showed cmain, then step 13 marked the task complete; test_fibonacci_polyglot: AssertionError &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot; (verifier/test-stdout.txt)</td><td></td></tr>
+<tr><td>15</td><td>protein-assembly</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Spent steps 3-22 identifying components (FLAG, Clover 5WJ2, DHFR, mCherry 2H5Q, SNAP 3KZY) through the RCSB and FPBase APIs; final.py at step 23 wrote the sequence only to /tmp/gblock.txt, then Harbor&#x27;s 1800 s agent timeout hit before it was copied to /app (exception.txt); test_gblock: &#x27;File /app/gblock.txt does not exist.&#x27;</td><td>no_answer</td></tr>
+<tr><td>40</td><td>protein-assembly</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Lost steps 8-20 to failed RCSB search queries (HTTP 400) and an NCBI BLAST job that stayed in WAITING (steps 12-17); step 27 was still building the protein (build2.py, 869 aa) when Harbor&#x27;s 1800 s agent timeout hit (exception.txt); /app/gblock.txt never written, so test_gblock: &#x27;File /app/gblock.txt does not exist.&#x27;</td><td>no_answer</td></tr>
+<tr><td>70</td><td>protein-assembly</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Step 22 wrote /app/gblock.txt with SNAP-tag stripped of its first residue (build.py step 21: snap[1:] gives &#x27;PGSDKD...&#x27;, not the expected &#x27;GPGSDKD...&#x27;); step 25 rewrote it with GGYG/GMYG and step 26 rewrote it with chromophore X-&gt;&#x27;G&#x27;, so the Clover donor (...TTFGYGVAC...) was missing too; test_gblock: &#x27;Fusion protein must be in the order flag - donor - dhfr - acceptor - snap&#x27;, assert 0 &lt; -1; Harbor&#x27;s 1800 s timeout ended the run during these rewrites.</td><td>wrong_answer Its checker chose wrong_answer; moved to timeout for consistency with seqs 12, 14, 35 and 71, where the agent was still reworking an answer already on disk when the end came.</td></tr>
+<tr><td>30</td><td>winning-avg-corewars</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 3600s timeout hit while the agent was still testing candidates: step 44&#x27;s grade.py output already showed /app/cand2 variants marked OK under the exact `pmars -b -r 100 -f` command (e.g. v_3000_7_9_4.red 77/82/82/47/51), but none was copied to /app/my_warrior.red; steps 45-55 were spent on slow -P/-F robustness sweeps, interrupted at step 52 and still running at step 55 (test_warrior_exists &#x27;my_warrior.red file not found&#x27; and test_warrior_performance &quot;Unable to open file &#x27;/app/my_warrior.red&#x27;&quot;).</td><td>no_answer</td></tr>
+<tr><td>56</td><td>winning-avg-corewars</td><td>terminus-2</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 3600s timeout hit while the agent was still searching for a design: no candidate met the thresholds (the best, in step 26, was the bundled rave.red at stone 59 &lt; 75, and step 42&#x27;s p1.red scored 1/33/0/4/0); the last step, 43, was still running sweep.sh, and /app/my_warrior.red was never written (test_warrior_exists &#x27;my_warrior.red file not found&#x27; and test_warrior_performance &quot;Unable to open file &#x27;/app/my_warrior.red&#x27;&quot;).</td><td>no_answer</td></tr>
+</table></div>
+
+  <h2>Cost</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>Median agent s</th>
+<th class='num'>Total agent h</th>
+<th class='num'>Model calls</th>
+<th class='num'>Prompt tokens</th>
+<th class='num'>Cached tokens</th>
+<th class='num'>Completion tokens</th>
+</tr>
+<tr><td>aos</td><td class='num'>443</td><td class='num'>7.6</td><td class='num'>1,111</td><td class='num'>20,551,359</td><td class='num'>19,491,539</td><td class='num'>1,372,375</td></tr>
+<tr><td>terminus-2</td><td class='num'>799</td><td class='num'>12.0</td><td class='num'>976</td><td class='num'>18,325,667</td><td class='num'>17,101,661</td><td class='num'>1,552,499</td></tr>
+</table></div>
+  <p class="muted">Model calls are the relay's chat completions attributed to each arm's trials. AOS tokens are from its ledger; Terminus-2 tokens are Harbor's counts. Both arms ran against a server with prefix caching, so most prompt tokens were cached.</p>
+
+  <h2>AOS contracts, per trial</h2>
+  <p>Across the 48 AOS trials: 1046 budget notes and 1046 checkpoints, 9 trials that reached the 10% time warning, 7 budget exits, 48 of 48 complete ledgers, 0 compactions and 0 handoffs. Replay: 48 identical, 0 diverged, 0 refused.</p>
+  <div class='wrap'><table><tr>
+<th class='num'>Seq</th>
+<th>Task</th>
+<th>Reward</th>
+<th>Ending</th>
+<th class='num'>Agent s</th>
+<th class='num'>Calls</th>
+<th class='num'>Budget notes</th>
+<th class='num'>Checkpoints</th>
+<th class='num'>Warning at s</th>
+<th>Budget exit</th>
+<th>Ledger complete</th>
+<th>Compactions</th>
+<th>Replay</th>
+</tr>
+<tr><td class='num'>1</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>308</td><td class='num'>11</td><td class='num'>9</td><td class='num'>9</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>11/11 identical</td></tr>
+<tr><td class='num'>4</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>117</td><td class='num'>12</td><td class='num'>12</td><td class='num'>12</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>12/12 identical</td></tr>
+<tr><td class='num'>5</td><td>mailman</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>839</td><td class='num'>39</td><td class='num'>39</td><td class='num'>39</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>39/39 identical</td></tr>
+<tr><td class='num'>8</td><td>feal-linear-cryptanalysis</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>778</td><td class='num'>32</td><td class='num'>29</td><td class='num'>29</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>32/32 identical</td></tr>
+<tr><td class='num'>9</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>880</td><td class='num'>30</td><td class='num'>28</td><td class='num'>28</td><td class='num'>—</td><td>yes</td><td>yes</td><td>0</td><td>30/30 identical</td></tr>
+<tr><td class='num'>12</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>879</td><td class='num'>35</td><td class='num'>34</td><td class='num'>34</td><td class='num'>821</td><td>yes</td><td>yes</td><td>0</td><td>35/35 identical</td></tr>
+<tr><td class='num'>13</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>524</td><td class='num'>30</td><td class='num'>30</td><td class='num'>30</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>30/30 identical</td></tr>
+<tr><td class='num'>16</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>1,068</td><td class='num'>59</td><td class='num'>54</td><td class='num'>54</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>59/59 identical</td></tr>
+<tr><td class='num'>17</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>232</td><td class='num'>10</td><td class='num'>10</td><td class='num'>10</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>10/10 identical</td></tr>
+<tr><td class='num'>20</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>104</td><td class='num'>10</td><td class='num'>10</td><td class='num'>10</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>10/10 identical</td></tr>
+<tr><td class='num'>21</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>75</td><td class='num'>9</td><td class='num'>9</td><td class='num'>9</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>9/9 identical</td></tr>
+<tr><td class='num'>24</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>160</td><td class='num'>6</td><td class='num'>5</td><td class='num'>5</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>6/6 identical</td></tr>
+<tr><td class='num'>25</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>870</td><td class='num'>17</td><td class='num'>16</td><td class='num'>16</td><td class='num'>858</td><td>no</td><td>yes</td><td>0</td><td>17/17 identical</td></tr>
+<tr><td class='num'>28</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>47</td><td class='num'>9</td><td class='num'>8</td><td class='num'>8</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>9/9 identical</td></tr>
+<tr><td class='num'>29</td><td>winning-avg-corewars</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>2,342</td><td class='num'>81</td><td class='num'>78</td><td class='num'>78</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>81/81 identical</td></tr>
+<tr><td class='num'>32</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>47</td><td class='num'>13</td><td class='num'>13</td><td class='num'>13</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>13/13 identical</td></tr>
+<tr><td class='num'>34</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>90</td><td class='num'>9</td><td class='num'>9</td><td class='num'>9</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>9/9 identical</td></tr>
+<tr><td class='num'>35</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>880</td><td class='num'>15</td><td class='num'>11</td><td class='num'>11</td><td class='num'>804</td><td>yes</td><td>yes</td><td>0</td><td>15/15 identical</td></tr>
+<tr><td class='num'>38</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>880</td><td class='num'>16</td><td class='num'>14</td><td class='num'>14</td><td class='num'>—</td><td>yes</td><td>yes</td><td>0</td><td>16/16 identical</td></tr>
+<tr><td class='num'>39</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>730</td><td class='num'>35</td><td class='num'>35</td><td class='num'>35</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>35/35 identical</td></tr>
+<tr><td class='num'>42</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>540</td><td class='num'>18</td><td class='num'>16</td><td class='num'>16</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>18/18 identical</td></tr>
+<tr><td class='num'>43</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>201</td><td class='num'>9</td><td class='num'>6</td><td class='num'>6</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>9/9 identical</td></tr>
+<tr><td class='num'>46</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>38</td><td class='num'>5</td><td class='num'>5</td><td class='num'>5</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>5/5 identical</td></tr>
+<tr><td class='num'>47</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>456</td><td class='num'>20</td><td class='num'>20</td><td class='num'>20</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>20/20 identical</td></tr>
+<tr><td class='num'>50</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>250</td><td class='num'>12</td><td class='num'>12</td><td class='num'>12</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>12/12 identical</td></tr>
+<tr><td class='num'>51</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>879</td><td class='num'>28</td><td class='num'>26</td><td class='num'>26</td><td class='num'>845</td><td>yes</td><td>yes</td><td>0</td><td>28/28 identical</td></tr>
+<tr><td class='num'>54</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>85</td><td class='num'>10</td><td class='num'>10</td><td class='num'>10</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>10/10 identical</td></tr>
+<tr><td class='num'>55</td><td>winning-avg-corewars</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>1,037</td><td class='num'>49</td><td class='num'>47</td><td class='num'>47</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>49/49 identical</td></tr>
+<tr><td class='num'>58</td><td>feal-linear-cryptanalysis</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>319</td><td class='num'>20</td><td class='num'>20</td><td class='num'>20</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>20/20 identical</td></tr>
+<tr><td class='num'>59</td><td>mailman</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>1,630</td><td class='num'>68</td><td class='num'>64</td><td class='num'>64</td><td class='num'>1,615</td><td>no</td><td>yes</td><td>0</td><td>68/68 identical</td></tr>
+<tr><td class='num'>62</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>249</td><td class='num'>16</td><td class='num'>15</td><td class='num'>15</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>16/16 identical</td></tr>
+<tr><td class='num'>63</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>835</td><td class='num'>42</td><td class='num'>39</td><td class='num'>39</td><td class='num'>811</td><td>no</td><td>yes</td><td>0</td><td>42/42 identical</td></tr>
+<tr><td class='num'>65</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>55</td><td class='num'>6</td><td class='num'>6</td><td class='num'>6</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>6/6 identical</td></tr>
+<tr><td class='num'>68</td><td>feal-linear-cryptanalysis</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>1,779</td><td class='num'>15</td><td class='num'>15</td><td class='num'>15</td><td class='num'>—</td><td>yes</td><td>yes</td><td>0</td><td>15/15 identical</td></tr>
+<tr><td class='num'>69</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>760</td><td class='num'>36</td><td class='num'>35</td><td class='num'>35</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>36/36 identical</td></tr>
+<tr><td class='num'>72</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>430</td><td class='num'>18</td><td class='num'>17</td><td class='num'>17</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>18/18 identical</td></tr>
+<tr><td class='num'>73</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>budget_exit</td><td class='num'>879</td><td class='num'>29</td><td class='num'>27</td><td class='num'>27</td><td class='num'>824</td><td>yes</td><td>yes</td><td>0</td><td>29/29 identical</td></tr>
+<tr><td class='num'>76</td><td>mailman</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>1,131</td><td class='num'>51</td><td class='num'>46</td><td class='num'>46</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>51/51 identical</td></tr>
+<tr><td class='num'>77</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>88</td><td class='num'>9</td><td class='num'>9</td><td class='num'>9</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>9/9 identical</td></tr>
+<tr><td class='num'>80</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>171</td><td class='num'>11</td><td class='num'>10</td><td class='num'>10</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>11/11 identical</td></tr>
+<tr><td class='num'>81</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>57</td><td class='num'>10</td><td class='num'>9</td><td class='num'>9</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>10/10 identical</td></tr>
+<tr><td class='num'>84</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>63</td><td class='num'>10</td><td class='num'>10</td><td class='num'>10</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>10/10 identical</td></tr>
+<tr><td class='num'>85</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>415</td><td class='num'>22</td><td class='num'>21</td><td class='num'>21</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>22/22 identical</td></tr>
+<tr><td class='num'>88</td><td>winning-avg-corewars</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>915</td><td class='num'>46</td><td class='num'>44</td><td class='num'>44</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>46/46 identical</td></tr>
+<tr><td class='num'>89</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>171</td><td class='num'>6</td><td class='num'>6</td><td class='num'>6</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>6/6 identical</td></tr>
+<tr><td class='num'>92</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>329</td><td class='num'>14</td><td class='num'>11</td><td class='num'>11</td><td class='num'>—</td><td>no</td><td>yes</td><td>0</td><td>14/14 identical</td></tr>
+<tr><td class='num'>93</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>871</td><td class='num'>26</td><td class='num'>24</td><td class='num'>24</td><td class='num'>813</td><td>no</td><td>yes</td><td>0</td><td>26/26 identical</td></tr>
+<tr><td class='num'>96</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>864</td><td class='num'>25</td><td class='num'>23</td><td class='num'>23</td><td class='num'>832</td><td>no</td><td>yes</td><td>0</td><td>25/25 identical</td></tr>
+</table></div>
+
+  <h2>Data quality</h2>
+  <ul>
+    <li><b>Contention.</b> The server is shared. For each trial, its request count before and after was compared with the requests the relay saw start inside the trial. Under A3, the surplus is 0 in every trial with saved counts; only seq 29's is unknown (A2). No other client used the model during any trial.</li>
+    <li><b>Why A3 was needed.</b> The relay logs a request when its reply ends. A request in flight when a trial ended, because Harbor's timeout killed Terminus-2 or AOS left a call at its budget exit, was counted by the server inside that trial but logged after the trial's closing check, so the frozen collector put it in the next trial's slice, sometimes as a 502 to the departed client. Under the frozen rule that made seqs 16, 31 and 38 infra errors and moved the 10% stop rule within one trial. The cancelled requests and carry-overs are listed here:</li>
+  </ul>
+  <div class='wrap'><table><tr>
+<th class='num'>Seq</th>
+<th>Task</th>
+<th>Arm</th>
+<th>Ending (frozen)</th>
+<th>Ending (A3)</th>
+<th>Cancelled at its end (start)</th>
+<th>Carried in (start)</th>
+<th class='num'>Surplus (frozen)</th>
+<th class='num'>Surplus (A3)</th>
+</tr>
+<tr><td class='num'>10</td><td>make-doom-for-mips</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>01:25:23Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>11</td><td>adaptive-rejection-sampler</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>01:42:54Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>15</td><td>protein-assembly</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>02:55:06Z</td><td></td><td class='num'>1</td><td class='num'>0</td></tr>
+<tr><td class='num'>16</td><td>protein-assembly</td><td>aos</td><td>infra_error</td><td>completed</td><td></td><td>02:55:06Z</td><td class='num'>-1</td><td class='num'>0</td></tr>
+<tr><td class='num'>30</td><td>winning-avg-corewars</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>06:25:30Z</td><td></td><td class='num'>1</td><td class='num'>0</td></tr>
+<tr><td class='num'>31</td><td>vulnerable-secret</td><td>terminus-2</td><td>infra_error</td><td>completed</td><td></td><td>06:25:30Z</td><td class='num'>-1</td><td class='num'>0</td></tr>
+<tr><td class='num'>37</td><td>gpt2-codegolf</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>07:19:25Z</td><td></td><td class='num'>1</td><td class='num'>0</td></tr>
+<tr><td class='num'>38</td><td>gpt2-codegolf</td><td>aos</td><td>infra_error</td><td>budget_exit</td><td>07:33:33Z</td><td>07:19:25Z</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>39</td><td>protein-assembly</td><td>aos</td><td>completed</td><td>completed</td><td></td><td>07:33:33Z</td><td class='num'>-1</td><td class='num'>0</td></tr>
+<tr><td class='num'>60</td><td>mailman</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>12:24:08Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>64</td><td>headless-terminal</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>13:04:16Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>67</td><td>feal-linear-cryptanalysis</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>13:39:46Z</td><td></td><td class='num'>1</td><td class='num'>0</td></tr>
+<tr><td class='num'>70</td><td>protein-assembly</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>14:53:04Z</td><td></td><td class='num'>1</td><td class='num'>0</td></tr>
+<tr><td class='num'>71</td><td>headless-terminal</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>15:08:56Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td class='num'>74</td><td>make-doom-for-mips</td><td>terminus-2</td><td>harbor_timeout</td><td>harbor_timeout</td><td>15:48:02Z</td><td></td><td class='num'>0</td><td class='num'>0</td></tr>
+</table></div>
+  <ul>
+    <li><b>Sampling.</b> All 2,089 chat completions in the run carried temperature 0.6, top_p 0.95, max_tokens 8192 and reasoning_budget_tokens 2048: 1,109 from AOS and 980 from Terminus-2, by User-Agent.</li>
+    <li><b>Backend.</b> The model ID and the server's start time were checked before and after every trial and never changed.</li>
+    <li><b>The key stayed out.</b> It appears in none of the 5,732 files under the 96 job folders, this folder and the replay copies.</li>
+    <li><b>No reruns or replacements.</b> All 96 scheduled trials ran once, in the frozen order.</li>
+  </ul>
+
+  <h2>What this run can and cannot show</h2>
+  <ul>
+    <li>It compares two agents driving the same model with the same sampling. It does not separate the reasons: AOS's tools, prompts, in-container execution and strict time budget all differ from Terminus-2's, by design.</li>
+    <li>The tasks are a random draw from the eligible 85, so the result speaks for that population, at this model, on this machine. Four tasks (both arms 0/3) gave no information about the difference.</li>
+    <li>Three trials per arm per task leaves wide per-task uncertainty. The per-task table is the evidence; the pooled test is a summary of it.</li>
+  </ul>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>baseline-tb2/PLAN.md</code>: the frozen plan with amendments A1–A3.</li>
+    <li><code>baseline-tb2/results.jsonl</code>: one record per trial, as written during the run; <code>corrections.jsonl</code>: the A3 fields for seqs 1–39.</li>
+    <li><code>baseline-tb2/failures.json</code>: the hand-check; <code>replay.jsonl</code>: the replays; <code>analysis.json</code>: everything above.</li>
+    <li><code>baseline-tb2/relay.log</code>: the relay's per-request log (no messages, no headers but the User-Agent); <code>logs/backend.jsonl</code>: the backend checks from seq 30 on.</li>
+  </ul>
+
+  <h2>Reproduce</h2>
+  <p><code>python3 -I reports/terminal-bench/baseline-tb2/a3_corrections.py</code>, then <code>analyze.py</code>, then <code>make_report.py</code>. The job folders are under <code>reports/terminal-bench/jobs/tb2-base-*</code>.</p>
+</body>
+</html>
