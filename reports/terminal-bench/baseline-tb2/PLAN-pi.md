@@ -1,9 +1,13 @@
-# TB2 baseline, third arm: pi (DRAFT, not frozen)
+# TB2 baseline, third arm: pi (frozen, Option A)
 
-**Status: draft for review.** Nothing in this plan has run. No trial, smoke
-or model call is made until the user's explicit go-ahead. The plan is frozen
-in a later commit, after review, by the same rules as the baseline's
-`PLAN.md`:
+**Status: frozen**, after Book's review and the user's choice of Option A
+(2026-11-10). The draft is 19bc6e8, with review amendments in bfdd446.
+The adapter was merged in as 151d07f.
+
+- The smoke may run now.
+- The counted 48-trial run needs the user's explicit go-ahead.
+
+The freeze follows the same rules as the baseline's `PLAN.md`:
 
 - amendments come only before the first counted trial;
 - there are no reruns or replacements.
@@ -139,7 +143,8 @@ were not interleaved with pi. Weighed honestly:
 - If the user prefers the stronger design, Option B is fully specified
   here and needs no other change.
 
-**Open for the user:** A or B.
+**Decided: Option A.** The user chose it on 2026-11-10. Option B's
+description is kept for the record, but none of its trials run.
 
 ## What is different about pi, recorded rather than tuned
 
@@ -183,17 +188,15 @@ were not interleaved with pi. Weighed honestly:
   - Both commits are on the AOS main checkout only.
   - **The run needs the adapter on this branch.** PYTHONPATH points at
     `bench/harbor`, and the plan pins file hashes at HEAD.
-  - The simplest way is to merge main into the eval branch before freezing.
+  - **Done:** main was merged into the eval branch as 151d07f, on the
+    user's approval, and not pushed.
     - The eval branch's merge base with main is 9070498 (v0.1.10).
     - main is 9070498 plus exactly 1ef6a84 and 42dbed7.
     - So the merge brings in only those two commits. It is not a
       fast-forward, because the eval branch has its own commits, but it is
       clean: `git merge-tree` reports no conflicts.
-    - The merge is the user's call.
   - Pushing the eval branch after the merge would also publish 1ef6a84 and
     42dbed7. That push needs the user's approval when it comes up.
-  - The alternative, pointing PYTHONPATH at the main checkout, ties the run
-    to another checkout's state, so it is not proposed.
 - **Pi release: no new download.**
   - The main checkout already has the hash-checked release, fetched by
     Coder on 2026-11-09: `.cache/pi-v1.5.0/download/pi-linux-x64.tar.gz`
@@ -201,12 +204,37 @@ were not interleaved with pi. Weighed honestly:
   - Its SHA-256 is df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b,
     which equals `RELEASE_SHA256["linux-x64"]`. This was checked on
     2026-11-10.
-  - The tarball and `SHA256SUMS` are copied into this worktree's
-    `.cache/pi-v1.5.0/download/`.
+  - **Done:** the tarball and `SHA256SUMS` were copied into this
+    worktree's `.cache/pi-v1.5.0/download/`.
+    - The copy's SHA-256 matches, and `pi_agent.release_tarball("linux-x64")`
+      accepts it.
+    - `run-pi.sh` sets `PI_HARBOR_CACHE` to this worktree's
+      `.cache/pi-v1.5.0`.
   - The hash is verified at freeze, and by the adapter on every install.
-- **Pinned at freeze.** The SHA-256 of `pi_agent.py`, `aos_agent.py` (pi
-  imports its endpoint defaults), the release tarball and each new driver
-  file below. `bench/harbor/run-tb.sh --self-test` must pass, with 46 tests.
+- **Pinned at freeze** (SHA-256).
+  - `bench/harbor/run-tb.sh --self-test` passed with 46 tests, and
+    `test_collect_pi.py` with 10 tests. Both ran with ANTHROPIC_API_KEY and
+    AOS_LLM_API_KEY unset.
+
+| File | SHA-256 |
+|---|---|
+| `bench/harbor/pi_agent.py` | f9235fdf020496c13abfb2a52b141f2d8c8d159248baa38f9c51f1cb646492ca |
+| `bench/harbor/aos_agent.py` | 3b85d008cef55b1e581c500b27aea6817fa0aaf448c692d8336dab740de64c42 |
+| `.cache/pi-v1.5.0/download/pi-linux-x64.tar.gz` | df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b |
+| `run-pi.sh` | f10b9928a2200d71f425e35c184aaf7d851ab55b4fa40154a6bd25b883edb5a5 |
+| `relay-start-pi.sh` | 5dff95ad44e58bd07ce7925e0c3df0e42b8dc5f9defa18c44abe0bd0c283be58 |
+| `relay.py` (the baseline's, unchanged) | fb0e7814544f56667aaf7fd8f08466362d4301fba8f26ad40a6201736e593445 |
+| `collect_pi.py` | 3f6b7cd908deb59df7ac2bb6b3d25a57180fa58dc005c9a8911fd37bba69792a |
+| `collect.py` (the baseline's, at A3) | 9ee4be51a5f8f96d5e1d5dfacac77d6830e1d322207f27d6a9d8fea0be5ad980 |
+| `test_collect_pi.py` | 374a4d43ce5ba22b55ff0989c97f8b11dd9569f8e5d56f62b268524d8fe15020 |
+| `make_schedule_pi.py` | 9455eaccf0f7119293674e528382e6e62eed8f067fc76912f93b6edcc74bf143 |
+| `schedule-pi.json` | bbacc73c005aee11131216961c2adebce54d437f36d2f2c8cb0d478e0bca12bb |
+| `analyze_pi.py` | 5d8365200592bd2d5bcf3366a3efd52a9e43c735d6cf2831638f049d0edbba90 |
+| `analyze.py` (the baseline's) | 58f427a2f3edb75204d032cdde68a1da863785115f407a69c110e8f1e94a2a6d |
+| `power_pi.py` | 0f446930748a908cdcbffd7dfd669eac3b5dfea42493749bc3b8b152592c6583 |
+| `survey.json` | 279229e49814f57fd7a6d68c9ccd05f5d101358549e61856c3d1653d9207cb22 |
+| `drawn.json` | b9551e4a7cd1e9e0b6cad2bed3fb0621b82c11a5c89abef6410586c652b057ca |
+
 - **New driver files, in this folder.** The baseline's files are not
   edited.
   - `make_schedule_pi.py` and `schedule-pi.json`.
@@ -219,21 +247,41 @@ were not interleaved with pi. Weighed honestly:
 
     Without an explicit `AOS_LLM_MODEL`, pi_agent.py falls back to an older
     default model.
-  - `collect_pi.py`: imports `collect.py` and adds the pi fields and
-    endings. It writes `results-pi.jsonl`.
-  - `analyze_pi.py` and `make_report_pi.py`.
+  - `collect_pi.py`: imports `collect.py`, sets its relay log to
+    `relay-pi.log`, and adds the pi fields, endings and stop rule. It
+    writes `results-pi.jsonl`, or `smoke-pi.jsonl` for seq 0.
+    - Its `backend` check also requires engine 0.1.54.
+    - Its `done` honours the `PAUSE` file.
+  - `relay-start-pi.sh`: the baseline's `relay-start.sh` with
+    `--log relay-pi.log`.
+  - `analyze_pi.py`, pinned here, fixes the analysis.
+    - It was dry-run on a copy, with the baseline's terminus-2 records
+      standing in for pi. P1 gave a difference of 0, and P2 reproduced the
+      baseline's p = 0.0152 (Holm 0.0304).
+  - `make_report_pi.py` only presents `analysis-pi.json`. It is written
+    after the run, as the baseline's `make_report.py` was.
   - The relay runs with `--log relay-pi.log`, so the baseline's committed
     `relay.log` stays as it is.
-- **Tests.** `collect_pi.py` gets unit tests for its pi fields and endings,
-  run on the adapter's `testdata/pi-session.jsonl`:
+- **Tests.** `test_collect_pi.py` has 10 tests, run on the adapter's
+  `testdata/pi-session.jsonl`:
   - a whole run;
-  - a run killed with a torn last line;
-  - a run killed before the first reply (`pi.txt` only).
+  - a recovered 502 (not infra) and an unrecovered 502 (infra);
+  - a timeout whose last request is cancelled at the end;
+  - a torn last line;
+  - no session file (killed before the first reply);
+  - no exit without a timeout (agent_crash);
+  - an exception before the agent ran (infra);
+  - unsaved backend counts;
+  - the stop rule.
 
 ## Trials and order
 
-- **Seed 20261111.** `make_schedule_pi.py` draws a fresh permutation of the
-  16 tasks for each of rounds 1, 2 and 3.
+- **Seed 20261120.** `make_schedule_pi.py` draws a fresh permutation of the
+  16 tasks for each of rounds 1, 2 and 3, from one generator.
+  - The draft's seed was 20261111. The baseline seeded round r with
+    20261110 + r, so 20261111 reproduced the baseline's round-1 order
+    exactly. It was changed before the freeze.
+  - Under Option A all 48 trials are pi.
   - With Option B, each round-1 task gets three trials, aos, terminus-2 and
     pi, in an order drawn from the same seed.
   - Jobs are `tb2-pi-{seq:03d}-{task}-{arm}`.
@@ -302,7 +350,8 @@ The baseline's endings are used, with pi's exit in place of AOS's:
   - or a LiteLLM-style API error, for the arms that raise one;
   - or an exception raised before the agent ran, such as a failed install or
     version check.
-  - The unrecovered-502 rule applies to all three arms. So does AOS's
+  - The unrecovered-502 rule applies to all three arms (under Option A only
+    pi trials run). So does AOS's
     ledger rule: a backend error counts only if the call was not followed by
     a later successful one.
   - The baseline is unaffected. Under A3, no baseline trial had an own 502
@@ -465,13 +514,10 @@ counted trial.
 
 ## Procedure
 
-1. User decisions:
-   - Option A or B;
-   - the merge of 1ef6a84 and 42dbed7 into the eval branch;
-   - approval of the run's length.
-2. Copy the pi release from the main checkout's cache and verify its hash.
-   Build the driver files and their tests. Pin the hashes and freeze this
-   plan in a commit.
+1. User decisions: Option A, and the merge (done). Approval of the run's
+   length is still to come.
+2. Copy the pi release and verify its hash. Build the driver files and
+   their tests. Pin the hashes and freeze this plan in a commit (done).
 3. Start the relay with `--log relay-pi.log`. Check the backend: model,
    engine and start time.
 4. Run the smoke and check it against "Smoke". Amend if needed, before
@@ -501,12 +547,11 @@ From the baseline:
 **This is well over 30 minutes and needs the user's approval.** Started in
 the early afternoon, Option A crosses one 08:55 hold. Option B may cross two.
 
-## Open questions
+## Decisions
 
-1. Option A or B for the comparators.
-2. Bringing 1ef6a84 and 42dbed7 onto the eval branch: merge main (proposed),
-   or another way.
-3. Approval of the run's length (see "Estimate").
+- Option A. The user chose it on 2026-11-10.
+- 1ef6a84 and 42dbed7 merged into the eval branch (151d07f), not pushed.
+- Still open: the user's go-ahead for the counted run and its length.
 
 Settled in review (2026-11-10):
 

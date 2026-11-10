@@ -1,0 +1,342 @@
+{
+ "seed": 20261120,
+ "option": "A",
+ "trials": [
+  {
+   "seq": 1,
+   "round": 1,
+   "task": "regex-log",
+   "arm": "pi",
+   "job": "tb2-pi-001-regex-log-pi"
+  },
+  {
+   "seq": 2,
+   "round": 1,
+   "task": "protein-assembly",
+   "arm": "pi",
+   "job": "tb2-pi-002-protein-assembly-pi"
+  },
+  {
+   "seq": 3,
+   "round": 1,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "job": "tb2-pi-003-adaptive-rejection-sampler-pi"
+  },
+  {
+   "seq": 4,
+   "round": 1,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "job": "tb2-pi-004-winning-avg-corewars-pi"
+  },
+  {
+   "seq": 5,
+   "round": 1,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "job": "tb2-pi-005-gpt2-codegolf-pi"
+  },
+  {
+   "seq": 6,
+   "round": 1,
+   "task": "log-summary-date-ranges",
+   "arm": "pi",
+   "job": "tb2-pi-006-log-summary-date-ranges-pi"
+  },
+  {
+   "seq": 7,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "arm": "pi",
+   "job": "tb2-pi-007-polyglot-c-py-pi"
+  },
+  {
+   "seq": 8,
+   "round": 1,
+   "task": "break-filter-js-from-html",
+   "arm": "pi",
+   "job": "tb2-pi-008-break-filter-js-from-html-pi"
+  },
+  {
+   "seq": 9,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "arm": "pi",
+   "job": "tb2-pi-009-prove-plus-comm-pi"
+  },
+  {
+   "seq": 10,
+   "round": 1,
+   "task": "distribution-search",
+   "arm": "pi",
+   "job": "tb2-pi-010-distribution-search-pi"
+  },
+  {
+   "seq": 11,
+   "round": 1,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "pi",
+   "job": "tb2-pi-011-feal-linear-cryptanalysis-pi"
+  },
+  {
+   "seq": 12,
+   "round": 1,
+   "task": "fix-git",
+   "arm": "pi",
+   "job": "tb2-pi-012-fix-git-pi"
+  },
+  {
+   "seq": 13,
+   "round": 1,
+   "task": "headless-terminal",
+   "arm": "pi",
+   "job": "tb2-pi-013-headless-terminal-pi"
+  },
+  {
+   "seq": 14,
+   "round": 1,
+   "task": "mailman",
+   "arm": "pi",
+   "job": "tb2-pi-014-mailman-pi"
+  },
+  {
+   "seq": 15,
+   "round": 1,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "job": "tb2-pi-015-make-doom-for-mips-pi"
+  },
+  {
+   "seq": 16,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "arm": "pi",
+   "job": "tb2-pi-016-vulnerable-secret-pi"
+  },
+  {
+   "seq": 17,
+   "round": 2,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "job": "tb2-pi-017-winning-avg-corewars-pi"
+  },
+  {
+   "seq": 18,
+   "round": 2,
+   "task": "log-summary-date-ranges",
+   "arm": "pi",
+   "job": "tb2-pi-018-log-summary-date-ranges-pi"
+  },
+  {
+   "seq": 19,
+   "round": 2,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "pi",
+   "job": "tb2-pi-019-feal-linear-cryptanalysis-pi"
+  },
+  {
+   "seq": 20,
+   "round": 2,
+   "task": "headless-terminal",
+   "arm": "pi",
+   "job": "tb2-pi-020-headless-terminal-pi"
+  },
+  {
+   "seq": 21,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "arm": "pi",
+   "job": "tb2-pi-021-vulnerable-secret-pi"
+  },
+  {
+   "seq": 22,
+   "round": 2,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "job": "tb2-pi-022-adaptive-rejection-sampler-pi"
+  },
+  {
+   "seq": 23,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "arm": "pi",
+   "job": "tb2-pi-023-prove-plus-comm-pi"
+  },
+  {
+   "seq": 24,
+   "round": 2,
+   "task": "break-filter-js-from-html",
+   "arm": "pi",
+   "job": "tb2-pi-024-break-filter-js-from-html-pi"
+  },
+  {
+   "seq": 25,
+   "round": 2,
+   "task": "fix-git",
+   "arm": "pi",
+   "job": "tb2-pi-025-fix-git-pi"
+  },
+  {
+   "seq": 26,
+   "round": 2,
+   "task": "mailman",
+   "arm": "pi",
+   "job": "tb2-pi-026-mailman-pi"
+  },
+  {
+   "seq": 27,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "arm": "pi",
+   "job": "tb2-pi-027-polyglot-c-py-pi"
+  },
+  {
+   "seq": 28,
+   "round": 2,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "job": "tb2-pi-028-make-doom-for-mips-pi"
+  },
+  {
+   "seq": 29,
+   "round": 2,
+   "task": "distribution-search",
+   "arm": "pi",
+   "job": "tb2-pi-029-distribution-search-pi"
+  },
+  {
+   "seq": 30,
+   "round": 2,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "job": "tb2-pi-030-gpt2-codegolf-pi"
+  },
+  {
+   "seq": 31,
+   "round": 2,
+   "task": "regex-log",
+   "arm": "pi",
+   "job": "tb2-pi-031-regex-log-pi"
+  },
+  {
+   "seq": 32,
+   "round": 2,
+   "task": "protein-assembly",
+   "arm": "pi",
+   "job": "tb2-pi-032-protein-assembly-pi"
+  },
+  {
+   "seq": 33,
+   "round": 3,
+   "task": "regex-log",
+   "arm": "pi",
+   "job": "tb2-pi-033-regex-log-pi"
+  },
+  {
+   "seq": 34,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "arm": "pi",
+   "job": "tb2-pi-034-polyglot-c-py-pi"
+  },
+  {
+   "seq": 35,
+   "round": 3,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "job": "tb2-pi-035-make-doom-for-mips-pi"
+  },
+  {
+   "seq": 36,
+   "round": 3,
+   "task": "fix-git",
+   "arm": "pi",
+   "job": "tb2-pi-036-fix-git-pi"
+  },
+  {
+   "seq": 37,
+   "round": 3,
+   "task": "log-summary-date-ranges",
+   "arm": "pi",
+   "job": "tb2-pi-037-log-summary-date-ranges-pi"
+  },
+  {
+   "seq": 38,
+   "round": 3,
+   "task": "break-filter-js-from-html",
+   "arm": "pi",
+   "job": "tb2-pi-038-break-filter-js-from-html-pi"
+  },
+  {
+   "seq": 39,
+   "round": 3,
+   "task": "distribution-search",
+   "arm": "pi",
+   "job": "tb2-pi-039-distribution-search-pi"
+  },
+  {
+   "seq": 40,
+   "round": 3,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "pi",
+   "job": "tb2-pi-040-feal-linear-cryptanalysis-pi"
+  },
+  {
+   "seq": 41,
+   "round": 3,
+   "task": "mailman",
+   "arm": "pi",
+   "job": "tb2-pi-041-mailman-pi"
+  },
+  {
+   "seq": 42,
+   "round": 3,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "job": "tb2-pi-042-adaptive-rejection-sampler-pi"
+  },
+  {
+   "seq": 43,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "arm": "pi",
+   "job": "tb2-pi-043-prove-plus-comm-pi"
+  },
+  {
+   "seq": 44,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "arm": "pi",
+   "job": "tb2-pi-044-vulnerable-secret-pi"
+  },
+  {
+   "seq": 45,
+   "round": 3,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "job": "tb2-pi-045-winning-avg-corewars-pi"
+  },
+  {
+   "seq": 46,
+   "round": 3,
+   "task": "headless-terminal",
+   "arm": "pi",
+   "job": "tb2-pi-046-headless-terminal-pi"
+  },
+  {
+   "seq": 47,
+   "round": 3,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "job": "tb2-pi-047-gpt2-codegolf-pi"
+  },
+  {
+   "seq": 48,
+   "round": 3,
+   "task": "protein-assembly",
+   "arm": "pi",
+   "job": "tb2-pi-048-protein-assembly-pi"
+  }
+ ]
+}
