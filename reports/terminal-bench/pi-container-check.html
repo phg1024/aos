@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pi Container Checks</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code, pre { background: #f3f4f6; border-radius: 4px; }
+    code { padding: 2px 5px; }
+    pre { padding: 10px 14px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #ecfdf5, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .pass { color: #047857; font-weight: 600; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Pi arm: container checks on the baseline's 16 task images</h1>
+    <p><b>All six deferred checks pass for <code>bench/harbor/pi_agent.py</code> (commit <code>1ef6a84</code>).</b> They ran on 2026-11-10 between 13:30 and 13:40 PST, after the TB2 baseline finished.</p>
+    <p><b>The pi linux-x64 build runs in all 16 drawn images under Rosetta.</b> In each one it sent the arm's sampling fields to a stub relay and made no other network request. None of the images contains an <code>AGENTS.md</code> or <code>CLAUDE.md</code>.</p>
+    <p><b>Harbor 0.25.0 ran the adapter as <code>--agent pi_agent:PiAgent</code>.</b> In a trial killed at its timeout, the token usage was still recovered from pi's session file.</p>
+    <p><b>Nothing here touched a model.</b> Every request went to a scripted stub. The two Harbor trials were uncounted, and their jobs are outside the repository. Nothing was pushed or tagged.</p>
+  </div>
+
+  <h2>How it was checked</h2>
+  <ul>
+    <li><b>Per-image runs</b> (<a href="pi-container-check/check.py"><code>check.py</code></a>), for each image in <code>drawn.json</code>, as <code>linux/amd64</code>:
+      <ul>
+        <li>A probe records the architecture, glibc, bash and grep, the user, the working directory, and which directories are writable. It also lists every <code>AGENTS.md</code> and <code>CLAUDE.md</code> on the image's root filesystem, matching names without regard to case.</li>
+        <li>An install that copies <code>PiAgent.install</code>:
+          <ul>
+            <li>a <code>docker cp</code> of the hash-checked 130 MB bundle, which Harbor's Docker <code>upload_dir</code> also does, timed;</li>
+            <li>the same <code>chmod</code> commands and config directory;</li>
+            <li><code>pi --version</code>, run with <code>PI_ENV</code>.</li>
+          </ul>
+        </li>
+        <li>A run of <code>pi_command</code>, the exact shell command <code>PiAgent.run</code> uses, against <a href="pi-container-check/stub.py"><code>stub.py</code></a>. The stub plays two turns: a bash tool call, then a final answer.</li>
+      </ul>
+    </li>
+    <li><b>Network isolation in the per-image runs.</b>
+      <ul>
+        <li>The stub runs in a <code>python:3.12</code> container on a Docker <code>--internal</code> network, which has no route out.</li>
+        <li><code>HTTP(S)_PROXY</code> points at a proxy in that container which refuses every request and records it. Any request pi made to another host would be recorded there; one that ignores the proxy has no route anywhere.</li>
+        <li>Control, in the fix-git image: a direct HTTPS request failed at name resolution. The same request through the proxy was recorded as <code>CONNECT example.com:443</code> and refused.</li>
+      </ul>
+    </li>
+    <li><b>Harbor trials.</b> Two uncounted trials of fix-git ran through Harbor 0.25.0, with the AOS arm's flags: <code>--dataset terminal-bench@2.0 --n-concurrent 1 --allow-agent-host host.docker.internal</code>.
+      <ul>
+        <li>The relay was <code>stub.py</code> on <code>127.0.0.1</code>, reached by the container as <code>host.docker.internal</code>, the same way the baseline's relay was reached.</li>
+        <li>No key was set in Harbor's environment. <code>AOS_LLM_MODEL</code> was the baseline's model id, as <code>run.sh</code> sets it for the AOS arm.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Results</h2>
+  <table>
+    <tr><th>#</th><th>Check</th><th>Result</th></tr>
+    <tr><td>1</td><td>The binary starts in all 16 images (glibc, bash, writable directories)</td><td class="pass">pass, 16/16</td></tr>
+    <tr><td></td><td colspan="2">Every image is x86_64 and runs as root.
+      <ul>
+        <li>glibc is 2.36 to 2.41; the build needs 2.17.</li>
+        <li>Every image has bash at <code>/usr/bin/bash</code> and GNU grep. <code>pi_command</code> uses <code>grep --line-buffered</code>.</li>
+        <li><code>/tmp</code>, <code>/logs/agent</code> and the working directory are writable in every image.</li>
+        <li>Under Rosetta, <code>pi --version</code> takes 0.89 to 1.01 s, and the whole two-turn run takes 1.22 to 1.35 s.</li>
+      </ul></td></tr>
+    <tr><td>2</td><td>The ~125 MB upload works, and how long it takes</td><td class="pass">pass</td></tr>
+    <tr><td></td><td colspan="2">The bundle is 130.2 MB, in 234 files.
+      <ul>
+        <li><code>docker cp</code> into a running task container takes 0.73 to 0.81 s, across 16 images.</li>
+        <li>In the Harbor trials, the whole agent setup takes 2.80 s and 2.82 s. That covers the hash check, unpacking, upload, the <code>chmod</code> commands and <code>pi --version</code>.</li>
+      </ul></td></tr>
+    <tr><td>3</td><td>Harbor 0.25.0 accepts the import-path subclass</td><td class="pass">pass</td></tr>
+    <tr><td></td><td colspan="2"><code>--agent pi_agent:PiAgent</code> was accepted with <code>PYTHONPATH=bench/harbor</code>. It needed no <code>--model</code> and raised no credential error. Harbor reported 0 exceptions in the normal trial.</td></tr>
+    <tr><td>4</td><td>The relay sees the expected fields, and there is no other egress</td><td class="pass">pass</td></tr>
+    <tr><td></td><td colspan="2">Every request carried <code>max_tokens 8192</code>, <code>temperature 0.6</code>, <code>top_p 0.95</code>, <code>reasoning_budget_tokens 2048</code>, <code>stream</code> and <code>stream_options.include_usage</code>. That covers 32 requests in the per-image runs and 3 in the Harbor trials.
+      <ul>
+        <li>None carried <code>store</code>, <code>max_completion_tokens</code>, <code>reasoning_effort</code>, <code>prompt_cache_key</code>, <code>thinking</code> or <code>chat_template_kwargs</code>.</li>
+        <li>Every request went to <code>POST /v1/chat/completions</code> with <code>Authorization: Bearer relay</code>. The tools were <code>read</code>, <code>bash</code>, <code>edit</code> and <code>write</code>.</li>
+        <li>The stub received only chat completions: 2 per image, and no GET. The refusing proxy received no requests at all from the 16 runs.</li>
+      </ul></td></tr>
+    <tr><td>5</td><td>Usage survives a kill at the timeout</td><td class="pass">pass</td></tr>
+    <tr><td></td><td colspan="2">In the timeout trial, the stub's first turn was <code>sleep 3600</code>. Harbor ran it with <code>--agent-timeout-multiplier 0.05</code>, a 45 s agent timeout.
+      <ul>
+        <li>Harbor raised <code>AgentTimeoutError</code> at 45.0 s.</li>
+        <li><code>agent_result</code> still holds the first turn's usage, (1200, 0, 30), from the session file: <code>usage_source "session"</code>, <code>pi_exit null</code>.</li>
+        <li>The normal trial recorded (2500, 1100, 42) with <code>pi_exit "0"</code>, as the stub reported.</li>
+      </ul></td></tr>
+    <tr><td>6</td><td>No image has an AGENTS.md or CLAUDE.md that pi would read</td><td class="pass">pass, none found</td></tr>
+    <tr><td></td><td colspan="2">A search of each image's whole root filesystem found no such file, so none sits in the working directory or any parent.
+      <ul>
+        <li>The system prompt pi sent mentions neither file. The prompts are byte-identical apart from the <code>&lt;cwd&gt;</code> line: 2151 characters for <code>/app</code>, 2157 for <code>/workspace</code> and 2165 for <code>/app/personal-site</code>.</li>
+        <li>Pi's global agent directory is <code>PI_CODING_AGENT_DIR</code>, which holds only the uploaded <code>models.json</code>.</li>
+      </ul></td></tr>
+  </table>
+
+  <div class="wrap">
+  <table>
+    <tr><th>Task</th><th>glibc</th><th>Working dir</th><th>Upload s</th><th><code>--version</code> s</th><th>Run s</th><th>Stub requests</th><th>Proxied</th><th>Usage (in, cache, out)</th><th>AGENTS/CLAUDE.md</th><th></th></tr>
+<tr><td>mailman</td><td>2.39</td><td><code>/app</code></td><td>0.76</td><td>0.9</td><td>1.27</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>feal-linear-cryptanalysis</td><td>2.36</td><td><code>/app</code></td><td>0.74</td><td>0.99</td><td>1.31</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>make-doom-for-mips</td><td>2.36</td><td><code>/app</code></td><td>0.81</td><td>0.89</td><td>1.31</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>distribution-search</td><td>2.36</td><td><code>/app</code></td><td>0.78</td><td>0.92</td><td>1.26</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>headless-terminal</td><td>2.36</td><td><code>/app</code></td><td>0.78</td><td>1.01</td><td>1.29</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>winning-avg-corewars</td><td>2.41</td><td><code>/app</code></td><td>0.77</td><td>0.91</td><td>1.32</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>prove-plus-comm</td><td>2.39</td><td><code>/workspace</code></td><td>0.74</td><td>0.97</td><td>1.31</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>polyglot-c-py</td><td>2.39</td><td><code>/app</code></td><td>0.73</td><td>0.96</td><td>1.31</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>vulnerable-secret</td><td>2.36</td><td><code>/app</code></td><td>0.79</td><td>1.01</td><td>1.35</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>protein-assembly</td><td>2.36</td><td><code>/app</code></td><td>0.73</td><td>0.98</td><td>1.22</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>gpt2-codegolf</td><td>2.39</td><td><code>/app</code></td><td>0.75</td><td>0.97</td><td>1.22</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>log-summary-date-ranges</td><td>2.36</td><td><code>/app</code></td><td>0.77</td><td>0.89</td><td>1.23</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>break-filter-js-from-html</td><td>2.36</td><td><code>/app</code></td><td>0.8</td><td>0.99</td><td>1.34</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>fix-git</td><td>2.36</td><td><code>/app/personal-site</code></td><td>0.74</td><td>0.9</td><td>1.35</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>regex-log</td><td>2.39</td><td><code>/app</code></td><td>0.75</td><td>0.97</td><td>1.27</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+<tr><td>adaptive-rejection-sampler</td><td>2.39</td><td><code>/app</code></td><td>0.77</td><td>0.99</td><td>1.35</td><td>2</td><td>0</td><td>2500, 1100, 42</td><td>none</td><td class=pass>pass</td></tr>
+  </table>
+  </div>
+  <p>The raw rows are in <a href="pi-container-check/images.json"><code>images.json</code></a>, and the Harbor trials' timings, usage and relay-side request fields are in <a href="pi-container-check/harbor.json"><code>harbor.json</code></a>.</p>
+
+  <h2>Points for the counted run's frozen plan</h2>
+  <ul>
+    <li><b>Set <code>AOS_LLM_MODEL</code> explicitly.</b> Without it, <code>pi_agent.py</code> uses <code>aos_agent.FORWARDED_ENV</code>'s default, <code>qwen3.8-flash-next-unsloth-ud-q4_k_xl</code>, not the baseline's <code>qwen3.8-flash-next-nvfp4-nvfp4</code>. <code>run.sh</code> already sets it for the AOS arm. The pi arm needs the same line, and <code>AOS_LLM_BASE_URL</code> pointing at the relay.</li>
+    <li><b>Harbor does not restrict egress for these tasks.</b> TB2's effective network policy is public, so Harbor printed that <code>--allow-agent-host host.docker.internal</code> is ignored. This holds for all three arms.
+      <ul>
+        <li>The evidence that pi itself contacts only the relay comes from the per-image runs on the internal network, not from Harbor.</li>
+        <li>In a counted run, egress would show only in the relay log, as the relay sees only what is sent to it.</li>
+      </ul>
+    </li>
+    <li><b>After a timeout, the verifier runs in the same container.</b> Harbor raises its timeout and proceeds; this check did not look at whether pi's child processes are still alive when the verifier starts. The same applies to Terminus-2 and AOS.</li>
+  </ul>
+
+  <h2>Limits</h2>
+  <ul>
+    <li><b>The per-image runs are not Harbor runs.</b> They start each image with <code>docker run</code> on their own network, not through Harbor's compose setup. Only fix-git ran through Harbor.</li>
+    <li><b>The stub plays two fixed turns.</b> These checks do not exercise compaction near 245,760 tokens, retries after a relay error, or long tool output. Those behaviours come from pi's defaults and are unchanged by the adapter.</li>
+    <li><b>The search for context files covers what the image ships.</b> It does not cover files a task might create later. The agent runs first, and the TB2 tests are copied in only at verification.</li>
+  </ul>
+
+  <h2>Reproduce</h2>
+<pre>PYTHONPATH=bench/harbor &lt;harbor's python&gt; reports/terminal-bench/pi-container-check/check.py \
+    --drawn &lt;eval worktree&gt;/reports/terminal-bench/baseline-tb2/drawn.json --out &lt;tmp&gt;/pi-check/images
+
+python3 -I reports/terminal-bench/pi-container-check/stub.py --stub-port 18090 --stub-record &lt;tmp&gt;/stub.jsonl [--mode hang]
+PYTHONPATH=bench/harbor AOS_LLM_BASE_URL=http://127.0.0.1:18090 AOS_LLM_MODEL=qwen3.8-flash-next-nvfp4-nvfp4 \
+  harbor run --dataset terminal-bench@2.0 --agent pi_agent:PiAgent --n-concurrent 1 \
+  --allow-agent-host host.docker.internal --jobs-dir &lt;tmp&gt;/jobs -i fix-git --yes [--agent-timeout-multiplier 0.05]</pre>
+</body>
+</html>
