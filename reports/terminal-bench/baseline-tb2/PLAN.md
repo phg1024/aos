@@ -503,3 +503,34 @@ counted trial.**
 - `relay.log` and the Harbor logs in `logs/` match the repository's `*.log`
   ignore rule. `relay.log` is force-added with the results, because the
   contention and sampling checks rest on it.
+
+### A2, 2026-11-09, after 29 counted trials: timestamp parsing, seq 29, backend log
+
+**Timing.** This amendment comes after 29 counted trials, not before the
+first, so it breaks the rule above that amendments come only before the
+first counted trial. The user approved it on 2026-11-09 at about 21:30 PST,
+while the run was paused. It changes no trial, measure, test or stop rule.
+
+**What happened.** Seq 29 (winning-avg-corewars, aos) ran to the end.
+`collect.py` then crashed on an AOS ledger timestamp whose fraction had 5
+digits, `…04:49:00.83241+00:00`. Go trims trailing zeros, and Python 3.10's
+`fromisoformat` accepts only 3 or 6 digits. `run.sh` treats a failed record
+as a stop, so the run halted at 21:19 PST with seq 29 unrecorded.
+
+**Changes.**
+
+- `collect.py`'s `parse_time` pads or truncates the fraction to 6 digits.
+  Recomputing all 28 stored records with the fix gives field-for-field
+  identical results. The fields that need the backend strings (relay,
+  contention, ending) were left out of that check.
+- Seq 29 is recorded once, from its job folder, by `a2_record_seq29.py`.
+  There is no rerun. Its before/after backend strings were not saved, so its
+  server-side request count is lost and its contention is recorded as an
+  error: "backend counts not saved". Its relay slice is taken from
+  `relay.log` by timestamp. The slice has 81 posts, all 200, matching the
+  ledger's 81 calls.
+- `run.sh` appends each trial's before/after backend strings to
+  `logs/backend.jsonl` before calling `record`, so a collector crash cannot
+  lose them again.
+- The run resumes at seq 30. `run.sh` skips recorded trials. The 08:55–09:10
+  Pacific hold still applies.

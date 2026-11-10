@@ -48,7 +48,8 @@ API_ERRORS = re.compile(r"APIError|APIConnectionError|ServiceUnavailable|Interna
 def parse_time(text):
     if not text:
         return None
-    text = re.sub(r"(\.\d{6})\d+", r"\1", str(text).replace("Z", "+00:00"))
+    # Go trims trailing zeros, so the fraction has 1 to 9 digits; Python 3.10 needs exactly 6 (A2)
+    text = re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], str(text).replace("Z", "+00:00"))
     value = datetime.fromisoformat(text)
     return value if value.tzinfo else value.replace(tzinfo=datetime.now().astimezone().tzinfo)
 

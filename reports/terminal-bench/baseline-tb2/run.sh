@@ -102,6 +102,7 @@ trials "${1:-}" | while read -r seq round task arm job; do
       --yes < /dev/null > "$HERE/logs/$job.log" 2>&1
   ) || echo "harbor exit $? for $job"
   after="$("${COLLECT[@]}" backend)" || after="{\"error\": \"no answer\"}"
+  printf '{"seq": %s, "before": %s, "after": %s}\n' "$seq" "$before" "$after" >> "$HERE/logs/backend.jsonl"  # A2
   "${COLLECT[@]}" record "$seq" "$round" "$task" "$arm" "$JOBS/$job" "$before" "$after" \
     || { echo "stop: rule met after seq $seq"; exit 4; }
 done
