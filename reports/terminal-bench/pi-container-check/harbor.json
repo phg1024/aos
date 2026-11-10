@@ -1,0 +1,121 @@
+[
+  {
+    "job": "pi-check-normal-fix-git",
+    "task": "fix-git",
+    "harbor": "0.25.0",
+    "agent": "pi_agent:PiAgent",
+    "agent_timeout_multiplier": 1.0,
+    "agent_setup_s": 2.8,
+    "agent_execution_s": 1.69,
+    "exception": null,
+    "exception_message": null,
+    "usage": [
+      2500,
+      1100,
+      42
+    ],
+    "metadata": {
+      "pi_version": "1.5.0",
+      "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+      "pi_exit": "0",
+      "session_files": [
+        "2026-11-10T21-36-25-727Z_01a1c764-0e7c-7489-aa4a-bdb3d1b2c83e.jsonl"
+      ],
+      "usage_source": "session"
+    },
+    "relay_requests": [
+      {
+        "path": "/v1/chat/completions",
+        "authorization": "Bearer relay",
+        "fields": {
+          "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          },
+          "max_tokens": 8192,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "reasoning_budget_tokens": 2048
+        },
+        "tools": [
+          "read",
+          "bash",
+          "edit",
+          "write"
+        ]
+      },
+      {
+        "path": "/v1/chat/completions",
+        "authorization": "Bearer relay",
+        "fields": {
+          "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          },
+          "max_tokens": 8192,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "reasoning_budget_tokens": 2048
+        },
+        "tools": [
+          "read",
+          "bash",
+          "edit",
+          "write"
+        ]
+      }
+    ],
+    "reward": 0.0
+  },
+  {
+    "job": "pi-check-timeout-fix-git",
+    "task": "fix-git",
+    "harbor": "0.25.0",
+    "agent": "pi_agent:PiAgent",
+    "agent_timeout_multiplier": 0.05,
+    "agent_setup_s": 2.82,
+    "agent_execution_s": 45.0,
+    "exception": "AgentTimeoutError",
+    "exception_message": "Agent execution timed out after 45.0 seconds",
+    "usage": [
+      1200,
+      0,
+      30
+    ],
+    "metadata": {
+      "pi_version": "1.5.0",
+      "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+      "pi_exit": null,
+      "session_files": [
+        "2026-11-10T21-37-10-154Z_01a1c764-bc07-71a2-bc08-ef385992ba68.jsonl"
+      ],
+      "usage_source": "session"
+    },
+    "relay_requests": [
+      {
+        "path": "/v1/chat/completions",
+        "authorization": "Bearer relay",
+        "fields": {
+          "model": "qwen3.8-flash-next-nvfp4-nvfp4",
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          },
+          "max_tokens": 8192,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "reasoning_budget_tokens": 2048
+        },
+        "tools": [
+          "read",
+          "bash",
+          "edit",
+          "write"
+        ]
+      }
+    ],
+    "reward": 0.0
+  }
+]
