@@ -63,7 +63,11 @@ The mechanism check matters as much as the pass rate (see "Secondary"):
   - `--n-concurrent 1` and `--allow-agent-host host.docker.internal`;
   - the same Docker Desktop with Rosetta (18 CPUs, 7,932 MiB);
   - the same Strata and model `qwen3.8-flash-next-nvfp4-nvfp4`, through the
-    same `relay.py`, which adds the key itself.
+    same `relay.py`, which adds the key itself;
+  - a quiet machine for the run's whole duration, as in the baseline. No
+    other session may start Docker, pull images, run Harbor, call the model
+    or do heavy CPU work on the Mac. Book tells Coder when the run starts
+    and ends.
 - **Sampling, as in the other arms:**
   - temperature 0.6, top_p 0.95, max_tokens 8192;
   - `reasoning_budget_tokens` 2048;
@@ -93,10 +97,14 @@ were not interleaved with pi. Weighed honestly:
     too.
   - The report compares the two latency distributions as a disclosed check,
     not as a correction.
+  - This check compares pi against AOS only, because Terminus-2's per-call
+    latency was never recorded. Drift that would affect the comparison with
+    Terminus-2 specifically stays unmeasured.
 - **Image cache.** All 16 images are already pulled. Image pulls happen in
   environment setup, before the agent's clock starts, so they do not touch
   agent time.
-- **Machine.** Same host and Docker settings. Other load on the Mac is not
+- **Machine.** Same host and Docker settings. Both runs kept the machine
+  quiet (see "Held fixed"). Load that comes from outside the sessions is not
   controlled, in either run.
 - **Order.** The baseline alternated aos and terminus-2 within each task
   pair. pi runs a day later, so any drift between the two days falls
@@ -105,7 +113,8 @@ were not interleaved with pi. Weighed honestly:
 **Option A: reuse the baseline arms, with the drift disclosed.**
 
 - 48 trials.
-- Expected about 10 to 14 h, upper bound about 21 h (see "Estimate").
+- Expected about 10 to 14 h, upper bound about 20 h, plus the daily hold
+  (see "Estimate").
 
 **Option B: Option A plus one interleaved re-check round.**
 
@@ -174,15 +183,27 @@ were not interleaved with pi. Weighed honestly:
   - Both commits are on the AOS main checkout only.
   - **The run needs the adapter on this branch.** PYTHONPATH points at
     `bench/harbor`, and the plan pins file hashes at HEAD.
-  - The simplest way is to merge main, which is v0.1.10 plus those two
-    commits, into the eval branch before freezing. That merge is the
-    user's call.
+  - The simplest way is to merge main into the eval branch before freezing.
+    - The eval branch's merge base with main is 9070498 (v0.1.10).
+    - main is 9070498 plus exactly 1ef6a84 and 42dbed7.
+    - So the merge brings in only those two commits. It is not a
+      fast-forward, because the eval branch has its own commits, but it is
+      clean: `git merge-tree` reports no conflicts.
+    - The merge is the user's call.
+  - Pushing the eval branch after the merge would also publish 1ef6a84 and
+    42dbed7. That push needs the user's approval when it comes up.
   - The alternative, pointing PYTHONPATH at the main checkout, ties the run
     to another checkout's state, so it is not proposed.
-- **Pi release.** pi 1.5.0 linux-x64, checked on every install against
-  `RELEASE_SHA256` df870ba0…. It is fetched once with
-  `python3 bench/harbor/pi_agent.py fetch` into `.cache/pi-v1.5.0`. That is
-  a download, to be approved.
+- **Pi release: no new download.**
+  - The main checkout already has the hash-checked release, fetched by
+    Coder on 2026-11-09: `.cache/pi-v1.5.0/download/pi-linux-x64.tar.gz`
+    (58,876,253 bytes) and its `SHA256SUMS`.
+  - Its SHA-256 is df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b,
+    which equals `RELEASE_SHA256["linux-x64"]`. This was checked on
+    2026-11-10.
+  - The tarball and `SHA256SUMS` are copied into this worktree's
+    `.cache/pi-v1.5.0/download/`.
+  - The hash is verified at freeze, and by the adapter on every install.
 - **Pinned at freeze.** The SHA-256 of `pi_agent.py`, `aos_agent.py` (pi
   imports its endpoint defaults), the release tarball and each new driver
   file below. `bench/harbor/run-tb.sh --self-test` must pass, with 46 tests.
@@ -270,13 +291,23 @@ The baseline's endings are used, with pi's exit in place of AOS's:
 - `harbor_timeout`: Harbor raised AgentTimeoutError.
 - `infra_error`:
   - no reward;
-  - or a 502 that started inside the window while the agent was running
-    (A3: a request cut off at the trial's own end does not count);
+  - or an **unrecovered** 502: one that started inside the window while
+    the agent was running, after which the agent did not go on. Either the
+    turn failed on it, or it is the agent's last request before the agent
+    exited.
+    - A 502 the agent retried past, or went on from with a later request,
+      is recovered and does not make the trial an infra_error.
+    - A request cut off at the trial's own end does not count either (A3).
+    - Every 502 and every retry is recorded, recovered or not.
   - or a LiteLLM-style API error, for the arms that raise one;
   - or an exception raised before the agent ran, such as a failed install or
     version check.
-  - A 502 that pi then retried past still counts. The rule is the
-    baseline's, applied unchanged.
+  - The unrecovered-502 rule applies to all three arms. So does AOS's
+    ledger rule: a backend error counts only if the call was not followed by
+    a later successful one.
+  - The baseline is unaffected. Under A3, no baseline trial had an own 502
+    (`own_502` is 0 in all 96), and no AOS trial recorded a backend error.
+    So its endings are the same under this rule.
 - `completed`: `pi_exit` "0" and a reward.
 - `agent_crash`: `pi_exit` non-zero, or no `pi_exit` without a timeout.
 
@@ -437,9 +468,9 @@ counted trial.
 1. User decisions:
    - Option A or B;
    - the merge of 1ef6a84 and 42dbed7 into the eval branch;
-   - approval of the pi download;
    - approval of the run's length.
-2. Build the driver files and their tests. Pin the hashes and freeze this
+2. Copy the pi release from the main checkout's cache and verify its hash.
+   Build the driver files and their tests. Pin the hashes and freeze this
    plan in a commit.
 3. Start the relay with `--log relay-pi.log`. Check the backend: model,
    engine and start time.
@@ -462,7 +493,7 @@ From the baseline:
 
 | | Trials | Expected | Upper bound |
 |---|---|---|---|
-| Option A (pi only) | 48 | 10–14 h. pi has no deadline, so it is likely to look like Terminus-2's 12.6 h or less; AOS took 8.0 h. | about 20 h: every trial runs to its timeout, plus overhead |
+| Option A (pi only) | 48 | 10–14 h. pi has no deadline, so it is likely to look like Terminus-2's 12.6 h or less; AOS took 8.0 h. | about 20 h: every trial runs to its timeout (19.0 h), plus about 0.6 h of overhead |
 | Option B (adds a re-check round) | 80 | 17–21 h: about +7 h, from the baseline's per-round means (aos 2.7 h, terminus-2 4.2 h) | about 33 h |
 | Daily hold | | 0–1.5 h, once per day crossed | |
 | Smoke | 1 | about 5 min | 15 min |
@@ -475,11 +506,11 @@ the early afternoon, Option A crosses one 08:55 hold. Option B may cross two.
 1. Option A or B for the comparators.
 2. Bringing 1ef6a84 and 42dbed7 onto the eval branch: merge main (proposed),
    or another way.
-3. Approval to download the pi 1.5.0 linux-x64 release into `.cache`, which
-   is hash-checked.
-4. The infra rule counts a 502 that pi retried past as infra_error, as the
-   baseline did for the other arms. Keep it, for consistency, or exempt
-   retried 502s for all arms in the re-analysis? Proposed: keep it, and
-   record retries.
-5. Whether an agent_crash should pause the run (proposed) or only be
-   recorded.
+3. Approval of the run's length (see "Estimate").
+
+Settled in review (2026-11-10):
+
+- The pi release is copied from the existing cache. There is no download.
+- A 502 the agent recovered from is not an infra_error, in any arm. Every
+  502 and retry is recorded.
+- An agent_crash pauses the run for a look, and the trial stays counted.
