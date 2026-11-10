@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pi Harbor Adapter</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 980px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code, pre { background: #f3f4f6; border-radius: 4px; }
+    code { padding: 2px 5px; }
+    pre { padding: 10px 14px; overflow-x: auto; font-size: 13px; }
+    .hero { background: linear-gradient(135deg, #fff7ed, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    .pass { color: #047857; font-weight: 600; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Pi as the Terminal-Bench baseline's third arm: the Harbor adapter</h1>
+    <p><b><code>bench/harbor/pi_agent.py</code> runs pi 1.5.0 in a task container as the baseline's third arm.</b> It runs pi with pi's own tools, system prompt and context handling, and with the same endpoint and sampling as the AOS and Terminus-2 arms. It has no time budget: Harbor's timeout ends it, as with Terminus-2.</p>
+    <p><b>The adapter is checked without a container.</b> 24 unit tests and a macOS plumbing run check it against a scripted OpenAI-compatible stub. In that run, pi sent exactly the five sampling settings, used only the placeholder credential, and contacted nothing but the stub.</p>
+    <p><b>Nothing has run in a container or against the model yet.</b> The baseline run shares this machine, so those checks wait until it is done. They are listed under "Left for the container test".</p>
+  </div>
+
+  <h2>What Harbor already had</h2>
+  <p>Harbor 0.25.0 ships an installed agent named <code>pi</code>, in <code>harbor/agents/installed/pi.py</code>. It cannot serve as this arm as it is:</p>
+  <ul>
+    <li><b>Install.</b> It installs curl with the image's package manager, then nvm from GitHub, then Node 22, then <code>npm install -g</code> of the pi package. This needs network at install time, a package manager and a glibc distribution.</li>
+    <li><b>Model settings.</b> For a custom endpoint it writes a <code>models.json</code> holding only the model id. It cannot set temperature, top_p, the thinking budget, the context window or the output limit.
+      <ul>
+        <li>Pi then falls back to its defaults for a custom model: a 128,000-token window and 16,384 output tokens, sent as <code>max_completion_tokens</code>.</li>
+        <li>So it would compact near 111,616 tokens instead of near the model's 262,144.</li>
+      </ul>
+    </li>
+    <li><b>Key.</b> It requires an API-key environment variable for a custom endpoint.</li>
+    <li><b>Network during the run.</b> It does not set <code>PI_OFFLINE</code>, so pi would try to refresh its model catalog and check its version during the run.</li>
+  </ul>
+  <p><code>PiAgent</code> subclasses Harbor's agent. It replaces <code>install</code> and <code>run</code>, and keeps Harbor's parsing of pi's session file into the trajectory and the token counts.</p>
+
+  <h2>Version and install</h2>
+  <ul>
+    <li><b>Version.</b> pi 1.5.0, released 2026-11-02. It is pinned in <code>PI_VERSION</code> and recorded in each trial's metadata. 1.5.1 came out on 2026-11-09 and was not used.</li>
+    <li><b>Build.</b> pi's own release binaries: a standalone Bun build per platform, bundled with pi's docs, themes and WebAssembly assets.
+      <ul>
+        <li>The Linux x64 build targets <code>bun-linux-x64-baseline</code>, so it needs no AVX2, which suits Rosetta.</li>
+        <li>It needs glibc 2.17 or newer.</li>
+      </ul>
+    </li>
+    <li><b>Fetch.</b> <code>python3 bench/harbor/pi_agent.py fetch linux-x64</code> downloads the tarball into <code>.cache/pi-v1.5.0/download/</code>. It keeps the file only if its SHA-256 matches the pinned value.</li>
+    <li><b>Install.</b> On every install, the adapter checks the cached tarball's hash again. It unpacks the tarball on the host and uploads the bundle to <code>/installed-agent/pi/pi-1.5.0/</code>. Then it checks that the uploaded binary reports 1.5.0.
+      <ul>
+        <li>No package manager, Node, npm or network is used inside the container.</li>
+        <li>The adapter refuses to install on a hash mismatch, a wrong version or an unknown architecture.</li>
+      </ul>
+    </li>
+  </ul>
+  <table>
+    <tr><th>Release asset</th><th>Size (bytes)</th><th>SHA-256 (from the release's SHA256SUMS, checked locally)</th></tr>
+    <tr><td><code>pi-linux-x64.tar.gz</code></td><td>58,876,253</td><td><code>df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b</code></td></tr>
+    <tr><td><code>pi-darwin-arm64.tar.gz</code></td><td>48,027,930</td><td><code>a9bf0d82d58d2a7d337f4ae4171b5fc9ebffe42509527a831364c4b65adf2cdf</code></td></tr>
+    <tr><td><code>pi-linux-arm64.tar.gz</code> (pinned, not fetched)</td><td>&nbsp;</td><td><code>5d5711b48600756473682e86360b026b11abf7591e5d112eb411d4da2c100d9a</code></td></tr>
+  </table>
+  <p class="note"><b>The hashes come from the release itself.</b> SHA256SUMS is published with the same release and is not signed. It guards against a corrupted or swapped download after this point, not against a compromised release.</p>
+
+  <h2>The run</h2>
+<pre>cd &lt;task workdir&gt;   # Harbor's default
+PI_CODING_AGENT_DIR=/installed-agent/pi/config PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \
+/installed-agent/pi/pi-1.5.0/pi --print --mode json --no-approve \
+  --session-dir /logs/agent/pi/sessions --provider aos-relay --model &lt;AOS_LLM_MODEL&gt; "$PI_INSTRUCTION" &lt;/dev/null
+# stdout, without message_update deltas, goes to /logs/agent/pi.txt, then pi_exit=&lt;status&gt;</pre>
+  <ul>
+    <li><b>Pi's defaults.</b> The tools are <code>read</code>, <code>bash</code>, <code>edit</code> and <code>write</code>. The run uses pi's own system prompt and sets no thinking level, turn limit, extension or time budget.</li>
+    <li><b>Project files.</b> <code>--no-approve</code> ignores project-local <code>.pi</code> configuration in the task folder, which pi loads only for trusted projects. Pi still reads <code>AGENTS.md</code> or <code>CLAUDE.md</code> from the working directory and its parents, as it does by default.</li>
+    <li><b>Instruction.</b> It travels in an environment variable, so it needs no shell quoting.</li>
+    <li><b>Exit status.</b> Pi's exit status is recorded in the output rather than failing the trial. The hidden tests decide the outcome.</li>
+    <li><b>Endpoint.</b> The adapter reads the AOS arm's variables, as <code>aos_agent.py</code> does: <code>AOS_LLM_BASE_URL</code>, <code>AOS_LLM_MODEL</code>, <code>AOS_LLM_CONTEXT_WINDOW</code>, <code>AOS_LLM_TEMPERATURE</code>, <code>AOS_LLM_TOP_P</code>, <code>AOS_LLM_MAX_TOKENS</code> and <code>AOS_LLM_THINKING_BUDGET</code>.
+      <ul>
+        <li>It uses the same defaults as the AOS adapter.</li>
+        <li>A loopback base URL becomes <code>host.docker.internal</code>, with <code>/v1</code> added.</li>
+        <li><code>AOS_LLM_API_KEY</code> is never read.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Sampling: all five settings match</h2>
+  <p>The settings are in <code>models.json</code>. Pi merges a model's <code>samplingParams</code> into every request body last, without filtering keys (<code>openai-completions</code> API).</p>
+  <table>
+    <tr><th>Setting</th><th>aos</th><th>terminus-2</th><th>pi</th><th>How pi gets it</th></tr>
+    <tr><td>temperature</td><td>0.6</td><td>0.6</td><td class="pass">0.6</td><td><code>samplingParams.temperature</code></td></tr>
+    <tr><td>top_p</td><td>0.95</td><td>0.95</td><td class="pass">0.95</td><td><code>samplingParams.top_p</code></td></tr>
+    <tr><td>max_tokens</td><td>8192</td><td>8192</td><td class="pass">8192</td><td>model <code>maxTokens</code> with <code>compat.maxTokensField: "max_tokens"</code>. Without that compat setting pi sends <code>max_completion_tokens</code>. Near the end of the window pi lowers it to the room left.</td></tr>
+    <tr><td>thinking budget</td><td>2048</td><td>2048</td><td class="pass">2048</td><td><code>samplingParams.reasoning_budget_tokens</code>, top level in the body, as Terminus-2's <code>extra_body</code> sends it</td></tr>
+    <tr><td>context window</td><td>262144</td><td>262144</td><td class="pass">262144</td><td>model <code>contextWindow</code></td></tr>
+  </table>
+  <p>Two more settings keep stray fields out of the request:</p>
+  <ul>
+    <li><code>reasoning: false</code>: pi sends no <code>reasoning_effort</code> and keeps its prompt in the <code>system</code> role, where it would otherwise use <code>developer</code>. Pi still reads <code>reasoning_content</code> from the stream.</li>
+    <li><code>compat.supportsStore: false</code>: pi sends no <code>store</code> field.</li>
+  </ul>
+  <p>Nothing was changed in the relay.</p>
+
+  <h2>No key</h2>
+  <p><code>models.json</code> carries the literal placeholder <code>apiKey: "relay"</code>. It contains no <code>$</code> interpolation and no key variable. The relay already drops any incoming <code>Authorization</code> header and adds its own. The command line and the container environment hold only the <code>PI_*</code> variables and the instruction. A unit test sets fake values for <code>AOS_LLM_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code> and <code>STRATA_KEY</code> in the host environment, and checks that neither those values nor those variable names reach any uploaded file, command or environment.</p>
+
+  <h2>Usage and logs</h2>
+  <ul>
+    <li><b>The session file.</b> Pi writes its session file under <code>/logs/agent/pi/sessions/</code> once the first user and assistant messages exist. After that, it appends each entry as it happens.
+      <ul>
+        <li>A Harbor kill loses at most the reply in progress.</li>
+        <li><code>/logs/agent</code> is synced back after a timeout too.</li>
+      </ul>
+    </li>
+    <li><b>Token counts.</b> Harbor's own parsing fills <code>n_input_tokens</code>, <code>n_cache_tokens</code> and <code>n_output_tokens</code> from the session file. Compaction calls are included. It also writes an ATIF <code>trajectory.json</code>.
+      <ul>
+        <li>Input tokens are input + cache read + cache write, which equals the server's <code>prompt_tokens</code>.</li>
+        <li>Cache tokens are <code>cached_tokens</code>.</li>
+      </ul>
+    </li>
+    <li><b>Before the first reply.</b> If pi is killed before its first reply there is no session file, and Harbor reads the <code>message_end</code> events in <code>pi.txt</code> instead.</li>
+    <li><b>Metadata.</b> The adapter adds <code>pi_version</code>, <code>model</code>, <code>pi_exit</code> (null after a kill), <code>session_files</code> and <code>usage_source</code> (<code>session</code> or <code>output</code>).</li>
+  </ul>
+
+  <h2>Pi's context handling, a difference between the arms</h2>
+  <table>
+    <tr><th>Arm</th><th>When it compacts or summarizes</th></tr>
+    <tr><td>aos</td><td>at 0.8 of the window</td></tr>
+    <tr><td>terminus-2</td><td>when fewer than 8000 tokens are free, and on a context-length error</td></tr>
+    <tr><td>pi (defaults)</td><td>
+      <ul>
+        <li>When the context exceeds the window minus <code>reserveTokens</code> 16384, which is 245,760 tokens (93.75%).</li>
+        <li>It keeps the last 20,000 tokens unsummarized.</li>
+        <li>It also does one compact-and-retry on an overflow error or an early length stop.</li>
+      </ul>
+    </td></tr>
+  </table>
+  <p>Further differences, recorded rather than tuned:</p>
+  <ul>
+    <li><b>Reasoning in history.</b> Pi sends earlier reasoning back in assistant messages as <code>reasoning_content</code>.</li>
+    <li><b>Retries.</b> Pi retries transient failures by default, so the relay's request count can exceed the calls pi completed.</li>
+    <li><b>Request timeout.</b> Pi's per-request timeout is its default.</li>
+  </ul>
+
+  <h2>Checks</h2>
+  <h3>Unit tests</h3>
+  <p><code>bench/harbor/run-tb.sh --self-test</code> runs 46 tests, all passing: the 22 existing AOS adapter tests and 24 new tests in <code>test_pi_agent.py</code>. The new tests cover:</p>
+  <ul>
+    <li>the base URL rewrite;</li>
+    <li>the settings and their defaults;</li>
+    <li>the exact <code>models.json</code>;</li>
+    <li>the command, including a shell run with a fake <code>pi</code> that checks the exit line, the delta filter and quoting;</li>
+    <li>the release hash checks and safe unpacking;</li>
+    <li>install against a fake container;</li>
+    <li>run, with no key anywhere;</li>
+    <li>usage from a session file recorded by pi 1.5.0, with its paths replaced. This covers a whole run, a run killed with a torn last line, and the fallback to <code>pi.txt</code>.</li>
+  </ul>
+
+  <h3>Plumbing on macOS</h3>
+  <p><code>bench/harbor/pi_plumbing.py</code> sets up the following and passed:</p>
+  <ul>
+    <li><b>The pi build.</b> The darwin-arm64 build of 1.5.0, run with the adapter's <code>models.json</code> and command.</li>
+    <li><b>An isolated home.</b> A fresh <code>HOME</code> and config directory, which leave the local pi installation untouched.</li>
+    <li><b>The stub.</b> A stub server on 127.0.0.1 that plays two turns: a <code>bash</code> tool call with reasoning, then a final answer.</li>
+    <li><b>Two network guards.</b>
+      <ul>
+        <li><code>HTTP(S)_PROXY</code> points at a proxy that refuses and records every request.</li>
+        <li>The run is wrapped in <code>sandbox-exec</code>, which denies every outbound connection except to the stub and the proxy. In a separate check, <code>curl</code> to an outside host fails under the same profile.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>The results:</p>
+  <ul>
+    <li>Both requests reached the stub, and nothing went through the proxy.</li>
+    <li>The tool call wrote its file, and pi exited 0.</li>
+    <li>Harbor's parsing totaled the stub's usage exactly: 2500 input, 1100 cached and 42 output tokens.</li>
+  </ul>
+  <p>The first request, with the message contents and tool schemas abbreviated:</p>
+<pre>POST /v1/chat/completions
+Authorization: Bearer relay
+{
+  "model": "qwen3.8-flash-next-unsloth-ud-q4_k_xl",   // the adapter default; the baseline sets AOS_LLM_MODEL
+  "messages": [{"role": "system", ...2654 chars}, {"role": "user", ...}],
+  "stream": true,
+  "stream_options": {"include_usage": true},
+  "max_tokens": 8192,
+  "tools": ["read", "bash", "edit", "write"],
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "reasoning_budget_tokens": 2048
+}</pre>
+  <p>The second request carries the same fields. Its messages are system, user, assistant (with <code>reasoning_content</code> and the tool call) and tool.</p>
+
+  <h2>Left for the container test, after the baseline run</h2>
+  <ul>
+    <li><b>The binary in the task images.</b> In each of the 16 task images under Rosetta, check that the Linux x64 build starts and reports 1.5.0. That covers glibc 2.17 or newer, <code>bash</code> present, and the agent user able to write <code>/installed-agent/pi/config</code> and <code>/logs/agent</code>.</li>
+    <li><b>Harbor's handling.</b> Check that <code>upload_dir</code> of the 125 MB bundle works in Harbor's Docker environment. Check that Harbor accepts an import-path agent subclassing <code>pi</code> without <code>--model</code>, under <code>--allow-agent-host host.docker.internal</code>.</li>
+    <li><b>Network.</b> Check that the relay log shows only <code>POST /v1/chat/completions</code> from pi, with the five settings as above and no <code>reasoning_effort</code>, <code>store</code> or <code>max_completion_tokens</code>. Check that nothing else is contacted with <code>PI_OFFLINE=1</code>.</li>
+    <li><b>Harbor's timeout.</b> Check that a timeout kill leaves the session file and that usage is recovered from it.</li>
+    <li><b>Context files.</b> Check whether any of the 16 tasks has an <code>AGENTS.md</code> or <code>CLAUDE.md</code> on its working path, which pi would load.</li>
+  </ul>
+</body>
+</html>
