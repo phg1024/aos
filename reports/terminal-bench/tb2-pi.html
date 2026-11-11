@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Terminal-Bench 2 pi Arm</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px auto; max-width: 1040px; line-height: 1.5; color: #1f2937; padding: 0 16px; }
+    code { background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }
+    .hero { background: linear-gradient(135deg, #ecfdf5, #eff6ff); padding: 24px; border-radius: 16px; }
+    .note { background: #fefce8; border-left: 4px solid #ca8a04; padding: 10px 14px; }
+    .warn { background: #fef2f2; border-left: 4px solid #b91c1c; padding: 10px 14px; }
+    ul { padding-left: 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0 12px; }
+    th, td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
+    th { background: #f9fafb; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pass { color: #047857; font-weight: 600; }
+    .fail { color: #b91c1c; font-weight: 600; }
+    .muted { color: #6b7280; }
+    .wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Terminal-Bench 2.0: pi as a third arm</h1>
+    <p><b>On the baseline's 16 tasks, with the same model and sampling, pi solved 28 of 48 trials: the same count as Terminus-2 (28/48) and 7 fewer than AOS (35/48).</b></p>
+    <p><b>Neither frozen comparison is significant at family α = 0.05.</b> P1 (pi − Terminus-2) is +0.0 points, p = 1.0000. P2 (pi − AOS) is -14.6 points, raw p = 0.0306; it is tested first, at Holm's 0.025, and not rejected (Holm-adjusted p = 0.0613). The plan's power table gives under 50% power for a 15-point difference, so this does not show that pi equals either arm.</p>
+    <p><b>The P2 result is fragile.</b> pi kept running after Harbor's timeout in 9 of its 21 timed-out trials, and 2 of those passed. Counted as failures, as a labelled sensitivity check, P2 becomes -18.8 points, p = 0.0042 (Holm 0.0084), which would be rejected. The measured result above is the primary one; see "pi after Harbor's timeout".</p>
+    <p><b>Most of pi's failures were timeouts.</b> 21 of 48 pi trials ran into Harbor's timeout (Terminus-2: 22; AOS: 0), and 17 of its 20 failures are timeouts.</p>
+  </div>
+
+  <p class="note"><b>Scope.</b> One model (qwen3.8-flash-next-nvfp4-nvfp4, served by Strata on a shared GPU server), the baseline's 16 tasks, 3 pi trials per task. The comparators are the baseline's own 48 trials per arm, run just before this one against the same server, engine and sampling; they were not rerun. pi runs with its defaults apart from the settings needed to reach the model and match sampling.</p>
+
+  <h2>What was run</h2>
+  <ul>
+    <li><b>Plan.</b> <code>reports/terminal-bench/baseline-tb2/PLAN-pi.md</code>, frozen at 35c5f70 (Option A: pi only, 3 rounds). One uncounted smoke trial passed every check (533aa2d). There were no amendments, pauses, reruns or replacements: all 48 scheduled trials ran once, in the frozen order (seed 20261120).</li>
+    <li><b>Arm.</b> pi v1.5.0 (release tarball pinned by hash) through <code>bench/harbor/pi_agent.py</code>. Like Terminus-2, pi has no deadline of its own: only Harbor's timeout ends it.</li>
+    <li><b>Sampling.</b> All 1,540 chat completions of the counted trials, and the smoke's, carried temperature 0.6, top_p 0.95, max_tokens 8192, reasoning_budget_tokens 2048 and stream true, with pi's User-Agent. The relay does not log <code>store</code>; its absence rests on the container check (42dbed7).</li>
+    <li><b>Harness.</b> Harbor 0.25.0, one trial at a time, Docker Desktop with Rosetta, as in the baseline.</li>
+    <li><b>Time.</b> The first trial started 2026-11-10 14:47 PST and the last ended 2026-11-11 02:54 PST.</li>
+  </ul>
+
+  <h2>Reward</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>Solved</th>
+<th class='num'>pass@1</th>
+<th class='num'>pass@2</th>
+<th class='num'>pass@3</th>
+<th class='num'>pass^2</th>
+<th class='num'>pass^3</th>
+</tr>
+<tr><td>pi</td><td class='num'>28/48</td><td class='num'>58.3%</td><td class='num'>68.8%</td><td class='num'>75.0%</td><td class='num'>47.9%</td><td class='num'>43.8%</td></tr>
+<tr><td>aos (baseline)</td><td class='num'>35/48</td><td class='num'>72.9%</td><td class='num'>75.0%</td><td class='num'>75.0%</td><td class='num'>70.8%</td><td class='num'>68.8%</td></tr>
+<tr><td>terminus-2 (baseline)</td><td class='num'>28/48</td><td class='num'>58.3%</td><td class='num'>64.6%</td><td class='num'>68.8%</td><td class='num'>52.1%</td><td class='num'>50.0%</td></tr>
+</table></div>
+  <p class="muted">pass@k and pass^k are computed per task from c successes in n = 3 and averaged over the 16 tasks.</p>
+  <div class='wrap'><table><tr>
+<th>Task</th>
+<th class='num'>pi</th>
+<th class='num'>aos</th>
+<th class='num'>terminus-2</th>
+<th class='num'>pi − terminus-2</th>
+<th class='num'>pi − aos</th>
+</tr>
+<tr><td>mailman</td><td class='num'>1/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>-2</td><td class='num'>-2</td></tr>
+<tr><td>feal-linear-cryptanalysis</td><td class='num'>1/3</td><td class='num'>2/3</td><td class='num'>2/3</td><td class='num'>-1</td><td class='num'>-1</td></tr>
+<tr><td>make-doom-for-mips</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>distribution-search</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>headless-terminal</td><td class='num'>2/3</td><td class='num'>3/3</td><td class='num'>1/3</td><td class='num'>+1</td><td class='num'>-1</td></tr>
+<tr><td>winning-avg-corewars</td><td class='num'>0/3</td><td class='num'>3/3</td><td class='num'>1/3</td><td class='num'>-1</td><td class='num'>-3</td></tr>
+<tr><td>prove-plus-comm</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>polyglot-c-py</td><td class='num'>1/3</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+1</td><td class='num'>+1</td></tr>
+<tr><td>vulnerable-secret</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>protein-assembly</td><td class='num'>2/3</td><td class='num'>3/3</td><td class='num'>0/3</td><td class='num'>+2</td><td class='num'>-1</td></tr>
+<tr><td>gpt2-codegolf</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>log-summary-date-ranges</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>break-filter-js-from-html</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>fix-git</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>regex-log</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>3/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+<tr><td>adaptive-rejection-sampler</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>0/3</td><td class='num'>+0</td><td class='num'>+0</td></tr>
+</table></div>
+  <ul>
+    <li><b>Against Terminus-2:</b> pi solved more trials on 3 tasks (headless-terminal, polyglot-c-py, protein-assembly) and fewer on 3 (mailman, feal-linear-cryptanalysis, winning-avg-corewars).</li>
+    <li><b>Against AOS:</b> pi solved fewer on 5 tasks (mailman, feal-linear-cryptanalysis, headless-terminal, winning-avg-corewars, protein-assembly) and more on 1 (polyglot-c-py).</li>
+  </ul>
+  <h3>Primary tests</h3>
+  <div class='wrap'><table><tr>
+<th>Comparison</th>
+<th class='num'>pi mean</th>
+<th class='num'>Comparator mean</th>
+<th class='num'>Diff (pts)</th>
+<th class='num'>p</th>
+<th class='num'>p (Holm)</th>
+<th class='num'>Holm level</th>
+<th>Rejected</th>
+<th class='num'>Sensitivity diff</th>
+<th class='num'>Sensitivity p</th>
+<th class='num'>Sensitivity p (Holm)</th>
+<th>Sensitivity rejected</th>
+</tr>
+<tr><td>P1: pi − terminus-2</td><td class='num'>0.5833</td><td class='num'>0.5833</td><td class='num'>+0.0</td><td class='num'>1.0000</td><td class='num'>1.0000</td><td class='num'>0.050</td><td>no</td><td class='num'>-4.2</td><td class='num'>0.7288</td><td class='num'>0.7288</td><td>no</td></tr>
+<tr><td>P2: pi − aos</td><td class='num'>0.5833</td><td class='num'>0.7292</td><td class='num'>-14.6</td><td class='num'>0.0306</td><td class='num'>0.0613</td><td class='num'>0.025</td><td>no</td><td class='num'>-18.8</td><td class='num'>0.0042</td><td class='num'>0.0084</td><td>yes</td></tr>
+</table></div>
+  <p class="muted">Exact stratified permutation test: labels permuted within each task's 6 trials (3 pi, 3 comparator), two-sided, p computed exactly by convolution; Holm at family α = 0.05. The sensitivity columns count pi seqs 13, 40 as failures (see "pi after Harbor's timeout"); they are not the result.</p>
+  <h3>Secondary: the three split tasks</h3>
+  <p>On headless-terminal, winning-avg-corewars and protein-assembly, pi solved 4 of 9, against AOS 9/9 and Terminus-2 2/9. Exact stratified p on these three tasks: pi − Terminus-2 +22.2 points, p = 0.6300; pi − AOS -55.6 points, p = 0.0250. These tasks were chosen from the baseline's results, so the comparators' numbers there are selected and pi's are not; the p-values are not part of the family.</p>
+
+  <h2>Endings</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>completed</th>
+<th class='num'>budget_exit</th>
+<th class='num'>harbor_timeout</th>
+<th class='num'>infra_error</th>
+<th class='num'>agent_crash</th>
+</tr>
+<tr><td>pi</td><td class='num'>27</td><td class='num'>—</td><td class='num'>21</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td>aos (baseline, A3)</td><td class='num'>41</td><td class='num'>7</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td>terminus-2 (baseline, A3)</td><td class='num'>26</td><td class='num'>0</td><td class='num'>22</td><td class='num'>0</td><td class='num'>0</td></tr>
+</table></div>
+  <ul>
+    <li><b>pi:</b> 24 of 27 completed trials passed, and 4 of 21 trials ended by Harbor's timeout passed: the verifier still runs, and a trial passes if the answer was in place.</li>
+    <li>No infra errors and no agent crashes, so the stop rule never fired. pi has no budget exit; that column is AOS's.</li>
+  </ul>
+
+  <h2>Why each failed trial failed</h2>
+  <p>Every failed pi trial was read from its session file, <code>pi.txt</code> and the verifier's output, and given one bucket by the baseline's definitions and tie rule.</p>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>no_answer</th>
+<th class='num'>wrong_answer</th>
+<th class='num'>environment</th>
+<th class='num'>timeout</th>
+<th class='num'>infra</th>
+<th class='num'>unexplained</th>
+</tr>
+<tr><td>pi</td><td class='num'>2</td><td class='num'>1</td><td class='num'>0</td><td class='num'>17</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td>aos (baseline)</td><td class='num'>0</td><td class='num'>6</td><td class='num'>0</td><td class='num'>7</td><td class='num'>0</td><td class='num'>0</td></tr>
+<tr><td>terminus-2 (baseline)</td><td class='num'>0</td><td class='num'>3</td><td class='num'>0</td><td class='num'>17</td><td class='num'>0</td><td class='num'>0</td></tr>
+</table></div>
+  <ul>
+    <li><b>How the tie rule was applied.</b> Each failed trial was read from its trace and given one bucket by PLAN.md&#x27;s definitions. Where two buckets applied, the earliest cause was chosen and the other noted. A trial ended by Harbor&#x27;s timeout or AOS&#x27;s budget while the agent was still working is timeout, even when an unfinished or wrong answer was already on disk; wrong_answer is a trial whose agent finished (exited, or marked the task complete) with a wrong answer. Under the strict reading, in which any written answer that a test failed on comes first, seqs 7, 14, 22, 42 and 46 (other: wrong_answer) would be wrong_answer instead. For pi, &quot;finished&quot; means pi exited by itself (pi_exit set).</li>
+    <li><b>An answer on disk.</b> 6 of pi's 20 failed trials had a written answer that a test failed on (seqs 7, 14, 22, 27, 42, 46); the rest never wrote one. No failed trial was seen to have had a passing answer and lost it, as Terminus-2 did in its seq 30; this is from the traces only, as intermediate answers were not run against the tests.</li>
+    <li><b>Two exits without an answer.</b> In gpt2-codegolf seqs 30 and 47, pi exited by itself after a model reply that held only reasoning, ending mid-sentence with stop reason "stop", and no text or tool call. pi treats such a reply as the end of its turn.</li>
+    <li><b>polyglot-c-py.</b> pi solved it once (seq 34), the first pass on this task in any arm. Its two failures were the baseline's: a compiled <code>cmain</code> left in <code>/app/polyglot</code>.</li>
+    <li><b>Long tool calls at the timeout.</b> In 7 timed-out trials, pi's last tool call had been running for 5 minutes or more when Harbor stopped it. pi's bash tool has no time limit of its own, so a command that does not return holds the agent until Harbor's timeout:</li>
+  </ul>
+  <div class='wrap'><table><tr>
+<th class='num'>Seq</th>
+<th>Task</th>
+<th class='num'>Call started (s after agent start)</th>
+<th class='num'>Running at the timeout (s)</th>
+<th>Reward</th>
+</tr>
+<tr><td class='num'>7</td><td>polyglot-c-py</td><td class='num'>380</td><td class='num'>520</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>11</td><td>feal-linear-cryptanalysis</td><td class='num'>309</td><td class='num'>1,491</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>14</td><td>mailman</td><td class='num'>556</td><td class='num'>1,244</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>19</td><td>feal-linear-cryptanalysis</td><td class='num'>706</td><td class='num'>1,094</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>26</td><td>mailman</td><td class='num'>397</td><td class='num'>1,403</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>32</td><td>protein-assembly</td><td class='num'>914</td><td class='num'>886</td><td><span class='fail'>0</span></td></tr>
+<tr><td class='num'>48</td><td>protein-assembly</td><td class='num'>644</td><td class='num'>1,156</td><td><span class='pass'>1</span></td></tr>
+</table></div>
+  <div class='wrap'><table><tr>
+<th>Seq</th>
+<th>Task</th>
+<th>Ending</th>
+<th>Bucket</th>
+<th>Reason, from the trace</th>
+<th>Also</th>
+</tr>
+<tr><td>3</td><td>adaptive-rejection-sampler</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing R prototypes to /tmp (session tool calls 13-18 wrote /tmp/p5.R to /tmp/p1b.R, the last at +892 s); /app/ars.R was never written, so the tests failed with &quot;No ars.R file found&quot; (verifier/test-stdout.txt).</td><td>no_answer</td></tr>
+<tr><td>4</td><td>winning-avg-corewars</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still tuning clear-style candidates in /app/lab (tool calls 134-141 edited mk2.py and ran sweeps; every config in calls 139-140 printed &#x27;fail&#x27;, snake 6-8); /app/my_warrior.red was never written (test_warrior_exists &#x27;my_warrior.red file not found&#x27;).</td><td>no_answer</td></tr>
+<tr><td>5</td><td>gpt2-codegolf</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still probing the checkpoint&#x27;s weight layout in C (tool calls 29-51: lay.c, st.c, ln.c, ax.c, prof.c, vecs.c, rows.c; the last at +858 s printed row stats); /app/gpt2.c was never written (test_gpt2_implementation &#x27;File /app/gpt2.c does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>7</td><td>polyglot-c-py</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 21 (+380 s, a loop comparing ./cmain and python3 main.py.c for n = 0..93) had not returned; call 20 had rebuilt the binary into the answer folder (`gcc ... main.py.c -o cmain` in /app/polyglot), so test_fibonacci_polyglot failed with &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot;.</td><td>wrong_answer</td></tr>
+<tr><td>11</td><td>feal-linear-cryptanalysis</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 10 (+309 s: build /app/attack.c with -fopenmp and run ./attack /app/my_pairs.txt) had not returned, about 1490 s later; no key was recovered and test_attack failed with &quot;FileNotFoundError: ... &#x27;/app/plaintexts.txt&#x27;&quot;. Its verifier ran 928 s although pytest reports 5.4 s; the cause was not determined.</td><td>no_answer</td></tr>
+<tr><td>14</td><td>mailman</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 52 (+556 s: `service postfix start ... service mailman3 start ... mailman status`) had not returned, about 1240 s later; reading-group-configure (calls 37-50) had set up the list and 2 of 3 tests passed, but test_join_announce_leave_flow failed with SMTPRecipientsRefused 550 &#x27;User unknown in local recipient table&#x27;.</td><td>wrong_answer</td></tr>
+<tr><td>15</td><td>make-doom-for-mips</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its MIPS libc (tool calls 58-63: my_stdlib.h, sys.c, string.c, stdio.c twice, printf.c at +892 s); nothing was compiled or linked (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27;, test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>17</td><td>winning-avg-corewars</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 141 (+3585 s, a rave.red parameter search under `timeout 1500`) was running; calls 138-140 were still varying IVAL/CDIST/BOMBLEN variants of the bundled rave.red, and /app/my_warrior.red was never written (test_warrior_exists &#x27;my_warrior.red file not found&#x27;).</td><td>no_answer</td></tr>
+<tr><td>19</td><td>feal-linear-cryptanalysis</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 28 (+705 s: rebuild and run ./attack on self-generated test pairs, after call 26 failed with &#x27;key values exceed 24 bits&#x27;) had not returned, about 1095 s later; no key was recovered and test_attack failed with &quot;FileNotFoundError: ... &#x27;/app/plaintexts.txt&#x27;&quot;.</td><td>no_answer</td></tr>
+<tr><td>22</td><td>adaptive-rejection-sampler</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still patching /app/ars.R (call 40 at +890 s failed with &#x27;Could not find the exact text&#x27;, call 41 at +898 s retried with perl); the ars.R on disk had no test() function and its sampling run failed with &quot;object &#x27;ok&#x27; not found&quot; (test_has_test_function, test_can_generate_standard_distribution_samples).</td><td>wrong_answer</td></tr>
+<tr><td>26</td><td>mailman</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 48 (+396 s: chmod the mailman3 dirs, then `mailman --run-as-root start`) had not returned, about 1400 s later; no list had been created (test_mlist_exists &#x27;Mailing list does not exist&#x27;; local delivery got 451 &#x27;Temporary lookup failure&#x27;).</td><td>no_answer</td></tr>
+<tr><td>27</td><td>polyglot-c-py</td><td>completed</td><td><b>wrong_answer</b></td><td>pi finished (pi_exit 0, stop at +550 s) after tool call 20 ran `rm -f cmain &amp;&amp; gcc main.py.c -o cmain` in /app/polyglot and listed the folder showing cmain; its final message reports the task done, and test_fibonacci_polyglot failed with &quot;Expected only main.py.c, found: [&#x27;cmain&#x27;, &#x27;main.py.c&#x27;]&quot;.</td><td></td></tr>
+<tr><td>28</td><td>make-doom-for-mips</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its libc under /app/mips-port (tool calls 52-55: my_internal.h, then my_string.c and two edits, the last at +835 s); nothing was compiled (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27;, test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>30</td><td>gpt2-codegolf</td><td>completed</td><td><b>no_answer</b></td><td>pi exited by itself (pi_exit 0) after 46 s and 3 tool calls: the model&#x27;s third reply was reasoning only (124 output tokens, ending mid-sentence, stopReason &#x27;stop&#x27;, no text and no tool call), which ends pi&#x27;s turn; /app/gpt2.c was never written (test_gpt2_implementation &#x27;File /app/gpt2.c does not exist&#x27;).</td><td></td></tr>
+<tr><td>32</td><td>protein-assembly</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 27 (+914 s, an NCBI BLAST submit-and-poll script) had not returned, about 886 s later; calls 24-26 had failed RCSB (HTTP 404) and BLAST lookups, and /app/gblock.txt was never written (test_gblock &#x27;File /app/gblock.txt does not exist.&#x27;).</td><td>no_answer</td></tr>
+<tr><td>35</td><td>make-doom-for-mips</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its libc under /app/mipseal (tool calls 45-52: my_stdlib.h, syscall.S, my_sys.c; call 53 at +858 s listed fopen modes in doomgeneric); nothing was compiled (test_vm_execution &#x27;Timeout waiting for frame.bmp to be created&#x27;, test_frame_bmp_exists &#x27;File /tmp/frame.bmp does not exist&#x27;).</td><td>no_answer</td></tr>
+<tr><td>42</td><td>adaptive-rejection-sampler</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still editing /app/ars.R (calls 30-32, the last at +888 s); the file on disk defined no function matching `ars &lt;-`, so the tests failed with &quot;No &#x27;ars&#x27; function found in ars.R&quot;, &#x27;could not find function &quot;ars&quot;&#x27; and &quot;No &#x27;test&#x27; function found&quot;.</td><td>wrong_answer</td></tr>
+<tr><td>45</td><td>winning-avg-corewars</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 124 (+3524 s, a sweep of clear-style variants against the five opponents) was running; calls 121-123 were still debugging a g2-clear stall in pmars&#x27;s cdb, and /app/my_warrior.red was never written (test_warrior_exists &#x27;my_warrior.red file not found&#x27;).</td><td>no_answer</td></tr>
+<tr><td>46</td><td>headless-terminal</td><td>harbor_timeout</td><td><b>timeout</b></td><td>Harbor&#x27;s 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was installing vim for further key tests (calls 40-41, the last at +892 s, after call 38&#x27;s KEYS OK); /app/headless_terminal.py passed 6 of 7 tests, but test_background_commands failed with ConnectionError to localhost:8000. Post-kill relay activity: one POST at +1 s (502).</td><td>wrong_answer</td></tr>
+<tr><td>47</td><td>gpt2-codegolf</td><td>completed</td><td><b>no_answer</b></td><td>pi exited by itself (pi_exit 0) at +730 s after 28 tool calls spent identifying the checkpoint&#x27;s tensor layout (calls 5-28: hdr.c, s.c-s6.c, d.c, p.c, n.c, q.c, t1.c, t2.c, f2.c); its last reply was reasoning only (1399 output tokens, ending mid-sentence, stopReason &#x27;stop&#x27;, no text and no tool call), and /app/gpt2.c was never written (test_gpt2_implementation &#x27;File /app/gpt2.c does not exist&#x27;).</td><td></td></tr>
+</table></div>
+
+  <h2>pi after Harbor's timeout</h2>
+  <p class="warn"><b>Harbor's timeout stops waiting for pi; it does not stop the pi process in the container.</b> In 9 of pi's 21 timed-out trials (seqs 5, 13, 17, 22, 28, 32, 40, 42, 46), the relay logged 12 chat completions that started after the agent's end, 9 of them inside the verifier's window, which runs in the same container. Each carries one or two more messages than the session saved at the kill, so in each case a tool finished after the kill before the request was sent. The plan disclosed the child-process form of this as untested; this is the agent itself still acting.</p>
+  <div class='wrap'><table><tr>
+<th class='num'>Seq</th>
+<th>Task</th>
+<th>Reward</th>
+<th>Verifier (s after agent end)</th>
+<th class='num'>Messages in the saved session</th>
+<th class='num'>Late POSTs</th>
+<th>Each: start after agent end, status, messages</th>
+</tr>
+<tr><td class='num'>3</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>+0.3–18.1</td><td class='num'>37</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>4</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>+0.4–10.5</td><td class='num'>277</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>5</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>+0.3–18.3</td><td class='num'>102</td><td class='num'>1</td><td>+2.2 s, 502, messages=104, in verifier</td></tr>
+<tr><td class='num'>7</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>+0.2–50.0</td><td class='num'>43</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>11</td><td>feal-linear-cryptanalysis</td><td><span class='fail'>0</span></td><td>+4.5–932.5</td><td class='num'>20</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>13</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>+0.2–13.1</td><td class='num'>112</td><td class='num'>2</td><td>+4.5 s, 200, messages=114, in verifier<br>+11.7 s, 502, messages=116, in verifier</td></tr>
+<tr><td class='num'>14</td><td>mailman</td><td><span class='fail'>0</span></td><td>+0.3–25.9</td><td class='num'>102</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>15</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>+0.3–47.6</td><td class='num'>107</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>17</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>+0.2–12.3</td><td class='num'>280</td><td class='num'>1</td><td>+8.2 s, 502, messages=281, in verifier</td></tr>
+<tr><td class='num'>19</td><td>feal-linear-cryptanalysis</td><td><span class='fail'>0</span></td><td>+1.7–345.8</td><td class='num'>56</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>20</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>+0.3–24.0</td><td class='num'>66</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>22</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>+0.3–16.8</td><td class='num'>83</td><td class='num'>2</td><td>+10.0 s, 200, messages=85, in verifier<br>+15.8 s, 502, messages=87, in verifier</td></tr>
+<tr><td class='num'>26</td><td>mailman</td><td><span class='fail'>0</span></td><td>+0.3–130.2</td><td class='num'>84</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>28</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>+0.2–44.3</td><td class='num'>106</td><td class='num'>1</td><td>+9.6 s, 502, messages=108, in verifier</td></tr>
+<tr><td class='num'>32</td><td>protein-assembly</td><td><span class='fail'>0</span></td><td>+0.3–14.7</td><td class='num'>53</td><td class='num'>1</td><td>+14.4 s, 200, messages=54, in verifier</td></tr>
+<tr><td class='num'>35</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>+0.3–49.2</td><td class='num'>97</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>40</td><td>feal-linear-cryptanalysis</td><td><span class='pass'>1</span></td><td>+0.3–13.2</td><td class='num'>113</td><td class='num'>2</td><td>+6.2 s, 200, messages=115, in verifier<br>+15.8 s, 200, messages=117, after verifier</td></tr>
+<tr><td class='num'>42</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>+0.3–19.2</td><td class='num'>65</td><td class='num'>1</td><td>+19.4 s, 502, messages=67, after verifier</td></tr>
+<tr><td class='num'>45</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>+0.3–20.0</td><td class='num'>246</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+<tr><td class='num'>46</td><td>headless-terminal</td><td><span class='fail'>0</span></td><td>+0.2–15.1</td><td class='num'>82</td><td class='num'>1</td><td>+15.7 s, 502, messages=84, after verifier</td></tr>
+<tr><td class='num'>48</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>+0.2–19.9</td><td class='num'>80</td><td class='num'>0</td><td><span class='muted'>none</span></td></tr>
+</table></div>
+  <ul>
+    <li><b>How to read it.</b> The relay logs each request's start time, written when its reply ends. The saved session file is a copy taken at the agent's end, so a request carrying more messages than the saved session shows activity after the kill: two more is a reply and a tool result, one more is the result of a tool that was running at the kill. What those tools did is not recorded anywhere: the session copy stops at the kill and the relay logs no bodies. Every late request that failed ended with a 502 when the container stopped; these are all 7 of pi's 502s, so none is an infra error.</li>
+    <li><b>The baseline does not have this.</b> In the baseline's relay log, the 22 Terminus-2 trials that ended by Harbor's timeout have 0 chat completions that started after the agent's end. Terminus-2 runs in Harbor's own process and stops when cancelled; AOS never reached Harbor's timeout.</li>
+    <li><b>The direction of any effect is unknown.</b> A late action could have made a pass (an answer finished or fixed during the verifier) or a failure (a working answer changed or a service disturbed while the tests ran). The second case cannot be detected from the data: 7 of the late-active trials failed, and any of them might have passed without the late actions. For seq 40, the answer that passed (<code>/app/plaintexts.txt</code>) was written and checked against the reference binary at +1772–1780 s, before the kill; seq 13's last saved test run, at +891 s, raised an error in pi's own test script, and what pi changed afterwards is unknown.</li>
+    <li><b>Sensitivity.</b> Counting the 2 late-active passes (seqs 13, 40) as failures gives pi 26/48. Through the same exact test and Holm step: P1 -4.2 points, p = 0.7288; P2 -18.8 points, p = 0.0042, Holm 0.0084, rejected. This is a bound in one direction only, not a corrected result.</li>
+    <li><b>Usage.</b> Token counts come from the saved session, so they miss the late calls.</li>
+    <li><b>Long verifiers.</b> Seq 11's verifier ran from +4.5 to +932.5 s after the agent's end, although pytest reports 5.4 s, and seq 19's from +1.7 to +345.8 s; no chat completion started in either window. Both are feal-linear-cryptanalysis trials killed while pi's key search was still running (see the long tool calls above); seq 40, whose search had finished, took 13.2 s. That fits the search holding the CPU during verification, but it was not confirmed.</li>
+    <li><b>For future runs (a recommendation only; the harness was not changed during this run):</b> stop the pi process, and its children, in the container before the verifier starts, and then check the relay for requests after the agent's end. The same check would settle the child-process question for every arm.</li>
+  </ul>
+
+  <h2>Cost and latency</h2>
+  <div class='wrap'><table><tr>
+<th>Arm</th>
+<th class='num'>Median agent s</th>
+<th class='num'>Total agent h</th>
+<th class='num'>Model calls</th>
+<th class='num'>Prompt tokens</th>
+<th class='num'>Cached tokens</th>
+<th class='num'>Completion tokens</th>
+</tr>
+<tr><td>pi</td><td class='num'>621</td><td class='num'>11.3</td><td class='num'>1,517</td><td class='num'>75,219,475</td><td class='num'>74,178,657</td><td class='num'>1,650,097</td></tr>
+<tr><td>aos (baseline)</td><td class='num'>443</td><td class='num'>7.6</td><td class='num'>1,111</td><td class='num'>20,551,359</td><td class='num'>19,491,539</td><td class='num'>1,372,375</td></tr>
+<tr><td>terminus-2 (baseline)</td><td class='num'>799</td><td class='num'>12.0</td><td class='num'>976</td><td class='num'>18,325,667</td><td class='num'>17,101,661</td><td class='num'>1,552,499</td></tr>
+</table></div>
+  <p class="muted">pi's calls are assistant messages in its saved sessions (1,517); the relay saw 1,540 start in pi's trial windows, the difference being the requests in flight at a kill and the late ones above. pi's tokens are from its session files (all 48 had one), AOS's from its ledger and Terminus-2's from Harbor. pi's tool calls: bash 1279, write 185, edit 111, read 40; 116 returned an error.</p>
+  <div class='wrap'><table><tr>
+<th>Per-call latency</th>
+<th class='num'>Calls</th>
+<th class='num'>Median s</th>
+<th class='num'>p90 s</th>
+<th class='num'>Max s</th>
+</tr>
+<tr><td>pi (relay-side, per call)</td><td class='num'>1,517</td><td class='num'>10.2</td><td class='num'>43.1</td><td class='num'>126.1</td></tr>
+<tr><td>aos (baseline ledger)</td><td class='num'>1,109</td><td class='num'>13.2</td><td class='num'>43.2</td><td class='num'>331.0</td></tr>
+</table></div>
+  <p class="muted">pi's latency is per streamed call from its session; AOS's is from its ledger. Both are dominated by the same server and model; the difference reflects prompt and output sizes as much as the agents.</p>
+
+  <h2>Data quality</h2>
+  <ul>
+    <li><b>Contention.</b> For each trial, the server's request count before and after was compared with the requests the relay saw start inside it (A3 attribution). The surplus is 0 in all 48 trials; no other client used the model during any trial.</li>
+    <li><b>Backend.</b> The model ID, the engine (0.1.54) and the server's start time were checked before and after every trial, the smoke included, and never changed. They match the baseline's.</li>
+    <li><b>Requests cut off at the kill.</b> 4 trials had a request in flight at Harbor's timeout, logged after the closing check; they are recorded as cancelled, as A3 defines.</li>
+    <li><b>The key stayed out.</b> It appears in none of the 956 files under the pi job folders, the baseline folder and the pi release cache.</li>
+  </ul>
+
+  <h2>What this run can and cannot show</h2>
+  <ul>
+    <li>It compares pi with the baseline's two arms on the same model, sampling, tasks and machine, one day apart. It does not separate pi's prompt, tools, context handling and lack of a deadline from each other.</li>
+    <li>The comparators were not rerun. Server load, network for tasks that fetch data, and anything else that changed overnight are outside the comparison; the backend checks show the model server itself did not.</li>
+    <li>With 3 trials per task the per-task numbers are wide. The primary tests are a summary of the per-task table, and they are underpowered for a 15-point difference.</li>
+    <li>The post-kill activity above is a known flaw in how this run ended pi, disclosed rather than corrected.</li>
+  </ul>
+
+  <h2>Per trial</h2>
+  <div class='wrap'><table><tr>
+<th class='num'>Seq</th>
+<th class='num'>Round</th>
+<th>Task</th>
+<th>Reward</th>
+<th>Ending</th>
+<th class='num'>Agent s</th>
+<th class='num'>Calls</th>
+<th class='num'>POSTs</th>
+<th>pi_exit</th>
+<th class='num'>Prompt tokens</th>
+<th class='num'>Completion tokens</th>
+<th class='num'>Cancelled</th>
+<th class='num'>502s</th>
+<th>Bucket</th>
+</tr>
+<tr><td class='num'>1</td><td class='num'>1</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>156</td><td class='num'>13</td><td class='num'>13</td><td>0</td><td class='num'>104,704</td><td class='num'>9,952</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>2</td><td class='num'>1</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>620</td><td class='num'>35</td><td class='num'>35</td><td>0</td><td class='num'>793,991</td><td class='num'>35,676</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>3</td><td class='num'>1</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>17</td><td class='num'>18</td><td>None</td><td class='num'>305,270</td><td class='num'>52,991</td><td class='num'>1</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>4</td><td class='num'>1</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>3,600</td><td class='num'>134</td><td class='num'>135</td><td>None</td><td class='num'>16,599,079</td><td class='num'>179,317</td><td class='num'>1</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>5</td><td class='num'>1</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>49</td><td class='num'>51</td><td>None</td><td class='num'>1,750,767</td><td class='num'>50,670</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>6</td><td class='num'>1</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>50</td><td class='num'>10</td><td class='num'>10</td><td>0</td><td class='num'>68,494</td><td class='num'>2,551</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>7</td><td class='num'>1</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>21</td><td class='num'>21</td><td>None</td><td class='num'>282,240</td><td class='num'>21,424</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>8</td><td class='num'>1</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>287</td><td class='num'>15</td><td class='num'>15</td><td>0</td><td class='num'>175,042</td><td class='num'>13,740</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>9</td><td class='num'>1</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>53</td><td class='num'>10</td><td class='num'>10</td><td>0</td><td class='num'>33,648</td><td class='num'>2,719</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>10</td><td class='num'>1</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>363</td><td class='num'>19</td><td class='num'>19</td><td>0</td><td class='num'>355,399</td><td class='num'>22,760</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>11</td><td class='num'>1</td><td>feal-linear-cryptanalysis</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>9</td><td class='num'>9</td><td>None</td><td class='num'>115,549</td><td class='num'>21,828</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>12</td><td class='num'>1</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>68</td><td class='num'>12</td><td class='num'>12</td><td>0</td><td class='num'>68,622</td><td class='num'>3,394</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>13</td><td class='num'>1</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>54</td><td class='num'>57</td><td>None</td><td class='num'>1,604,384</td><td class='num'>52,677</td><td class='num'>0</td><td class='num'>1</td><td></td></tr>
+<tr><td class='num'>14</td><td class='num'>1</td><td>mailman</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>49</td><td class='num'>49</td><td>None</td><td class='num'>1,706,347</td><td class='num'>29,181</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>15</td><td class='num'>1</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>42</td><td class='num'>43</td><td>None</td><td class='num'>1,997,736</td><td class='num'>47,046</td><td class='num'>1</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>16</td><td class='num'>1</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>111</td><td class='num'>10</td><td class='num'>10</td><td>0</td><td class='num'>92,811</td><td class='num'>6,494</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>17</td><td class='num'>2</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>3,600</td><td class='num'>138</td><td class='num'>139</td><td>None</td><td class='num'>15,188,328</td><td class='num'>180,557</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>18</td><td class='num'>2</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>74</td><td class='num'>11</td><td class='num'>11</td><td>0</td><td class='num'>79,139</td><td class='num'>3,836</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>19</td><td class='num'>2</td><td>feal-linear-cryptanalysis</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>27</td><td class='num'>27</td><td>None</td><td class='num'>833,058</td><td class='num'>45,794</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>20</td><td class='num'>2</td><td>headless-terminal</td><td><span class='pass'>1</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>31</td><td class='num'>31</td><td>None</td><td class='num'>698,636</td><td class='num'>45,607</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>21</td><td class='num'>2</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>65</td><td class='num'>8</td><td class='num'>8</td><td>0</td><td class='num'>59,323</td><td class='num'>3,839</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>22</td><td class='num'>2</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>40</td><td class='num'>43</td><td>None</td><td class='num'>1,355,666</td><td class='num'>49,823</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>23</td><td class='num'>2</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>54</td><td class='num'>8</td><td class='num'>8</td><td>0</td><td class='num'>25,798</td><td class='num'>2,995</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>24</td><td class='num'>2</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>233</td><td class='num'>12</td><td class='num'>12</td><td>0</td><td class='num'>93,086</td><td class='num'>7,989</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>25</td><td class='num'>2</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>69</td><td class='num'>12</td><td class='num'>12</td><td>0</td><td class='num'>68,142</td><td class='num'>3,432</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>26</td><td class='num'>2</td><td>mailman</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>35</td><td class='num'>35</td><td>None</td><td class='num'>845,919</td><td class='num'>20,840</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>27</td><td class='num'>2</td><td>polyglot-c-py</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>550</td><td class='num'>21</td><td class='num'>21</td><td>0</td><td class='num'>363,049</td><td class='num'>17,615</td><td class='num'>0</td><td class='num'>0</td><td>wrong_answer</td></tr>
+<tr><td class='num'>28</td><td class='num'>2</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>49</td><td class='num'>51</td><td>None</td><td class='num'>2,478,954</td><td class='num'>49,730</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>29</td><td class='num'>2</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>523</td><td class='num'>29</td><td class='num'>29</td><td>0</td><td class='num'>643,280</td><td class='num'>30,960</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>30</td><td class='num'>2</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>46</td><td class='num'>3</td><td class='num'>3</td><td>0</td><td class='num'>8,132</td><td class='num'>2,405</td><td class='num'>0</td><td class='num'>0</td><td>no_answer</td></tr>
+<tr><td class='num'>31</td><td class='num'>2</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>246</td><td class='num'>16</td><td class='num'>16</td><td>0</td><td class='num'>159,115</td><td class='num'>15,630</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>32</td><td class='num'>2</td><td>protein-assembly</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>25</td><td class='num'>26</td><td>None</td><td class='num'>401,622</td><td class='num'>16,360</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>33</td><td class='num'>3</td><td>regex-log</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>300</td><td class='num'>18</td><td class='num'>18</td><td>0</td><td class='num'>249,095</td><td class='num'>18,763</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>34</td><td class='num'>3</td><td>polyglot-c-py</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>573</td><td class='num'>31</td><td class='num'>31</td><td>0</td><td class='num'>745,929</td><td class='num'>30,777</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>35</td><td class='num'>3</td><td>make-doom-for-mips</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>42</td><td class='num'>43</td><td>None</td><td class='num'>2,005,808</td><td class='num'>49,609</td><td class='num'>1</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>36</td><td class='num'>3</td><td>fix-git</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>118</td><td class='num'>13</td><td class='num'>13</td><td>0</td><td class='num'>116,853</td><td class='num'>5,876</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>37</td><td class='num'>3</td><td>log-summary-date-ranges</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>79</td><td class='num'>10</td><td class='num'>10</td><td>0</td><td class='num'>65,644</td><td class='num'>3,743</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>38</td><td class='num'>3</td><td>break-filter-js-from-html</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>622</td><td class='num'>19</td><td class='num'>19</td><td>0</td><td class='num'>323,928</td><td class='num'>19,965</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>39</td><td class='num'>3</td><td>distribution-search</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>310</td><td class='num'>15</td><td class='num'>15</td><td>0</td><td class='num'>256,075</td><td class='num'>20,090</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>40</td><td class='num'>3</td><td>feal-linear-cryptanalysis</td><td><span class='pass'>1</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>55</td><td class='num'>58</td><td>None</td><td class='num'>2,955,851</td><td class='num'>77,559</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>41</td><td class='num'>3</td><td>mailman</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>982</td><td class='num'>79</td><td class='num'>79</td><td>0</td><td class='num'>3,522,668</td><td class='num'>40,350</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>42</td><td class='num'>3</td><td>adaptive-rejection-sampler</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>31</td><td class='num'>33</td><td>None</td><td class='num'>692,370</td><td class='num'>51,074</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>43</td><td class='num'>3</td><td>prove-plus-comm</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>50</td><td class='num'>7</td><td class='num'>7</td><td>0</td><td class='num'>22,666</td><td class='num'>2,706</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>44</td><td class='num'>3</td><td>vulnerable-secret</td><td><span class='pass'>1</span></td><td>completed</td><td class='num'>71</td><td class='num'>8</td><td class='num'>8</td><td>0</td><td class='num'>58,382</td><td class='num'>4,036</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+<tr><td class='num'>45</td><td class='num'>3</td><td>winning-avg-corewars</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>3,600</td><td class='num'>121</td><td class='num'>121</td><td>None</td><td class='num'>11,311,512</td><td class='num'>143,653</td><td class='num'>0</td><td class='num'>0</td><td>timeout</td></tr>
+<tr><td class='num'>46</td><td class='num'>3</td><td>headless-terminal</td><td><span class='fail'>0</span></td><td>harbor_timeout</td><td class='num'>900</td><td class='num'>39</td><td class='num'>41</td><td>None</td><td class='num'>1,166,149</td><td class='num'>51,828</td><td class='num'>0</td><td class='num'>1</td><td>timeout</td></tr>
+<tr><td class='num'>47</td><td class='num'>3</td><td>gpt2-codegolf</td><td><span class='fail'>0</span></td><td>completed</td><td class='num'>730</td><td class='num'>27</td><td class='num'>27</td><td>0</td><td class='num'>1,280,432</td><td class='num'>42,178</td><td class='num'>0</td><td class='num'>0</td><td>no_answer</td></tr>
+<tr><td class='num'>48</td><td class='num'>3</td><td>protein-assembly</td><td><span class='pass'>1</span></td><td>harbor_timeout</td><td class='num'>1,800</td><td class='num'>38</td><td class='num'>38</td><td>None</td><td class='num'>1,090,783</td><td class='num'>38,058</td><td class='num'>0</td><td class='num'>0</td><td></td></tr>
+</table></div>
+
+  <h2>Files</h2>
+  <ul>
+    <li><code>baseline-tb2/PLAN-pi.md</code>: the frozen plan.</li>
+    <li><code>baseline-tb2/results-pi.jsonl</code>: one record per trial, as written during the run; <code>smoke-pi.jsonl</code>: the smoke.</li>
+    <li><code>baseline-tb2/failures-pi.json</code>: the hand-check; <code>analysis-pi.json</code>: the frozen analysis; <code>postkill-pi.json</code> (from <code>postkill_pi.py</code>, added after round 1): the late-request table and the sensitivity check.</li>
+    <li><code>baseline-tb2/relay-pi.log</code>: the relay's per-request log (no messages, no headers but the User-Agent); <code>logs/backend-pi.jsonl</code>: the backend checks.</li>
+  </ul>
+
+  <h2>Reproduce</h2>
+  <p><code>python3 -I reports/terminal-bench/baseline-tb2/analyze_pi.py</code>, then <code>postkill_pi.py</code>, then <code>make_report_pi.py</code>. The job folders are under <code>reports/terminal-bench/jobs/tb2-pi-*</code>.</p>
+</body>
+</html>

@@ -1,0 +1,1685 @@
+{
+ "trials": 48,
+ "primary": {
+  "P1": {
+   "a": "pi",
+   "b": "terminus-2",
+   "n_a": 48,
+   "n_b": 48,
+   "mean_a": 0.5833333333333334,
+   "mean_b": 0.5833333333333334,
+   "diff": 0.0,
+   "p_two_sided": 1.0,
+   "p": 1.0,
+   "p_holm": 1.0,
+   "level": 0.05,
+   "reject": false
+  },
+  "P2": {
+   "a": "pi",
+   "b": "aos",
+   "n_a": 48,
+   "n_b": 48,
+   "mean_a": 0.5833333333333334,
+   "mean_b": 0.7291666666666666,
+   "diff": -0.14583333333333326,
+   "p_two_sided": 0.030625000000000055,
+   "p": 0.030625000000000055,
+   "p_holm": 0.06125000000000011,
+   "level": 0.025,
+   "reject": false
+  }
+ },
+ "split_tasks": {
+  "terminus-2": {
+   "a": "pi",
+   "b": "terminus-2",
+   "n_a": 9,
+   "n_b": 9,
+   "mean_a": 0.4444444444444444,
+   "mean_b": 0.2222222222222222,
+   "diff": 0.2222222222222222,
+   "p_two_sided": 0.6299999999999998
+  },
+  "aos": {
+   "a": "pi",
+   "b": "aos",
+   "n_a": 9,
+   "n_b": 9,
+   "mean_a": 0.4444444444444444,
+   "mean_b": 1.0,
+   "diff": -0.5555555555555556,
+   "p_two_sided": 0.024999999999999994
+  },
+  "successes": {
+   "pi": 4,
+   "aos": 9,
+   "terminus-2": 2
+  }
+ },
+ "per_task": {
+  "mailman": {
+   "n": 3,
+   "c": 1,
+   "pass_at": {
+    "1": 0.33333333333333337,
+    "2": 0.6666666666666667,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "feal-linear-cryptanalysis": {
+   "n": 3,
+   "c": 1,
+   "pass_at": {
+    "1": 0.33333333333333337,
+    "2": 0.6666666666666667,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 2,
+   "terminus-2": 2
+  },
+  "make-doom-for-mips": {
+   "n": 3,
+   "c": 0,
+   "pass_at": {
+    "1": 0.0,
+    "2": 0.0,
+    "3": 0.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 0,
+   "terminus-2": 0
+  },
+  "distribution-search": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "headless-terminal": {
+   "n": 3,
+   "c": 2,
+   "pass_at": {
+    "1": 0.6666666666666667,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 0.3333333333333333,
+    "3": 0.0
+   },
+   "aos": 3,
+   "terminus-2": 1
+  },
+  "winning-avg-corewars": {
+   "n": 3,
+   "c": 0,
+   "pass_at": {
+    "1": 0.0,
+    "2": 0.0,
+    "3": 0.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 3,
+   "terminus-2": 1
+  },
+  "prove-plus-comm": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "polyglot-c-py": {
+   "n": 3,
+   "c": 1,
+   "pass_at": {
+    "1": 0.33333333333333337,
+    "2": 0.6666666666666667,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 0,
+   "terminus-2": 0
+  },
+  "vulnerable-secret": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "protein-assembly": {
+   "n": 3,
+   "c": 2,
+   "pass_at": {
+    "1": 0.6666666666666667,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 0.3333333333333333,
+    "3": 0.0
+   },
+   "aos": 3,
+   "terminus-2": 0
+  },
+  "gpt2-codegolf": {
+   "n": 3,
+   "c": 0,
+   "pass_at": {
+    "1": 0.0,
+    "2": 0.0,
+    "3": 0.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 0,
+   "terminus-2": 0
+  },
+  "log-summary-date-ranges": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "break-filter-js-from-html": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "fix-git": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "regex-log": {
+   "n": 3,
+   "c": 3,
+   "pass_at": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0
+   },
+   "pass_hat": {
+    "2": 1.0,
+    "3": 1.0
+   },
+   "aos": 3,
+   "terminus-2": 3
+  },
+  "adaptive-rejection-sampler": {
+   "n": 3,
+   "c": 0,
+   "pass_at": {
+    "1": 0.0,
+    "2": 0.0,
+    "3": 0.0
+   },
+   "pass_hat": {
+    "2": 0.0,
+    "3": 0.0
+   },
+   "aos": 0,
+   "terminus-2": 0
+  }
+ },
+ "pi": {
+  "n": 48,
+  "successes": 28,
+  "pass_at": {
+   "1": 0.5833333333333334,
+   "2": 0.6875,
+   "3": 0.75
+  },
+  "pass_hat": {
+   "2": 0.4791666666666667,
+   "3": 0.4375
+  },
+  "endings": {
+   "completed": 27,
+   "harbor_timeout": 21,
+   "infra_error": 0,
+   "agent_crash": 0
+  },
+  "passed_by_ending": {
+   "completed": 24,
+   "harbor_timeout": 4,
+   "infra_error": 0,
+   "agent_crash": 0
+  },
+  "agent_s_median": 620.936179,
+  "agent_s_total": 40702.273387,
+  "trial_s_total": 43319.731512,
+  "prompt_tokens": 75219475,
+  "cached_tokens": 74178657,
+  "completion_tokens": 1650097,
+  "model_calls": 1517,
+  "relay_posts_started": 1540,
+  "retries_or_cancelled": 23,
+  "cancelled_at_end": 4,
+  "own_502": 7,
+  "unrecovered_502": 7,
+  "contended": 0,
+  "contention_unknown": 0,
+  "usage_source": {
+   "session": 48,
+   "output": 0,
+   "null": 0
+  },
+  "other_session_entries": {},
+  "tool_calls": {
+   "bash": 1279,
+   "write": 185,
+   "edit": 111,
+   "read": 40
+  },
+  "tool_errors": 116,
+  "failures": {
+   "no_answer": 2,
+   "wrong_answer": 1,
+   "environment": 0,
+   "timeout": 17,
+   "infra": 0
+  },
+  "unexplained": 0
+ },
+ "baseline_failures": {
+  "aos": {
+   "no_answer": 0,
+   "wrong_answer": 6,
+   "environment": 0,
+   "timeout": 7,
+   "infra": 0
+  },
+  "terminus-2": {
+   "no_answer": 0,
+   "wrong_answer": 3,
+   "environment": 0,
+   "timeout": 17,
+   "infra": 0
+  }
+ },
+ "latency_s": {
+  "pi": {
+   "n": 1517,
+   "median": 10.235,
+   "p90": 43.062,
+   "max": 126.055
+  },
+  "aos_baseline": {
+   "n": 1109,
+   "median": 13.188,
+   "p90": 43.151,
+   "max": 330.954
+  }
+ },
+ "per_trial": [
+  {
+   "seq": 1,
+   "round": 1,
+   "task": "regex-log",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 155.575521,
+   "calls": 13,
+   "posts": 13,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 104704,
+    "cached_tokens": 99687,
+    "completion_tokens": 9952
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 13,
+    "posts_started": 13,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 2,
+   "round": 1,
+   "task": "protein-assembly",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 620.128459,
+   "calls": 35,
+   "posts": 35,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 793991,
+    "cached_tokens": 776375,
+    "completion_tokens": 35676
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 35,
+    "posts_started": 35,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 3,
+   "round": 1,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.004201,
+   "calls": 17,
+   "posts": 18,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 305270,
+    "cached_tokens": 298418,
+    "completion_tokens": 52991
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 18,
+    "posts_started": 18,
+    "surplus": 0
+   },
+   "cancelled_at_end": [
+    "2026-11-10T23:16:26.286548+00:00"
+   ],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 4,
+   "round": 1,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 3600.015162,
+   "calls": 134,
+   "posts": 135,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 16599079,
+    "cached_tokens": 16493011,
+    "completion_tokens": 179317
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 135,
+    "posts_started": 135,
+    "surplus": 0
+   },
+   "cancelled_at_end": [
+    "2026-11-11T00:16:59.708575+00:00"
+   ],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 5,
+   "round": 1,
+   "task": "gpt2-codegolf",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.008296,
+   "calls": 49,
+   "posts": 51,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1750767,
+    "cached_tokens": 1713970,
+    "completion_tokens": 50670
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 51,
+    "posts_started": 51,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T00:32:26.855814+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 6,
+   "round": 1,
+   "task": "log-summary-date-ranges",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 50.258382,
+   "calls": 10,
+   "posts": 10,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 68494,
+    "cached_tokens": 61810,
+    "completion_tokens": 2551
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 10,
+    "posts_started": 10,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 7,
+   "round": 1,
+   "task": "polyglot-c-py",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.003833,
+   "calls": 21,
+   "posts": 21,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 282240,
+    "cached_tokens": 278891,
+    "completion_tokens": 21424
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 21,
+    "posts_started": 21,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 8,
+   "round": 1,
+   "task": "break-filter-js-from-html",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 286.859452,
+   "calls": 15,
+   "posts": 15,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 175042,
+    "cached_tokens": 168803,
+    "completion_tokens": 13740
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 15,
+    "posts_started": 15,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 9,
+   "round": 1,
+   "task": "prove-plus-comm",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 52.863896,
+   "calls": 10,
+   "posts": 10,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 33648,
+    "cached_tokens": 30797,
+    "completion_tokens": 2719
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 10,
+    "posts_started": 10,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 10,
+   "round": 1,
+   "task": "distribution-search",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 363.479211,
+   "calls": 19,
+   "posts": 19,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 355399,
+    "cached_tokens": 344551,
+    "completion_tokens": 22760
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 19,
+    "posts_started": 19,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 11,
+   "round": 1,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.009387,
+   "calls": 9,
+   "posts": 9,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 115549,
+    "cached_tokens": 106524,
+    "completion_tokens": 21828
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 9,
+    "posts_started": 9,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 12,
+   "round": 1,
+   "task": "fix-git",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 67.737813,
+   "calls": 12,
+   "posts": 12,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 68622,
+    "cached_tokens": 63438,
+    "completion_tokens": 3394
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 12,
+    "posts_started": 12,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 13,
+   "round": 1,
+   "task": "headless-terminal",
+   "reward": 1.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.003309,
+   "calls": 54,
+   "posts": 57,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1604384,
+    "cached_tokens": 1588153,
+    "completion_tokens": 52677
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 57,
+    "posts_started": 57,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T02:05:37.450353+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": null
+  },
+  {
+   "seq": 14,
+   "round": 1,
+   "task": "mailman",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.007671,
+   "calls": 49,
+   "posts": 49,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1706347,
+    "cached_tokens": 1677410,
+    "completion_tokens": 29181
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 49,
+    "posts_started": 49,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 15,
+   "round": 1,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.004783,
+   "calls": 42,
+   "posts": 43,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1997736,
+    "cached_tokens": 1934520,
+    "completion_tokens": 47046
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 43,
+    "posts_started": 43,
+    "surplus": 0
+   },
+   "cancelled_at_end": [
+    "2026-11-11T02:51:17.352815+00:00"
+   ],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 16,
+   "round": 1,
+   "task": "vulnerable-secret",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 110.582532,
+   "calls": 10,
+   "posts": 10,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 92811,
+    "cached_tokens": 81234,
+    "completion_tokens": 6494
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 10,
+    "posts_started": 10,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 17,
+   "round": 2,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 3600.012025,
+   "calls": 138,
+   "posts": 139,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 15188328,
+    "cached_tokens": 15111503,
+    "completion_tokens": 180557
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 139,
+    "posts_started": 139,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T03:55:42.369133+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 18,
+   "round": 2,
+   "task": "log-summary-date-ranges",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 74.312577,
+   "calls": 11,
+   "posts": 11,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 79139,
+    "cached_tokens": 72225,
+    "completion_tokens": 3836
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 11,
+    "posts_started": 11,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 19,
+   "round": 2,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.006489,
+   "calls": 27,
+   "posts": 27,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 833058,
+    "cached_tokens": 815150,
+    "completion_tokens": 45794
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 27,
+    "posts_started": 27,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 20,
+   "round": 2,
+   "task": "headless-terminal",
+   "reward": 1.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.006451,
+   "calls": 31,
+   "posts": 31,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 698636,
+    "cached_tokens": 683205,
+    "completion_tokens": 45607
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 31,
+    "posts_started": 31,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 21,
+   "round": 2,
+   "task": "vulnerable-secret",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 65.071057,
+   "calls": 8,
+   "posts": 8,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 59323,
+    "cached_tokens": 49159,
+    "completion_tokens": 3839
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 8,
+    "posts_started": 8,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 22,
+   "round": 2,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.001088,
+   "calls": 40,
+   "posts": 43,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1355666,
+    "cached_tokens": 1340580,
+    "completion_tokens": 49823
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 43,
+    "posts_started": 43,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T05:05:40.771938+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 23,
+   "round": 2,
+   "task": "prove-plus-comm",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 54.152802,
+   "calls": 8,
+   "posts": 8,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 25798,
+    "cached_tokens": 23519,
+    "completion_tokens": 2995
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 8,
+    "posts_started": 8,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 24,
+   "round": 2,
+   "task": "break-filter-js-from-html",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 233.231668,
+   "calls": 12,
+   "posts": 12,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 93086,
+    "cached_tokens": 86793,
+    "completion_tokens": 7989
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 12,
+    "posts_started": 12,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 25,
+   "round": 2,
+   "task": "fix-git",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 69.425828,
+   "calls": 12,
+   "posts": 12,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 68142,
+    "cached_tokens": 62795,
+    "completion_tokens": 3432
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 12,
+    "posts_started": 12,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 26,
+   "round": 2,
+   "task": "mailman",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.005775,
+   "calls": 35,
+   "posts": 35,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 845919,
+    "cached_tokens": 820891,
+    "completion_tokens": 20840
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 35,
+    "posts_started": 35,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 27,
+   "round": 2,
+   "task": "polyglot-c-py",
+   "reward": 0.0,
+   "ending": "completed",
+   "agent_s": 550.421726,
+   "calls": 21,
+   "posts": 21,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 363049,
+    "cached_tokens": 346071,
+    "completion_tokens": 17615
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 21,
+    "posts_started": 21,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "wrong_answer"
+  },
+  {
+   "seq": 28,
+   "round": 2,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.008022,
+   "calls": 49,
+   "posts": 51,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 2478954,
+    "cached_tokens": 2410697,
+    "completion_tokens": 49730
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 51,
+    "posts_started": 51,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T06:10:02.024811+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 29,
+   "round": 2,
+   "task": "distribution-search",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 523.255925,
+   "calls": 29,
+   "posts": 29,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 643280,
+    "cached_tokens": 632101,
+    "completion_tokens": 30960
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 29,
+    "posts_started": 29,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 30,
+   "round": 2,
+   "task": "gpt2-codegolf",
+   "reward": 0.0,
+   "ending": "completed",
+   "agent_s": 45.551842,
+   "calls": 3,
+   "posts": 3,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 8132,
+    "cached_tokens": 5956,
+    "completion_tokens": 2405
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 3,
+    "posts_started": 3,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "no_answer"
+  },
+  {
+   "seq": 31,
+   "round": 2,
+   "task": "regex-log",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 245.653797,
+   "calls": 16,
+   "posts": 16,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 159115,
+    "cached_tokens": 154239,
+    "completion_tokens": 15630
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 16,
+    "posts_started": 16,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 32,
+   "round": 2,
+   "task": "protein-assembly",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.007254,
+   "calls": 25,
+   "posts": 26,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 401622,
+    "cached_tokens": 382046,
+    "completion_tokens": 16360
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 26,
+    "posts_started": 26,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 33,
+   "round": 3,
+   "task": "regex-log",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 300.300959,
+   "calls": 18,
+   "posts": 18,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 249095,
+    "cached_tokens": 243651,
+    "completion_tokens": 18763
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 18,
+    "posts_started": 18,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 34,
+   "round": 3,
+   "task": "polyglot-c-py",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 572.809327,
+   "calls": 31,
+   "posts": 31,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 745929,
+    "cached_tokens": 735977,
+    "completion_tokens": 30777
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 31,
+    "posts_started": 31,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 35,
+   "round": 3,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.007692,
+   "calls": 42,
+   "posts": 43,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 2005808,
+    "cached_tokens": 1956822,
+    "completion_tokens": 49609
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 43,
+    "posts_started": 43,
+    "surplus": 0
+   },
+   "cancelled_at_end": [
+    "2026-11-11T07:26:58.305934+00:00"
+   ],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 36,
+   "round": 3,
+   "task": "fix-git",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 117.647784,
+   "calls": 13,
+   "posts": 13,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 116853,
+    "cached_tokens": 108154,
+    "completion_tokens": 5876
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 13,
+    "posts_started": 13,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 37,
+   "round": 3,
+   "task": "log-summary-date-ranges",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 78.91254,
+   "calls": 10,
+   "posts": 10,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 65644,
+    "cached_tokens": 59571,
+    "completion_tokens": 3743
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 10,
+    "posts_started": 10,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 38,
+   "round": 3,
+   "task": "break-filter-js-from-html",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 621.743899,
+   "calls": 19,
+   "posts": 19,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 323928,
+    "cached_tokens": 310917,
+    "completion_tokens": 19965
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 19,
+    "posts_started": 19,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 39,
+   "round": 3,
+   "task": "distribution-search",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 309.528007,
+   "calls": 15,
+   "posts": 15,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 256075,
+    "cached_tokens": 251530,
+    "completion_tokens": 20090
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 15,
+    "posts_started": 15,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 40,
+   "round": 3,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 1.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.006269,
+   "calls": 55,
+   "posts": 58,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 2955851,
+    "cached_tokens": 2927014,
+    "completion_tokens": 77559
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 58,
+    "posts_started": 58,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 41,
+   "round": 3,
+   "task": "mailman",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 981.747598,
+   "calls": 79,
+   "posts": 79,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 3522668,
+    "cached_tokens": 3479690,
+    "completion_tokens": 40350
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 79,
+    "posts_started": 79,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 42,
+   "round": 3,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.006669,
+   "calls": 31,
+   "posts": 33,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 692370,
+    "cached_tokens": 682372,
+    "completion_tokens": 51074
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 33,
+    "posts_started": 33,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T08:52:10.933581+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 43,
+   "round": 3,
+   "task": "prove-plus-comm",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 50.080372,
+   "calls": 7,
+   "posts": 7,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 22666,
+    "cached_tokens": 20448,
+    "completion_tokens": 2706
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 7,
+    "posts_started": 7,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 44,
+   "round": 3,
+   "task": "vulnerable-secret",
+   "reward": 1.0,
+   "ending": "completed",
+   "agent_s": 70.890787,
+   "calls": 8,
+   "posts": 8,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 58382,
+    "cached_tokens": 47630,
+    "completion_tokens": 4036
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 8,
+    "posts_started": 8,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  },
+  {
+   "seq": 45,
+   "round": 3,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 3600.048531,
+   "calls": 121,
+   "posts": 121,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 11311512,
+    "cached_tokens": 11244292,
+    "completion_tokens": 143653
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 121,
+    "posts_started": 121,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 46,
+   "round": 3,
+   "task": "headless-terminal",
+   "reward": 0.0,
+   "ending": "harbor_timeout",
+   "agent_s": 900.010384,
+   "calls": 39,
+   "posts": 41,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1166149,
+    "cached_tokens": 1140001,
+    "completion_tokens": 51828
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 41,
+    "posts_started": 41,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [
+    {
+     "start": "2026-11-11T10:11:01.433738+00:00",
+     "recovered": false
+    }
+   ],
+   "bucket": "timeout"
+  },
+  {
+   "seq": 47,
+   "round": 3,
+   "task": "gpt2-codegolf",
+   "reward": 0.0,
+   "ending": "completed",
+   "agent_s": 729.858821,
+   "calls": 27,
+   "posts": 27,
+   "pi_exit": "0",
+   "usage": {
+    "prompt_tokens": 1280432,
+    "cached_tokens": 1190286,
+    "completion_tokens": 42178
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 27,
+    "posts_started": 27,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": "no_answer"
+  },
+  {
+   "seq": 48,
+   "round": 3,
+   "task": "protein-assembly",
+   "reward": 1.0,
+   "ending": "harbor_timeout",
+   "agent_s": 1800.007514,
+   "calls": 38,
+   "posts": 38,
+   "pi_exit": null,
+   "usage": {
+    "prompt_tokens": 1090783,
+    "cached_tokens": 1065780,
+    "completion_tokens": 38058
+   },
+   "usage_source": "session",
+   "other_entries": {},
+   "contention": {
+    "server_requests": 38,
+    "posts_started": 38,
+    "surplus": 0
+   },
+   "cancelled_at_end": [],
+   "own_502": [],
+   "bucket": null
+  }
+ ]
+}

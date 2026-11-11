@@ -1,0 +1,406 @@
+{
+ "relay_time": "request start, written when the reply ends",
+ "pi": [
+  {
+   "seq": 3,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    18.1
+   ],
+   "trial_end_s": 21.6,
+   "session_messages": 37,
+   "late_posts": []
+  },
+  {
+   "seq": 4,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "verifier_s": [
+    0.4,
+    10.5
+   ],
+   "trial_end_s": 13.8,
+   "session_messages": 277,
+   "late_posts": []
+  },
+  {
+   "seq": 5,
+   "task": "gpt2-codegolf",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    18.3
+   ],
+   "trial_end_s": 21.7,
+   "session_messages": 102,
+   "late_posts": [
+    {
+     "offset_s": 2.2,
+     "status": "502",
+     "messages": 104,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 7,
+   "task": "polyglot-c-py",
+   "reward": 0.0,
+   "verifier_s": [
+    0.2,
+    50.0
+   ],
+   "trial_end_s": 53.4,
+   "session_messages": 43,
+   "late_posts": []
+  },
+  {
+   "seq": 11,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 0.0,
+   "verifier_s": [
+    4.5,
+    932.5
+   ],
+   "trial_end_s": 935.9,
+   "session_messages": 20,
+   "late_posts": []
+  },
+  {
+   "seq": 13,
+   "task": "headless-terminal",
+   "reward": 1.0,
+   "verifier_s": [
+    0.2,
+    13.1
+   ],
+   "trial_end_s": 16.4,
+   "session_messages": 112,
+   "late_posts": [
+    {
+     "offset_s": 4.5,
+     "status": "200",
+     "messages": 114,
+     "before_trial_end": true,
+     "in_verifier": true
+    },
+    {
+     "offset_s": 11.7,
+     "status": "502",
+     "messages": 116,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 14,
+   "task": "mailman",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    25.9
+   ],
+   "trial_end_s": 29.4,
+   "session_messages": 102,
+   "late_posts": []
+  },
+  {
+   "seq": 15,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    47.6
+   ],
+   "trial_end_s": 51.0,
+   "session_messages": 107,
+   "late_posts": []
+  },
+  {
+   "seq": 17,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "verifier_s": [
+    0.2,
+    12.3
+   ],
+   "trial_end_s": 15.7,
+   "session_messages": 280,
+   "late_posts": [
+    {
+     "offset_s": 8.2,
+     "status": "502",
+     "messages": 281,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 19,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 0.0,
+   "verifier_s": [
+    1.7,
+    345.8
+   ],
+   "trial_end_s": 349.2,
+   "session_messages": 56,
+   "late_posts": []
+  },
+  {
+   "seq": 20,
+   "task": "headless-terminal",
+   "reward": 1.0,
+   "verifier_s": [
+    0.3,
+    24.0
+   ],
+   "trial_end_s": 27.3,
+   "session_messages": 66,
+   "late_posts": []
+  },
+  {
+   "seq": 22,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    16.8
+   ],
+   "trial_end_s": 20.2,
+   "session_messages": 83,
+   "late_posts": [
+    {
+     "offset_s": 10.0,
+     "status": "200",
+     "messages": 85,
+     "before_trial_end": true,
+     "in_verifier": true
+    },
+    {
+     "offset_s": 15.8,
+     "status": "502",
+     "messages": 87,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 26,
+   "task": "mailman",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    130.2
+   ],
+   "trial_end_s": 133.7,
+   "session_messages": 84,
+   "late_posts": []
+  },
+  {
+   "seq": 28,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "verifier_s": [
+    0.2,
+    44.3
+   ],
+   "trial_end_s": 47.6,
+   "session_messages": 106,
+   "late_posts": [
+    {
+     "offset_s": 9.6,
+     "status": "502",
+     "messages": 108,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 32,
+   "task": "protein-assembly",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    14.7
+   ],
+   "trial_end_s": 18.1,
+   "session_messages": 53,
+   "late_posts": [
+    {
+     "offset_s": 14.4,
+     "status": "200",
+     "messages": 54,
+     "before_trial_end": true,
+     "in_verifier": true
+    }
+   ]
+  },
+  {
+   "seq": 35,
+   "task": "make-doom-for-mips",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    49.2
+   ],
+   "trial_end_s": 52.5,
+   "session_messages": 97,
+   "late_posts": []
+  },
+  {
+   "seq": 40,
+   "task": "feal-linear-cryptanalysis",
+   "reward": 1.0,
+   "verifier_s": [
+    0.3,
+    13.2
+   ],
+   "trial_end_s": 16.5,
+   "session_messages": 113,
+   "late_posts": [
+    {
+     "offset_s": 6.2,
+     "status": "200",
+     "messages": 115,
+     "before_trial_end": true,
+     "in_verifier": true
+    },
+    {
+     "offset_s": 15.8,
+     "status": "200",
+     "messages": 117,
+     "before_trial_end": true,
+     "in_verifier": false
+    }
+   ]
+  },
+  {
+   "seq": 42,
+   "task": "adaptive-rejection-sampler",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    19.2
+   ],
+   "trial_end_s": 22.8,
+   "session_messages": 65,
+   "late_posts": [
+    {
+     "offset_s": 19.4,
+     "status": "502",
+     "messages": 67,
+     "before_trial_end": true,
+     "in_verifier": false
+    }
+   ]
+  },
+  {
+   "seq": 45,
+   "task": "winning-avg-corewars",
+   "reward": 0.0,
+   "verifier_s": [
+    0.3,
+    20.0
+   ],
+   "trial_end_s": 23.4,
+   "session_messages": 246,
+   "late_posts": []
+  },
+  {
+   "seq": 46,
+   "task": "headless-terminal",
+   "reward": 0.0,
+   "verifier_s": [
+    0.2,
+    15.1
+   ],
+   "trial_end_s": 18.4,
+   "session_messages": 82,
+   "late_posts": [
+    {
+     "offset_s": 15.7,
+     "status": "502",
+     "messages": 84,
+     "before_trial_end": true,
+     "in_verifier": false
+    }
+   ]
+  },
+  {
+   "seq": 48,
+   "task": "protein-assembly",
+   "reward": 1.0,
+   "verifier_s": [
+    0.2,
+    19.9
+   ],
+   "trial_end_s": 23.3,
+   "session_messages": 80,
+   "late_posts": []
+  }
+ ],
+ "pi_trials_with_late_posts": [
+  5,
+  13,
+  17,
+  22,
+  28,
+  32,
+  40,
+  42,
+  46
+ ],
+ "pi_late_posts": 12,
+ "pi_late_posts_in_verifier": 9,
+ "baseline": {
+  "terminus-2": {
+   "harbor_timeout_trials": 22,
+   "late_posts": 0,
+   "trials_with_late_posts": 0
+  }
+ },
+ "sensitivity": {
+  "label": "sensitivity: pi passes with post-kill calls counted as failures",
+  "flipped": [
+   13,
+   40
+  ],
+  "successes": 26,
+  "P1": {
+   "a": "pi",
+   "b": "terminus-2",
+   "n_a": 48,
+   "n_b": 48,
+   "mean_a": 0.5416666666666666,
+   "mean_b": 0.5833333333333334,
+   "diff": -0.04166666666666674,
+   "p_two_sided": 0.7288000000000014,
+   "p": 0.7288000000000014,
+   "p_holm": 0.7288000000000014,
+   "level": 0.05,
+   "reject": false
+  },
+  "P2": {
+   "a": "pi",
+   "b": "aos",
+   "n_a": 48,
+   "n_b": 48,
+   "mean_a": 0.5416666666666666,
+   "mean_b": 0.7291666666666666,
+   "diff": -0.1875,
+   "p_two_sided": 0.004200000000000009,
+   "p": 0.004200000000000009,
+   "p_holm": 0.008400000000000019,
+   "level": 0.025,
+   "reject": true
+  }
+ }
+}

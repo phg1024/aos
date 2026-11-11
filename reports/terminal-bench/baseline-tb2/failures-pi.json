@@ -1,0 +1,166 @@
+{
+ "rule": "Each failed trial was read from its trace and given one bucket by PLAN.md's definitions. Where two buckets applied, the earliest cause was chosen and the other noted. A trial ended by Harbor's timeout or AOS's budget while the agent was still working is timeout, even when an unfinished or wrong answer was already on disk; wrong_answer is a trial whose agent finished (exited, or marked the task complete) with a wrong answer. Under the strict reading, in which any written answer that a test failed on comes first, seqs 7, 14, 22, 42 and 46 (other: wrong_answer) would be wrong_answer instead. For pi, \"finished\" means pi exited by itself (pi_exit set).",
+ "checked_by": "the eval session, from each trial's pi session file, pi.txt, verifier/test-stdout.txt and ctrf.json; offsets (+N s) are from the agent's start; tool calls are numbered in session order",
+ "trials": [
+  {
+   "seq": 3,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing R prototypes to /tmp (session tool calls 13-18 wrote /tmp/p5.R to /tmp/p1b.R, the last at +892 s); /app/ars.R was never written, so the tests failed with \"No ars.R file found\" (verifier/test-stdout.txt).",
+   "other": "no_answer"
+  },
+  {
+   "seq": 4,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still tuning clear-style candidates in /app/lab (tool calls 134-141 edited mk2.py and ran sweeps; every config in calls 139-140 printed 'fail', snake 6-8); /app/my_warrior.red was never written (test_warrior_exists 'my_warrior.red file not found').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 5,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still probing the checkpoint's weight layout in C (tool calls 29-51: lay.c, st.c, ln.c, ax.c, prof.c, vecs.c, rows.c; the last at +858 s printed row stats); /app/gpt2.c was never written (test_gpt2_implementation 'File /app/gpt2.c does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 7,
+   "task": "polyglot-c-py",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 21 (+380 s, a loop comparing ./cmain and python3 main.py.c for n = 0..93) had not returned; call 20 had rebuilt the binary into the answer folder (`gcc ... main.py.c -o cmain` in /app/polyglot), so test_fibonacci_polyglot failed with \"Expected only main.py.c, found: ['cmain', 'main.py.c']\".",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 11,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 10 (+309 s: build /app/attack.c with -fopenmp and run ./attack /app/my_pairs.txt) had not returned, about 1490 s later; no key was recovered and test_attack failed with \"FileNotFoundError: ... '/app/plaintexts.txt'\". Its verifier ran 928 s although pytest reports 5.4 s; the cause was not determined.",
+   "other": "no_answer"
+  },
+  {
+   "seq": 14,
+   "task": "mailman",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 52 (+556 s: `service postfix start ... service mailman3 start ... mailman status`) had not returned, about 1240 s later; reading-group-configure (calls 37-50) had set up the list and 2 of 3 tests passed, but test_join_announce_leave_flow failed with SMTPRecipientsRefused 550 'User unknown in local recipient table'.",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 15,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its MIPS libc (tool calls 58-63: my_stdlib.h, sys.c, string.c, stdio.c twice, printf.c at +892 s); nothing was compiled or linked (test_vm_execution 'Timeout waiting for frame.bmp to be created', test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 17,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 141 (+3585 s, a rave.red parameter search under `timeout 1500`) was running; calls 138-140 were still varying IVAL/CDIST/BOMBLEN variants of the bundled rave.red, and /app/my_warrior.red was never written (test_warrior_exists 'my_warrior.red file not found').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 19,
+   "task": "feal-linear-cryptanalysis",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 28 (+705 s: rebuild and run ./attack on self-generated test pairs, after call 26 failed with 'key values exceed 24 bits') had not returned, about 1095 s later; no key was recovered and test_attack failed with \"FileNotFoundError: ... '/app/plaintexts.txt'\".",
+   "other": "no_answer"
+  },
+  {
+   "seq": 22,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still patching /app/ars.R (call 40 at +890 s failed with 'Could not find the exact text', call 41 at +898 s retried with perl); the ars.R on disk had no test() function and its sampling run failed with \"object 'ok' not found\" (test_has_test_function, test_can_generate_standard_distribution_samples).",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 26,
+   "task": "mailman",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 48 (+396 s: chmod the mailman3 dirs, then `mailman --run-as-root start`) had not returned, about 1400 s later; no list had been created (test_mlist_exists 'Mailing list does not exist'; local delivery got 451 'Temporary lookup failure').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 27,
+   "task": "polyglot-c-py",
+   "arm": "pi",
+   "bucket": "wrong_answer",
+   "reason": "pi finished (pi_exit 0, stop at +550 s) after tool call 20 ran `rm -f cmain && gcc main.py.c -o cmain` in /app/polyglot and listed the folder showing cmain; its final message reports the task done, and test_fibonacci_polyglot failed with \"Expected only main.py.c, found: ['cmain', 'main.py.c']\".",
+   "other": null
+  },
+  {
+   "seq": 28,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its libc under /app/mips-port (tool calls 52-55: my_internal.h, then my_string.c and two edits, the last at +835 s); nothing was compiled (test_vm_execution 'Timeout waiting for frame.bmp to be created', test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 30,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "bucket": "no_answer",
+   "reason": "pi exited by itself (pi_exit 0) after 46 s and 3 tool calls: the model's third reply was reasoning only (124 output tokens, ending mid-sentence, stopReason 'stop', no text and no tool call), which ends pi's turn; /app/gpt2.c was never written (test_gpt2_implementation 'File /app/gpt2.c does not exist').",
+   "other": null
+  },
+  {
+   "seq": 32,
+   "task": "protein-assembly",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 1800 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 27 (+914 s, an NCBI BLAST submit-and-poll script) had not returned, about 886 s later; calls 24-26 had failed RCSB (HTTP 404) and BLAST lookups, and /app/gblock.txt was never written (test_gblock 'File /app/gblock.txt does not exist.').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 35,
+   "task": "make-doom-for-mips",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still writing its libc under /app/mipseal (tool calls 45-52: my_stdlib.h, syscall.S, my_sys.c; call 53 at +858 s listed fopen modes in doomgeneric); nothing was compiled (test_vm_execution 'Timeout waiting for frame.bmp to be created', test_frame_bmp_exists 'File /tmp/frame.bmp does not exist').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 42,
+   "task": "adaptive-rejection-sampler",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was still editing /app/ars.R (calls 30-32, the last at +888 s); the file on disk defined no function matching `ars <-`, so the tests failed with \"No 'ars' function found in ars.R\", 'could not find function \"ars\"' and \"No 'test' function found\".",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 45,
+   "task": "winning-avg-corewars",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 3600 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while tool call 124 (+3524 s, a sweep of clear-style variants against the five opponents) was running; calls 121-123 were still debugging a g2-clear stall in pmars's cdb, and /app/my_warrior.red was never written (test_warrior_exists 'my_warrior.red file not found').",
+   "other": "no_answer"
+  },
+  {
+   "seq": 46,
+   "task": "headless-terminal",
+   "arm": "pi",
+   "bucket": "timeout",
+   "reason": "Harbor's 900 s agent timeout (exception AgentTimeoutError, pi_exit null) hit while pi was installing vim for further key tests (calls 40-41, the last at +892 s, after call 38's KEYS OK); /app/headless_terminal.py passed 6 of 7 tests, but test_background_commands failed with ConnectionError to localhost:8000. Post-kill relay activity: one POST at +1 s (502).",
+   "other": "wrong_answer"
+  },
+  {
+   "seq": 47,
+   "task": "gpt2-codegolf",
+   "arm": "pi",
+   "bucket": "no_answer",
+   "reason": "pi exited by itself (pi_exit 0) at +730 s after 28 tool calls spent identifying the checkpoint's tensor layout (calls 5-28: hdr.c, s.c-s6.c, d.c, p.c, n.c, q.c, t1.c, t2.c, f2.c); its last reply was reasoning only (1399 output tokens, ending mid-sentence, stopReason 'stop', no text and no tool call), and /app/gpt2.c was never written (test_gpt2_implementation 'File /app/gpt2.c does not exist').",
+   "other": null
+  }
+ ]
+}
