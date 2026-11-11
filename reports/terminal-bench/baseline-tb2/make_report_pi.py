@@ -157,6 +157,10 @@ bt = K["baseline"]["terminus-2"]
 seq11, seq19, seq40 = (next(t for t in K["pi"] if t["seq"] == s) for s in (11, 19, 40))
 
 # Cost and per-trial
+STATUS = {l.split()[0]: l.split()[3] for l in open(os.path.join(HERE, "relay-pi.log")) if " POST " in l}
+cut = [r["seq"] for r in PI if (r.get("attribution") or {}).get("cancelled_at_end")]
+cut502 = [r["seq"] for r in PI if any(STATUS.get(c) == "502" for c in r["attribution"].get("cancelled_at_end") or [])]
+n502 = sum(1 for st in STATUS.values() if st == "502")
 cost_rows = [["pi", num(p["agent_s_median"]), num(p["agent_s_total"] / 3600, 1), num(p["model_calls"]),
               num(p["prompt_tokens"]), num(p["cached_tokens"]), num(p["completion_tokens"])]]
 for name, a, calls in (("aos (baseline)", aos, aos.get("relay_posts")), ("terminus-2 (baseline)", t2, t2.get("relay_posts"))):
@@ -171,7 +175,9 @@ for r in A["per_trial"]:
     trial_rows.append([str(r["seq"]), str(r["round"]), e(r["task"]), reward_cell(r["reward"]), e(r["ending"]),
                        num(r["agent_s"]), num(r["calls"]), num(r["posts"]), e(str(r["pi_exit"])),
                        num(u.get("prompt_tokens")), num(u.get("completion_tokens")),
-                       str(len(r["cancelled_at_end"] or [])), str(len(r["own_502"] or [])), e(r["bucket"] or "")])
+                       str(len(r["cancelled_at_end"] or [])),
+                       str(len(r["own_502"] or []) + sum(STATUS.get(c) == "502" for c in r["cancelled_at_end"] or [])),
+                       e(r["bucket"] or "")])
 
 body = f"""<!doctype html>
 <html lang="en">
@@ -253,7 +259,7 @@ body = f"""<!doctype html>
   <p class="warn"><b>Harbor's timeout stops waiting for pi; it does not stop the pi process in the container.</b> In {len(active)} of pi's {len(K['pi'])} timed-out trials (seqs {e(', '.join(map(str, active)))}), the relay logged {K['pi_late_posts']} chat completions that started after the agent's end, {K['pi_late_posts_in_verifier']} of them inside the verifier's window, which runs in the same container. Each carries one or two more messages than the session saved at the kill, so in each case a tool finished after the kill before the request was sent. The plan disclosed the child-process form of this as untested; this is the agent itself still acting.</p>
   {table(["Seq", "Task", "Reward", "Verifier (s after agent end)", "Messages in the saved session", "Late POSTs", "Each: start after agent end, status, messages"], kill_rows, nums=(0, 4, 5))}
   <ul>
-    <li><b>How to read it.</b> The relay logs each request's start time, written when its reply ends. The saved session file is a copy taken at the agent's end, so a request carrying more messages than the saved session shows activity after the kill: two more is a reply and a tool result, one more is the result of a tool that was running at the kill. What those tools did is not recorded anywhere: the session copy stops at the kill and the relay logs no bodies. Every late request that failed ended with a 502 when the container stopped; these are all {p['own_502']} of pi's 502s, so none is an infra error.</li>
+    <li><b>How to read it.</b> The relay logs each request's start time, written when its reply ends. The saved session file is a copy taken at the agent's end, so a request carrying more messages than the saved session shows activity after the kill: two more is a reply and a tool result, one more is the result of a tool that was running at the kill. What those tools did is not recorded anywhere: the session copy stops at the kill and the relay logs no bodies. pi's {n502} 502s all ended when the container stopped: {p['own_502']} are these late requests, and {len(cut502)} were requests already running at the kill (seqs {e(', '.join(map(str, cut502)))}). None is an infra error.</li>
     <li><b>The baseline does not have this.</b> In the baseline's relay log, the {bt['harbor_timeout_trials']} Terminus-2 trials that ended by Harbor's timeout have {bt['late_posts']} chat completions that started after the agent's end. Terminus-2 runs in Harbor's own process and stops when cancelled; AOS never reached Harbor's timeout.</li>
     <li><b>The direction of any effect is unknown.</b> A late action could have made a pass (an answer finished or fixed during the verifier) or a failure (a working answer changed or a service disturbed while the tests ran). The second case cannot be detected from the data: {len(active) - len(flipped)} of the late-active trials failed, and any of them might have passed without the late actions. For seq 40, the answer that passed (<code>/app/plaintexts.txt</code>) was written and checked against the reference binary at +1772–1780 s, before the kill; seq 13's last saved test run, at +891 s, raised an error in pi's own test script, and what pi changed afterwards is unknown.</li>
     <li><b>Sensitivity.</b> Counting the {len(flipped)} late-active passes (seqs {e(', '.join(map(str, flipped)))}) as failures gives pi {K['sensitivity']['successes']}/48. Through the same exact test and Holm step: P1 {100 * S1['diff']:+.1f} points, p = {S1['p']:.4f}; P2 {100 * S2['diff']:+.1f} points, p = {S2['p']:.4f}, Holm {S2['p_holm']:.4f}, rejected. This is a bound in one direction only, not a corrected result.</li>
@@ -272,7 +278,7 @@ body = f"""<!doctype html>
   <ul>
     <li><b>Contention.</b> For each trial, the server's request count before and after was compared with the requests the relay saw start inside it (A3 attribution). The surplus is 0 in all 48 trials; no other client used the model during any trial.</li>
     <li><b>Backend.</b> The model ID, the engine (0.1.54) and the server's start time were checked before and after every trial, the smoke included, and never changed. They match the baseline's.</li>
-    <li><b>Requests cut off at the kill.</b> {p['cancelled_at_end']} trials had a request in flight at Harbor's timeout, logged after the closing check; they are recorded as cancelled, as A3 defines.</li>
+    <li><b>Requests cut off at the kill.</b> {p['cancelled_at_end']} trials had a request in flight at Harbor's timeout (seqs {e(', '.join(map(str, cut)))}); they are recorded as cancelled, as A3 defines. {len(cut502)} of them ended with a 502 when the container stopped; seq {e(', '.join(map(str, sorted(set(cut) - set(cut502)))))}'s returned 200 and was logged after the closing check.</li>
     <li><b>The key stayed out.</b> It appears in none of the {{KEYFILES}} files under the pi job folders, the baseline folder and the pi release cache.</li>
   </ul>
 
